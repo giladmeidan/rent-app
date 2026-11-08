@@ -108,3 +108,14 @@ database, named the `.env.example` minimum set, pinned sync SQLAlchemy.
            Gush Dan stored as a coarse bounding box — mitigation: Slice 3 replaces it with municipal boundaries.
     Reviewers: code, qa, security   Estimated: 1 coder run, ~1–2 review rounds
     Links: specs/0000a-foundations-api.md · PRODUCT.md "Stack", "Launch area" · no Design artboard
+
+    --- merged shape ---
+
+    Spec 0000a — Foundations: infra + API   READY TO MERGE (branch spec/0000a-foundations-api, 28 commits, head fadbecc) — Gilad merges
+    Shipped: `make dev` brings up Postgres+PostGIS, Redis, API and worker bound to loopback; GET /areas returns the seeded Gush Dan area; CI api job defined.
+    Demo: 1) `DB_PORT=5434 REDIS_PORT=6380 make dev` (waits until /health is 200)  2) curl 127.0.0.1:8000/areas → גוש דן  3) `docker compose stop redis` → /health 503 degraded; start → 200
+    Tests: +35 pytest (unit + integration incl. migration roundtrip, autogenerate no-drift, dotenv loader, DB-error log hygiene)   CI: not yet run (no GitHub remote) — NF1 unmeasured, NF2 measured 9–16 s
+    Findings: 1 blocker fixed (DB/Redis exposed on LAN), 7 majors fixed, 0 waived, 4 follow-ups logged (action SHA pins, base image digest, Redis pool reuse, hung-Postgres timeout)
+    Review rounds: 3 (round 2 code+security approve; qa major fixed in round 3, verified by orchestrator)
+    Changed in PRODUCT.md: nothing
+    Next spec I propose: 0000b — Foundations: web shell (already verified; needs: your merge of 0000a, and the GitHub remote so CI can run)
