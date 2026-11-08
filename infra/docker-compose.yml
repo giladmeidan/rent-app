@@ -1,5 +1,8 @@
 name: rent-app
 
+# Every published port binds to loopback only: the dev DB user is a superuser and Redis has no auth,
+# so nothing here may be reachable from the LAN.
+
 services:
   db:
     image: postgis/postgis:16-3.4
@@ -8,7 +11,7 @@ services:
       POSTGRES_PASSWORD: rent
       POSTGRES_DB: rent
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -37,7 +40,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ../api:/app
     depends_on:
