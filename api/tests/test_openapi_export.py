@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -9,13 +10,12 @@ from tests.conftest import REPO_ROOT
 
 
 def _env_example() -> dict[str, str]:
-    env: dict[str, str] = {}
-    for line in (REPO_ROOT / ".env.example").read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            key, _, value = line.partition("=")
-            env[key] = value
-    return env
+    """Every variable `.env.example` lists, including the commented-out `# KEY=value` ones (the
+    URLs, which the Makefile otherwise derives from the ports)."""
+    pairs = re.findall(
+        r"^(?:# )?([A-Z_][A-Z0-9_]*)=(\S*)$", (REPO_ROOT / ".env.example").read_text(), re.M
+    )
+    return dict(pairs)
 
 
 def test_ac6_openapi_export_without_server() -> None:

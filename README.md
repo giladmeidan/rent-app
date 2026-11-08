@@ -25,7 +25,7 @@ Interactive API docs: http://localhost:8000/docs. Stop everything (and drop the 
 
 | target | what it does |
 | --- | --- |
-| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000) and `worker` (arq) |
+| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000) and `worker` (arq), and fails unless the api answers `/health` within 60 s (then see `docker compose -f infra/docker-compose.yml logs api`) |
 | `make down` | `docker compose down -v` — stops the stack and removes volumes |
 | `make migrate` | `alembic upgrade head` against `DATABASE_URL` |
 | `make seed` | inserts the launch areas (idempotent) |
@@ -49,8 +49,10 @@ it runs, including compose interpolation (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `
 
 `DATABASE_URL`, `TEST_DATABASE_URL` and `REDIS_URL` default to `localhost` on `DB_PORT` / `REDIS_PORT`, so
 moving a port takes one variable, e.g. a `.env` with `DB_PORT=5434` and `REDIS_PORT=6380` when 5432/6379 are taken.
-If your `.env` also sets the URLs (an unedited copy of `.env.example` does), they win over the
-port-derived defaults, so keep them in sync with the ports, including ports set in the shell. `.env` is read by `make` only: the API
+`.env.example` lists the URLs commented out, so an unedited copy keeps deriving them; a URL you
+uncomment (or set in the shell) wins over the port-derived default, so keep it in sync with the ports.
+Values may be quoted (`WEB_ORIGIN="http://localhost:3000"`, quotes stripped as compose does); `make`
+warns about any line it cannot parse. `.env` is read by `make` only: the API
 itself reads plain environment variables, and a bare `docker compose -f infra/docker-compose.yml …` needs
 `--env-file .env` to see it. Inside the containers `DATABASE_URL` / `REDIS_URL` always point at the compose
 services `db` / `redis`.
