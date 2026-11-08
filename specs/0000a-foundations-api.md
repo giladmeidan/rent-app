@@ -1,7 +1,7 @@
 ---
 id: 0000a
 title: A developer can run `make dev` and get Postgres+PostGIS, Redis, the API and the worker up, with `GET /areas` returning the seeded Gush Dan area, and CI runs the api job on every PR
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, qa, security]   # security: config/secrets handling, CORS, compose defaults, CI secrets — everything later slices inherit
 estimate: 1 coder run
@@ -74,7 +74,7 @@ None in this part. The web shell that consumes `/areas` is `0000b`.
 - [ ] AC4 Given an empty DB, When `alembic upgrade head` then `downgrade base` then `upgrade head`, Then all succeed and `areas` exists at the end — `api/tests/test_migrations.py::test_ac4_migration_roundtrip`
 - [ ] AC5 Given `seed.py` is run twice, Then exactly one `gush-dan` row exists — `api/tests/test_seed.py::test_ac5_seed_is_idempotent`
 - [ ] AC6 Given only the variables in `.env.example`, When `python api/scripts/export_openapi.py` runs with no server, Then it exits 0 and the output parses as JSON containing paths `/health` and `/areas` — `api/tests/test_openapi_export.py::test_ac6_openapi_export_without_server`
-- [ ] NF1 CI `api` job wall time ≤ 5 min on GitHub-hosted runners — measured on the PR's first green run, number in the PR body
+- [x] NF1 CI `api` job wall time ≤ 5 min — measured 51 s on run 42534130737 on GitHub-hosted runners — measured on the PR's first green run, number in the PR body
 - [ ] NF2 `make dev` from clean clone (images cached) to `/health` 200 ≤ 90 s — measured once, number in the PR body
 - [ ] NF3 `make lint` is clean under `ruff` and `mypy --strict` — CI job
 
@@ -111,10 +111,10 @@ database, named the `.env.example` minimum set, pinned sync SQLAlchemy.
 
     --- merged shape ---
 
-    Spec 0000a — Foundations: infra + API   READY TO MERGE (branch spec/0000a-foundations-api, 28 commits, head fadbecc) — Gilad merges
+    Spec 0000a — Foundations: infra + API   MERGED b00db8a (PR giladmeidan/rent-app#1, 2026-11-09)
     Shipped: `make dev` brings up Postgres+PostGIS, Redis, API and worker bound to loopback; GET /areas returns the seeded Gush Dan area; CI api job defined.
     Demo: 1) `DB_PORT=5434 REDIS_PORT=6380 make dev` (waits until /health is 200)  2) curl 127.0.0.1:8000/areas → גוש דן  3) `docker compose stop redis` → /health 503 degraded; start → 200
-    Tests: +35 pytest (unit + integration incl. migration roundtrip, autogenerate no-drift, dotenv loader, DB-error log hygiene)   CI: not yet run (no GitHub remote) — NF1 unmeasured, NF2 measured 9–16 s
+    Tests: +35 pytest (unit + integration incl. migration roundtrip, autogenerate no-drift, dotenv loader, DB-error log hygiene)   CI: 51 s api job (NF1 ≤ 5 min met), NF2 measured 9–16 s
     Findings: 1 blocker fixed (DB/Redis exposed on LAN), 7 majors fixed, 0 waived, 4 follow-ups logged (action SHA pins, base image digest, Redis pool reuse, hung-Postgres timeout)
     Review rounds: 3 (round 2 code+security approve; qa major fixed in round 3, verified by orchestrator)
     Changed in PRODUCT.md: nothing

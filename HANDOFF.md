@@ -15,65 +15,34 @@ Work is sliced into specs in `specs/NNNN-slug.md`; the frontmatter `status` is t
 Overall: IN_PROGRESS
 
 Current focus:
-Spec 0000a (Foundations: infra + API) in its final fix round; spec 0000b (Foundations: web shell)
-verified and next to build.
+Spec 0000a merged to main (b00db8a). Spec 0000b (Foundations: web shell) verified and next to build.
 
 Last updated:
 2026-11-09
 
 ## Current Work
-**Spec 0000a — Foundations: infra + API** on branch `spec/0000a-foundations-api` (19+ commits ahead
-of `main`). Status `in-review`. Delivers: compose stack (db, redis, api, worker), Makefile targets
-`dev/down/migrate/seed/test/lint`, FastAPI skeleton with `GET /health` and `GET /areas`, `areas`
-table (migration `0001_areas`, PostGIS, GiST index) with an idempotent Gush Dan seed,
-`api/scripts/export_openapi.py`, CI `api` job, README, `.env.example`.
-
-Review history:
-- Round 1 (code, qa, security): 1 blocker (DB/Redis published on all interfaces), 6 majors. All fixed
-  by the coder in round 2 (ports bound to loopback, `restart: unless-stopped`, Alembic `search_path`
-  pinned to `public`, 2 s connect timeout, `.env` loading in Makefile, `.dockerignore`, non-root
-  container uid 10001, SecretStr DSNs, WEB_ORIGIN validation, JSON 503 on `/areas` when DB is down,
-  TCP Postgres healthcheck fixing a fresh-volume startup race). Tests 7 → 27.
-- Round 2: code APPROVE, security APPROVE, qa REQUEST CHANGES (1 major: `make dev` exits 0 while
-  the API is dead after a settings validation error, because the uvicorn `--reload` parent survives).
-- Round 3 (in progress when this handoff was written, expected complete): bounded `/health` wait at
-  the end of `make dev`; Makefile `.env` loader strips quotes/CR and warns on unparseable lines;
-  `hide_input_in_errors=True`; `hide_parameters=True` on engines and the 503 handler logs only the
-  exception class; URL lines commented out in `.env.example`; `API_PORT` override; WEB_ORIGIN
-  normalisation; alembic/seed reuse `app.db.make_engine`; spec API table gains the `/areas` 503 row.
-  **Verify on resume:** `git log main..spec/0000a-foundations-api` shows the round-3 commits and
-  `PR-0000a.md` has a "Round 3" section. If not, the coder run did not finish; re-run it from the
-  brief in `REVIEW-0000a-round1.md` + the QA round-2 major above.
-
-Merge-readiness of 0000a is gated only on: (1) orchestrator brief check of round 3, (2) a GitHub
-remote + first green CI run to measure NF1 (CI ≤ 5 min), (3) Gilad merges (`CLAUDE.md`: Gilad
-merges, agents never do). The digest for Gilad goes into the spec's `## Digest` in "merged" shape.
+Nothing in flight. 0000b (web shell) is the next build; see Next Steps.
 
 ## Completed
 - [x] Agent kit committed on `main` (CLAUDE.md, specs template, agents, commands).
 - [x] Spec 0000 written, split by the verifier into 0000a (api) and 0000b (web); both `verified`,
       digests appended, committed on `main`.
-- [x] 0000a implemented and through two full review rounds (see Current Work).
-- [x] Design artboards added by Gilad under `design/screens-v1/` with `design/README.md`
-      (uncommitted at time of writing, together with matching edits to `CLAUDE.md` → "## Design",
-      `.claude/agents/reviewer-ux.md`, `specs/_template.md`).
+- [x] 0000a implemented, three review rounds, merged to main as b00db8a via PR giladmeidan/rent-app#1 (2026-11-09). CI api job 51 s.
+- [x] Design artboards under `design/screens-v1/` committed on main (f5d2912) with the matching
+      `CLAUDE.md` → "## Design", UX reviewer and template edits.
+- [x] GitHub remote: https://github.com/giladmeidan/rent-app (private). CI runs on PRs and main.
 
 ## Next Steps
-1. Finish 0000a: read the coder's round-3 report / `PR-0000a.md` Round 3 section; run
-   `DB_PORT=5434 REDIS_PORT=6380 make lint && make test` (expect clean, ~30 tests); repro the QA
-   major once (`.env` with `WEB_ORIGIN=*` → `make dev` must exit non-zero). No further reviewer
-   round (Gilad's rule, see Constraints).
-2. Write the 0000a "merged"-shape digest into `specs/0000a-foundations-api.md` → `## Digest`
-   (shape in `.claude/commands/digest.md`) and show Gilad. Note NF1 is unmeasured until a remote exists.
-3. Commit Gilad's design/CLAUDE.md/template changes on `main` (or ask him to), then rebase/merge as
-   he decides. Create the GitHub remote when he is ready; first CI run measures NF1.
-4. Start 0000b: before `/build 0000b`, update its UI section to reference
-   `design/screens-v1/Main.dc.html` for shell structure and tokens (it currently says "no Design
-   artboard exists"), and note the QA nits that affect it: CORS allows exactly `WEB_ORIGIN`
+1. Update 0000b's UI section to reference `design/screens-v1/Main.dc.html` for shell structure and
+   tokens (it says "no Design artboard exists"), and note: CORS allows exactly `WEB_ORIGIN`
    (`http://localhost:5173`, not `127.0.0.1`); api binds `127.0.0.1` so a Vite proxy must target IPv4;
-   `make client` should supply env vars to `export_openapi.py`. Then coder → reviewers (code, qa, ux)
-   once → coder fixes → orchestrator brief check → digest → update this handoff.
-5. Then `/spec` for Slice 1 (Auth + roles, email OTP, SMS adapter stubbed).
+   `make client` must supply env vars to `export_openapi.py`; `API_PORT` exists.
+2. `/build 0000b`: coder → reviewers (code, qa, ux) once → coder fixes → orchestrator brief check →
+   digest → PR → Gilad merges (the orchestrator cannot run `gh pr merge` or `gh repo create` without
+   Gilad's explicit yes in chat; the permission classifier blocks them otherwise).
+3. Then `/spec` for Slice 1 (Auth + roles). Note: another session may have already written 0001a/0001b
+   specs — check `ls specs/` first.
+4. Flip GitHub branch protection to require the `api` (and later `web`, `e2e`) checks.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, CORS exact-origin, global OperationalError → JSON 503),
@@ -123,13 +92,9 @@ merges, agents never do). The digest for Gilad goes into the spec's `## Digest` 
   endpoint, secrets via env, no undeclared dependencies, stop on product questions).
 
 ## Known Issues
-- NF1 (CI wall time) unmeasured: no GitHub remote; CI workflow has never run. Blocks merge per
-  `CLAUDE.md` rule 3.
 - `/areas` still blocks indefinitely on a *hung* (paused, not unreachable) Postgres via pooled
   connections; `/health` is bounded. Needs an app-wide query timeout design (FOLLOWUPS).
 - Design artboards reference a missing `design/screens-v1/support.js`.
-- Gilad's edits to `CLAUDE.md`, `.claude/agents/reviewer-ux.md`, `specs/_template.md` and the
-  `design/` folder are uncommitted in the working tree (on the 0000a branch checkout).
 - Starlette deprecation warning about httpx in TestClient (1 warning per test session).
 
 ## Environment & Commands
@@ -149,6 +114,7 @@ Required environment variables (names only; see `.env.example`): `DATABASE_URL`,
 API at http://127.0.0.1:8000 (`/health`, `/areas`, `/docs`).
 
 ## Session History
+- 2026-11-09 — 0000a merged (PR #1, CI 51 s). GitHub repo created. Handoff refreshed.
 - 2026-11-09 — 0000a built (coder), reviewed twice (code/qa/security), round-3 fixes launched.
   Gilad set: Opus/high for all agents; single reviewer round; handoff after each spec. Gilad added
   `design/screens-v1` artboards. This handoff created.
