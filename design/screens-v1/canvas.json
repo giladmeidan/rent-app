@@ -1,0 +1,31 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-08T12:00:00Z" },
+  "title": "Rent App — Core Screens v1",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 390, "h": 1480, "title": "01 · דף נחיתה", "radius": 32 },
+    "Search.dc.html": { "x": 470, "y": 0, "w": 390, "h": 1320, "title": "02 · חיפוש", "radius": 32 },
+    "Listing.dc.html": { "x": 940, "y": 0, "w": 390, "h": 2080, "title": "03 · עמוד דירה", "radius": 32 },
+    "CreateListing.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 1300, "title": "04 · יצירת מודעה (שלב 2/5)", "radius": 32 },
+    "Inbox.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 1460, "title": "05 · מועמדויות (בעל הדירה)", "radius": 32 },
+    "SearchDesktop.dc.html": { "x": 0, "y": 2460, "w": 1280, "h": 900, "title": "02 · חיפוש — דסקטופ", "expand": "fill", "radius": 12 },
+    "InboxDesktop.dc.html": { "x": 1360, "y": 2460, "w": 1280, "h": 900, "title": "05 · מועמדויות — דסקטופ", "expand": "fill", "radius": 12 }
+  },
+  "order": [
+    "Main.dc.html",
+    "Search.dc.html",
+    "Listing.dc.html",
+    "CreateListing.dc.html",
+    "Inbox.dc.html",
+    "SearchDesktop.dc.html",
+    "InboxDesktop.dc.html"
+  ],
+  "notes": {
+    "row1": { "x": 0, "y": -300, "text": "מסכי ליבה — מובייל (390)", "kind": "title1", "maxW": 2270 },
+    "row2": { "x": 0, "y": 2160, "text": "גרסאות דסקטופ (1280) — חיפוש ותיבת מועמדויות", "kind": "title1", "maxW": 2640 },
+    "sticky1": { "x": 2360, "y": 0, "w": 300, "text": "כיוון עיצובי: שוק דירות נקי וחם. Heebo, מבטא טורקיז עמוק (#0E7C6B) על נייטרלים חמים. ציון התאמה הוא האלמנט החוזר בכל מסך.", "fill": "teal" }
+  },
+  "designSystems": []
+}

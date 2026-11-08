@@ -25,7 +25,7 @@ Tables and columns added or changed. Migration name. Backwards-compatibility not
 
 ## UI
 Screens touched. States for each: empty, loading, error, success. RTL notes. i18n keys added.
-Reference artboard in the Design canvas if one exists.
+Reference the artboard file under `design/screens-vN/` (see design/README.md).
 
 ## Acceptance criteria
 Each line is testable and names its test.

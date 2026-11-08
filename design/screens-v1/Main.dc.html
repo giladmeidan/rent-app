@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>דף נחיתה</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+button,input{font:inherit}
+a{color:#0B5F52}a:hover{color:#08463D}
+</style>
+</helmet>
+<div dir="rtl" style="width: 390px; height: 1480px; background: #F7F5F2; color: #1C1917; font-family: Heebo, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; text-align: right">
+
+  <!-- top bar -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 8px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <div style="width: 32px; height: 32px; border-radius: 10px; background: {{accent}}; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      </div>
+      <span style="font-weight: 800; font-size: 20px; letter-spacing: -0.2px">דירתי</span>
+    </div>
+    <a href="#login" style="text-decoration: none; font-weight: 600; font-size: 15px; padding: 10px 14px; border-radius: 999px; min-height: 44px; display: inline-flex; align-items: center">כניסה</a>
+  </div>
+
+  <!-- hero -->
+  <div style="padding: 24px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <span style="align-self: flex-start; font-size: 13px; font-weight: 600; color: #0B5F52; background: #E6F4F1; padding: 6px 12px; border-radius: 999px">גוש דן · השקה בעברית</span>
+    <h1 style="margin: 0; font-size: 40px; line-height: 1.1; font-weight: 800; letter-spacing: -0.5px">מתאימים,<br>לא גוללים.</h1>
+    <p style="margin: 0; font-size: 17px; line-height: 1.5; color: #57534E">פרופילים מובנים, ציון התאמה לכל דירה וכרטיסי מועמדות מסודרים — במקום מאות הודעות בקבוצות.</p>
+  </div>
+
+  <!-- CTAs -->
+  <div style="padding: 22px 20px 0; display: flex; flex-direction: column; gap: 12px">
+    <a href="CreateListing.dc.html" style="text-decoration: none; display: flex; align-items: center; justify-content: space-between; background: {{accent}}; color: #FFFFFF; border-radius: 16px; padding: 16px 18px; min-height: 60px; font-weight: 700; font-size: 17px">
+      <span style="display: flex; align-items: center; gap: 10px">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
+        יש לי דירה / חדר
+      </span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </a>
+    <a href="Search.dc.html" style="text-decoration: none; display: flex; align-items: center; justify-content: space-between; background: #FFFFFF; color: #1C1917; border: 1.5px solid #D6D3D1; border-radius: 16px; padding: 16px 18px; min-height: 60px; font-weight: 700; font-size: 17px">
+      <span style="display: flex; align-items: center; gap: 10px">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1917" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        אני מחפש/ת
+      </span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1917" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </a>
+  </div>
+
+  <!-- preview card: a listing with match score -->
+  <div style="padding: 28px 20px 0">
+    <div style="background: #FFFFFF; border-radius: 20px; border: 1px solid #E7E5E4; overflow: hidden; box-shadow: 0 8px 24px rgba(28,25,23,0.06)">
+      <div style="height: 150px; background: #DDD6CE; display: flex; align-items: center; justify-content: center; position: relative">
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#A8A29E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+        <span style="position: absolute; top: 12px; right: 12px; background: {{accent}}; color: #FFFFFF; font-weight: 700; font-size: 13px; padding: 6px 10px; border-radius: 999px">התאמה 91%</span>
+      </div>
+      <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline">
+          <span style="font-weight: 800; font-size: 19px">7,200 ₪</span>
+          <span style="font-size: 13px; color: #57534E">כניסה 1.1.27</span>
+        </div>
+        <span style="font-size: 15px; font-weight: 500">4 חדרים · רחוב כצנלסון, גבעתיים</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+          <span style="font-size: 12px; font-weight: 600; color: #0B5F52; background: #E6F4F1; padding: 4px 10px; border-radius: 999px">חיות מחמד</span>
+          <span style="font-size: 12px; font-weight: 600; color: #0B5F52; background: #E6F4F1; padding: 4px 10px; border-radius: 999px">כניסה גמישה</span>
+          <span style="font-size: 12px; font-weight: 600; color: #0B5F52; background: #E6F4F1; padding: 4px 10px; border-radius: 999px">ללא מתווך</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- how it works -->
+  <div style="padding: 36px 20px 0; display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 22px; font-weight: 800">איך זה עובד</h2>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; gap: 14px; align-items: flex-start; background: #FFFFFF; border: 1px solid #E7E5E4; border-radius: 16px; padding: 14px 16px">
+        <span style="flex: none; width: 36px; height: 36px; border-radius: 12px; background: #E6F4F1; color: #0B5F52; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center">1</span>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 700; font-size: 16px">ממלאים פרופיל קצר</span>
+          <span style="font-size: 14px; color: #57534E; line-height: 1.45">תקציב, תאריך כניסה, אורח חיים והעדפות דיור — פעם אחת.</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: flex-start; background: #FFFFFF; border: 1px solid #E7E5E4; border-radius: 16px; padding: 14px 16px">
+        <span style="flex: none; width: 36px; height: 36px; border-radius: 12px; background: #E6F4F1; color: #0B5F52; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center">2</span>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 700; font-size: 16px">רואים ציון התאמה לכל דירה</span>
+          <span style="font-size: 14px; color: #57534E; line-height: 1.45">מה מסתדר, מה פחות — לפני שמבזבזים זמן על סיור.</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: flex-start; background: #FFFFFF; border: 1px solid #E7E5E4; border-radius: 16px; padding: 14px 16px">
+        <span style="flex: none; width: 36px; height: 36px; border-radius: 12px; background: #E6F4F1; color: #0B5F52; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center">3</span>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 700; font-size: 16px">מגישים מועמדות בלחיצה</span>
+          <span style="font-size: 14px; color: #57534E; line-height: 1.45">בעל הדירה מקבל כרטיס מסודר, לא עוד הודעה בצ'אט.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- trust line -->
+  <div style="padding: 28px 20px 0; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; font-size: 14px; font-weight: 600; color: #44403C">
+      <span style="display: inline-flex; align-items: center; gap: 6px">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B5F52" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        משתמשים מאומתים בטלפון
+      </span>
+      <span aria-hidden="true" style="color: #A8A29E">·</span>
+      <span>בלי מתווכים</span>
+      <span aria-hidden="true" style="color: #A8A29E">·</span>
+      <span>חינם למחפשים</span>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <div style="margin-top: auto; padding: 20px; display: flex; justify-content: center; gap: 18px; font-size: 13px; color: #57534E">
+    <a href="#terms" style="text-decoration: none">תנאי שימוש</a>
+    <a href="#privacy" style="text-decoration: none">פרטיות</a>
+    <a href="#contact" style="text-decoration: none">צור קשר</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0E7C6B","options":["#0E7C6B","#B45309","#1D4ED8","#9D174D"]},"$preview":{"width":390,"height":1480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#0E7C6B' };
+  }
+}
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@ You are the UX / i18n reviewer for the rent-app repo. Read the spec's UI section
 Run the stack and look at every touched screen at 390 px and 1280 px (Playwright screenshots are fine).
 
 Check:
-1. Matches the Design canvas in structure and hierarchy (not pixel-perfect): primary action placement, card anatomy, match-score badge usage.
+1. Matches the referenced artboard in `design/` in structure and hierarchy (not pixel-perfect): primary action placement, card anatomy, match-score badge usage.
 2. Hebrew copy: natural, consistent register (מועמדות not בקשה if that is the canvas term), gendered forms handled (הגש/י), numbers and ₪ formatted via Intl.
 3. RTL: icons that imply direction are mirrored; stepper, breadcrumbs, carousels advance right-to-left; logical properties used.
 4. States: empty, loading (skeleton, not spinner-only), error with recovery action, success feedback.

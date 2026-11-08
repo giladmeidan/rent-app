@@ -1,6 +1,6 @@
 # Standing product decisions (read before writing any spec)
 
-Updated: 2026-11-08. Full reasoning in the Product Plan doc.
+Updated: 2026-11-09. Full reasoning in the Product Plan doc.
 
 | Topic | Decision |
 | --- | --- |
@@ -12,6 +12,8 @@ Updated: 2026-11-08. Full reasoning in the Product Plan doc.
 | Launch area | Gush Dan only; areas are a config table, listings outside are hidden |
 | Gender preference | Hard filter on ROOM listings and room-seeker profiles only; never on whole-apartment listings |
 | Applicant count | Shown to seekers as the exact number; Slice 4 logs applications-per-view to revisit |
+| Account roles | Every account picks **owner** or **seeker** at signup (switchable later via a profile edit, slice TBD). Broker is an `account_type`, not a role (decided 2026-11-09) |
+| Signup data | Email + display name (2–40 chars) only. No phone number is collected until SMS verification is switched on (decided 2026-11-09) |
 | OTP | Email OTP in Slice 1; SMS adapter stubbed behind an interface; switched on at launch readiness |
 | Matching | Hard filters (budget overlap, move-in window ±4 weeks, shared area, deal-breakers) then weighted distance score, 0–100, with top-3 agreeing / top-1 differing explanation |
 | Chat | Opens only on owner shortlist or mutual interest; never one-sided |

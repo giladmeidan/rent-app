@@ -65,3 +65,6 @@ Max 3 review rounds; a 3rd rejection returns the spec to the orchestrator as a s
 Gilad has ~5 h/week. He reads spec digests and review digests, not diffs. The orchestrator
 sends a digest (`/digest`) after every verified spec and after every merge. Decisions he
 makes are written into `specs/PRODUCT.md` the same day.
+
+## Design
+Artboards for the core screens are in `design/screens-v1/*.dc.html` (see `design/README.md`). Specs reference them in the UI section; coders read them for structure and copy; the UX reviewer compares against them.

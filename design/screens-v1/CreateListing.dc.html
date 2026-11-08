@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>יצירת מודעה — פרטי הדירה</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+button,input,select{font:inherit}
+a{color:#0B5F52}a:hover{color:#08463D}
+</style>
+</helmet>
+<div dir="rtl" style="width: 390px; height: 1300px; background: #F7F5F2; color: #1C1917; font-family: Heebo, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; text-align: right; position: relative">
+
+  <!-- header -->
+  <div style="background: #FFFFFF; border-bottom: 1px solid #E7E5E4; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <a href="Main.dc.html" aria-label="חזרה" style="width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #1C1917">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
+      <span style="font-weight: 700; font-size: 16px">מודעה חדשה</span>
+      <button type="button" style="min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: #57534E; font-weight: 600; font-size: 14px; cursor: pointer">שמירה כטיוטה</button>
+    </div>
+    <!-- stepper -->
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 4px">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1">
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: {{accent}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>
+        <span style="font-size: 12px; font-weight: 600; color: #0B5F52">סוג</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1">
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: #FFFFFF; border: 2.5px solid {{accent}}; color: #0B5F52; font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center">2</span>
+        <span style="font-size: 12px; font-weight: 700; color: #1C1917">פרטים</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1">
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: #FFFFFF; border: 2px solid #D6D3D1; color: #57534E; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">3</span>
+        <span style="font-size: 12px; font-weight: 500; color: #57534E">תמונות</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1">
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: #FFFFFF; border: 2px solid #D6D3D1; color: #57534E; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">4</span>
+        <span style="font-size: 12px; font-weight: 500; color: #57534E">העדפות</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1">
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: #FFFFFF; border: 2px solid #D6D3D1; color: #57534E; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">5</span>
+        <span style="font-size: 12px; font-weight: 500; color: #57534E">תצוגה מקדימה</span>
+      </div>
+    </div>
+    <div style="height: 4px; border-radius: 999px; background: #E7E5E4; overflow: hidden; display: flex">
+      <div style="width: 40%; background: {{accent}}; border-radius: 999px"></div>
+    </div>
+  </div>
+
+  <!-- form -->
+  <div style="padding: 22px 20px 0; display: flex; flex-direction: column; gap: 22px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 800">פרטי הדירה</h1>
+      <p style="margin: 0; font-size: 14px; color: #57534E">שלב 2 מתוך 5 · הפרטים האלה נכנסים לחישוב ציון ההתאמה.</p>
+    </div>
+
+    <!-- rooms -->
+    <fieldset style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <legend style="font-size: 14px; font-weight: 700; padding: 0; margin-bottom: 8px">מספר חדרים</legend>
+      <div style="display: flex; gap: 8px">
+        <button type="button" style="flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid #D6D3D1; background: #FFFFFF; font-weight: 600; font-size: 15px; color: #1C1917; cursor: pointer">2</button>
+        <button type="button" style="flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid #D6D3D1; background: #FFFFFF; font-weight: 600; font-size: 15px; color: #1C1917; cursor: pointer">3</button>
+        <button type="button" style="flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid #D6D3D1; background: #FFFFFF; font-weight: 600; font-size: 15px; color: #1C1917; cursor: pointer">3.5</button>
+        <button type="button" aria-pressed="true" style="flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid {{accent}}; background: #E6F4F1; font-weight: 700; font-size: 15px; color: #0B5F52; cursor: pointer">4</button>
+        <button type="button" style="flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid #D6D3D1; background: #FFFFFF; font-weight: 600; font-size: 15px; color: #1C1917; cursor: pointer">5+</button>
+      </div>
+    </fieldset>
+
+    <!-- floor + size -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="floor" style="font-size: 14px; font-weight: 700">קומה</label>
+        <div style="display: flex; align-items: center; gap: 6px; background: #FFFFFF; border: 1.5px solid #D6D3D1; border-radius: 12px; padding: 0 8px 0 12px; min-height: 48px">
+          <input id="floor" type="number" value="3" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 600; color: #1C1917; outline: none">
+          <span style="font-size: 13px; color: #57534E">מתוך</span>
+          <input aria-label="סך הקומות בבניין" type="number" value="5" style="width: 36px; border: 0; background: transparent; font-size: 16px; font-weight: 600; color: #1C1917; outline: none; text-align: center">
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="size" style="font-size: 14px; font-weight: 700">שטח</label>
+        <div style="display: flex; align-items: center; gap: 6px; background: #FFFFFF; border: 1.5px solid #D6D3D1; border-radius: 12px; padding: 0 12px; min-height: 48px">
+          <input id="size" type="number" value="95" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 600; color: #1C1917; outline: none">
+          <span style="font-size: 14px; color: #57534E">מ״ר</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- price -->
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="price" style="font-size: 14px; font-weight: 700">שכר דירה חודשי</label>
+      <div style="display: flex; align-items: center; gap: 6px; background: #FFFFFF; border: 1.5px solid {{accent}}; border-radius: 12px; padding: 0 12px; min-height: 52px; box-shadow: 0 0 0 3px #E6F4F1">
+        <input id="price" type="text" inputmode="numeric" value="7,200" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 20px; font-weight: 800; color: #1C1917; outline: none">
+        <span style="font-size: 16px; font-weight: 600; color: #57534E">₪</span>
+      </div>
+      <span style="font-size: 12px; color: #57534E">הממוצע לדירות 4 חדרים בגבעתיים: 7,000–7,800 ₪</span>
+    </div>
+
+    <!-- entry date -->
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="entry" style="font-size: 14px; font-weight: 700">תאריך כניסה</label>
+      <div style="display: flex; align-items: center; gap: 10px; background: #FFFFFF; border: 1.5px solid #D6D3D1; border-radius: 12px; padding: 0 12px; min-height: 48px">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        <input id="entry" type="text" value="01.01.2027" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 600; color: #1C1917; outline: none">
+        <button type="button" style="min-height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid #D6D3D1; background: #F5F5F4; font-size: 12px; font-weight: 600; color: #44403C; cursor: pointer">גמיש ±2 שבועות</button>
+      </div>
+    </div>
+
+    <!-- toggles -->
+    <div style="background: #FFFFFF; border: 1px solid #E7E5E4; border-radius: 16px; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #F0EEEB">
+        <span style="font-size: 15px; font-weight: 600">מעלית</span>
+        <button type="button" role="switch" aria-checked="true" aria-label="מעלית" style="width: 52px; height: 32px; border-radius: 999px; border: 0; background: {{accent}}; position: relative; cursor: pointer; padding: 0"><span style="position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.2)"></span></button>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #F0EEEB">
+        <span style="font-size: 15px; font-weight: 600">חניה</span>
+        <button type="button" role="switch" aria-checked="true" aria-label="חניה" style="width: 52px; height: 32px; border-radius: 999px; border: 0; background: {{accent}}; position: relative; cursor: pointer; padding: 0"><span style="position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.2)"></span></button>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #F0EEEB">
+        <span style="font-size: 15px; font-weight: 600">מרוהטת</span>
+        <button type="button" role="switch" aria-checked="false" aria-label="מרוהטת" style="width: 52px; height: 32px; border-radius: 999px; border: 0; background: #D6D3D1; position: relative; cursor: pointer; padding: 0"><span style="position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.2)"></span></button>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px">
+        <span style="font-size: 15px; font-weight: 600">חיות מחמד מותרות</span>
+        <button type="button" role="switch" aria-checked="true" aria-label="חיות מחמד מותרות" style="width: 52px; height: 32px; border-radius: 999px; border: 0; background: {{accent}}; position: relative; cursor: pointer; padding: 0"><span style="position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.2)"></span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer buttons -->
+  <div style="position: absolute; bottom: 0; right: 0; left: 0; background: #FFFFFF; border-top: 1px solid #E7E5E4; padding: 12px 16px 22px; display: flex; gap: 10px">
+    <button type="button" style="flex: 1; min-height: 52px; border-radius: 14px; border: 1.5px solid #D6D3D1; background: #FFFFFF; color: #1C1917; font-weight: 700; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      חזרה
+    </button>
+    <button type="button" style="flex: 1.6; min-height: 52px; border-radius: 14px; border: 0; background: {{accent}}; color: #FFFFFF; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px">
+      הבא: תמונות
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0E7C6B","options":["#0E7C6B","#B45309","#1D4ED8","#9D174D"]},"$preview":{"width":390,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#0E7C6B' };
+  }
+}
+</script>
+</body>
+</html>
