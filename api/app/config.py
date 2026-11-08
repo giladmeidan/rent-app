@@ -1,9 +1,11 @@
 """Application settings. Every value comes from the environment (see `.env.example`)."""
 
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +25,27 @@ class Settings(DatabaseSettings):
     test_database_url: SecretStr | None = None
     redis_url: SecretStr
     web_origin: str = "http://localhost:5173"
+    # HMAC key for OTP codes (spec 0001a). Required: there is no safe default in code.
+    secret_key: SecretStr
+    email_backend: Literal["file", "smtp"] = "file"
+    email_outbox_dir: Path = Path("./.outbox")
+    smtp_url: SecretStr | None = None
+    email_from: str = "noreply@localhost"
+    cookie_secure: bool = False
+
+    @field_validator("secret_key")
+    @classmethod
+    def _secret_key_is_long_enough(cls, value: SecretStr) -> SecretStr:
+        # The message names the rule only, never the value.
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters")
+        return value
+
+    @model_validator(mode="after")
+    def _smtp_url_required_for_smtp_backend(self) -> Self:
+        if self.email_backend == "smtp" and self.smtp_url is None:
+            raise ValueError("SMTP_URL is required when EMAIL_BACKEND=smtp")
+        return self
 
     @field_validator("web_origin")
     @classmethod

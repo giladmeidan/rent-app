@@ -42,10 +42,15 @@ services:
       DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
       REDIS_URL: redis://redis:6379/0
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
+      EMAIL_BACKEND: file
+      EMAIL_OUTBOX_DIR: /outbox
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - ../api:/app
+      # Dev email outbox: the login code is in the newest file (`make dev` creates it 0777 first).
+      - ../.outbox:/outbox
     depends_on:
       db:
         condition: service_healthy
@@ -62,6 +67,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
       REDIS_URL: redis://redis:6379/0
+      # worker.py loads Settings at import, which requires SECRET_KEY.
+      SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
     volumes:
       - ../api:/app
     depends_on:

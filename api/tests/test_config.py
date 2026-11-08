@@ -77,3 +77,48 @@ def test_validation_errors_do_not_echo_dsns(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert "redis_url" in str(excinfo.value)
     assert "pw-canary" not in str(excinfo.value)
+
+
+_SECRET = "s" * 32
+
+
+def test_ac12_secret_key_and_smtp_url_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("SMTP_URL", raising=False)
+    monkeypatch.delenv("EMAIL_BACKEND", raising=False)
+
+    with pytest.raises(ValidationError, match="secret_key"):
+        Settings(database_url=_DSN, redis_url=_REDIS)
+
+    with pytest.raises(ValidationError, match="at least 32 characters") as excinfo:
+        Settings(database_url=_DSN, redis_url=_REDIS, secret_key="short-key-canary")
+    assert "short-key-canary" not in str(excinfo.value)
+
+    with pytest.raises(ValidationError, match="SMTP_URL is required"):
+        Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET, email_backend="smtp")
+    smtp = Settings(
+        database_url=_DSN,
+        redis_url=_REDIS,
+        secret_key=_SECRET,
+        email_backend="smtp",
+        smtp_url="smtp://u:smtp-canary@mail.example.com",
+    )
+    assert "smtp-canary" not in repr(smtp)
+    assert _SECRET not in repr(smtp)
+
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", _DSN)
+    assert DatabaseSettings().database_url.get_secret_value() == _DSN
+
+
+def test_ac12_settings_defaults_for_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("EMAIL_BACKEND", "EMAIL_OUTBOX_DIR", "EMAIL_FROM", "COOKIE_SECURE", "SMTP_URL"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET)
+
+    assert settings.email_backend == "file"
+    assert str(settings.email_outbox_dir) == ".outbox"
+    assert settings.email_from == "noreply@localhost"
+    assert settings.cookie_secure is False
+    assert settings.smtp_url is None

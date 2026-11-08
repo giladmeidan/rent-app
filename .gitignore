@@ -11,3 +11,4 @@ dist/
 web/src/api/*.gen.ts
 web/test-results/
 web/playwright-report/
+.outbox/
