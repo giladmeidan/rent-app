@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import threading
 import time
 from collections.abc import Callable, Iterator
 from http.cookies import Morsel, SimpleCookie
@@ -13,8 +14,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
+from app.db import get_sessionmaker
 from app.models import User
 from app.redis_client import get_redis
 from app.services import auth as auth_service
@@ -461,3 +464,108 @@ def test_cookie_secure_when_configured(
 
     assert _session_cookie(login)["secure"] is True
     assert _session_cookie(logout)["secure"] is True
+
+
+def test_ac16_burst_of_429s_does_not_consume_daily_budget(
+    client: TestClient, outbox: Outbox
+) -> None:
+    statuses = [
+        client.post("/auth/otp/request", json={"email": EMAIL}).status_code for _ in range(10)
+    ]
+
+    assert statuses == [204] * 3 + [429] * 7
+    r = get_redis()
+    assert r.get(f"rl:otp:email:day:{EMAIL}") == b"3"
+    assert r.get("rl:otp:ip:testclient") == b"3"
+    r.delete(f"rl:otp:email:{EMAIL}", "rl:otp:ip:testclient")  # the 15-min window has passed
+    assert client.post("/auth/otp/request", json={"email": EMAIL}).status_code == 204
+
+
+def test_ac7_ip_limited_requests_do_not_count_against_email(
+    client: TestClient, outbox: Outbox
+) -> None:
+    for i in range(10):
+        assert (
+            client.post("/auth/otp/request", json={"email": f"u{i}@example.com"}).status_code == 204
+        )
+
+    response = client.post("/auth/otp/request", json={"email": EMAIL})
+
+    assert response.status_code == 429
+    r = get_redis()
+    assert r.exists(f"rl:otp:email:{EMAIL}", f"rl:otp:email:day:{EMAIL}") == 0
+    assert r.get("rl:otp:ip:testclient") == b"10"
+
+
+def test_otp_single_use_under_concurrency(
+    client: TestClient, outbox: Outbox, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with db_engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO users (email, display_name, role) VALUES (:e, 'נועה', 'owner')"),
+            {"e": EMAIL},
+        )
+    code = _request_code(client, outbox)
+    # Both verifies pass the code comparison and the user lookup before either claims the code.
+    both_checked = threading.Barrier(2, timeout=10)
+    real_find_user = auth_service._find_user
+
+    def find_user_in_step(db: Any, email: str) -> User | None:
+        user = real_find_user(db, email)
+        both_checked.wait()
+        return user
+
+    monkeypatch.setattr(auth_service, "_find_user", find_user_in_step)
+    outcomes: list[str] = []
+
+    def verify() -> None:
+        with get_sessionmaker()() as db:
+            try:
+                auth_service.verify_otp(db, get_redis(), EMAIL, code, None)
+                outcomes.append("login")
+            except auth_service.InvalidCodeError:
+                outcomes.append("invalid_code")
+
+    threads = [threading.Thread(target=verify) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=15)
+
+    assert sorted(outcomes) == ["invalid_code", "login"]
+    assert get_redis().exists(f"otp:{EMAIL}") == 0
+
+
+def test_settling_a_code_never_touches_a_newer_one(client: TestClient, outbox: Outbox) -> None:
+    r = get_redis()
+    _request_code(client, outbox)
+    old_hmac = r.hget(f"otp:{EMAIL}", "code_hmac")
+    assert old_hmac is not None
+    _request_code(client, outbox)
+    new_hmac = r.hget(f"otp:{EMAIL}", "code_hmac")
+    assert new_hmac != old_hmac
+
+    for op in (b"del", b"refund"):
+        assert auth_service._eval(r, auth_service._SETTLE_CODE, [f"otp:{EMAIL}"], old_hmac, op) == 0
+
+    assert r.hgetall(f"otp:{EMAIL}") == {b"code_hmac": new_hmac, b"attempts": b"0"}
+
+
+def test_code_survives_database_failure_at_login(
+    client: TestClient, outbox: Outbox, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _signup(client, outbox)
+    code = _request_code(client, outbox)
+
+    def commit_fails() -> None:
+        raise OperationalError("COMMIT", {}, Exception("connection lost"))
+
+    with get_sessionmaker()() as db:
+        monkeypatch.setattr(db, "commit", commit_fails)
+        with pytest.raises(OperationalError):
+            auth_service.verify_otp(db, get_redis(), EMAIL, code, None)
+
+    r = get_redis()
+    assert r.hget(f"otp:{EMAIL}", "attempts") == b"1"
+    assert 0 < r.pttl(f"otp:{EMAIL}") <= 600_000
+    assert _verify(client, EMAIL, code).status_code == 200

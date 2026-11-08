@@ -4,7 +4,8 @@ Brute-force bound (NF2), per targeted email: a code allows `OTP_MAX_ATTEMPTS` (5
 most `OTP_RATE_LIMIT_EMAIL` (3) codes per 15 min and `OTP_RATE_LIMIT_EMAIL_DAY` (10) codes per 24 h
 are issued, so an attacker gets at most 50 guesses a day against a 10**6 code space: about 0.005 %
 a day, about 0.15 % over a month of continuous attack. Attempts are reserved atomically in Redis
-before the comparison, so concurrent guesses cannot exceed the bound.
+before the comparison, so concurrent guesses cannot exceed the bound, and a right code is claimed
+(compare-and-delete) before it is used, so one code yields at most one session.
 
 OTP codes and rate-limit counters live in Redis with TTLs; only the HMAC of a code is stored, and
 only the sha256 of a session token reaches Postgres.
@@ -37,17 +38,50 @@ OTP_RATE_DAY_S = 86_400
 OTP_RATE_LIMIT_IP = 10
 SESSION_TTL_S = 30 * 24 * 3600
 
+# Rate limits. KEYS = the three counters, ARGV = limit, window per counter. If any counter is at
+# its limit, return the largest remaining TTL and count nothing, so refused requests never use up
+# the budget. Otherwise create each counter with its TTL (SET NX EX) and INCR it, atomically: a
+# counter can never exist without a TTL.
+_COUNT_REQUEST = """
+local retry = 0
+for i, key in ipairs(KEYS) do
+  if tonumber(redis.call('GET', key) or '0') >= tonumber(ARGV[2 * i - 1]) then
+    retry = math.max(retry, redis.call('TTL', key), 1)
+  end
+end
+if retry > 0 then return retry end
+for i, key in ipairs(KEYS) do
+  redis.call('SET', key, 0, 'EX', ARGV[2 * i], 'NX')
+  redis.call('INCR', key)
+end
+return 0
+"""
 # Reserve one attempt: nil when no code is pending (never creates a key, so never one without a
-# TTL); otherwise {code_hmac, attempts after this one}. A key already past the limit is deleted.
+# TTL); otherwise {code_hmac, attempts after this one, PTTL}. A key past the limit is deleted.
 _RESERVE_ATTEMPT = """
 if redis.call('EXISTS', KEYS[1]) == 0 then return nil end
 local n = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
 if n > tonumber(ARGV[1]) then redis.call('DEL', KEYS[1]) return nil end
-return {redis.call('HGET', KEYS[1], 'code_hmac'), n}
+return {redis.call('HGET', KEYS[1], 'code_hmac'), n, redis.call('PTTL', KEYS[1])}
 """
-# Give back a reserved attempt (right code, but no account and no profile yet).
-_REFUND_ATTEMPT = """
-if redis.call('EXISTS', KEYS[1]) == 1 then redis.call('HINCRBY', KEYS[1], 'attempts', -1) end
+# Act on the code only while it is still the one that was reserved (ARGV[1] = its code_hmac), so a
+# fresh code from a concurrent request is never touched. ARGV[2] = 'del' (claim a right code, or
+# drop an exhausted one; returns 1 if this call deleted it) or 'refund' (give the attempt back).
+_SETTLE_CODE = """
+if redis.call('HGET', KEYS[1], 'code_hmac') ~= ARGV[1] then return 0 end
+if ARGV[2] == 'refund' then
+  redis.call('HINCRBY', KEYS[1], 'attempts', -1)
+else
+  redis.call('DEL', KEYS[1])
+end
+return 1
+"""
+# Put a claimed code back after the login failed in Postgres, unless a new code was requested.
+_RESTORE_CODE = """
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+redis.call('HSET', KEYS[1], 'code_hmac', ARGV[1], 'attempts', ARGV[2])
+redis.call('PEXPIRE', KEYS[1], ARGV[3])
+return 1
 """
 
 
@@ -83,26 +117,18 @@ def _token_hash(token: str) -> str:
 
 
 def _count_request(r: RedisClient, email: str, ip: str) -> None:
-    """Count this request against all three limits; raise `RateLimitedError` if any is exceeded."""
+    """Count this request against all three limits; raise `RateLimitedError` (counting nothing)
+    if any is already at its limit."""
     counters = (
         (f"rl:otp:email:{email}", OTP_RATE_LIMIT_EMAIL, OTP_RATE_WINDOW_S),
         (f"rl:otp:email:day:{email}", OTP_RATE_LIMIT_EMAIL_DAY, OTP_RATE_DAY_S),
         (f"rl:otp:ip:{ip}", OTP_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
     )
-    pipe = r.pipeline(transaction=True)
-    for key, _limit, window in counters:
-        # SET NX EX and INCR in one MULTI: a counter can never exist without its TTL.
-        pipe.set(key, 0, ex=window, nx=True)
-        pipe.incr(key)
-        pipe.ttl(key)
-    results: list[Any] = pipe.execute()
-    tripped = [
-        max(int(results[i * 3 + 2]), 1)
-        for i, (_key, limit, _window) in enumerate(counters)
-        if int(results[i * 3 + 1]) > limit
-    ]
-    if tripped:
-        raise RateLimitedError(retry_after=max(tripped))
+    keys = [key for key, _limit, _window in counters]
+    args = [value for _key, limit, window in counters for value in (limit, window)]
+    retry_after = int(_eval(r, _COUNT_REQUEST, keys, *args))
+    if retry_after:
+        raise RateLimitedError(retry_after=retry_after)
 
 
 def request_otp(r: RedisClient, sender: EmailSender, email: str, ip: str) -> None:
@@ -123,9 +149,9 @@ def request_otp(r: RedisClient, sender: EmailSender, email: str, ip: str) -> Non
         raise
 
 
-def _eval(r: RedisClient, script: str, key: str, *args: int) -> Any:
-    """Run a one-key Lua script atomically."""
-    return r.eval(script, 1, key, *args)  # type: ignore[no-untyped-call]  # untyped in types-redis
+def _eval(r: RedisClient, script: str, keys: list[str], *args: bytes | int) -> Any:
+    """Run a Lua script atomically."""
+    return r.eval(script, len(keys), *keys, *args)  # type: ignore[no-untyped-call]  # untyped stub
 
 
 def _find_user(db: Session, email: str) -> User | None:
@@ -138,37 +164,46 @@ def verify_otp(
     """Check the code and return `(user, created)`, creating the account from `profile` on first
     use. Raises `InvalidCodeError` or `ProfileRequiredError`. Commits; the caller adds a session."""
     email = normalise_email(email)
-    key = otp_key(email)
+    key = [otp_key(email)]
     reserved = _eval(r, _RESERVE_ATTEMPT, key, OTP_MAX_ATTEMPTS)
     if reserved is None:
         raise InvalidCodeError
-    stored, attempts = reserved
+    stored, attempts, ttl_ms = reserved
     if not hmac.compare_digest(stored, _code_hmac(code)):
         if int(attempts) >= OTP_MAX_ATTEMPTS:
-            r.delete(key)
+            _eval(r, _SETTLE_CODE, key, stored, b"del")
         raise InvalidCodeError
 
     user = _find_user(db, email)
-    created = False
-    if user is None:
-        if profile is None:
-            _eval(r, _REFUND_ATTEMPT, key)
-            raise ProfileRequiredError
-        # ON CONFLICT: a concurrent first verify for the same email that inserted first wins, and
-        # this request becomes a login of that row instead of a 500.
-        user = db.scalar(
-            insert(User)
-            .values(email=email, display_name=profile.display_name, role=profile.role)
-            .on_conflict_do_nothing(index_elements=[User.email])
-            .returning(User)
-        )
-        created = user is not None
+    if user is None and profile is None:
+        _eval(r, _SETTLE_CODE, key, stored, b"refund")
+        raise ProfileRequiredError
+    # Claim the code: of concurrent verifies with the same right code, exactly one gets past here.
+    if not _eval(r, _SETTLE_CODE, key, stored, b"del"):
+        raise InvalidCodeError
+    try:
+        created = False
         if user is None:
-            user = _find_user(db, email)
-            assert user is not None  # the conflicting row exists once our INSERT returns
-    user.last_login_at = dt.datetime.now(dt.UTC)
-    db.commit()
-    r.delete(key)
+            assert profile is not None
+            # ON CONFLICT: a concurrent first verify for the same email that inserted first wins,
+            # and this request becomes a login of that row instead of a 500.
+            user = db.scalar(
+                insert(User)
+                .values(email=email, display_name=profile.display_name, role=profile.role)
+                .on_conflict_do_nothing(index_elements=[User.email])
+                .returning(User)
+            )
+            created = user is not None
+            if user is None:
+                user = _find_user(db, email)
+                assert user is not None  # the conflicting row exists once our INSERT returns
+        user.last_login_at = dt.datetime.now(dt.UTC)
+        db.commit()
+    except Exception:
+        db.rollback()
+        if int(ttl_ms) > 0:  # the code stays usable after a database failure
+            _eval(r, _RESTORE_CODE, key, stored, int(attempts), int(ttl_ms))
+        raise
     return user, created
 
 
