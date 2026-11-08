@@ -58,7 +58,7 @@ Backwards compatibility: first migration, nothing running yet.
 | Method | Path | Auth rule | Request | Response | Errors |
 | --- | --- | --- | --- | --- | --- |
 | GET | /health | public (no auth exists yet; unauthenticated by design, no PII) | – | `{"status":"ok","db":"ok","redis":"ok"}` 200 | 503 `{"status":"degraded","db":"error"|"ok","redis":"error"|"ok"}` when a dependency ping (`SELECT 1` / redis `PING`) fails |
-| GET | /areas | public | – | `[{"id":uuid,"slug":str,"name_he":str}]` only `is_active=true`, ordered by `name_he`; **no `geom`** in the response | – |
+| GET | /areas | public | – | `[{"id":uuid,"slug":str,"name_he":str}]` only `is_active=true`, ordered by `name_he`; **no `geom`** in the response | 503 `{"detail":"database unavailable"}` when Postgres is unreachable |
 
 Both routers are thin; `services/areas.py::list_active_areas(session)` holds the query. API schemas in
 `schemas/area.py` (`AreaOut`), never the ORM model. Response model excludes geometry (Slice 3 adds a
