@@ -54,3 +54,16 @@ def test_database_settings_do_not_require_redis_url(monkeypatch: pytest.MonkeyPa
     assert DatabaseSettings().database_url.get_secret_value() == _DSN
     with pytest.raises(ValidationError, match="redis_url"):
         Settings()
+
+
+def test_validation_errors_do_not_echo_dsns(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Only this short input, so pydantic would print it untruncated in `input_value=`.
+    for name in ("REDIS_URL", "TEST_DATABASE_URL", "WEB_ORIGIN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:pw-canary@db/x")
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings()
+
+    assert "redis_url" in str(excinfo.value)
+    assert "pw-canary" not in str(excinfo.value)

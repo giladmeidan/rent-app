@@ -10,7 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class DatabaseSettings(BaseSettings):
     """What database-only tools (Alembic, `scripts/seed.py`) need: just `DATABASE_URL`."""
 
-    model_config = SettingsConfigDict(env_file=None, extra="ignore")
+    # hide_input_in_errors: a ValidationError would otherwise echo every input, DSNs included.
+    model_config = SettingsConfigDict(env_file=None, extra="ignore", hide_input_in_errors=True)
 
     # DSNs carry credentials: SecretStr keeps them out of reprs, logs and tracebacks.
     database_url: SecretStr
