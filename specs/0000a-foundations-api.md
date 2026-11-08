@@ -1,7 +1,7 @@
 ---
 id: 0000a
 title: A developer can run `make dev` and get Postgres+PostGIS, Redis, the API and the worker up, with `GET /areas` returning the seeded Gush Dan area, and CI runs the api job on every PR
-status: verified
+status: in-progress
 depends_on: []
 reviewers: [code, qa, security]   # security: config/secrets handling, CORS, compose defaults, CI secrets — everything later slices inherit
 estimate: 1 coder run
