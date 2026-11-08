@@ -1,7 +1,7 @@
 ---
 id: 0001a
 title: A person signs up or logs in with an email one-time code, choosing owner or seeker at signup, and the API knows who they are on every request via a session cookie
-status: verified
+status: in-progress
 depends_on: [0000a]
 reviewers: [code, qa, security]   # security: OTP, sessions, cookies, rate limits, email PII
 estimate: 1 coder run
