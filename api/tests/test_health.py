@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.db import CONNECT_TIMEOUT_S, make_engine
 from app.routers import health as health_router
+from app.services.health import ping_redis
 
 
 def test_ac1_health_ok_when_dependencies_up(client: TestClient) -> None:
@@ -27,6 +28,21 @@ def test_ac2_health_degraded_when_redis_down(
 
     assert response.status_code == 503
     assert response.json() == {"status": "degraded", "db": "ok", "redis": "error"}
+
+
+def test_ac2_ping_redis_is_false_when_nothing_listens() -> None:
+    assert ping_redis("redis://127.0.0.1:1/0") is False
+
+
+def test_ac2_health_degraded_when_db_down(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(health_router, "ping_db", lambda _engine: False)
+
+    response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "degraded", "db": "error", "redis": "ok"}
 
 
 @pytest.fixture

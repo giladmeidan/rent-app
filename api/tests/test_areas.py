@@ -1,7 +1,13 @@
 """GET /areas (AC3)."""
 
+from collections.abc import Iterator
+
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
+from sqlalchemy.orm import Session
+
+from app.db import get_session, make_engine
+from app.main import create_app
 
 _INSERT = text(
     """
@@ -37,3 +43,22 @@ def test_ac3_areas_ordered_by_name_he(client: TestClient, db_engine: Engine) -> 
     response = client.get("/areas")
 
     assert [area["name_he"] for area in response.json()] == ["א", "ב", "ג"]
+
+
+def test_areas_returns_json_503_when_db_unreachable() -> None:
+    # Port 1 on loopback refuses the connection immediately.
+    engine = make_engine("postgresql+psycopg://rent:rent@127.0.0.1:1/rent")
+
+    def unreachable_session() -> Iterator[Session]:
+        with Session(engine) as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = unreachable_session
+    with TestClient(app) as client:
+        response = client.get("/areas")
+    engine.dispose()
+
+    assert response.status_code == 503
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"detail": "database unavailable"}
