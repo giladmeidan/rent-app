@@ -36,9 +36,9 @@ def seed_areas(engine: Engine) -> int:
 
 
 def main() -> None:
-    from app.config import get_settings
+    from app.config import get_database_settings
 
-    engine = create_engine(get_settings().database_url)
+    engine = create_engine(get_database_settings().database_url.get_secret_value())
     try:
         inserted = seed_areas(engine)
     finally:

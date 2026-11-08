@@ -33,11 +33,12 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.config import get_settings  # noqa: E402
+from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 get_settings.cache_clear()
+get_database_settings.cache_clear()
 get_engine.cache_clear()
 get_ping_engine.cache_clear()
 get_sessionmaker.cache_clear()

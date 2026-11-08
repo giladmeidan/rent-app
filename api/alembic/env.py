@@ -18,9 +18,9 @@ def _database_url() -> str:
     url = config.get_main_option("sqlalchemy.url")
     if url:
         return url
-    from app.config import get_settings
+    from app.config import get_database_settings
 
-    return get_settings().database_url
+    return get_database_settings().database_url.get_secret_value()
 
 
 # The postgis image sets the database `search_path` to `"$user", public, topology, tiger`, which

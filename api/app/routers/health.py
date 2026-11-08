@@ -18,7 +18,7 @@ router = APIRouter(tags=["health"])
 )
 def health() -> JSONResponse:
     db_ok = ping_db(get_ping_engine())
-    redis_ok = ping_redis(get_settings().redis_url)
+    redis_ok = ping_redis(get_settings().redis_url.get_secret_value())
     body = HealthOut(
         status="ok" if db_ok and redis_ok else "degraded",
         db="ok" if db_ok else "error",

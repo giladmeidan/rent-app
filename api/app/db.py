@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import Engine, NullPool, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.config import get_settings
+from app.config import get_database_settings
 
 # Bound how long a connection attempt waits for an unreachable Postgres (libpq's minimum is 2 s);
 # without it a blackholed host hangs for the OS TCP timeout (~75 s) or longer. On Linux,
@@ -25,14 +25,15 @@ def make_engine(database_url: str, **kwargs: Any) -> Engine:
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     """Process-wide engine for `DATABASE_URL`."""
-    return make_engine(get_settings().database_url)
+    return make_engine(get_database_settings().database_url.get_secret_value())
 
 
 @lru_cache(maxsize=1)
 def get_ping_engine() -> Engine:
     """Unpooled engine for `/health`: every ping opens a fresh connection, so an unreachable or hung
     server is reported within `CONNECT_TIMEOUT_S` instead of blocking on a pooled socket."""
-    return make_engine(get_settings().database_url, poolclass=NullPool)
+    url = get_database_settings().database_url.get_secret_value()
+    return make_engine(url, poolclass=NullPool)
 
 
 @lru_cache(maxsize=1)
