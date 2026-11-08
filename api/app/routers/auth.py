@@ -30,7 +30,7 @@ DbDep = Annotated[Session, Depends(get_session)]
     status_code=204,
     responses={
         429: {"model": ErrorOut, "description": "Too many codes requested; see Retry-After"},
-        503: {"model": ErrorOut, "description": "The email could not be sent"},
+        503: {"model": ErrorOut, "description": "email_unavailable, or Redis is unreachable"},
     },
 )
 def request_otp(
@@ -58,6 +58,7 @@ def request_otp(
         201: {"model": UserOut, "description": "Account created and logged in"},
         401: {"model": ErrorOut, "description": "invalid_code"},
         422: {"description": "profile_required, or a malformed body"},
+        503: {"model": ErrorOut, "description": "Redis or the database is unreachable"},
     },
 )
 def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:

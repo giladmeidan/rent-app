@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 import pytest
+import redis
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import OperationalError
@@ -599,3 +600,17 @@ def test_code_survives_database_failure_at_login(
     assert r.hget(f"otp:{EMAIL}", "attempts") == b"1"
     assert 0 < r.pttl(f"otp:{EMAIL}") <= 600_000
     assert _verify(client, EMAIL, code).status_code == 200
+
+
+def test_redis_down_is_json_503(client: TestClient, outbox: Outbox) -> None:
+    unreachable = redis.Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.5)
+    client.app.dependency_overrides[get_redis] = lambda: unreachable  # type: ignore[attr-defined]
+
+    for path, body in (
+        ("/auth/otp/request", {"email": EMAIL}),
+        ("/auth/otp/verify", {"email": EMAIL, "code": "123456"}),
+    ):
+        response = client.post(path, json=body)
+        assert response.status_code == 503
+        assert response.json() == {"detail": "redis unavailable"}
+    assert outbox.messages == []
