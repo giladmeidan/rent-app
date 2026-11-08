@@ -5,7 +5,7 @@
 # quotes, spaces, `$` or `#` in values. Each key is loaded with `?=` and exported, so precedence is
 #   `make VAR=…` > shell environment (`VAR=… make dev`) > `.env` > the defaults below.
 # Exported values reach every recipe: uv/pytest/alembic and compose interpolation
-# (`DB_PORT`, `REDIS_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml).
+# (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml).
 ifneq (,$(wildcard .env))
 $(foreach kv,$(shell sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=([^[:space:]]*)$$/\1?=\2/p' .env),$(eval export $(kv)))
 endif
@@ -18,6 +18,7 @@ export DATABASE_URL      ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_P
 export TEST_DATABASE_URL ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent_test
 export REDIS_URL         ?= redis://localhost:$(or $(REDIS_PORT),6379)/0
 export WEB_ORIGIN        ?= http://localhost:5173
+export API_PORT          ?= 8000
 
 .PHONY: dev down migrate seed test lint
 

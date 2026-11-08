@@ -18,13 +18,14 @@ curl localhost:8000/health   # {"status":"ok","db":"ok","redis":"ok"}
 curl localhost:8000/areas    # [{"id":"…","slug":"gush-dan","name_he":"גוש דן"}]
 ```
 
+The API is published on `127.0.0.1:${API_PORT:-8000}`; the examples assume the default port.
 Interactive API docs: http://localhost:8000/docs. Stop everything (and drop the data volume) with `make down`.
 
 ## Make targets
 
 | target | what it does |
 | --- | --- |
-| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on :8000) and `worker` (arq) |
+| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000) and `worker` (arq) |
 | `make down` | `docker compose down -v` — stops the stack and removes volumes |
 | `make migrate` | `alembic upgrade head` against `DATABASE_URL` |
 | `make seed` | inserts the launch areas (idempotent) |
@@ -39,7 +40,7 @@ Every variable is listed in `.env.example` with a working local default. Secrets
 environment. Compose publishes Postgres, Redis and the API on `127.0.0.1` only.
 
 Every `make` target loads an optional repo-root `.env` (gitignored) and exports its values to the commands
-it runs, including compose interpolation (`DB_PORT`, `REDIS_PORT`, `WEB_ORIGIN`). Precedence, highest first:
+it runs, including compose interpolation (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN`). Precedence, highest first:
 
 1. `make` command-line variables: `make dev DB_PORT=5434`
 2. the shell environment: `DB_PORT=5434 make dev`
