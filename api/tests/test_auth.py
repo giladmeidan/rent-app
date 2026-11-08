@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.db import get_sessionmaker
 from app.models import User
 from app.redis_client import get_redis
+from app.schemas.auth import ProfileIn
 from app.services import auth as auth_service
 from app.services.email import EmailUnavailable, get_email_sender
 from tests.conftest import Outbox
@@ -309,6 +310,18 @@ _GOOD_VERIFY = {"email": EMAIL, "code": "123456"}
         ("/auth/otp/verify", {**_GOOD_VERIFY, "code": "٠١٢٣٤٥"}),
         ("/auth/otp/verify", {**_GOOD_VERIFY, "email": "x"}),
         ("/auth/otp/request", {"email": "x"}),
+        (
+            "/auth/otp/verify",
+            {**_GOOD_VERIFY, "profile": {"display_name": "\u0000\u0000", "role": "owner"}},
+        ),
+        (
+            "/auth/otp/verify",
+            {**_GOOD_VERIFY, "profile": {"display_name": "\u200b\u200b", "role": "owner"}},
+        ),
+        (
+            "/auth/otp/verify",
+            {**_GOOD_VERIFY, "profile": {"display_name": "a\nb", "role": "owner"}},
+        ),
     ],
     ids=[
         "name-1-char",
@@ -319,6 +332,9 @@ _GOOD_VERIFY = {"email": EMAIL, "code": "123456"}
         "code-arabic-indic-digits",
         "verify-email-x",
         "request-email-x",
+        "name-nul",
+        "name-zero-width-space",
+        "name-newline",
     ],
 )
 def test_ac11_validation_rejects_bad_input(
@@ -464,6 +480,20 @@ def test_cookie_secure_when_configured(
 
     assert _session_cookie(login)["secure"] is True
     assert _session_cookie(logout)["secure"] is True
+
+
+def test_ac11_invalid_name_keeps_code_valid(client: TestClient, outbox: Outbox) -> None:
+    code = _request_code(client, outbox)
+
+    response = _verify(client, EMAIL, code, {"display_name": "\u0000\u0000", "role": "owner"})
+
+    assert response.status_code == 422
+    assert get_redis().hget(f"otp:{EMAIL}", "attempts") == b"0"
+    assert _verify(client, EMAIL, code, PROFILE).status_code == 201
+
+
+def test_display_name_keeps_joiners() -> None:
+    assert ProfileIn(display_name="👩\u200d💻 נועה", role="owner").display_name == "👩\u200d💻 נועה"
 
 
 def test_ac16_burst_of_429s_does_not_consume_daily_budget(

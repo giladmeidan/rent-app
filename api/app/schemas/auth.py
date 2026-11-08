@@ -1,12 +1,16 @@
 """API schemas for email-OTP auth (spec 0001a). Never the ORM models."""
 
 import datetime as dt
+import unicodedata
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 Role = Literal["owner", "seeker"]
+
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
+_JOINERS = frozenset({"\u200c", "\u200d"})  # ZWNJ, ZWJ
 
 
 class OtpRequestIn(BaseModel):
@@ -21,6 +25,17 @@ class ProfileIn(BaseModel):
 
     display_name: str = Field(min_length=2, max_length=40)
     role: Role
+
+    @field_validator("display_name")
+    @classmethod
+    def _visible_characters_only(cls, value: str) -> str:
+        """No control, format (bidi, zero-width) or line/paragraph-separator characters: they
+        hide or spoof a name, and NUL is rejected by Postgres. ZWJ/ZWNJ stay (emoji, scripts)."""
+        if any(
+            unicodedata.category(ch) in _INVISIBLE_CATEGORIES and ch not in _JOINERS for ch in value
+        ):
+            raise ValueError("display_name contains control or invisible characters")
+        return value
 
 
 class OtpVerifyIn(BaseModel):
