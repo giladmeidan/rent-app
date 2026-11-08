@@ -14,5 +14,10 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 COPY api/ ./
 
+# Run unprivileged. The venv in /opt/venv and the code in /app stay root-owned and read-only to
+# this user; in compose the source tree is bind-mounted over /app.
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
+USER app
+
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
