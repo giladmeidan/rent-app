@@ -123,9 +123,10 @@ Redis (all keys TTL-bound; `email` below is the normalised address):
   A new request overwrites the previous code. Deleted on success or when `attempts` reaches `OTP_MAX_ATTEMPTS`.
   A 422 `profile_required` does **not** increment `attempts`.
 - `rl:otp:email:{email}` (limit 3, window 900 s), `rl:otp:email:day:{email}` (limit 10, window 86 400 s),
-  `rl:otp:ip:{ip}` (limit 10, window 900 s). Each is created with `SET key 0 EX window NX` and then `INCR`
-  inside one `MULTI`, so a crash between the two can never leave a counter without a TTL (a permanent
-  lockout). `ip` is `request.client.host` (no proxy headers; the reverse proxy at deploy time, Slice 12,
+  `rl:otp:ip:{ip}` (limit 10, window 900 s). One Lua script reads all three first; if any is at its limit
+  it counts nothing (a refused request never uses up a budget, review round 1). Otherwise each is created
+  with `SET key 0 EX window NX` and then `INCR`ed in the same script, so a counter can never exist without
+  a TTL (a permanent lockout). `ip` is `request.client.host` (no proxy headers; the reverse proxy at deploy time, Slice 12,
   sets the real client IP).
 
 Backwards compatibility: additive tables; nothing running depends on them.
@@ -196,6 +197,14 @@ E2E: none in this part (`0001b` AC7 covers the browser flow through the file out
   addresses (quoted local parts). Tests and the `0001b` e2e use `…@example.com`. Acceptable.
 - The daily cap (10 codes/email/day) can lock out a legitimate person who mistypes a lot; 10 is generous for
   a login flow and the 429 message in `0001b` says to try later. Revisit with Slice 10 trust metrics.
+- **Deployment constraint (review round 1):** `SameSite=Lax` sends the cookie only when web and API share
+  one registrable domain. Cloudflare Pages + Fly/Railway defaults (`*.pages.dev` + `*.fly.dev`, both on
+  the public suffix list) would never send it and break `0001b` in production; Slice 12 must serve both
+  under one domain (e.g. `app.X` / `api.X`). Logged in FOLLOWUPS.
+- **Accepted risk (orchestrator, review round 1):** the 10 codes/day per-email cap lets an attacker lock a
+  chosen account out of login for a day with 10 requests spread over ~45 min (refused requests no longer
+  count, so a burst cannot do it). Accepted for MVP; revisit in Slice 10 (trust) with an email-confirmed
+  unlock or a soft cap.
 - AC15 resolved by the orchestrator (2026-11-09): the "no Allow-Credentials for other origins" clause was dropped; Starlette cannot do it and `Allow-Origin` is what protects. The xfail test is removed.
 - No open product questions: roles at signup, no phone in this slice, and display-name-only signup were
   decided by Gilad on 2026-11-09 and recorded in `specs/PRODUCT.md`.

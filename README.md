@@ -32,7 +32,8 @@ curl -X POST localhost:8000/auth/otp/request -H 'Content-Type: application/json'
 ls -t .outbox/*.json | head -1 | xargs cat
 ```
 
-`make down` empties `.outbox/`. Real delivery: `EMAIL_BACKEND=smtp` plus `SMTP_URL` (see `.env.example`).
+`make down` empties `.outbox/`. If an earlier `docker compose up` (without `make dev`) left a root-owned
+`.outbox/`, `make dev` fails at `chmod`: remove it once with `sudo rm -rf .outbox`. Real delivery: `EMAIL_BACKEND=smtp` plus `SMTP_URL` (see `.env.example`).
 
 ## Make targets
 
