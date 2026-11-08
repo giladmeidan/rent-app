@@ -27,8 +27,9 @@ class Settings(DatabaseSettings):
     @field_validator("web_origin")
     @classmethod
     def _web_origin_is_one_exact_origin(cls, value: str) -> str:
-        """CORS allows exactly this origin: it must be `scheme://host[:port]` and nothing else."""
-        parts = urlsplit(value)
+        """CORS allows exactly this origin: it must be `scheme://host[:port]` and nothing else.
+        Returned trimmed with scheme and host lowercased, the form browsers send in `Origin`."""
+        parts = urlsplit(value.strip())
         try:
             parts.port  # noqa: B018  (raises ValueError on a malformed port)
         except ValueError as exc:
@@ -36,6 +37,7 @@ class Settings(DatabaseSettings):
         if (
             parts.scheme not in {"http", "https"}
             or not parts.hostname
+            or "*" in parts.hostname
             or parts.username is not None
             or parts.path
             or parts.query
@@ -45,7 +47,7 @@ class Settings(DatabaseSettings):
                 f"WEB_ORIGIN must be one origin like https://host[:port] (no '*', path or "
                 f"trailing slash), got {value!r}"
             )
-        return value
+        return f"{parts.scheme}://{parts.netloc.lower()}"
 
 
 @lru_cache(maxsize=1)

@@ -20,10 +20,20 @@ def test_web_origin_accepts_a_single_origin(origin: str) -> None:
     assert settings.web_origin == origin
 
 
+def test_web_origin_is_trimmed_and_lowercased() -> None:
+    settings = Settings(
+        database_url=_DSN, redis_url=_REDIS, web_origin=" HTTPS://App.Rent.Example:8443\n"
+    )
+
+    assert settings.web_origin == "https://app.rent.example:8443"
+
+
 @pytest.mark.parametrize(
     "origin",
     [
         "*",
+        "http://*",
+        "https://*.rent.example",
         "localhost:5173",
         "ftp://localhost",
         "http://localhost:5173/",
