@@ -35,6 +35,7 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
       REDIS_URL: redis://redis:6379/0
@@ -54,6 +55,8 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.api
     command: arq app.worker.WorkerSettings
+    # arq exits when Redis goes away; come back once it is reachable again.
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
       REDIS_URL: redis://redis:6379/0
