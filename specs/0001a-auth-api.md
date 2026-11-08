@@ -170,7 +170,7 @@ None in this part. The login/signup screens that consume these endpoints are `00
 - [ ] AC12 Given `SECRET_KEY` missing or shorter than 32 chars, When `Settings()` is built, Then a validation error whose message does not echo the value; Given `EMAIL_BACKEND=smtp` without `SMTP_URL`, Then a validation error; Given only `DATABASE_URL`, Then `DatabaseSettings()` still builds — `api/tests/test_config.py::test_ac12_secret_key_and_smtp_url_required`
 - [ ] AC13 Given an empty DB, When `upgrade head` → `downgrade base` → `upgrade head`, Then `users` and `sessions` exist at the end with `ck_users_display_name_length`, `ck_users_role`, `ck_users_account_type` and `ix_sessions_user_id` present (queried from `pg_constraint` / `pg_indexes`) — new function `api/tests/test_migrations.py::test_ac13_users_sessions_roundtrip` reusing the `_mig` database fixture; `test_ac4_autogenerate_sees_no_diff_with_postgis_extensions` stays green
 - [ ] AC14 Given `EMAIL_BACKEND=file` and a non-existent `EMAIL_OUTBOX_DIR` under `tmp_path`, When two codes are requested in the same second, Then the directory is created and exactly two `.json` files appear with `to`, `subject`, `body`, `sent_at` — `api/tests/test_auth.py::test_ac14_file_backend_writes_outbox`
-- [ ] AC15 Given a request with `Origin: http://localhost:5173` (the test `WEB_ORIGIN`), When `GET /me`, Then the response carries `Access-Control-Allow-Origin: http://localhost:5173` and `Access-Control-Allow-Credentials: true`; Given `Origin: http://evil.example`, Then neither header — `api/tests/test_auth.py::test_ac15_cors_allows_credentials_for_web_origin_only`
+- [ ] AC15 Given a request with `Origin: http://localhost:5173` (the test `WEB_ORIGIN`), When `GET /me`, Then the response carries `Access-Control-Allow-Origin: http://localhost:5173` and `Access-Control-Allow-Credentials: true`; Given `Origin: http://evil.example`, Then no `Access-Control-Allow-Origin` header (Starlette always emits `Allow-Credentials` when configured; browsers ignore it without a matching `Allow-Origin`, so `Allow-Origin` is the protective header) — `api/tests/test_auth.py::test_ac15_cors_allows_credentials_for_web_origin_only`
 - [ ] AC16 Given 10 requests for one email spread over the day counter only (the 15-min counter reset by deleting its key between batches), When an 11th arrives, Then 429 — `api/tests/test_auth.py::test_ac16_daily_email_rate_limit`
 - [ ] AC17 Given the email sender raises `EmailUnavailable`, When a code is requested, Then 503 `email_unavailable`, no `otp:{email}` key remains, and the rate-limit counter was incremented — `api/tests/test_auth.py::test_ac17_email_failure_is_503_and_counted`
 - [ ] NF1 The OTP code appears nowhere in API log output at any level (`caplog` over AC1 at DEBUG) and nowhere in any response body — `api/tests/test_auth.py::test_nf1_code_never_logged`
@@ -196,17 +196,7 @@ E2E: none in this part (`0001b` AC7 covers the browser flow through the file out
   addresses (quoted local parts). Tests and the `0001b` e2e use `…@example.com`. Acceptable.
 - The daily cap (10 codes/email/day) can lock out a legitimate person who mistypes a lot; 10 is generous for
   a login flow and the 429 message in `0001b` says to try later. Revisit with Slice 10 trust metrics.
-- **Open question (coder, 2026-11-09) — AC15 cannot pass as written without changing `main.py`.**
-  Starlette's `CORSMiddleware` (with `allow_credentials=True`) adds `Access-Control-Allow-Credentials:
-  true` to every response that carries an `Origin` header, matching or not; it only withholds
-  `Access-Control-Allow-Origin` for a non-matching origin. So for `Origin: http://evil.example` the
-  "neither header" clause fails, while Scope says `main.py` gets no CORS change. Browsers ignore
-  `Allow-Credentials` without a matching `Allow-Origin`, so the security property (no
-  `Allow-Origin` for other origins) holds. Built as: `test_ac15_cors_allows_credentials_for_web_origin_only`
-  asserts both headers for `WEB_ORIGIN` and no `Allow-Origin` for evil; the "no `Allow-Credentials`
-  for evil" clause is `test_ac15_evil_origin_gets_no_allow_credentials`, `xfail(strict=True)`.
-  Decide: (a) drop that clause from AC15 (recommended; then delete the xfail test), or (b) allow a
-  small `main.py` change that strips `Allow-Credentials` when `Allow-Origin` is absent.
+- AC15 resolved by the orchestrator (2026-11-09): the "no Allow-Credentials for other origins" clause was dropped; Starlette cannot do it and `Allow-Origin` is what protects. The xfail test is removed.
 - No open product questions: roles at signup, no phone in this slice, and display-name-only signup were
   decided by Gilad on 2026-11-09 and recorded in `specs/PRODUCT.md`.
 

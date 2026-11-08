@@ -359,20 +359,6 @@ def test_ac15_cors_allows_credentials_for_web_origin_only(client: TestClient) ->
     assert "access-control-allow-origin" not in evil.headers
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "spec 0001a AC15 open question: Starlette's CORSMiddleware sends "
-        "Access-Control-Allow-Credentials: true on every response that has an Origin header, "
-        "matching or not; the spec also says main.py's CORS is not changed in this slice"
-    ),
-)
-def test_ac15_evil_origin_gets_no_allow_credentials(client: TestClient) -> None:
-    evil = client.get("/me", headers={"Origin": "http://evil.example"})
-
-    assert "access-control-allow-credentials" not in evil.headers
-
-
 def test_ac16_daily_email_rate_limit(client: TestClient, outbox: Outbox) -> None:
     r = get_redis()
 
