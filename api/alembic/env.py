@@ -9,7 +9,8 @@ from app.models import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep app loggers (e.g. `app.main`) enabled when migrations run in-process, as in the tests.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
