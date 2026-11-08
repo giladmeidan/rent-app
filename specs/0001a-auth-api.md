@@ -196,6 +196,17 @@ E2E: none in this part (`0001b` AC7 covers the browser flow through the file out
   addresses (quoted local parts). Tests and the `0001b` e2e use `…@example.com`. Acceptable.
 - The daily cap (10 codes/email/day) can lock out a legitimate person who mistypes a lot; 10 is generous for
   a login flow and the 429 message in `0001b` says to try later. Revisit with Slice 10 trust metrics.
+- **Open question (coder, 2026-11-09) — AC15 cannot pass as written without changing `main.py`.**
+  Starlette's `CORSMiddleware` (with `allow_credentials=True`) adds `Access-Control-Allow-Credentials:
+  true` to every response that carries an `Origin` header, matching or not; it only withholds
+  `Access-Control-Allow-Origin` for a non-matching origin. So for `Origin: http://evil.example` the
+  "neither header" clause fails, while Scope says `main.py` gets no CORS change. Browsers ignore
+  `Allow-Credentials` without a matching `Allow-Origin`, so the security property (no
+  `Allow-Origin` for other origins) holds. Built as: `test_ac15_cors_allows_credentials_for_web_origin_only`
+  asserts both headers for `WEB_ORIGIN` and no `Allow-Origin` for evil; the "no `Allow-Credentials`
+  for evil" clause is `test_ac15_evil_origin_gets_no_allow_credentials`, `xfail(strict=True)`.
+  Decide: (a) drop that clause from AC15 (recommended; then delete the xfail test), or (b) allow a
+  small `main.py` change that strips `Allow-Credentials` when `Allow-Origin` is absent.
 - No open product questions: roles at signup, no phone in this slice, and display-name-only signup were
   decided by Gilad on 2026-11-09 and recorded in `specs/PRODUCT.md`.
 
