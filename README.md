@@ -21,12 +21,25 @@ curl localhost:8000/areas    # [{"id":"…","slug":"gush-dan","name_he":"גוש 
 The API is published on `127.0.0.1:${API_PORT:-8000}`; the examples assume the default port.
 Interactive API docs: http://localhost:8000/docs. Stop everything (and drop the data volume) with `make down`.
 
+## Logging in locally
+
+`make dev` runs the API with `EMAIL_BACKEND=file`: no email is sent, each message is written as a JSON
+file (`to`, `subject`, `body`, `sent_at`) into `.outbox/` at the repo root. After
+`POST /auth/otp/request`, the 6-digit code is on its own line in the `body` of the newest file:
+
+```sh
+curl -X POST localhost:8000/auth/otp/request -H 'Content-Type: application/json' -d '{"email":"me@example.com"}'
+ls -t .outbox/*.json | head -1 | xargs cat
+```
+
+`make down` empties `.outbox/`. Real delivery: `EMAIL_BACKEND=smtp` plus `SMTP_URL` (see `.env.example`).
+
 ## Make targets
 
 | target | what it does |
 | --- | --- |
 | `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000) and `worker` (arq), and fails unless the api answers `/health` within 60 s (then see `docker compose -f infra/docker-compose.yml logs api`) |
-| `make down` | `docker compose down -v` — stops the stack and removes volumes |
+| `make down` | `docker compose down -v` — stops the stack and removes volumes; empties `.outbox/` |
 | `make migrate` | `alembic upgrade head` against `DATABASE_URL` |
 | `make seed` | inserts the launch areas (idempotent) |
 | `make test` | API pytest. Needs Postgres at `TEST_DATABASE_URL` and Redis at `REDIS_URL` (the compose `db`/`redis`; the test database is created on first run) |
