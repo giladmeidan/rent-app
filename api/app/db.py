@@ -17,14 +17,17 @@ CONNECT_TIMEOUT_S = 2
 _CONNECT_ARGS = {"connect_timeout": CONNECT_TIMEOUT_S, "tcp_user_timeout": 5000}
 
 
-def make_engine(database_url: str, **kwargs: Any) -> Engine:
-    """Engine for a `postgresql+psycopg://` URL with the app connection settings (lazy connect).
-    `hide_parameters` keeps bound values (user data) out of exception messages and logs."""
+def make_engine(
+    database_url: str, connect_args: dict[str, Any] | None = None, **kwargs: Any
+) -> Engine:
+    """Engine for a `postgresql+psycopg://` URL with the app connection settings (lazy connect);
+    `connect_args` are added to them. `hide_parameters` keeps bound values (user data) out of
+    exception messages and logs."""
     return create_engine(
         database_url,
         pool_pre_ping=True,
         hide_parameters=True,
-        connect_args=_CONNECT_ARGS,
+        connect_args={**_CONNECT_ARGS, **(connect_args or {})},
         **kwargs,
     )
 

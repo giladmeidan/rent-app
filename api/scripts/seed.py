@@ -8,7 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import Engine, create_engine, text  # noqa: E402
+from sqlalchemy import Engine, text  # noqa: E402
+
+from app.db import make_engine  # noqa: E402
 
 # Coarse bounding box for Gush Dan (lon 34.74–34.95, lat 31.95–32.17). Slice 3 replaces it
 # with municipal boundaries.
@@ -38,7 +40,7 @@ def seed_areas(engine: Engine) -> int:
 def main() -> None:
     from app.config import get_database_settings
 
-    engine = create_engine(get_database_settings().database_url.get_secret_value())
+    engine = make_engine(get_database_settings().database_url.get_secret_value())
     try:
         inserted = seed_areas(engine)
     finally:

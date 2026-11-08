@@ -3,8 +3,8 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine
 
+from app.db import make_engine
 from app.models import Base
 
 config = context.config
@@ -22,12 +22,6 @@ def _database_url() -> str:
     from app.config import get_database_settings
 
     return get_database_settings().database_url.get_secret_value()
-
-
-# The postgis image sets the database `search_path` to `"$user", public, topology, tiger`, which
-# makes the topology and tiger geocoder tables look like they live in the default schema. App tables
-# live in `public` only, so migrations (and autogenerate's reflection) use exactly that search_path.
-_CONNECT_ARGS = {"options": "-c search_path=public"}
 
 
 def _include_object(obj: object, name: str | None, type_: str, *_: object) -> bool:
@@ -48,7 +42,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    engine = create_engine(_database_url(), connect_args=_CONNECT_ARGS)
+    # The postgis image sets the database `search_path` to `"$user", public, topology, tiger`, which
+    # makes the topology and tiger geocoder tables look like they live in the default schema. App
+    # tables live in `public` only, so migrations (and autogenerate's reflection) use exactly that.
+    engine = make_engine(_database_url(), connect_args={"options": "-c search_path=public"})
     with engine.connect() as connection:
         context.configure(
             connection=connection,
