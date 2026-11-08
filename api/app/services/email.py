@@ -9,9 +9,8 @@ import uuid
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Protocol
-from urllib.parse import unquote, urlsplit
 
-from app.config import get_settings
+from app.config import get_settings, parse_smtp_url
 
 log = logging.getLogger(__name__)
 
@@ -50,14 +49,12 @@ class SmtpEmailSender:
     TLS (default port 465); `user:pass@` in the URL logs in. Never logs the message body."""
 
     def __init__(self, smtp_url: str, sender: str) -> None:
-        parts = urlsplit(smtp_url)
-        if parts.scheme not in {"smtp", "smtps"} or not parts.hostname:
-            raise ValueError("SMTP_URL must be smtp://host[:port] or smtps://host[:port]")
-        self.implicit_tls = parts.scheme == "smtps"
-        self.host = parts.hostname
-        self.port = parts.port or (465 if self.implicit_tls else 587)
-        self.username = unquote(parts.username) if parts.username else None
-        self.password = unquote(parts.password) if parts.password else None
+        target = parse_smtp_url(smtp_url)
+        self.implicit_tls = target.implicit_tls
+        self.host = target.host
+        self.port = target.port
+        self.username = target.username
+        self.password = target.password
         self.sender = sender
 
     def send(self, to: str, subject: str, body: str) -> None:

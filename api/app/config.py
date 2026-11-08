@@ -2,11 +2,42 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
-from urllib.parse import urlsplit
+from typing import Literal, NamedTuple, Self
+from urllib.parse import unquote, urlsplit
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The public dev value from the Makefile, compose and .env.example; refused when serving https.
+DEV_SECRET_KEY = "dev-only-secret-change-me-0123456789abcdef"
+
+
+class SmtpTarget(NamedTuple):
+    implicit_tls: bool
+    host: str
+    port: int
+    username: str | None
+    password: str | None
+
+
+def parse_smtp_url(url: str) -> SmtpTarget:
+    """`smtp://` = STARTTLS (default port 587), `smtps://` = implicit TLS (default port 465),
+    optional percent-encoded `user:pass@`. The error never includes any part of the URL."""
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+        if parts.scheme not in {"smtp", "smtps"} or not parts.hostname:
+            raise ValueError
+    except ValueError:
+        raise ValueError("SMTP_URL must be smtp[s]://[user:pass@]host[:port]") from None
+    implicit_tls = parts.scheme == "smtps"
+    return SmtpTarget(
+        implicit_tls=implicit_tls,
+        host=parts.hostname,
+        port=port or (465 if implicit_tls else 587),
+        username=unquote(parts.username) if parts.username else None,
+        password=unquote(parts.password) if parts.password else None,
+    )
 
 
 class DatabaseSettings(BaseSettings):
@@ -42,9 +73,19 @@ class Settings(DatabaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _smtp_url_required_for_smtp_backend(self) -> Self:
+    def _email_and_production_rules(self) -> Self:
+        if self.smtp_url is not None:
+            parse_smtp_url(self.smtp_url.get_secret_value())
         if self.email_backend == "smtp" and self.smtp_url is None:
             raise ValueError("SMTP_URL is required when EMAIL_BACKEND=smtp")
+        # An https web origin means a real deployment: refuse the dev defaults there.
+        if self.web_origin.startswith("https://"):
+            if self.secret_key.get_secret_value() == DEV_SECRET_KEY:
+                raise ValueError("SECRET_KEY must not be the dev value when WEB_ORIGIN is https")
+            if not self.cookie_secure:
+                raise ValueError("COOKIE_SECURE must be true when WEB_ORIGIN is https")
+            if "email_backend" not in self.model_fields_set:
+                raise ValueError("EMAIL_BACKEND must be set explicitly when WEB_ORIGIN is https")
         return self
 
     @field_validator("web_origin")

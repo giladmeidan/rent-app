@@ -1,13 +1,21 @@
 """Settings hardening (review round 1 minors): WEB_ORIGIN validation, secret DSNs, and the
 database-only settings used by Alembic and `scripts/seed.py`."""
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
-from app.config import DatabaseSettings, Settings
+from app.config import DEV_SECRET_KEY, DatabaseSettings, Settings
 
 _DSN = "postgresql+psycopg://rent:s3cret@localhost:5432/rent"
 _REDIS = "redis://:r3dis@localhost:6379/0"
+# What an https WEB_ORIGIN requires since 0001a (round 1, minor 6); unrelated to the origin rules.
+_HTTPS_READY: dict[str, Any] = {
+    "secret_key": "p" * 32,
+    "cookie_secure": True,
+    "email_backend": "file",
+}
 
 
 @pytest.mark.parametrize(
@@ -15,14 +23,17 @@ _REDIS = "redis://:r3dis@localhost:6379/0"
     ["http://localhost:5173", "https://rent.example", "https://app.rent.example:8443"],
 )
 def test_web_origin_accepts_a_single_origin(origin: str) -> None:
-    settings = Settings(database_url=_DSN, redis_url=_REDIS, web_origin=origin)
+    settings = Settings(database_url=_DSN, redis_url=_REDIS, web_origin=origin, **_HTTPS_READY)
 
     assert settings.web_origin == origin
 
 
 def test_web_origin_is_trimmed_and_lowercased() -> None:
     settings = Settings(
-        database_url=_DSN, redis_url=_REDIS, web_origin=" HTTPS://App.Rent.Example:8443\n"
+        database_url=_DSN,
+        redis_url=_REDIS,
+        web_origin=" HTTPS://App.Rent.Example:8443\n",
+        **_HTTPS_READY,
     )
 
     assert settings.web_origin == "https://app.rent.example:8443"
@@ -105,6 +116,21 @@ def test_ac12_secret_key_and_smtp_url_required(monkeypatch: pytest.MonkeyPatch) 
     )
     assert "smtp-canary" not in repr(smtp)
     assert _SECRET not in repr(smtp)
+    for bad_url in ("smtp://u:pa/ss@host:587", "http://x"):
+        with pytest.raises(ValidationError, match="SMTP_URL must be") as excinfo:
+            Settings(
+                database_url=_DSN,
+                redis_url=_REDIS,
+                secret_key=_SECRET,
+                email_backend="smtp",
+                smtp_url=bad_url,
+            )
+        assert "pa/ss" not in str(excinfo.value)
+        assert "u:pa" not in str(excinfo.value)
+        # `from None`: the urllib error (which quotes the bad port, i.e. part of the password)
+        # is not chained into the traceback.
+        assert excinfo.value.errors()[0]["ctx"]["error"].__cause__ is None
+        assert excinfo.value.errors()[0]["ctx"]["error"].__suppress_context__ is True
 
     monkeypatch.delenv("REDIS_URL", raising=False)
     monkeypatch.setenv("DATABASE_URL", _DSN)
@@ -122,3 +148,26 @@ def test_ac12_settings_defaults_for_auth(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.email_from == "noreply@localhost"
     assert settings.cookie_secure is False
     assert settings.smtp_url is None
+
+
+def test_https_web_origin_refuses_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("EMAIL_BACKEND", "COOKIE_SECURE", "SECRET_KEY", "SMTP_URL"):
+        monkeypatch.delenv(name, raising=False)
+    https: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "web_origin": "https://rent.example",
+    }
+
+    with pytest.raises(ValidationError, match="SECRET_KEY must not be the dev value") as excinfo:
+        Settings(**https, secret_key=DEV_SECRET_KEY, cookie_secure=True, email_backend="file")
+    assert DEV_SECRET_KEY not in str(excinfo.value)
+    with pytest.raises(ValidationError, match="COOKIE_SECURE must be true"):
+        Settings(**https, secret_key=_SECRET, email_backend="file")
+    with pytest.raises(ValidationError, match="EMAIL_BACKEND must be set explicitly"):
+        Settings(**https, secret_key=_SECRET, cookie_secure=True)
+
+    monkeypatch.setenv("EMAIL_BACKEND", "file")  # from the environment counts as explicit
+    assert Settings(**https, secret_key=_SECRET, cookie_secure=True).cookie_secure is True
+    # Plain http (local dev) keeps the dev defaults working.
+    assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=DEV_SECRET_KEY).secret_key
