@@ -12,7 +12,7 @@ Agent conventions live in `CLAUDE.md`; product decisions in `specs/PRODUCT.md`; 
 ## Quick start
 
 ```sh
-cp .env.example .env     # optional: local overrides; the defaults already match the compose stack
+cp .env.example .env     # optional: local overrides (see Configuration); the defaults already work
 make dev                 # db + redis up, alembic upgrade head, seed, then api (reload) + worker
 curl localhost:8000/health   # {"status":"ok","db":"ok","redis":"ok"}
 curl localhost:8000/areas    # [{"id":"…","slug":"gush-dan","name_he":"גוש דן"}]
@@ -35,9 +35,24 @@ Web targets (`client`, `e2e`, `i18n-check`) and the web halves of `test`/`lint` 
 
 ## Configuration
 
-Every variable the API reads is listed in `.env.example` with a working local default. Secrets only ever come
-from the environment. Compose host ports can be moved if something already listens locally, e.g.
-`REDIS_PORT=6380 REDIS_URL=redis://localhost:6380/0 make dev`.
+Every variable is listed in `.env.example` with a working local default. Secrets only ever come from the
+environment. Compose publishes Postgres, Redis and the API on `127.0.0.1` only.
+
+Every `make` target loads an optional repo-root `.env` (gitignored) and exports its values to the commands
+it runs, including compose interpolation (`DB_PORT`, `REDIS_PORT`, `WEB_ORIGIN`). Precedence, highest first:
+
+1. `make` command-line variables: `make dev DB_PORT=5434`
+2. the shell environment: `DB_PORT=5434 make dev`
+3. `.env`
+4. the Makefile defaults (which match `.env.example`)
+
+`DATABASE_URL`, `TEST_DATABASE_URL` and `REDIS_URL` default to `localhost` on `DB_PORT` / `REDIS_PORT`, so
+moving a port takes one variable, e.g. a `.env` with `DB_PORT=5434` and `REDIS_PORT=6380` when 5432/6379 are taken.
+If your `.env` also sets the URLs (an unedited copy of `.env.example` does), they win over the
+port-derived defaults, so keep them in sync with the ports, including ports set in the shell. `.env` is read by `make` only: the API
+itself reads plain environment variables, and a bare `docker compose -f infra/docker-compose.yml …` needs
+`--env-file .env` to see it. Inside the containers `DATABASE_URL` / `REDIS_URL` always point at the compose
+services `db` / `redis`.
 
 ## Layout
 
@@ -50,5 +65,8 @@ specs/          one spec per slice + PRODUCT.md
 
 ## Scripts
 
-- `python api/scripts/seed.py` — seed launch areas (what `make seed` runs).
-- `python api/scripts/export_openapi.py > openapi.json` — dump the OpenAPI schema without a running server.
+Run them through `make` (which supplies the environment) or with `uv` from the repo root:
+
+- `make seed` — seed launch areas (`api/scripts/seed.py`; needs `DATABASE_URL`).
+- `uv --directory api run python scripts/export_openapi.py > openapi.json` — dump the OpenAPI schema
+  without a running server. Needs only the `.env.example` variables in the environment; nothing connects.
