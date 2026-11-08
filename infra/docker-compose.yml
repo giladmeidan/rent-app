@@ -15,7 +15,9 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rent -d rent"]
+      # Over TCP, not the Unix socket: on a fresh volume the image's init runs a temporary server
+      # that listens on the socket only, then restarts, so a socket check reports healthy too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U rent -d rent"]
       interval: 2s
       timeout: 3s
       retries: 30
