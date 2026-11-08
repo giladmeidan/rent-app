@@ -1,0 +1,74 @@
+name: rent-app
+
+# Every published port binds to loopback only: the dev DB user is a superuser and Redis has no auth,
+# so nothing here may be reachable from the LAN.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: rent
+      POSTGRES_PASSWORD: rent
+      POSTGRES_DB: rent
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Over TCP, not the Unix socket: on a fresh volume the image's init runs a temporary server
+      # that listens on the socket only, then restarts, so a socket check reports healthy too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U rent -d rent"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
+      REDIS_URL: redis://redis:6379/0
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ../api:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    command: arq app.worker.WorkerSettings
+    # arq exits when Redis goes away; come back once it is reachable again.
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ../api:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

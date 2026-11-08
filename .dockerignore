@@ -1,0 +1,13 @@
+# Build context is the repo root (infra/docker-compose.yml). Keep host-only state out of images:
+# local venvs and caches bloat the image and bust the COPY layer; .env files must never be baked in.
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv
+**/.*_cache
+**/__pycache__
+**/*.pyc
+.git
+node_modules
+web/node_modules
+**/node_modules

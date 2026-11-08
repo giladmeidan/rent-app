@@ -1,7 +1,7 @@
 ---
 id: 0000a
 title: A developer can run `make dev` and get Postgres+PostGIS, Redis, the API and the worker up, with `GET /areas` returning the seeded Gush Dan area, and CI runs the api job on every PR
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, qa, security]   # security: config/secrets handling, CORS, compose defaults, CI secrets — everything later slices inherit
 estimate: 1 coder run
@@ -58,7 +58,7 @@ Backwards compatibility: first migration, nothing running yet.
 | Method | Path | Auth rule | Request | Response | Errors |
 | --- | --- | --- | --- | --- | --- |
 | GET | /health | public (no auth exists yet; unauthenticated by design, no PII) | – | `{"status":"ok","db":"ok","redis":"ok"}` 200 | 503 `{"status":"degraded","db":"error"|"ok","redis":"error"|"ok"}` when a dependency ping (`SELECT 1` / redis `PING`) fails |
-| GET | /areas | public | – | `[{"id":uuid,"slug":str,"name_he":str}]` only `is_active=true`, ordered by `name_he`; **no `geom`** in the response | – |
+| GET | /areas | public | – | `[{"id":uuid,"slug":str,"name_he":str}]` only `is_active=true`, ordered by `name_he`; **no `geom`** in the response | 503 `{"detail":"database unavailable"}` when Postgres is unreachable |
 
 Both routers are thin; `services/areas.py::list_active_areas(session)` holds the query. API schemas in
 `schemas/area.py` (`AreaOut`), never the ORM model. Response model excludes geometry (Slice 3 adds a
@@ -108,3 +108,14 @@ database, named the `.env.example` minimum set, pinned sync SQLAlchemy.
            Gush Dan stored as a coarse bounding box — mitigation: Slice 3 replaces it with municipal boundaries.
     Reviewers: code, qa, security   Estimated: 1 coder run, ~1–2 review rounds
     Links: specs/0000a-foundations-api.md · PRODUCT.md "Stack", "Launch area" · no Design artboard
+
+    --- merged shape ---
+
+    Spec 0000a — Foundations: infra + API   READY TO MERGE (branch spec/0000a-foundations-api, 28 commits, head fadbecc) — Gilad merges
+    Shipped: `make dev` brings up Postgres+PostGIS, Redis, API and worker bound to loopback; GET /areas returns the seeded Gush Dan area; CI api job defined.
+    Demo: 1) `DB_PORT=5434 REDIS_PORT=6380 make dev` (waits until /health is 200)  2) curl 127.0.0.1:8000/areas → גוש דן  3) `docker compose stop redis` → /health 503 degraded; start → 200
+    Tests: +35 pytest (unit + integration incl. migration roundtrip, autogenerate no-drift, dotenv loader, DB-error log hygiene)   CI: not yet run (no GitHub remote) — NF1 unmeasured, NF2 measured 9–16 s
+    Findings: 1 blocker fixed (DB/Redis exposed on LAN), 7 majors fixed, 0 waived, 4 follow-ups logged (action SHA pins, base image digest, Redis pool reuse, hung-Postgres timeout)
+    Review rounds: 3 (round 2 code+security approve; qa major fixed in round 3, verified by orchestrator)
+    Changed in PRODUCT.md: nothing
+    Next spec I propose: 0000b — Foundations: web shell (already verified; needs: your merge of 0000a, and the GitHub remote so CI can run)
