@@ -1,13 +1,15 @@
 # Rent App — developer targets. See CLAUDE.md → Commands.
 # Web targets (client, e2e, i18n-check) and the web parts of test/lint arrive with spec 0000b.
 
-# Optional repo-root `.env` (gitignored; start from `.env.example`): plain `KEY=value` lines, no
-# quotes, spaces, `$` or `#` in values. Each key is loaded with `?=` and exported, so precedence is
+# Optional repo-root `.env` (gitignored; start from `.env.example`), parsed by infra/dotenv.awk:
+# `KEY=value` lines, value optionally in single or double quotes (stripped, as compose does), no
+# spaces, `$` or `#` in values; any other non-comment line is ignored with a warning. Each key is
+# loaded with `?=` and exported, so precedence is
 #   `make VAR=…` > shell environment (`VAR=… make dev`) > `.env` > the defaults below.
 # Exported values reach every recipe: uv/pytest/alembic and compose interpolation
 # (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml).
 ifneq (,$(wildcard .env))
-$(foreach kv,$(shell sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=([^[:space:]]*)$$/\1?=\2/p' .env),$(eval export $(kv)))
+$(foreach kv,$(shell awk -f infra/dotenv.awk .env),$(if $(filter !%,$(kv)),$(warning .env line $(kv:!%=%) ignored: not KEY=value (see .env.example)),$(eval export $(kv))))
 endif
 
 COMPOSE := docker compose $(if $(wildcard .env),--env-file .env) -f infra/docker-compose.yml
@@ -22,12 +24,19 @@ export API_PORT          ?= 8000
 
 .PHONY: dev down migrate seed test lint
 
-## dev: start db+redis, wait for Postgres, migrate, seed, then start api (reload) and worker
+## dev: start db+redis, wait for Postgres, migrate, seed, start api (reload) and worker, then wait
+## for /health: a settings error leaves the uvicorn reloader running but serving nothing
 dev:
 	$(COMPOSE) up -d --wait db redis
 	$(MAKE) migrate
 	$(MAKE) seed
 	$(COMPOSE) up -d --build api worker
+	@echo "waiting for http://127.0.0.1:$(API_PORT)/health ..."
+	@for _ in $$(seq 60); do \
+	  curl -fs -m 2 -o /dev/null http://127.0.0.1:$(API_PORT)/health && echo "api is up" && exit 0; \
+	  sleep 1; \
+	done; \
+	echo "api not healthy after 60 s; see: $(COMPOSE) logs api" >&2; exit 1
 
 ## down: stop the stack and remove its volumes
 down:
