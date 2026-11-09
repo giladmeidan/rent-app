@@ -221,6 +221,16 @@ Verifier notes (2026-11-09): round 1 rejected with 8 findings, all applied above
 
 ## Digest (filled by orchestrator after verification)
 
+    Spec 0001a — Auth API: email OTP, sessions, roles   READY TO MERGE — PR #2, head 689d888, CI green
+    Shipped: email one-time code signup/login with owner|seeker role, 30-day HttpOnly session cookie, GET /me, logout; SMS adapter stubbed.
+    Demo (make dev, then): 1. `curl -X POST :8000/auth/otp/request -d '{"email":"you@example.com"}' -H 'content-type: application/json'` → 204, code in newest `.outbox/*.json`
+                           2. `curl -c c.txt -X POST :8000/auth/otp/verify -d '{"email":"you@example.com","code":"123456","profile":{"display_name":"נועה","role":"owner"}}' -H 'content-type: application/json'` → 201
+                           3. `curl -b c.txt :8000/me` → your user; `curl -b c.txt -X POST :8000/auth/logout` → 204
+    Tests: +53 (88 total, 35 from 0000a unchanged in assertions; 2 adjusted their setup for the new https rule)   CI: api job 55 s
+    Findings: 0 blockers, 1 major fixed (429'd requests burned the daily cap → one Lua script checks before counting), 6 minors fixed, 2 follow-ups logged (Slice 12: one domain for web+API because of SameSite=Lax; per-IP verify limit / IPv6 buckets / global send cap), 1 accepted risk (10 requests over ~45 min lock a chosen email out for a day — MVP, revisit Slice 10), 14 nits ignored.
+    Changed in PRODUCT.md: rows "Account roles" and "Signup data" (2026-11-09).
+    Next spec I propose: 0001b — Auth web (verified, waiting; build in a new session after this merges).  Needs your decisions: none open.
+
     Spec 0001a — Auth API: email OTP, sessions, roles   (verified, part 1 of 2, builds on the 0000a branch)
     What a user can do after this: request a 6-digit code by email, verify it to sign up (name + owner/seeker) or log in, and stay logged in for 30 days via an HttpOnly cookie; GET /me and logout work.
     Decisions I need from you (reply with numbers):
