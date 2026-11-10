@@ -13,7 +13,7 @@ from app.auth import current_owner
 from app.db import get_session
 from app.models import User
 from app.schemas.error import ErrorOut
-from app.schemas.listing import ListingIn, ListingOut, ListingPatch
+from app.schemas.listing import ListingIn, ListingOut, ListingPatch, MyListingOut
 from app.services import listings as listings_service
 
 router = APIRouter(tags=["listings"])
@@ -50,9 +50,19 @@ def create_listing(body: ListingIn, owner: OwnerDep, db: DbDep) -> ListingOut:
     return ListingOut.model_validate(listing)
 
 
-@router.get("/me/listings", response_model=list[ListingOut], responses=_AUTH_ERRORS)
-def my_listings(owner: OwnerDep, db: DbDep) -> list[ListingOut]:
-    return [ListingOut.model_validate(row) for row in listings_service.list_own_listings(db, owner)]
+@router.get("/me/listings", response_model=list[MyListingOut], responses=_AUTH_ERRORS)
+def my_listings(owner: OwnerDep, db: DbDep) -> list[MyListingOut]:
+    return [
+        MyListingOut(
+            **dict(ListingOut.model_validate(listing)),
+            applicant_count=applicant_count,
+            new_applicant_count=new_applicant_count,
+            view_count=listing.view_count,
+        )
+        for listing, applicant_count, new_applicant_count in listings_service.list_own_listings(
+            db, owner
+        )
+    ]
 
 
 @router.patch(
