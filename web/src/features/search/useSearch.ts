@@ -3,9 +3,11 @@ import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { searchListings, type ListingPublic, type ListingSearchOut } from './api';
 import type { Filters } from './filters';
 
-export function useSearch(filters: Filters) {
+/** The list's pages; `enabled` is false in the map view, which sends its own query. */
+export function useSearch(filters: Filters, enabled = true) {
   return useInfiniteQuery({
     queryKey: ['search', filters],
+    enabled,
     queryFn: ({ pageParam }) => searchListings(filters, pageParam),
     initialPageParam: 0,
     // The next offset counts raw items, repeats included, so paging never stalls on a repeat.

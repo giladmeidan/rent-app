@@ -26,6 +26,8 @@ export type Filters = {
   elevator?: true | undefined;
   parking?: true | undefined;
   sort?: Sort | undefined;
+  /** `map`: the results as a map (spec 0003d). Not a filter: never sent to the API, never counted. */
+  view?: 'map' | undefined;
 };
 
 /** The URL's key order, as `toSearchParams` writes it. */
@@ -37,6 +39,7 @@ const KEYS = [
   'available_by',
   ...FEATURES,
   'sort',
+  'view',
 ] as const satisfies readonly (keyof Filters)[];
 
 const PRICE = /^\d{1,6}$/;
@@ -92,6 +95,8 @@ export function parseFilters(params: URLSearchParams): Filters {
   const sort = params.get('sort');
   if (isSort(sort)) filters.sort = sort;
 
+  if (params.get('view') === 'map') filters.view = 'map';
+
   return filters;
 }
 
@@ -107,7 +112,8 @@ export function toSearchParams(filters: Filters): URLSearchParams {
   return params;
 }
 
-/** How many filters are set (`sort` is not a filter; each price and rooms bound counts). */
+/** How many filters are set (`sort` and `view` are not filters; each price and rooms bound counts). */
 export function countActive(filters: Filters): number {
-  return KEYS.filter((key) => key !== 'sort' && filters[key] !== undefined).length;
+  return KEYS.filter((key) => key !== 'sort' && key !== 'view' && filters[key] !== undefined)
+    .length;
 }

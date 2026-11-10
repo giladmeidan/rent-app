@@ -5,3 +5,22 @@
 body {
   @apply bg-bg font-sans text-ink;
 }
+
+/* MapLibre's controls (spec 0003d). The attribution is Latin text: in RTL it would read
+   "OpenStreetMap contributors ©". */
+.maplibregl-map .maplibregl-ctrl-attrib-inner {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* The zoom buttons are >= 44 px targets. */
+.maplibregl-map .maplibregl-ctrl-group button {
+  width: 44px;
+  height: 44px;
+}
+
+/* The app's accent focus ring, drawn inside the canvas. */
+.maplibregl-canvas:focus-visible {
+  outline: 2px solid theme('colors.accent.DEFAULT');
+  outline-offset: -2px;
+}

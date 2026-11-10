@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import { ErrorState } from '../../components/ErrorState';
+import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
 import { ApiError } from './api';
 import { formatDate, formatIls, formatRooms, todayInIsrael } from './format';
@@ -16,6 +18,8 @@ export function ListingPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const listing = usePublicListing(id);
+  // The small map is dropped when it cannot be shown; the address text stays.
+  const [mapFailed, setMapFailed] = useState(false);
 
   let body;
   if (listing.isPending) {
@@ -112,6 +116,17 @@ export function ListingPage() {
 
         <section className="flex flex-col gap-2">
           <h2 className="text-[17px] font-extrabold">{t('listing.location')}</h2>
+          {l.lat !== null && l.lng !== null && !mapFailed && (
+            <MapCanvas
+              label={t('listing.mapLabel')}
+              center={[l.lng, l.lat]}
+              zoom={14}
+              interactive={false}
+              approximate
+              onError={() => setMapFailed(true)}
+              className="h-[150px] rounded-2xl border border-line"
+            />
+          )}
           <p className="text-[15px] font-semibold">
             {t('listing.address', { street: l.street, city: l.city })}
           </p>

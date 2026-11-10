@@ -21,6 +21,8 @@ export default defineConfig({
         background_color: '#F7F5F2',
         theme_color: '#0E7C6B',
       },
+      // The lazy map library (~300 kB gzip) is fetched only when a map is shown, never precached.
+      workbox: { globIgnores: ['**/maplibre-gl-*'] },
     }),
   ],
   server: { host: '0.0.0.0', port: 5173, strictPort: true },
