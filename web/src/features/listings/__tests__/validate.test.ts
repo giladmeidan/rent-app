@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { addDays } from '../format';
-import { emptyForm, toListingIn, validate, type FieldName, type ListingForm } from '../validate';
+import {
+  cleanText,
+  emptyForm,
+  toListingIn,
+  validate,
+  type FieldName,
+  type ListingForm,
+} from '../validate';
 
 const today = '2026-11-10';
 
@@ -153,6 +160,113 @@ describe('validate', () => {
       vaad_ils: 150,
       // `\n` stays in the description; a lone `\r`, U+2028 and bidi marks go; ZWJ stays.
       description: 'a\nb c\u200dd',
+    });
+  });
+
+  it('ac8_clean_text_strips_blank_and_private_use', () => {
+    // Hangul filler, braille blank, private use, a non-character and a lone surrogate go.
+    for (const ch of ['\u3164', '\u2800', '\ue000', '\uffff', '\ud800']) {
+      expect(cleanText(`\u05d0${ch}\u05d1`), `U+${ch.charCodeAt(0).toString(16)}`).toBe(
+        '\u05d0\u05d1',
+      );
+      expect(cleanText(ch), `U+${ch.charCodeAt(0).toString(16)} alone`).toBe('');
+    }
+    // The rest of the new set: the other blank letters, plane-15/16 private use, every kind of
+    // non-character, a lone low surrogate.
+    for (const ch of [
+      '\u115f',
+      '\u1160',
+      '\uffa0',
+      '\uf8ff',
+      '\u{f0000}',
+      '\u{10fffd}',
+      '\ufdd0',
+      '\ufdef',
+      '\ufffe',
+      '\u{1fffe}',
+      '\u{1ffff}',
+      '\u{10ffff}',
+      '\udfff',
+    ]) {
+      expect(cleanText(`a${ch}b`), `U+${ch.codePointAt(0)?.toString(16)}`).toBe('ab');
+    }
+    // Kept: ZWJ (emoji sequences), Hebrew niqqud, a valid surrogate pair, a Unicode 16 emoji,
+    // and `\n` in multiline text.
+    const family = '\u{1f468}\u200d\u{1f469}\u200d\u{1f467}';
+    expect(cleanText(family)).toBe(family);
+    const shalom = '\u05e9\u05c1\u05b8\u05dc\u05d5\u05b9\u05dd';
+    expect(cleanText(shalom)).toBe(shalom);
+    expect(cleanText('\u{1f642} \u{1fae9}')).toBe('\u{1f642} \u{1fae9}');
+    expect(cleanText('a\nb\u3164', { multiline: true })).toBe('a\nb');
+    expect(cleanText('a\nb')).toBe('ab');
+  });
+
+  it('ac8_clean_text_strips_unassigned_default_ignorables', () => {
+    // Review B1: unassigned in the API's Unicode tables, rendered as nothing by browsers.
+    for (const ch of [
+      '\u{e0080}',
+      '\u2065',
+      '\ufff0',
+      '\ufff8',
+      '\u{e0000}',
+      '\u{e00ff}',
+      '\u{e01f0}',
+      '\u{e0fff}',
+    ]) {
+      const name = `U+${ch.codePointAt(0)?.toString(16)}`;
+      expect(cleanText(`a${ch}b`), name).toBe('ab');
+      expect(cleanText(ch), `${name} alone`).toBe('');
+    }
+    // A variation selector between the ranges stays.
+    expect(cleanText('\u05d0\u{e0100}')).toBe('\u05d0\u{e0100}');
+  });
+
+  it('ac8_clean_text_strips_all_66_noncharacters', () => {
+    const nonCharacters = [
+      ...Array.from({ length: 32 }, (_, i) => 0xfdd0 + i),
+      ...Array.from({ length: 17 }, (_, plane) => [
+        plane * 0x10000 + 0xfffe,
+        plane * 0x10000 + 0xffff,
+      ]).flat(),
+    ];
+    expect(nonCharacters).toHaveLength(66);
+    for (const cp of nonCharacters) {
+      expect(cleanText(`a${String.fromCodePoint(cp)}b`), `U+${cp.toString(16)}`).toBe('ab');
+    }
+    // Their neighbours stay: U+FDCF, U+FDF0, U+FFFD (the replacement character).
+    for (const cp of [0xfdcf, 0xfdf0, 0xfffd]) {
+      const kept = `a${String.fromCodePoint(cp)}b`;
+      expect(cleanText(kept), `U+${cp.toString(16)}`).toBe(kept);
+    }
+  });
+
+  it('ac8_city_without_letter_or_digit_is_required', () => {
+    const cases: [string, Partial<ListingForm>, FieldName, object | undefined][] = [
+      ['city "..."', { city: '...' }, 'city', required],
+      ['city "-"', { city: '-' }, 'city', required],
+      ['city emoji only', { city: '\u{1f642}' }, 'city', required],
+      ['city Hangul filler only', { city: '\u3164' }, 'city', required],
+      ['city braille blank + dots', { city: '\u2800...' }, 'city', required],
+      ['street "..."', { street: '...' }, 'street', required],
+      ['street private use only', { street: '\ue000\ue000' }, 'street', required],
+      ['city digits', { city: '12' }, 'city', undefined],
+      ['city with a hyphen', { city: '\u05e8\u05de\u05ea-\u05d2\u05df' }, 'city', undefined],
+      ['street "3"', { street: '3' }, 'street', undefined],
+      ['41 dots is required, not too long', { city: '.'.repeat(41) }, 'city', required],
+      // The description has no letter-or-digit rule.
+      ['description "..."', { description: '...' }, 'description', undefined],
+    ];
+    for (const [name, patch, field, expected] of cases) {
+      const errors = validate({ ...valid, ...patch }, today);
+      expect(errors[field], name).toEqual(expected);
+      expect(Object.keys(errors), name).toEqual(expected === undefined ? [] : [field]);
+    }
+    // The body the wizard sends drops the stripped characters.
+    expect(
+      toListingIn({ ...valid, city: '\u05d0\u3164\u05d1', street: '\u2800\u05d2' }),
+    ).toMatchObject({
+      city: '\u05d0\u05d1',
+      street: '\u05d2',
     });
   });
 });

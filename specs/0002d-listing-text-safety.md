@@ -1,7 +1,7 @@
 ---
 id: 0002d
 title: Public listing text (city, street, description) and display names can no longer carry invisible filler, private-use or non-characters, lone surrogates or combining-mark stacks, and a city or street must contain a letter or digit
-status: verified
+status: in-review
 depends_on: []           # 0002a, 0002b, 0003a are merged
 reviewers: [code, security, qa]   # security: input sanitisation on now-public text; qa: tightens validation on 3 endpoints + validate.ts (Sonnet/medium)
 estimate: 1 coder run
@@ -44,6 +44,7 @@ lets Hangul filler U+3164, braille blank U+2800, non-characters … through"). P
   after `cleanText` gets the existing `listings.errors.required` error (no new i18n key). The combining-run
   rule is API-only: such a body falls through to the wizard's existing publish-error handling.
 - `specs/FOLLOWUPS.md`: tick the `0002a` · `_text.py` entry with "done in 0002d".
+- **Amended in review (B1):** rule 3 also rejects, by value, the default-ignorable code points that are `Cn` in Python 3.12 (U+2065, U+FFF0–U+FFF8, U+E0000–U+E00FF, U+E01F0–U+E0FFF; the web strips them too), and in rule 4 any other `Cn` code point is accepted and, like ZWJ/ZWNJ, neither counts toward nor ends a run.
 
 **Out:** text already stored (dev data only, no production yet: no data migration, read paths unchanged);
 a per-owner total-rows cap and `GET /me` `listing_cap` (FOLLOWUPS `0002a` / `0002b`, later specs); the

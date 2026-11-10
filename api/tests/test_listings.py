@@ -231,6 +231,63 @@ def test_ac4_validation_rejects_bad_input(
     assert _count(db_engine) == 0
 
 
+_INVISIBLE = "contains control or invisible characters"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "msg"),
+    [
+        (
+            "description",
+            "\u05d3\u05d9\u05e8\u05d4 \u3164 \u05de\u05d5\u05d0\u05e8\u05ea",
+            f"description {_INVISIBLE}",
+        ),
+        ("city", "...", "city must contain a letter or digit"),
+        ("street", "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df\ue000", f"street {_INVISIBLE}"),
+        ("description", "a" + "\u0301" * 5, "description has too many combining marks in a row"),
+    ],
+    ids=[
+        "description-hangul-filler",
+        "city-punctuation-only",
+        "street-private-use",
+        "description-zalgo",
+    ],
+)
+def test_ac6_text_rules_are_value_error_at_field(
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    field: str,
+    value: str,
+    msg: str,
+) -> None:
+    response = owner.post("/listings", json=_body(gush_dan, **{field: value}))
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail[0]["type"] == "value_error"
+    assert detail[0]["loc"] == ["body", field]
+    assert detail[0]["msg"] == f"Value error, {msg}"
+    assert "input" not in detail[0]
+    assert _count(db_engine) == 0
+
+
+def test_ac6_patch_rejects_blank_letter_city(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    listing = _create(owner, gush_dan)
+    row_before = _row(db_engine, listing["id"])
+
+    response = _patch(owner, listing["id"], {"city": "\u3164"})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail[0]["type"] == "value_error"
+    assert detail[0]["loc"] == ["body", "city"]
+    assert detail[0]["msg"] == f"Value error, city {_INVISIBLE}"
+    assert _row(db_engine, listing["id"]) == row_before
+
+
 def test_ac4_description_crlf_is_stored_as_lf(
     owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:

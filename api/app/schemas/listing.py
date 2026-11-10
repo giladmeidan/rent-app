@@ -47,7 +47,16 @@ def _lf_newlines(value: Any) -> Any:
 
 
 def _visible_multiline(value: str) -> str:
-    return visible_characters_only(value, allow_newlines=True)
+    return visible_characters_only(value, allow_newlines=True, field="description")
+
+
+def _visible_alnum(field: str) -> AfterValidator:
+    """The visible-characters rule plus at least one letter or digit (city, street)."""
+
+    def check(value: str) -> str:
+        return visible_characters_only(value, field=field, require_alnum=True)
+
+    return AfterValidator(check)
 
 
 # JSON number, not Pydantic's default string ("3.5"); `numeric(3,1)` in the database.
@@ -58,8 +67,8 @@ Rooms = Annotated[
     PlainSerializer(float, return_type=float, when_used="json"),
 ]
 # Text is stripped (model config) before the length check, so " " is empty and rejected.
-City = Annotated[str, Field(min_length=1, max_length=40), AfterValidator(visible_characters_only)]
-Street = Annotated[str, Field(min_length=1, max_length=80), AfterValidator(visible_characters_only)]
+City = Annotated[str, Field(min_length=1, max_length=40), _visible_alnum("city")]
+Street = Annotated[str, Field(min_length=1, max_length=80), _visible_alnum("street")]
 Description = Annotated[
     str, BeforeValidator(_lf_newlines), Field(max_length=2000), AfterValidator(_visible_multiline)
 ]

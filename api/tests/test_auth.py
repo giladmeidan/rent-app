@@ -493,6 +493,27 @@ def test_ac11_invalid_name_keeps_code_valid(client: TestClient, outbox: Outbox) 
     assert _verify(client, EMAIL, code, PROFILE).status_code == 201
 
 
+@pytest.mark.parametrize("name", ["ab\u3164", "\ue000\ue000"], ids=["hangul-filler", "private-use"])
+def test_ac7_display_name_rejects_blank_letters_and_private_use(
+    client: TestClient, outbox: Outbox, db_engine: Engine, name: str
+) -> None:
+    code = _request_code(client, outbox)
+
+    response = _verify(client, EMAIL, code, {"display_name": name, "role": "owner"})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail[0]["type"] == "value_error"
+    assert detail[0]["loc"] == ["body", "profile", "display_name"]
+    assert detail[0]["msg"] == "Value error, display_name contains control or invisible characters"
+    assert _scalar(db_engine, "SELECT count(*) FROM users") == 0
+    assert get_redis().hget(f"otp:{EMAIL}", "attempts") == b"0"
+    # The code stays valid, and a plain Hebrew name still signs up.
+    response = _verify(client, EMAIL, code, {"display_name": "\u05d3\u05e0\u05d4", "role": "owner"})
+    assert response.status_code == 201
+    assert response.json()["display_name"] == "\u05d3\u05e0\u05d4"
+
+
 def test_display_name_keeps_joiners() -> None:
     assert ProfileIn(display_name="👩\u200d💻 נועה", role="owner").display_name == "👩\u200d💻 נועה"
 
