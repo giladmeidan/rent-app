@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export type View = 'list' | 'map';
@@ -13,12 +14,20 @@ const other = `${option} bg-transparent font-semibold text-muted`;
 /** Search.dc.html's "list / map" segmented control. */
 export function ViewToggle({ view, onChange }: Props) {
   const { t } = useTranslation();
+  // The view last asked for, not the render's `view`: the router applies a navigation in a
+  // transition, so a double-click would see the old `view` twice and push two entries.
+  const requested = useRef(view);
+  useEffect(() => {
+    requested.current = view;
+  }, [view]);
   const button = (value: View, text: string) => (
     <button
       type="button"
       aria-pressed={view === value}
       onClick={() => {
-        if (view !== value) onChange(value);
+        if (requested.current === value) return;
+        requested.current = value;
+        onChange(value);
       }}
       className={view === value ? current : other}
     >
