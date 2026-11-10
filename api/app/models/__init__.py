@@ -8,7 +8,8 @@ class Base(DeclarativeBase):
 
 
 from app.models.area import Area  # noqa: E402  (models must see Base first)
+from app.models.listing import Listing  # noqa: E402
 from app.models.session import Session  # noqa: E402
 from app.models.user import User  # noqa: E402
 
-__all__ = ["Area", "Base", "Session", "User"]
+__all__ = ["Area", "Base", "Listing", "Session", "User"]
