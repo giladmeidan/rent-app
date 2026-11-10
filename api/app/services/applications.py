@@ -141,20 +141,21 @@ def withdraw(db: Session, seeker: User, application_id: uuid.UUID) -> tuple[Appl
 
 def record_view(db: Session, listing_id: uuid.UUID) -> int:
     """Count one view of a public listing and return its applicant count (every application
-    except withdrawn ones). Call only after `get_public_listing` succeeded. Two statements, one
-    commit; the UPDATE locks only this listing's row."""
+    except withdrawn ones). Call only after `get_public_listing` succeeded. The count runs
+    first and the UPDATE last, so the listing row lock is held only for the UPDATE and the
+    commit, not across the count."""
     try:
+        count = db.scalar(
+            select(func.count())
+            .select_from(Application)
+            .where(Application.listing_id == listing_id, Application.status != "withdrawn")
+        )
         db.execute(
             update(Listing)
             .where(Listing.id == listing_id)
             .values(view_count=Listing.view_count + 1)
             # The loaded `listing` keeps its old `view_count`: no public schema shows it.
             .execution_options(synchronize_session=False)
-        )
-        count = db.scalar(
-            select(func.count())
-            .select_from(Application)
-            .where(Application.listing_id == listing_id, Application.status != "withdrawn")
         )
         db.commit()
     except Exception:

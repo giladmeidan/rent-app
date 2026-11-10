@@ -141,8 +141,8 @@ def test_ac1_seeker_applies_to_live_listing(
     assert body["listing"] == {
         "id": str(listing_a),
         "listing_type": "apartment",
-        "city": "גבעתיים",
-        "street": "כצנלסון",
+        "city": "\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd",
+        "street": "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df",
         "rooms": 3.5,
         "price_ils": 7200,
     }
@@ -160,8 +160,8 @@ def _listing_body(area_id: uuid.UUID) -> dict[str, Any]:
     return {
         "listing_type": "apartment",
         "area_id": str(area_id),
-        "city": "גבעתיים",
-        "street": "כצנלסון",
+        "city": "\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd",
+        "street": "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df",
         "rooms": 3.5,
         "floor": 3,
         "size_sqm": 95,
@@ -321,10 +321,10 @@ _BAD_MESSAGES: list[tuple[str, Any]] = [
     ("empty", ""),
     ("too long", "x" * 501),
     ("no letter or digit", "..."),
-    ("bidi override", "hi‮there"),
-    ("zero-width only", "​​"),
-    ("hangul filler", "aㅤb"),
-    ("five combining marks", "א" + "ָ" * 5),
+    ("bidi override", "hi\u202ethere"),
+    ("zero-width only", "\u200b\u200b"),
+    ("hangul filler", "a\u3164b"),
+    ("five combining marks", "\u05d0" + "\u05b8" * 5),
 ]
 
 
@@ -512,8 +512,9 @@ def test_ac8_applicant_count_and_view_counter(
     assert measured.status_code == 200
     assert measured.json()["applicant_count"] == 3
     assert len(sent) == 3, sent
-    assert sent[1].lstrip().startswith("UPDATE listings")
-    assert "FROM applications" in sent[2]
+    assert "FROM listings" in sent[0]
+    assert "FROM applications" in sent[1]
+    assert sent[2].lstrip().startswith("UPDATE listings")
 
 
 def _hourly(seeker_id: uuid.UUID) -> int:
