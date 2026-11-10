@@ -26,7 +26,7 @@ export WEB_ORIGIN        ?= http://localhost:5173
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web
+.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -55,6 +55,16 @@ dev:
 	$(COMPOSE) up -d --build -V api worker web
 	$(call wait_for,$(API_HEALTH),60,api)
 	$(call wait_for,$(WEB_URL),60,web)
+
+## dev-api: `dev` without the web: db+redis, migrate, seed, then api (reload) and worker, waiting on
+## /health only. For an API spec built while another session holds the Vite port 5173 (Speed rule 2).
+dev-api:
+	mkdir -p .outbox && chmod 0777 .outbox
+	$(COMPOSE) up -d --wait db redis
+	$(MAKE) migrate
+	$(MAKE) seed
+	$(COMPOSE) up -d --build api worker
+	$(call wait_for,$(API_HEALTH),60,api)
 
 ## down: stop the stack, remove its volumes and empty the email outbox
 down:
