@@ -274,3 +274,13 @@ so the orchestrator set `verified`.
            Israel/UTC date gap at midnight — mitigation: client bound today+729 vs API today+730.
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0002b-listings-web.md · PRODUCT.md "Brokers" (cap), "Scope" · design/screens-v1/CreateListing.dc.html (form, stepper), Listing.dc.html (card)
+
+Build digest (spec session, 2026-11-10):
+
+    Spec 0002b — Listings web: 3-step wizard + "my listings"   READY TO MERGE — PR #6 (Gilad merges; branch has main incl. 0002a merged)
+    Shipped: an owner creates a listing in a type → details → preview → publish wizard and pauses/resumes it on /me/listings; seekers and logged-out visitors are redirected; the header shows "המודעות שלי" for owners.
+    Demo: 1. make dev, sign up as owner at /signup (code in .outbox/)  2. "המודעות שלי" → "מודעה חדשה", pick דירה שלמה, fill, preview, "פרסום המודעה"  3. on /me/listings click "השהיה" → מושהית, then "הפעלה מחדש" → פעילה
+    Tests: +12 unit, +0 integration, +1 e2e (web 31 total; api 123 unchanged)   CI: api 54 s, web 1 m 18 s; e2e 3/3 locally, CI e2e runs on the ready-to-merge label
+    Findings: 0 blockers, 2 majors fixed (pasted Hebrew with invisible bidi marks/tabs passed the form and failed at the API with no hint → now stripped silently like trim(), matching the API rule; price re-entry by keyboard appended digits → now selects), 6 minors fixed (double-click published twice, owner header truncation at 390 px, switch tap target, test name, spec wording, FOLLOWUPS), 3 minors + 1 noticed item logged in FOLLOWUPS (Hebrew singular/gender forms, colour tokens, browser Back drops wizard state, listings cache after session expiry), 0 waived
+    Changed in PRODUCT.md: nothing (this slice; main's 2026-11-10 0002a batch needs no web change: the count line already counts live listings only)
+    Next spec I propose: 0002c — listing photos (needs your decisions: photo count/size limits and the R2 bucket)
