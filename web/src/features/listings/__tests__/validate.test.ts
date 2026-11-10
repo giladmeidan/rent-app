@@ -68,6 +68,43 @@ const rows: Row[] = [
   ['city " גבעתיים "', { city: ' גבעתיים ' }, 'city', undefined],
   ['city 40', { city: 'א'.repeat(40) }, 'city', undefined],
   ['city 41', { city: 'א'.repeat(41) }, 'city', tooLong(40)],
+  // The API's visible-characters rule: invisible characters are removed before counting (an RLM
+  // alone is empty), a tab is a space, ZWJ stays and counts.
+  ['city RLM only', { city: '\u200f' }, 'city', required],
+  ['city RLM + LRE + NUL only', { city: '\u200f\u202a\u0000 ' }, 'city', required],
+  ['city 40 + RLM', { city: `${'א'.repeat(40)}\u200f` }, 'city', undefined],
+  [
+    'city 41 with an RLM inside',
+    { city: `${'א'.repeat(20)}\u200f${'א'.repeat(21)}` },
+    'city',
+    tooLong(40),
+  ],
+  ['street tab only', { street: '\t' }, 'street', required],
+  ['street 80 with a tab', { street: `${'א'.repeat(40)}\t${'א'.repeat(39)}` }, 'street', undefined],
+  [
+    'street 81 with a tab',
+    { street: `${'א'.repeat(40)}\t${'א'.repeat(40)}` },
+    'street',
+    tooLong(80),
+  ],
+  [
+    'description 2000 + RLMs',
+    { description: `${'א'.repeat(2000)}\u200f\u2028\u200b` },
+    'description',
+    undefined,
+  ],
+  [
+    'description 2001 with a tab',
+    { description: `${'א'.repeat(1000)}\t${'א'.repeat(1000)}` },
+    'description',
+    tooLong(2000),
+  ],
+  [
+    'description 2001 with a ZWJ',
+    { description: `${'א'.repeat(2000)}\u200d` },
+    'description',
+    tooLong(2000),
+  ],
   ['street 80', { street: 'א'.repeat(80) }, 'street', undefined],
   ['street 81', { street: 'א'.repeat(81) }, 'street', tooLong(80)],
   ['date empty', { available_from: '' }, 'available_from', required],
@@ -89,12 +126,18 @@ describe('validate', () => {
 
   it('ac8_body_is_trimmed_and_typed', () => {
     expect(
-      toListingIn({ ...valid, city: ' גבעתיים ', description: ' a\r\nb ', vaad_ils: '150' }),
+      toListingIn({
+        ...valid,
+        city: ' \u200fגבעתיים\u202e ',
+        street: 'כצנלסון\tהגדול\n',
+        description: ' a\r\nb\u200f\u2028\tc\u200d\rd\u0000 ',
+        vaad_ils: '150',
+      }),
     ).toEqual({
       listing_type: 'apartment',
       area_id: valid.area_id,
       city: 'גבעתיים',
-      street: 'כצנלסון',
+      street: 'כצנלסון הגדול',
       rooms: 3.5,
       floor: 3,
       total_floors: 5,
@@ -108,7 +151,8 @@ describe('validate', () => {
       pets_allowed: false,
       arnona_ils: null,
       vaad_ils: 150,
-      description: 'a\nb',
+      // `\n` stays in the description; a lone `\r`, U+2028 and bidi marks go; ZWJ stays.
+      description: 'a\nb c\u200dd',
     });
   });
 });

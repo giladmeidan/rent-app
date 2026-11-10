@@ -1,5 +1,7 @@
-// Pure field rules for the wizard's details step. They mirror spec 0002a's Data ranges, so a form
-// that passes here is not a 422 (except `unknown_area`, which only the API can know).
+// Pure field rules for the wizard's details step. They mirror spec 0002a's Data ranges and, via
+// `cleanText`, the API's visible-characters rule (`api/app/schemas/_text.py`), so the body
+// `toListingIn` builds from a form that passes here is not a 422 (except `unknown_area`, which only
+// the API can know).
 import { addDays } from './format';
 import type { Furnished, ListingInBody, ListingType } from './api';
 
@@ -92,13 +94,26 @@ export const LIMITS = {
   vaad_ils: { min: 0, max: 5_000 },
 } as const;
 
-/** Length in code points after trimming, as Postgres `char_length` and Python `len` count. */
-export function visibleLength(value: string): number {
-  return [...normaliseNewlines(value).trim()].length;
+// Control, format (bidi marks, zero-width), line- and paragraph-separator characters: the API
+// rejects them (`visible_characters_only`), except ZWNJ / ZWJ and, in the description, `\n`.
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+const JOINERS = new Set(['\u200c', '\u200d']);
+
+/**
+ * The text as the API will accept it: `\r\n` → `\n`, a tab → a space, invisible characters
+ * removed (silently, like the trim), then trimmed. Single-line fields lose newlines too.
+ */
+export function cleanText(value: string, { multiline = false } = {}): string {
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\t/g, ' ')
+    .replace(INVISIBLE, (ch) => (JOINERS.has(ch) || (multiline && ch === '\n') ? ch : ''))
+    .trim();
 }
 
-function normaliseNewlines(value: string): string {
-  return value.replace(/\r\n/g, '\n');
+/** Length in code points of `cleanText(value)`, as Postgres `char_length` and Python `len` count. */
+export function visibleLength(value: string, options: { multiline?: boolean } = {}): number {
+  return [...cleanText(value, options)].length;
 }
 
 const required = { key: 'listings.errors.required' } as const;
@@ -166,7 +181,7 @@ export function validate(form: ListingForm, today: string): FieldErrors {
     arnona_ils: integer(form.arnona_ils, LIMITS.arnona_ils, true),
     vaad_ils: integer(form.vaad_ils, LIMITS.vaad_ils, true),
     description:
-      visibleLength(form.description) > LIMITS.description
+      visibleLength(form.description, { multiline: true }) > LIMITS.description
         ? { key: 'listings.errors.tooLong', max: LIMITS.description }
         : undefined,
   };
@@ -195,7 +210,7 @@ const optionalInt = (value: string) => (value.trim() === '' ? null : Number(valu
 /** The `POST /listings` body for a form that `validate` accepts. */
 export function toListingIn(form: ListingForm): ListingInBody {
   if (form.listing_type === null) throw new Error('toListingIn: no listing type');
-  const description = normaliseNewlines(form.description).trim();
+  const description = cleanText(form.description, { multiline: true });
   return {
     listing_type: form.listing_type,
     rooms: Number(form.rooms),
@@ -212,8 +227,8 @@ export function toListingIn(form: ListingForm): ListingInBody {
     arnona_ils: optionalInt(form.arnona_ils),
     vaad_ils: optionalInt(form.vaad_ils),
     description: description === '' ? null : description,
-    city: form.city.trim(),
-    street: form.street.trim(),
+    city: cleanText(form.city),
+    street: cleanText(form.street),
     area_id: form.area_id,
   };
 }
