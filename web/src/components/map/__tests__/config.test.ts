@@ -58,4 +58,17 @@ describe('map config', () => {
     expect(osm?.attribution).toContain('OpenStreetMap');
     expect(style.layers.map((layer) => layer.type)).toEqual(['raster']);
   });
+
+  it('roundBbox_never_returns_an_empty_box', () => {
+    // A phone-width box at a high zoom rounds to zero width and height.
+    const [west, south, east, north] = roundBbox([34.84502, 32.06, 34.84508, 32.06004]);
+    expect(west).toBeLessThan(east);
+    expect(south).toBeLessThan(north);
+    // At the edge of the world the box grows inward.
+    const [w, s, e, n] = roundBbox([180, 90, 200, 95]);
+    expect(w).toBeLessThan(e);
+    expect(e).toBeLessThanOrEqual(180);
+    expect(s).toBeLessThan(n);
+    expect(n).toBeLessThanOrEqual(90);
+  });
 });

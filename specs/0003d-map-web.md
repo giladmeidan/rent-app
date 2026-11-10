@@ -28,9 +28,12 @@ on R2 once R2 is approved", "Stack — MapLibre+OSM tiles", "Search — the stre
   '/map/osm-raster.json'`; `GUSH_DAN_BOUNDS: [number, number, number, number] = [34.74, 31.95, 34.95, 32.17]`
   (west, south, east, north; same box as `api/scripts/seed.py`'s `GUSH_DAN_WKT`; comment `shortcut: one launch
   area, read the area's box from the API when a second area is added`); `MAP_RESULTS_LIMIT = 50`;
-  `MAP_MIN_ZOOM = 8` (the search map cannot zoom out past central Israel); `roundBbox(b)` (lng clamped to
-  [-180, 180], lat to [-90, 90], then each value to 4 decimals; MapLibre's world copies can report longitudes
-  beyond +-180 when zoomed out, which `0003c` answers with a 422); `mapLocale(t)` → the MapLibre `locale` object
+  `MAP_MIN_ZOOM = 8` (the search map cannot zoom out past central Israel); `MAP_MAX_ZOOM = 19` (the raster
+  source's `maxzoom`; above it tiles are only upscaled, and at z21–22 a phone-width box rounds to zero width);
+  `roundBbox(b)` (lng clamped to [-180, 180], lat to [-90, 90], then each value to 4 decimals; MapLibre's world
+  copies can report longitudes beyond +-180 when zoomed out, which `0003c` answers with a 422; never a degenerate
+  box: if rounding leaves `west >= east`, `east = west + 0.0001`, or `west = 180 - 0.0001` when that passes 180,
+  and the same for `south >= north` with 90); `mapLocale(t)` → the MapLibre `locale` object
   for the controls this app shows: at least `Map.Title`, `NavigationControl.ZoomIn`, `NavigationControl.ZoomOut`,
   `NavigationControl.ResetBearing`, `AttributionControl.ToggleAttribution` and `Marker.Title`, plus any other key
   the pinned version's `defaultLocale` uses for a shown control (the coder checks the names against it), mapped to
@@ -39,16 +42,17 @@ on R2 once R2 is approved", "Stack — MapLibre+OSM tiles", "Search — the stre
   through `import()` inside an effect, so the library is a separate chunk loaded only when a map is shown). Props:
   `label: string` (region name), `bounds?: [w, s, e, n]` (initial `fitBounds`) or `center?: [lng, lat]` + `zoom?:
   number`, `pins?: Pin[]` (`{ id, lng, lat, text, label }`), `selectedId?: string`, `onPinClick?: (id) => void`,
-  `onMoveEnd?: (bbox: [w, s, e, n]) => void` (from `map.getBounds()`, fired on every `moveend`, including the one
-  after the initial fit), `interactive?: boolean` (default `true`), `approximate?: boolean` (draws a ~56 px
+  `onMoveEnd?: (bbox: [w, s, e, n]) => void` (from `map.getBounds()`, fired on every `moveend`; the first box is
+  reported on `load`, for the initial fit), `interactive?: boolean` (default `true`), `approximate?: boolean` (draws a ~56 px
   translucent accent circle at `center`, `aria-hidden`), `busy?: boolean` (results pending), `minZoom?: number`,
   `onError?: () => void`, `className?: string`. `onError` fires **only** when the `import()` fails, when `new
   Map()` throws or emits `webglcontextcreationerror`, or on an `error` event before `load`; `error` events after
-  `load` (a failed tile, an OSM 429, going offline) are ignored, so one bad tile never replaces the map. The
+  `load` (a failed tile, an OSM 429, going offline) are ignored, and tile and source errors before `load` are
+  ignored too (events carrying `tile` or `sourceId`), so one bad tile never replaces the map. The
   effect sets a `cancelled` flag in its cleanup and checks it after the `import()` resolves, so React `StrictMode`
   (`main.tsx`) mounting twice in dev never creates two maps in one container. Renders `<div role="region"
   aria-label={label} aria-busy={busy || !loaded}>` containing the map container and, until the map's `load`
-  event, a `Skeleton` covering it. Map options: `style: MAP_STYLE_URL`, `minZoom`, `locale: mapLocale(t)`,
+  event, a `Skeleton` covering it. Map options: `style: MAP_STYLE_URL`, `minZoom`, `maxZoom: MAP_MAX_ZOOM`, `locale: mapLocale(t)`,
   `attributionControl: false` plus an
   `AttributionControl({ compact: false })` (OSM attribution always expanded), a `NavigationControl({ showCompass:
   false })` when interactive, `dragRotate: false`, `pitchWithRotate: false`, `touchPitch: false`,

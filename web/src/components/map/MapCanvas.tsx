@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Skeleton } from '../Skeleton';
-import { MAP_STYLE_URL, mapLocale, type Bbox } from './config';
+import { MAP_MAX_ZOOM, MAP_STYLE_URL, mapLocale, type Bbox } from './config';
 
 type MapLibre = typeof import('maplibre-gl');
 
@@ -27,7 +27,7 @@ type Props = {
   pins?: Pin[];
   selectedId?: string | undefined;
   onPinClick?: (id: string) => void;
-  /** The visible box after every move, including the initial fit. */
+  /** The visible box after every move; the initial fit's box is reported on `load`. */
   onMoveEnd?: (bbox: Bbox) => void;
   interactive?: boolean;
   /** A ~56 px translucent circle at `center`: the listing's approximate area. */
@@ -126,6 +126,7 @@ export function MapCanvas({
           ...(center !== undefined ? { center, zoom: zoom ?? 14 } : {}),
           ...(bounds !== undefined ? { bounds } : {}),
           ...(minZoom !== undefined ? { minZoom } : {}),
+          maxZoom: MAP_MAX_ZOOM,
           interactive,
           locale: mapLocale(t),
           attributionControl: false,
@@ -140,19 +141,25 @@ export function MapCanvas({
       }
       const created = map;
 
-      let isLoaded = false;
-      created.on('load', () => {
-        isLoaded = true;
-        setLoaded(true);
-      });
-      // After `load`, an error is a tile (a 429, offline): the map stays.
-      created.on('error', () => {
-        if (!isLoaded) fail();
-      });
       const reportBounds = () => {
         const b = created.getBounds();
         callbacks.current.onMoveEnd?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
       };
+      let isLoaded = false;
+      created.on('load', () => {
+        isLoaded = true;
+        setLoaded(true);
+        // The first box: the constructor's fit happened before any listener, and reporting it
+        // here keeps pins and the count off the skeleton.
+        reportBounds();
+      });
+      // A tile or source error (an OSM 429 or 500, offline) carries `tile` / `sourceId` and never
+      // replaces the map; any other error before `load` (the style failed) does. After `load`
+      // every error is ignored.
+      created.on('error', (event) => {
+        if (isLoaded || 'tile' in event || 'sourceId' in event) return;
+        fail();
+      });
       created.on('moveend', reportBounds);
 
       created.addControl(
@@ -168,8 +175,6 @@ export function MapCanvas({
 
       mapRef.current = { map: created, lib };
       setReady(true);
-      // The constructor's initial fit happened before the listener existed.
-      reportBounds();
     })();
 
     return () => {

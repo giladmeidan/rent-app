@@ -21,21 +21,38 @@ export const MAP_RESULTS_LIMIT = 50;
 /** The search map cannot zoom out past central Israel. */
 export const MAP_MIN_ZOOM = 8;
 
+/**
+ * The raster source's `maxzoom`: above it tiles are only upscaled, and at z21-22 a phone-width
+ * box rounds to zero width.
+ */
+export const MAP_MAX_ZOOM = 19;
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+
+/** The rounding step: 4 decimals. */
+const STEP = 0.0001;
+
+/**
+ * One axis of a box, never empty: if rounding made `low >= high`, `high` is one step above `low`,
+ * or `low` one step below `max` when that would pass it.
+ */
+function nonEmpty(low: number, high: number, max: number): [number, number] {
+  if (low < high) return [low, high];
+  if (round4(low + STEP) <= max) return [low, round4(low + STEP)];
+  return [round4(max - STEP), max];
+}
 
 /**
  * A box `GET /listings` accepts: lng clamped to [-180, 180], lat to [-90, 90] (MapLibre's world
  * copies report longitudes beyond +-180 when zoomed out, which `0003c` answers with a 422), then
- * each value rounded to 4 decimals (~11 m), so small moves share a query key.
+ * each value rounded to 4 decimals (~11 m), so small moves share a query key; never empty
+ * (`west < east`, `south < north`), which `0003c` also answers with a 422.
  */
 export function roundBbox([west, south, east, north]: Bbox): Bbox {
-  return [
-    round4(clamp(west, -180, 180)),
-    round4(clamp(south, -90, 90)),
-    round4(clamp(east, -180, 180)),
-    round4(clamp(north, -90, 90)),
-  ];
+  const [w, e] = nonEmpty(round4(clamp(west, -180, 180)), round4(clamp(east, -180, 180)), 180);
+  const [s, n] = nonEmpty(round4(clamp(south, -90, 90)), round4(clamp(north, -90, 90)), 90);
+  return [w, s, e, n];
 }
 
 /**
