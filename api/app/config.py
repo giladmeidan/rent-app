@@ -10,6 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The public dev value from the Makefile, compose and .env.example; refused when serving https.
 DEV_SECRET_KEY = "dev-only-secret-change-me-0123456789abcdef"
+# The dev User-Agent for Nominatim; refused with `GEOCODER=nominatim` when serving https.
+DEV_NOMINATIM_USER_AGENT = "rent-app-dev/0.0.1"
 
 
 class SmtpTarget(NamedTuple):
@@ -63,6 +65,22 @@ class Settings(DatabaseSettings):
     smtp_url: SecretStr | None = None
     email_from: str = "noreply@localhost"
     cookie_secure: bool = False
+    # Geocoding (spec 0003c), worker only. `fake` = deterministic points, no network (dev, CI, e2e);
+    # `nominatim` = NOMINATIM_URL, which wants an identifying User-Agent (never an email in it).
+    geocoder: Literal["fake", "nominatim"] = "fake"
+    nominatim_url: str = "https://nominatim.openstreetmap.org"
+    nominatim_user_agent: str = DEV_NOMINATIM_USER_AGENT
+
+    @field_validator("nominatim_user_agent")
+    @classmethod
+    def _user_agent_identifies_without_email(cls, value: str) -> str:
+        # The messages name the rule only, never the value.
+        value = value.strip()
+        if not 3 <= len(value) <= 200:
+            raise ValueError("NOMINATIM_USER_AGENT must be 3 to 200 characters")
+        if "@" in value:
+            raise ValueError("NOMINATIM_USER_AGENT must not contain an email address ('@')")
+        return value
 
     @field_validator("secret_key")
     @classmethod
@@ -86,6 +104,15 @@ class Settings(DatabaseSettings):
                 raise ValueError("COOKIE_SECURE must be true when WEB_ORIGIN is https")
             if "email_backend" not in self.model_fields_set:
                 raise ValueError("EMAIL_BACKEND must be set explicitly when WEB_ORIGIN is https")
+            if "geocoder" not in self.model_fields_set:
+                raise ValueError("GEOCODER must be set explicitly when WEB_ORIGIN is https")
+            if self.geocoder == "nominatim" and self.nominatim_user_agent.startswith(
+                "rent-app-dev"
+            ):
+                raise ValueError(
+                    "NOMINATIM_USER_AGENT must not be the dev value when GEOCODER=nominatim and "
+                    "WEB_ORIGIN is https"
+                )
         return self
 
     @field_validator("web_origin")

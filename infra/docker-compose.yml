@@ -69,6 +69,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       # worker.py loads Settings at import, which requires SECRET_KEY.
       SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
+      # Geocoding (spec 0003c): `fake` (no network) unless a deployment sets it; CI's e2e has no .env.
+      GEOCODER: ${GEOCODER:-fake}
+      NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-rent-app-dev/0.0.1}
     volumes:
       - ../api:/app
     depends_on:
