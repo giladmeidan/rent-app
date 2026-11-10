@@ -1,7 +1,7 @@
 ---
 id: 0004a
 title: A logged-in seeker applies to a live apartment with a short message, sees their applications and their status, and can withdraw; the public listing shows the exact applicant count and every view is counted
-status: in-review
+status: done
 depends_on: [0003c]      # migration chain: 0003c adds 0004_listing_location, this spec adds 0005; 0003a, 0002a, 0002d are merged
 reviewers: [code, qa, security, perf]   # security: messages between users (free text from a seeker to an owner), PII exposure in two directions (seeker <-> owner), rate limits, a new auth guard; qa: status and re-apply edge cases; perf: a write and a count on every public listing-page hit (verifier 4)
 estimate: 1 coder run
