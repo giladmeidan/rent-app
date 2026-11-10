@@ -11,6 +11,7 @@ export function usePatchListing(id: string) {
       queryClient.setQueryData<ListingOut[]>(MY_LISTINGS_KEY, (old) =>
         old?.map((listing) => (listing.id === updated.id ? updated : listing)),
       );
+      void queryClient.invalidateQueries({ queryKey: ['listing', updated.id] });
     },
   });
 }

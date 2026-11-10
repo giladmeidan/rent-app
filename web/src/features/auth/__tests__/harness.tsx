@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, type InitialEntry } from 'react-router';
 import { vi } from 'vitest';
 
 import type { UserOut } from '../../../api/client';
@@ -74,7 +74,7 @@ export function testQueryClient(retry: boolean | number = false) {
 }
 
 /** Renders a routes tree at `path`, with a probe showing the current location. */
-export function renderRoutes(path: string, routes: ReactNode, client = testQueryClient()) {
+export function renderRoutes(path: InitialEntry, routes: ReactNode, client = testQueryClient()) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>

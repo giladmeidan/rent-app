@@ -1,7 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { latestCode, uniqueEmail } from './helpers';
+import { latestCode, signUpOwner, uniqueEmail } from './helpers';
+
+// `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
+// `page.request`. `make e2e` exports API_PORT.
+const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 
 /** `YYYY-MM-DD`, `days` from today in Israel. */
 function israelDay(days: number): string {
@@ -71,4 +75,75 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.paused);
   await expect(card.getByRole('button', { name: he.listings.actions.resume })).toBeVisible();
   await expect(header.getByRole('link', { name: he.header.myListings })).toBeVisible();
+});
+
+test('ac12_owner_edits_listing', async ({ page }) => {
+  const f = he.listings.fields;
+  const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  await signUpOwner(page);
+
+  // One listing with arnona, posted through the API with the owner's session (as search.spec.ts).
+  const areas = await page.request.get(API + '/areas');
+  expect(areas.ok()).toBe(true);
+  const [area] = (await areas.json()) as { id: string }[];
+  expect(area).toBeDefined();
+  const created = await page.request.post(API + '/listings', {
+    data: {
+      listing_type: 'apartment',
+      area_id: area?.id,
+      city: '\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd',
+      street,
+      rooms: 3.5,
+      floor: 3,
+      total_floors: 5,
+      size_sqm: 95,
+      price_ils: 7200,
+      available_from: israelDay(30),
+      entry_flexible: false,
+      elevator: true,
+      parking_spots: 1,
+      furnished: 'partial',
+      pets_allowed: true,
+      arnona_ils: 480,
+      vaad_ils: null,
+      description: null,
+    },
+  });
+  expect(created.status()).toBe(201);
+  const { id } = (await created.json()) as { id: string };
+
+  // My listings → edit.
+  await page.goto('/me/listings');
+  let card = page.getByRole('article').filter({ hasText: street });
+  await expect(card).toHaveCount(1);
+  await card.getByRole('link', { name: he.listings.actions.edit }).click();
+  await expect(page).toHaveURL(`/me/listings/${id}/edit`);
+  await expect(page.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
+  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.arnona, { exact: true })).toHaveValue('480');
+
+  // Price 7500, arnona cleared, preview, save.
+  await page.getByLabel(f.price).fill('7500');
+  await page.getByLabel(f.arnona, { exact: true }).fill('');
+  await page.getByRole('button', { name: he.listings.next }).click();
+  await expect(page.getByText(he.listings.preview.hint)).toBeVisible();
+  const patch = page.waitForRequest(
+    (request) => request.method() === 'PATCH' && request.url().endsWith(`/listings/${id}`),
+  );
+  await page.getByRole('button', { name: he.listings.save }).click();
+  expect((await patch).postDataJSON()).toEqual({ price_ils: 7500, arnona_ils: null });
+
+  // Back on my listings with the new price and the saved line.
+  await expect(page).toHaveURL('/me/listings');
+  card = page.getByRole('article').filter({ hasText: street });
+  await expect(card.getByText(/7,500[\s\u200e\u200f]*\u20aa/)).toBeVisible();
+  await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.live);
+  await expect(page.getByText(he.listings.edit.saved)).toBeVisible();
+
+  const mine = await page.request.get(API + '/me/listings');
+  expect(mine.ok()).toBe(true);
+  const stored = ((await mine.json()) as { id: string; arnona_ils: number | null }[]).find(
+    (l) => l.id === id,
+  );
+  expect(stored?.arnona_ils).toBeNull();
 });

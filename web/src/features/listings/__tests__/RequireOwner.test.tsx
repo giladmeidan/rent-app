@@ -12,16 +12,23 @@ import {
   renderRoutes,
 } from '../../auth/__tests__/harness';
 import { RequireOwner } from '../../auth/RequireOwner';
+import { EditListingPage } from '../EditListingPage';
 import { MyListingsPage } from '../MyListingsPage';
 import { NewListingPage } from '../NewListingPage';
-import { gushDan, owner, seeker } from './fixtures';
+import { gushDan, listing, owner, seeker } from './fixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const PATHS = ['/listings/new', '/me/listings'] as const;
-const TITLES = { '/listings/new': he.listings.new.title, '/me/listings': he.listings.mine.title };
+const A = listing();
+const EDIT = `/me/listings/${A.id}/edit` as const;
+const PATHS = ['/listings/new', '/me/listings', EDIT] as const;
+const TITLES = {
+  '/listings/new': he.listings.new.title,
+  '/me/listings': he.listings.mine.title,
+  [EDIT]: he.listings.edit.title,
+};
 
 const routes = (
   <Routes>
@@ -30,6 +37,7 @@ const routes = (
     <Route element={<RequireOwner />}>
       <Route path="/listings/new" element={<NewListingPage />} />
       <Route path="/me/listings" element={<MyListingsPage />} />
+      <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
     </Route>
   </Routes>
 );
@@ -41,7 +49,7 @@ describe('RequireOwner', () => {
       mockApi({
         'GET /me': [json(owner)],
         'GET /areas': [json([gushDan])],
-        'GET /me/listings': [json([])],
+        'GET /me/listings': [json([A])],
       });
       const view = renderRoutes(path, routes);
       expect(await screen.findByRole('heading', { level: 1, name: TITLES[path] })).toBeVisible();
@@ -59,7 +67,7 @@ describe('RequireOwner', () => {
         mockApi({
           'GET /me': [me.clone()],
           'GET /areas': [json([gushDan])],
-          'GET /me/listings': [json([])],
+          'GET /me/listings': [json([A])],
         });
         const view = renderRoutes(path, routes);
         await vi.waitFor(() => {
@@ -88,7 +96,7 @@ describe('RequireOwner', () => {
       const api = mockApi({
         'GET /me': [networkError, json(owner)],
         'GET /areas': [json([gushDan])],
-        'GET /me/listings': [json([])],
+        'GET /me/listings': [json([A])],
       });
       const view = renderRoutes(path, routes);
       const retry = await screen.findByRole('button', { name: he.common.retry });

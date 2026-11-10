@@ -195,6 +195,9 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
           className={input}
         >
           <option value="">{t('listings.fields.choose')}</option>
+          {form.rooms !== '' && !ROOM_OPTIONS.map(String).includes(form.rooms) && (
+            <option value={form.rooms}>{formatRooms(Number(form.rooms))}</option>
+          )}
           {ROOM_OPTIONS.map((rooms) => (
             <option key={rooms} value={String(rooms)}>
               {formatRooms(rooms)}

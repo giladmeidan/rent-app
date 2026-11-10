@@ -4,6 +4,7 @@ import { AreasList } from '../features/areas/AreasList';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireOwner } from '../features/auth/RequireOwner';
 import { SignupPage } from '../features/auth/SignupPage';
+import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
 import { NewListingPage } from '../features/listings/NewListingPage';
@@ -23,6 +24,7 @@ export function AppRoutes() {
         <Route element={<RequireOwner />}>
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings" element={<MyListingsPage />} />
+          <Route path="me/listings/:id/edit" element={<EditListingPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
