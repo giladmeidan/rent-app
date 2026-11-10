@@ -22,25 +22,23 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–2, list search (`0003a`/`0003b`), text safety (`0002d`) and web listing edit (`0002e`) are merged.
-Nothing in flight from the orchestrator. `0003c` merged (PR #12, 2117474). Verified and waiting: `0002f`,
-`0003d`, `0004a`–`0004d` (a `../rent-app-0004a` worktree exists, branched from 0003c's head, Gilad's session).
-**Gilad starts `0002f` and the Slice 4 builds himself in other sessions** — the orchestrator does not start them.
+Slices 1–3 API, list search, text safety, listing edit, expired read-only (`0002f`), map API (`0003c`), apply API
+(`0004a`) and inbox API (`0004c`) are merged. In flight from Gilad's session "Spec continuation from handoff":
+`0003d` (PR #15, in CI) and `0004b` (building). Left in Slice 4: `0004d`.
 
 Last updated:
-2026-11-10
+2026-11-11
 
 ## Current Work
-- **0002f Expired listing read-only** (`specs/0002f-expired-listing-read-only.md`, `verified`, 9202a5d) —
-  worktree prepared at `../rent-app-0002f` (branch `spec/0002f-expired-read-only`, `.env` on 5443/6389/8011);
-  Gilad will build it in a different session. It is a web spec: it needs port 5173 (free now).
-- **0003d Map web** (`verified`, dd9de8b) — waits for `0003c` to merge and for 5173 (not while 0002f builds).
-- **Slice 4** (all `verified`, c27f1d2; decisions in PRODUCT "Applications", 231148b) — Gilad starts these in
-  other sessions, not the orchestrator:
-  - `0004a` apply API (depends 0003c; ready once 0003c's PR is open; migration `0005`, down_revision `0004`;
-    reviewers code, qa, security, perf).
-  - `0004b` apply web (depends 0004a) and `0004c` inbox API (depends 0004a) — can build in parallel.
-  - `0004d` inbox web (depends 0004b + 0004c). 0004b and 0004d are web specs: not at the same time (5173).
+- **0003d Map web** — [PR #15](https://github.com/giladmeidan/rent-app/pull/15), head `cf49689`, pushed once,
+  `ready-to-merge`; `api`/`web` green, `e2e` was pending. Review: 1 blocker + 2 majors fixed (zoom-in 422, early
+  tile error, SW precached the lazy map lib), 10 minors fixed/logged. Auto-fix is on for the PR (its session wakes
+  on CI failure / conflict / comment). Stack down. On merge: mark `done`, remove `../rent-app-0003d` + branch.
+- **0004b Apply web** — building in session "Build 0004b — Apply web" (worktree `../rent-app-0004b`, branch
+  `spec/0004b-apply-web` from main a8f6190, stack `rent-app-0004b` on 5446/6392/8014, holds 5173). No PR yet.
+  Likely conflicts with #15 on the listing page and `he.json` — it merges `origin/main` before its one push.
+- **0004d Inbox web** (`verified`; view count removed per Gilad, e9d77dc) — ready once 0004b's PR is open; web
+  spec, so it starts only when 0004b frees 5173.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -61,30 +59,40 @@ Last updated:
   fields. Review: 0 blockers, 0 majors; one push.
 - [x] 0003c Map API — PR #12 (2117474): worker geocoding via Nominatim (paced, cached, paused on outages),
   approximate public point, bbox filter and `lat`/`lng` on `GET /listings`, migration `0004`.
+- [x] 0002f Expired listing read-only — PR #11 (782c59f): no edit link on an expired card; the edit URL explains
+  renewal comes later.
+- [x] 0004a Apply API — PR #13 (0a56433): seeker applies / lists / withdraws, public applicant count, view
+  counter, migration `0005`. Review: 0 blockers, 0 majors.
+- [x] 0004c Inbox API — PR #14 (dabac4c): owner lists applicants, shortlists / declines; `MyListingOut` carries
+  `applicant_count` and `new_applicant_count` (no `view_count`). Review: 0 blockers, 0 majors.
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
   Unicode 16/17 gap accepted (dfc332b); "Listing edit" row — expired listings not editable, the rest of
   0002e as recommended (9202a5d); "Applications" row —
-  Slice 4 Q1–Q6 accepted (231148b).
+  Slice 4 Q1–Q6 accepted (231148b); 0004c Q-A (re-apply counts as new) and Q-B (owners see applicant counts
+  only, never views) (e9d77dc).
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **Shared stack**: run `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (DB is at `0003`; main
-   now has `0004`), then `make dev` with the same ports when 5173 is free.
-2. **0003d**: 0003c is merged; start once 5173 is free (0002f not building), prepare `../rent-app-0003d` with its own
-   `.env` and start `/build 0003d` (ask Gilad with a button if the turn is automated).
-3. **0002f**: Gilad builds it in another session from `../rent-app-0002f`; when its PR is green, merge on
-   Gilad's word and clean up.
-4. **Slice 4**: Gilad starts `0004a` (once 0003c's PR is open), then `0004b`/`0004c`, then `0004d`, in his own
-   sessions. The orchestrator merges on Gilad's word after `api`, `web`, `e2e` are green, and cleans up.
-5. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
+1. **PR #15 (0003d)**: when `e2e` is green, ask Gilad to merge; merge with `--match-head-commit`; mark `done`;
+   remove worktree + branch (rule 10).
+2. **0004b**: when its session reports the PR, ask Gilad; merge after `api`/`web`/`e2e` green on head; clean up.
+3. **0004d**: once 0004b's PR is open and 5173 is free, prepare `../rent-app-0004d` (own `.env`, e.g.
+   5447/6393/8015, branch from main or 0004b's branch) and start `/build 0004d` (ask Gilad with a button if the
+   turn is automated).
+4. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
+   unthrottled and writes a row per hit; owner PATCH rate limit (Slice 5); 0004d re-fetch on 404/409.
+5. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0005`), then
+   `make dev` with the same ports when 5173 is free.
+6. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
    number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
    photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-6. Housekeeping: archive finished build sessions (0001b … 0002e) if Gilad wants; decide on
-   `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9). The shared stack's web
-   container is stopped (5173 was lent to builds); `make dev` with `DB_PORT=5434 REDIS_PORT=6380` brings it back.
+7. **Next slice**: Slice 5 (Chat — opens on owner shortlist) is not specced yet; it can be specced and verified
+   in another session while 0004b/0004d build.
+8. Housekeeping: archive finished build sessions (0001b … 0004c) if Gilad wants; decide on
+   `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -174,6 +182,8 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-11 (early) — Gilad's session: 0002f built and merged (PR #11); 0004a (PR #13) and 0004c (PR #14) built
+  and merged; Gilad answered 0004c Q-A/Q-B; 0003d open as PR #15; 0004b building.
 - 2026-11-10 (after midnight) — Slice 4 specced as four specs (0004a–d), verified, Gilad accepted Q1–Q6;
   Gilad will start 0002f and Slice 4 builds in his own sessions.
 - 2026-11-10 (late night) — 0002e built and merged (PR #10); 0003c/0003d/0002f specced and verified; 0003c build
