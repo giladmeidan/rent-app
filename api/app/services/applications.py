@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Application, Listing, User
 from app.redis_client import RedisClient
+from app.schemas.application import ApplicantStatus
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
@@ -43,7 +44,7 @@ _WITHDRAWABLE = ("submitted", "shortlisted")
 # The owner's transition table (spec 0004c): target status -> the current statuses it may be set
 # from. Setting the current status again is a no-op that keeps `updated_at`. Not listed (and so a
 # 409): from `declined` to `shortlisted` / `submitted`. `withdrawn` is never a source (a 404).
-ALLOWED_FROM: dict[str, frozenset[str]] = {
+ALLOWED_FROM: dict[ApplicantStatus, frozenset[str]] = {
     "shortlisted": frozenset({"submitted", "shortlisted"}),
     "submitted": frozenset({"submitted", "shortlisted"}),
     "declined": frozenset({"submitted", "shortlisted", "declined"}),
@@ -207,7 +208,11 @@ def list_applicants(
 
 
 def set_applicant_status(
-    db: Session, owner: User, listing_id: uuid.UUID, application_id: uuid.UUID, status: str
+    db: Session,
+    owner: User,
+    listing_id: uuid.UUID,
+    application_id: uuid.UUID,
+    status: ApplicantStatus,
 ) -> tuple[Application, str]:
     """Set an applicant of one of `owner`'s listings to `status` (`shortlisted`, `submitted` or
     `declined`), whatever the listing's state, and return it with the applicant's display name.
@@ -215,7 +220,10 @@ def set_applicant_status(
     its WHERE, so a concurrent withdraw or decline cannot interleave. A same-status change keeps
     `updated_at` (in Postgres the SET clause's CASE sees the pre-update status). Raises
     `ApplicationNotFoundError` (unknown listing or application, another owner's listing, an
-    application of a different listing, a withdrawn one) or `InvalidTransitionError`. Commits."""
+    application of a different listing, a withdrawn one) or `InvalidTransitionError`. The fallback
+    status SELECT runs in a fresh READ COMMITTED snapshot, so a seeker withdrawing or re-applying
+    between the UPDATE and the SELECT can turn a 404 into a 409 or the reverse; no data changes in
+    either case and the client re-fetches. Commits."""
     applicant_name = (
         select(User.display_name)
         .where(User.id == Application.seeker_id)

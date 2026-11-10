@@ -172,6 +172,52 @@ def test_ac1_owner_lists_applicants(
     assert empty.json() == []
 
 
+def test_ac1_reapply_counts_as_new_and_ties_order_by_id(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    # Gilad, 2026-11-10: a re-apply counts as new, so it sorts first (newest first).
+    listing = make_listing(db_engine, _user_id(owner), gush_dan)
+    x = signup(client, outbox, "x@example.com", "seeker")
+    y = signup(client, outbox, "y@example.com", "seeker")
+    x_application = x.post(f"/listings/{listing}/applications", json={"message": "X here"}).json()
+    y_response = y.post(f"/listings/{listing}/applications", json={"message": "Y here"})
+    assert y_response.status_code == 201, y_response.text
+    y_application = y_response.json()["id"]
+    assert [i["id"] for i in _applicants(owner, listing).json()] == [
+        y_application,
+        x_application["id"],
+    ]
+
+    assert y.post(f"/me/applications/{y_application}/withdraw").status_code == 200
+    assert [i["id"] for i in _applicants(owner, listing).json()] == [x_application["id"]]
+    again = y.post(f"/listings/{listing}/applications", json={"message": "Y again"})
+    assert again.status_code == 201, again.text
+    assert again.json()["id"] == y_application
+    assert [i["id"] for i in _applicants(owner, listing).json()] == [
+        y_application,
+        x_application["id"],
+    ]
+
+    third = make_application(db_engine, listing, make_seeker(db_engine, "z@example.com"))
+    _execute(
+        db_engine,
+        "UPDATE applications SET created_at = '2026-01-01T00:00:00+00' WHERE listing_id = :id",
+        id=str(listing),
+    )
+    expected = _scalar(
+        db_engine,
+        "SELECT array_agg(id::text ORDER BY id) FROM applications WHERE listing_id = :id",
+        id=str(listing),
+    )
+    assert len(expected) == 3
+    assert third in {uuid.UUID(e) for e in expected}
+    assert [i["id"] for i in _applicants(owner, listing).json()] == expected
+
+
 def test_ac2_applicants_are_owner_only(
     client: TestClient,
     outbox: Outbox,
@@ -248,6 +294,7 @@ def test_ac4_status_transitions(
     owner: TestClient,
     gush_dan: uuid.UUID,
     db_engine: Engine,
+    statements: list[str],
 ) -> None:
     owner_id = _user_id(owner)
     listing_a = make_listing(db_engine, owner_id, gush_dan)
@@ -273,9 +320,22 @@ def test_ac4_status_transitions(
     applicant_count = _applicant_count(client, listing_a)
     assert applicant_count == 10
 
+    owner.get("/me")  # warm-up: a first connect sends its own setup statements
+    measured_ok = measured_conflict = False
     for application_id, name, current, target, code, no_op in cells:
         _, before = _row(db_engine, application_id)
+        statements.clear()
         response = _set_status(owner, listing_a, application_id, {"status": target})
+        sent = list(statements)
+        if code == 200 and not no_op and not measured_ok:
+            measured_ok = True
+            assert len(sent) == 2, sent  # the session lookup and the one UPDATE
+            assert "UPDATE applications" in sent[1]
+            assert "FROM listings" in sent[1]
+            assert "RETURNING" in sent[1]
+        if code == 409 and not measured_conflict:
+            measured_conflict = True
+            assert len(sent) == 3, sent  # lookup, UPDATE, then the follow-up SELECT
         assert response.status_code == code, (current, target, response.text)
         status, after = _row(db_engine, application_id)
         if code == 200:
@@ -303,6 +363,19 @@ def test_ac4_status_transitions(
     assert paused.status_code == 200, paused.text
     assert paused.json()["status"] == "shortlisted"
     assert _row(db_engine, e_application)[0] == "shortlisted"
+
+    listing_x = make_listing(db_engine, owner_id, gush_dan)
+    _execute(
+        db_engine,
+        "UPDATE listings SET expires_at = now() - interval '1 hour' WHERE id = :id",
+        id=str(listing_x),
+    )
+    x_seeker = make_seeker(db_engine, "x-expired@example.com", "Xena")
+    x_application = make_application(db_engine, listing_x, x_seeker)
+    expired = _set_status(owner, listing_x, x_application, {"status": "shortlisted"})
+    assert expired.status_code == 200, expired.text
+    assert expired.json()["status"] == "shortlisted"
+    assert _row(db_engine, x_application)[0] == "shortlisted"
 
     for target in ("shortlisted", "declined"):
         response = _set_status(owner, listing_a, s_application, {"status": target})
@@ -402,3 +475,50 @@ def test_ac6_my_listings_counts(
     patched = owner.patch(f"/listings/{created.json()['id']}", json={"price_ils": 7500})
     assert patched.status_code == 200, patched.text
     assert not set(patched.json()) & COUNT_KEYS
+
+
+def test_ac6_counts_follow_transitions(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    listing = make_listing(db_engine, _user_id(owner), gush_dan)
+    other_owner = make_owner(db_engine, "other@example.com")
+    other_listing = make_listing(db_engine, other_owner, gush_dan)
+    seeker_1 = make_seeker(db_engine, "s1@example.com")
+    seeker_2 = make_seeker(db_engine, "s2@example.com")
+    first = make_application(db_engine, listing, seeker_1)
+    second = make_application(db_engine, listing, seeker_2)
+    third_seeker = signup(client, outbox, "s3@example.com", "seeker")
+    applied = third_seeker.post(f"/listings/{listing}/applications", json={"message": "Hello"})
+    assert applied.status_code == 201, applied.text
+    third = applied.json()["id"]
+    stranger = make_seeker(db_engine, "stranger@example.com")
+    stranger_application = make_application(db_engine, other_listing, stranger)
+
+    def counts() -> tuple[int, int]:
+        items = {i["id"]: i for i in owner.get("/me/listings").json()}
+        return items[str(listing)]["applicant_count"], items[str(listing)]["new_applicant_count"]
+
+    assert counts() == (3, 3)
+    assert _set_status(owner, listing, first, {"status": "shortlisted"}).status_code == 200
+    assert counts() == (3, 2)
+    assert _set_status(owner, listing, second, {"status": "declined"}).status_code == 200
+    assert counts() == (3, 1)
+    assert third_seeker.post(f"/me/applications/{third}/withdraw").status_code == 200
+    assert counts() == (2, 0)
+    assert _set_status(owner, listing, first, {"status": "submitted"}).status_code == 200
+    assert counts() == (2, 1)
+    # another owner's applications never change these counts
+    assert (
+        _set_status(owner, other_listing, stranger_application, {"status": "declined"}).status_code
+        == 404
+    )
+    _execute(
+        db_engine,
+        "UPDATE applications SET status = 'shortlisted' WHERE id = :id",
+        id=str(stranger_application),
+    )
+    assert counts() == (2, 1)
