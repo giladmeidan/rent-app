@@ -173,3 +173,22 @@ so the orchestrator set `verified`.
     Risks: a paused / expired / room listing leaking into public results — mitigation: one predicate, AC1 + AC9 prove both endpoints agree, AC2 pins the public key set (no owner id).
     Reviewers: code, qa, perf   Estimated: 1 coder run, 1 review round
     Links: specs/0003a-search-api.md · PRODUCT.md "Launch area", "Gender preference", "Trust (MVP)" · design/screens-v1/Search.dc.html, SearchDesktop.dc.html (filters)
+
+    Spec 0003a — Search API: public search + listing by id   REVIEWED, ready to merge (PR #7, code head bae70c8, 2026-11-10)
+    Shipped: anyone, with or without a cookie, calls GET /listings (price / rooms ranges, available_by with ±14 days for
+             flexible entry, pets / furnished / elevator / parking, sort newest | price_asc | price_desc, limit ≤ 50, offset ≤
+             10,000) and gets {items, total} of live apartments in active areas only; GET /listings/{id} is 200 for those and
+             the same 404 for unknown, paused, expired, room or inactive-area ids; no owner_id / area_id / status / expires_at
+             in the response. Plus `make dev-api` (dev without the web, for API specs while a web spec holds 5173).
+    Demo: 1) make dev-api; sign up as an owner (code in .outbox/) and POST a listing with the README "Posting a listing" curl
+          2) curl 'http://127.0.0.1:8005/listings?price_max=8000' → {"items":[…], "total": 1}, no cookie needed
+          3) PATCH that listing {"status":"paused"} → GET /listings total 0 and GET /listings/{id} 404 {"detail":"not_found"}
+    Tests: +0 unit, +10 integration (AC1–AC9 by name, AC8 twice; 133 vs 123 on main), +0 e2e   CI on bae70c8: api 52s · web 51s
+    NF2 (10,000 live apartments, warm, EXPLAIN ANALYZE): (a) no params count 6.7 ms / page 9.9 ms · (b) price_max=8000&rooms_min=3
+         &sort=price_asc 5.5 / 5.9 ms · (c) offset=10000 6.8 / 10.9 ms — all < 50 ms, seq scans, all shared-buffer hits; no index
+    Findings: 0 blockers, 0 majors, 0 waived, 5 minors logged in FOLLOWUPS (shared rooms serialiser, repeated params last-wins,
+              two notes for 0003b: omit empty params, map 422 by type/loc; search index at ~50k listings), 6 nits dropped
+    Changed in PRODUCT.md: nothing (the 7 product assumptions in Risks stand, pending Gilad's batch approval of the digest above)
+    Heads-up: FOLLOWUPS' 0002a entry "visible_characters_only lets invisible fillers through … do before 0003a" is still open,
+              and listings are public from this PR on (city / street / description); worth a small spec before launch, not a blocker.
+    Next spec I propose: 0003b — Search web (verified; depends on 0003a + 0002b, so it starts once 0002b's PR is open and 5173 is free)
