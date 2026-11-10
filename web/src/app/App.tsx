@@ -2,12 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
 import { AreasList } from '../features/areas/AreasList';
-import './i18n';
+import i18n from './i18n';
 
 document.documentElement.dir = 'rtl';
 document.documentElement.lang = 'he';
+document.title = i18n.t('app.title');
 
-const queryClient = new QueryClient();
+// One retry: the default three with backoff delays the error state by ~7 s.
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1 } } });
 
 function Header() {
   const { t } = useTranslation();
