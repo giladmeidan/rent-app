@@ -63,6 +63,27 @@ def test_ac2_rejects_blank_letters(ch: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "ch",
+    [
+        "\U000e0080",
+        "\u2065",
+        "\ufff0",
+        "\ufff8",
+        "\U000e0000",
+        "\U000e00ff",
+        "\U000e01f0",
+        "\U000e0fff",
+    ],
+    ids=lambda ch: f"U+{ord(ch):04X}",
+)
+def test_ac2_rejects_unassigned_default_ignorables(ch: str) -> None:
+    """Review B1: default-ignorable code points that are `Cn` in Python 3.12 render as nothing."""
+    for value in _positions(ch):
+        with pytest.raises(ValueError, match=f"^{INVISIBLE}$"):
+            visible_characters_only(value, field="city")
+
+
+@pytest.mark.parametrize(
     "value",
     [
         "a" + "\u0301" * 5,
@@ -73,6 +94,9 @@ def test_ac2_rejects_blank_letters(ch: str) -> None:
         "a" + "\u0903" * 5,  # Mc (spacing mark)
         "a" + "\u20dd" * 5,  # Me (enclosing mark)
         "a" + "\u0301\u0903\u20dd\u05b8\u0301",  # mixed mark categories
+        # Review B1: a code point unassigned in Python's tables (`Cn`) does not end the run.
+        "a" + "\u0301" * 4 + "\u1ad0" + "\u0301" * 4,  # a Unicode 16 mark
+        "a" + "\u0301" * 4 + "\U0001fae9" + "\u0301",  # a Unicode 16 emoji
     ],
 )
 def test_ac3_combining_runs_capped_at_four_rejects(value: str) -> None:
@@ -89,6 +113,7 @@ def test_ac3_combining_runs_capped_at_four_rejects(value: str) -> None:
         "ש\u05c1\u05b8לו\u05b9ם",  # pointed shalom
         ("a" + "\u0301" * 4) * 3,  # a base letter ends each run
         "a" + "\u0301" * 4 + " " + "\u0301" * 4,  # a space ends the run too
+        "a" + "\u0301" * 2 + "\u1ad0" + "\u0301" * 2,  # a `Cn` code point is not counted (B1)
     ],
 )
 def test_ac3_combining_runs_capped_at_four(value: str) -> None:
@@ -126,6 +151,8 @@ def test_ac4_without_require_alnum_an_emoji_passes() -> None:
         ("line one\nline two", True),
         ("\U0001fae9", False),  # Unicode 16 emoji: `Cn` in Python 3.12, must stay accepted
         ("\U0001fae9 דירה", True),
+        ("\U0001fae9" * 5, False),  # `Cn` code points are not marks (review B1)
+        ("\u05d0\U000e0100", False),  # a variation selector (`Mn`), next to the B1 ranges
     ],
 )
 def test_ac5_existing_rules_unchanged(value: str, allow_newlines: bool) -> None:
