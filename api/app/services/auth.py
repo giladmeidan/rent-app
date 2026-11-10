@@ -28,6 +28,7 @@ from app.models import User
 from app.redis_client import RedisClient
 from app.schemas.auth import ProfileIn
 from app.services.email import EmailSender, EmailUnavailable
+from app.services.rate_limit import count_or_raise
 
 OTP_TTL_S = 600
 OTP_MAX_ATTEMPTS = 5
@@ -38,24 +39,6 @@ OTP_RATE_DAY_S = 86_400
 OTP_RATE_LIMIT_IP = 10
 SESSION_TTL_S = 30 * 24 * 3600
 
-# Rate limits. KEYS = the three counters, ARGV = limit, window per counter. If any counter is at
-# its limit, return the largest remaining TTL and count nothing, so refused requests never use up
-# the budget. Otherwise create each counter with its TTL (SET NX EX) and INCR it, atomically: a
-# counter can never exist without a TTL.
-_COUNT_REQUEST = """
-local retry = 0
-for i, key in ipairs(KEYS) do
-  if tonumber(redis.call('GET', key) or '0') >= tonumber(ARGV[2 * i - 1]) then
-    retry = math.max(retry, redis.call('TTL', key), 1)
-  end
-end
-if retry > 0 then return retry end
-for i, key in ipairs(KEYS) do
-  redis.call('SET', key, 0, 'EX', ARGV[2 * i], 'NX')
-  redis.call('INCR', key)
-end
-return 0
-"""
 # Reserve one attempt: nil when no code is pending (never creates a key, so never one without a
 # TTL); otherwise {code_hmac, attempts after this one, PTTL}. A key past the limit is deleted.
 _RESERVE_ATTEMPT = """
@@ -85,12 +68,6 @@ return 1
 """
 
 
-class RateLimitedError(Exception):
-    def __init__(self, retry_after: int) -> None:
-        super().__init__("rate_limited")
-        self.retry_after = retry_after
-
-
 class InvalidCodeError(Exception):
     """Wrong, expired, exhausted or never-requested code (deliberately one case)."""
 
@@ -118,17 +95,15 @@ def _token_hash(token: str) -> str:
 
 def _count_request(r: RedisClient, email: str, ip: str) -> None:
     """Count this request against all three limits; raise `RateLimitedError` (counting nothing)
-    if any is already at its limit."""
-    counters = (
-        (f"rl:otp:email:{email}", OTP_RATE_LIMIT_EMAIL, OTP_RATE_WINDOW_S),
-        (f"rl:otp:email:day:{email}", OTP_RATE_LIMIT_EMAIL_DAY, OTP_RATE_DAY_S),
-        (f"rl:otp:ip:{ip}", OTP_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
+    if any is already at its limit (`services/rate_limit.py`)."""
+    count_or_raise(
+        r,
+        (
+            (f"rl:otp:email:{email}", OTP_RATE_LIMIT_EMAIL, OTP_RATE_WINDOW_S),
+            (f"rl:otp:email:day:{email}", OTP_RATE_LIMIT_EMAIL_DAY, OTP_RATE_DAY_S),
+            (f"rl:otp:ip:{ip}", OTP_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
+        ),
     )
-    keys = [key for key, _limit, _window in counters]
-    args = [value for _key, limit, window in counters for value in (limit, window)]
-    retry_after = int(_eval(r, _COUNT_REQUEST, keys, *args))
-    if retry_after:
-        raise RateLimitedError(retry_after=retry_after)
 
 
 def request_otp(r: RedisClient, sender: EmailSender, email: str, ip: str) -> None:
