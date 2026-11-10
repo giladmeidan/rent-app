@@ -46,3 +46,14 @@ export async function patchListing(id: string, body: ListingPatch): Promise<List
   if (data === undefined) throw new ApiError('PATCH', '/listings/{id}', response.status, error);
   return data;
 }
+
+export type ListingPublic = components['schemas']['ListingPublic'];
+
+/** A live listing as anyone sees it. 404 (not live, or unknown) and 422 (malformed id) throw. */
+export async function fetchPublicListing(id: string): Promise<ListingPublic> {
+  const { data, error, response } = await api.GET('/listings/{listing_id}', {
+    params: { path: { listing_id: id } },
+  });
+  if (data === undefined) throw new ApiError('GET', '/listings/{id}', response.status, error);
+  return data;
+}
