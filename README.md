@@ -53,6 +53,7 @@ AREA=$(curl -s localhost:8000/areas | python3 -c 'import json,sys; print(json.lo
 curl -b cookies.txt -X POST localhost:8000/listings -H 'Content-Type: application/json' -d '{"listing_type":"apartment",
   "area_id":"'"$AREA"'","city":"גבעתיים","street":"כצנלסון","rooms":3.5,"floor":3,"size_sqm":95,"price_ils":7200,
   "available_from":"2026-12-01","elevator":true,"furnished":"partial","pets_allowed":true}'
+curl -s 'localhost:8000/listings?price_max=8000'  # public search, no cookie; GET /listings/{id} opens one
 ```
 
 ## Make targets
