@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
-from app.routers import areas, auth, health
+from app.routers import areas, auth, health, listings
 from app.schemas.error import ErrorOut
 
 log = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(areas.router)
     app.include_router(auth.router)
+    app.include_router(listings.router)
     return app
 
 

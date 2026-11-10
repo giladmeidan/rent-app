@@ -1,0 +1,155 @@
+"""Owner listings: create, list own, edit / pause / resume (spec 0002a).
+
+Cap (PRODUCT.md "Owner cap: 3 active listings per account, admin may raise"): an owner may have at
+most `users.listing_cap` **live** listings (`status = 'active' AND expires_at > now()`). Creating
+or resuming one locks the owner's `users` row (`SELECT … FOR UPDATE`) and counts inside the same
+transaction, so two concurrent creates serialise and the cap holds (AC9).
+
+Ownership: every query by listing id also carries `owner_id = :owner` in its `WHERE`, so another
+owner's listing is indistinguishable from an unknown id (`ListingNotFoundError`, a 404).
+
+Timestamps (`updated_at`, `expires_at`) come from the database's `now()`, never from Python.
+"""
+
+import datetime as dt
+import uuid
+from collections.abc import Sequence
+from typing import Any
+
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
+from sqlalchemy import func, insert, select, update
+from sqlalchemy.orm import Session
+
+from app.models import Area, Listing, User
+from app.schemas.listing import ListingIn, ListingPatch
+
+LISTING_TTL_DAYS = 30
+
+
+class ListingCapReachedError(Exception):
+    """The owner already has `listing_cap` live listings."""
+
+
+class UnknownAreaError(Exception):
+    """`area_id` is not an active launch area."""
+
+
+class ListingNotFoundError(Exception):
+    """No listing with this id belongs to the caller (unknown id or another owner's listing)."""
+
+
+def _check_area(db: Session, area_id: uuid.UUID) -> None:
+    active = db.scalar(select(Area.id).where(Area.id == area_id, Area.is_active.is_(True)))
+    if active is None:
+        raise UnknownAreaError
+
+
+def _lock_owner_cap(db: Session, owner_id: uuid.UUID) -> int:
+    """Lock the owner's `users` row until the transaction ends and return its `listing_cap`."""
+    return db.execute(
+        select(User.listing_cap).where(User.id == owner_id).with_for_update()
+    ).scalar_one()
+
+
+def _count_live_listings(db: Session, owner_id: uuid.UUID) -> int:
+    """The owner's live listings. Called with the owner row locked (`_lock_owner_cap`)."""
+    return db.execute(
+        select(func.count())
+        .select_from(Listing)
+        .where(
+            Listing.owner_id == owner_id,
+            Listing.status == "active",
+            Listing.expires_at > func.now(),
+        )
+    ).scalar_one()
+
+
+def _enforce_cap(db: Session, owner_id: uuid.UUID) -> None:
+    cap = _lock_owner_cap(db, owner_id)
+    if _count_live_listings(db, owner_id) >= cap:
+        raise ListingCapReachedError
+
+
+def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
+    """Insert an active listing expiring `LISTING_TTL_DAYS` from now. Raises `UnknownAreaError`
+    or `ListingCapReachedError` (nothing written). Commits."""
+    try:
+        _check_area(db, data.area_id)
+        _enforce_cap(db, owner.id)
+        listing = db.scalars(
+            insert(Listing)
+            .values(
+                **data.model_dump(),
+                owner_id=owner.id,
+                expires_at=func.now() + dt.timedelta(days=LISTING_TTL_DAYS),
+            )
+            .returning(Listing)
+        ).one()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return listing
+
+
+def list_own_listings(db: Session, owner: User) -> Sequence[Listing]:
+    """Every listing of `owner` (active, paused and expired), newest first, in one query."""
+    return db.scalars(
+        select(Listing)
+        .where(Listing.owner_id == owner.id)
+        .order_by(Listing.created_at.desc(), Listing.id)
+    ).all()
+
+
+def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:
+    """The listing as it would be after `patch`, re-validated as a whole (cross-field rules).
+    A failure is the request's fault: FastAPI's 422 with a list `detail`."""
+    current: dict[str, Any] = {name: getattr(listing, name) for name in ListingIn.model_fields}
+    sent = patch.model_dump(include=patch.model_fields_set - {"status"})
+    try:
+        return ListingIn.model_validate({**current, **sent})
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [{**error, "loc": ("body", *error["loc"])} for error in exc.errors()]
+        ) from None
+
+
+def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: ListingPatch) -> Listing:
+    """Apply the sent fields of `patch` to the caller's listing and refresh `updated_at`. Resuming
+    a paused listing re-applies the cap; `expires_at` never moves. Raises `ListingNotFoundError`,
+    `UnknownAreaError`, `ListingCapReachedError` or `RequestValidationError` (nothing written).
+    Commits."""
+    try:
+        # Row lock: a concurrent PATCH of the same listing waits and then merges onto this one's
+        # result, so two individually valid patches can never combine into a CHECK failure.
+        listing = db.scalar(
+            select(Listing)
+            .where(Listing.id == listing_id, Listing.owner_id == owner.id)
+            .with_for_update()
+        )
+        if listing is None:
+            raise ListingNotFoundError
+        data = _merged(listing, patch)
+        if "area_id" in patch.model_fields_set:
+            _check_area(db, data.area_id)
+        if patch.status == "active" and listing.status == "paused":
+            # The paused listing is not live, so the count is of the others only.
+            _enforce_cap(db, owner.id)
+        values: dict[str, Any] = {
+            name: getattr(data, name) for name in patch.model_fields_set - {"status"}
+        }
+        if patch.status is not None:
+            values["status"] = patch.status
+        updated = db.scalars(
+            update(Listing)
+            .where(Listing.id == listing_id, Listing.owner_id == owner.id)
+            .values(**values, updated_at=func.now())
+            .returning(Listing),
+            execution_options={"populate_existing": True},
+        ).one()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return updated
