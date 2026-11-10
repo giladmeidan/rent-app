@@ -26,7 +26,7 @@ export WEB_ORIGIN        ?= http://localhost:5173
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e
+.PHONY: dev down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -75,7 +75,7 @@ test: test-api test-web
 test-api:
 	$(UV) run pytest -q
 
-test-web: web/node_modules
+test-web: web/node_modules/.modules.yaml
 	$(PNPM) exec vitest run
 
 ## lint: api ruff (lint + format) and mypy --strict, then web eslint, prettier --check, tsc --noEmit
@@ -86,7 +86,7 @@ lint-api:
 	$(UV) run ruff format --check .
 	$(UV) run mypy --strict app scripts tests alembic
 
-lint-web: web/node_modules web/src/api/schema.d.ts
+lint-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts
 	$(PNPM) exec eslint .
 	$(PNPM) exec prettier --check .
 	$(PNPM) exec tsc --noEmit
@@ -94,7 +94,7 @@ lint-web: web/node_modules web/src/api/schema.d.ts
 ## client: export the OpenAPI schema (no server needed) into web/src/api/schema.d.ts (git-ignored)
 client: SHELL := /bin/bash
 client: .SHELLFLAGS := -o pipefail -c
-client: web/node_modules
+client: web/node_modules/.modules.yaml
 	$(UV) run python scripts/export_openapi.py | $(PNPM) exec openapi-typescript -o src/api/schema.d.ts
 
 # Generated on first use by lint-web; run `make client` again after changing the API.
@@ -102,18 +102,23 @@ web/src/api/schema.d.ts:
 	$(MAKE) client
 
 ## i18n-check: fail on hardcoded Hebrew/English in web/src/**/*.tsx or t() keys missing from he.json
-i18n-check: web/node_modules
+i18n-check: web/node_modules/.modules.yaml
 	$(PNPM) exec node scripts/i18n-check.mjs
 
 ## e2e: playwright smoke suite against the running compose stack (`make dev` first); waits up to
 ## 90 s each for the api /health and the web before starting
-e2e: web/node_modules
+e2e: web/node_modules/.modules.yaml
 	$(PNPM) exec playwright install --with-deps chromium
 	$(call wait_for,$(API_HEALTH),90,api)
 	$(call wait_for,$(WEB_URL),90,web)
 	$(PNPM) exec playwright test
 
-# pnpm install whenever the manifest or lockfile is newer than the last install.
-web/node_modules: web/package.json web/pnpm-lock.yaml
+## build-web: production build (tsc --noEmit, vite build with the PWA manifest and service worker) into web/dist
+build-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts
+	$(PNPM) build
+
+# pnpm install whenever the manifest or lockfile is newer than the last install. The stamp is pnpm's
+# own .modules.yaml, not the directory: compose's anonymous volume leaves an empty web/node_modules.
+web/node_modules/.modules.yaml: web/package.json web/pnpm-lock.yaml
 	$(PNPM) install --frozen-lockfile
 	@touch $@
