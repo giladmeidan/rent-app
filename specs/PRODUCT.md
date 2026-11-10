@@ -1,6 +1,6 @@
 # Standing product decisions (read before writing any spec)
 
-Updated: 2026-11-10. Full reasoning in the Product Plan doc.
+Updated: 2026-11-11. Full reasoning in the Product Plan doc.
 
 | Topic | Decision |
 | --- | --- |
@@ -16,7 +16,7 @@ Updated: 2026-11-10. Full reasoning in the Product Plan doc.
 | Signup data | Email + display name (2–40 chars) only. No phone number is collected until SMS verification is switched on (decided 2026-11-09) |
 | OTP | Email OTP in Slice 1; SMS adapter stubbed behind an interface; switched on at launch readiness |
 | Matching | Hard filters (budget overlap, move-in window ±4 weeks, shared area, deal-breakers) then weighted distance score, 0–100, with top-3 agreeing / top-1 differing explanation |
-| Chat | Opens only on owner shortlist or mutual interest; never one-sided |
+| Chat | Opens only on owner shortlist or mutual interest; never one-sided. Decided 2026-11-11 (Slice 5 batch): new messages are **pushed** to open pages (server-sent events over Redis pub/sub, one stream per tab, `0005c`; Gilad asked for the option that holds at a very large user count, the orchestrator chose SSE over polling and WebSockets); after an un-shortlist, decline or withdraw the thread stays readable by both and sending closes, a re-shortlist reopens it; no chat notifications in Slice 5 (header count only; unread messages join the pre-launch daily digest email); one conversation per application, with the application's id (Slice 8 generalises it before launch); "הצעת סיור" is a composer chip that inserts editable template text |
 | Trust (MVP) | Phone/email-verified accounts, report button everywhere, rate limits, listing auto-expiry **3 months (90 days from creation)** (changed from 30 days, Gilad 2026-11-10), deposit-before-viewing warning in chat |
 | Listings | Decided 2026-11-10 (0002a batch): a listing has the CreateListing/Listing artboards' facts, no photos until `0002c`; **no drafts** (live on publish, the wizard's preview is the review step); a room listing uses the apartment fields until Slice 7 and is hidden from search until then; arnona is entered as the bi-monthly bill, vaad monthly; the 3-listing cap counts **live** listings only (paused or expired free a slot; a total-rows cap per owner is a later follow-up) |
 | Listing edit | Decided 2026-11-10 (0002e batch): owners edit a listing's fields from "my listings"; **an expired listing is not editable** (no edit link, the edit page refuses it) until Slice 10's renewal; unsaved edits are guarded on reload/close and the page's own back link; an edit may switch apartment/room |
