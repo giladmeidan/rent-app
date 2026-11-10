@@ -53,7 +53,7 @@ away from both routes (the first protected routes, as `0001b` Out foresaw).
   חדרים…", needs data), persisting wizard state across reloads (component state only), desktop layout
   beyond the centred column, the bottom tab bar on `Search.dc.html` (Slice 3/9).
 
-**New dependencies:** none. `react-router-dom` arrives with `0001b`; dates and currency use `Intl`.
+**New dependencies:** none. `react-router` 7.x (library mode) arrives with `0001b`; dates and currency use `Intl`.
 
 ## Data
 None. Consumes `0002a`.
