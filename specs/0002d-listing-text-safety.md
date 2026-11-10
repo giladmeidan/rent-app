@@ -133,6 +133,9 @@ One round (2026-11-10): 6 findings, all applied by the orchestrator — old AC7 
 (4 marks pass, 5 raise, joiners do not reset); all invisible literals written as escapes; AC6/AC7 name new
 tests that assert `type` and `loc`; ZWJ/ZWNJ run rule stated in Scope rule 4; `qa` added to reviewers.
 
+## Gilad decisions
+- 2026-11-10: combining marks added in Unicode 16/17 (unknown to Python 3.12) cannot be capped; accepted as a logged gap, closes with a newer Python. No `unicodedata2`.
+
 ## Digest (filled by orchestrator after verification)
 
     Spec 0002d - Listing text safety   (verified, API + one web helper, no depends_on)

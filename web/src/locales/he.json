@@ -18,7 +18,8 @@
     "signup": "הרשמה",
     "logout": "התנתקות",
     "greeting": "שלום, {{name}}",
-    "myListings": "המודעות שלי"
+    "myListings": "המודעות שלי",
+    "search": "חיפוש דירות"
   },
   "auth": {
     "login": {
@@ -145,5 +146,53 @@
       "pause": "השהיה",
       "resume": "הפעלה מחדש"
     }
+  },
+  "search": {
+    "title": "חיפוש דירות",
+    "filters": "מסננים",
+    "filtersActive": "מסננים · {{count}}",
+    "price": "מחיר חודשי",
+    "rooms": "חדרים",
+    "from": "מ־",
+    "to": "עד",
+    "any": "הכול",
+    "availableBy": "תאריך כניסה",
+    "availableByHint": "דירות שאפשר להיכנס אליהן עד התאריך הזה",
+    "features": "מאפיינים",
+    "feature": {
+      "pets": "חיות מחמד",
+      "furnished": "מרוהטת",
+      "elevator": "מעלית",
+      "parking": "חניה"
+    },
+    "apply": "הצגת תוצאות",
+    "clear": "ניקוי",
+    "sort": {
+      "label": "מיון",
+      "newest": "החדשות ביותר",
+      "price_asc": "מחיר: מהנמוך לגבוה",
+      "price_desc": "מחיר: מהגבוה לנמוך"
+    },
+    "count": "{{count}} דירות",
+    "countOne": "דירה אחת",
+    "empty": "לא מצאנו דירות שמתאימות לחיפוש. אפשר להרחיב את המסננים.",
+    "more": "עוד דירות",
+    "errors": {
+      "priceOrder": "המחיר המינימלי גבוה מהמקסימלי",
+      "roomsOrder": "מספר החדרים המינימלי גבוה מהמקסימלי"
+    }
+  },
+  "listing": {
+    "backToSearch": "חזרה לחיפוש",
+    "notFound": "המודעה לא נמצאה או שכבר אינה פעילה",
+    "yes": "יש",
+    "no": "אין",
+    "parkingOne": "מקום אחד",
+    "parkingMany": "{{count}} מקומות",
+    "allowed": "מותר",
+    "notAllowed": "לא מותר",
+    "location": "מיקום",
+    "address": "{{street}}, {{city}}",
+    "locationHint": "המיקום המדויק יישלח לאחר אישור"
   }
 }
