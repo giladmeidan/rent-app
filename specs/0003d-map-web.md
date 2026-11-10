@@ -1,7 +1,7 @@
 ---
 id: 0003d
 title: Anyone switches /search to a map of the results (MapLibre on public OSM tiles), pans and zooms to search that area, opens a listing from its pin, and sees the approximate location on the listing page
-status: in-progress
+status: in-review
 depends_on: [0003c]
 reviewers: [code, qa, ux, perf]   # ux: new map view, toggle, pins, listing-page map; perf: a ~1 MB library on the search page (must stay lazy) and third-party tile traffic; no security: public read-only data, no credentials, no new endpoint
 estimate: 1 coder run
@@ -253,6 +253,17 @@ under the default newest sort, so the fresh listing is among the first 50 pins; 
   ever needed.
 - Builds after `0003c`'s PR is open (Speed rule 3): branch from `spec/0003c-map-api`, run `make client` against it,
   rebase after it merges. Only one web spec builds at a time on port 5173 (Speed rule 2).
+- **Open question from the build (coder, 2026-11-10) — the service worker precaches the map library.** The PWA's
+  `generateSW` precaches every `**/*.{js,css,html}` in `dist/`, so after `make build-web` the lazy
+  `maplibre-gl-*.js` (1,104 kB, 298 kB gzip) and `maplibre-gl-*.css` (71 kB) are in the precache manifest
+  (8 entries, 1,511 KiB, was 5 entries, 352 KiB): every visitor whose browser installs the service worker
+  downloads the library in the background on the first visit, list view or not. The code split itself holds
+  (NF2's entry check passes and AC8 proves the page never requests it), but in production the laziness is
+  undone by the precache. NF3 says the workbox config is unchanged, so the build leaves it as it is. Options:
+  (a) `workbox.globIgnores: ['**/maplibre-gl-*']` in `vite.config.ts` (one line; the map then needs the network
+  the first time, which it does anyway for tiles) **[recommended]**; (b) (a) plus a `runtimeCaching` CacheFirst
+  rule for those files, so a map opened once is cached; (c) keep the precache (offline-ready library, ~300 kB
+  gzip extra for every first visit). Not changed in this build; the perf reviewer will see it.
 
 ## Verifier findings — one round, 10 findings, all applied
 1. `useSearch(filtersWithoutView, filters.view !== 'map')`: no list request in map view; `useMapSearch` keys on `filtersWithoutView` (Scope `useSearch.ts` / `SearchPage.tsx`, AC3).
