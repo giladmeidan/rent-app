@@ -15,6 +15,7 @@ _HTTPS_READY: dict[str, Any] = {
     "secret_key": "p" * 32,
     "cookie_secure": True,
     "email_backend": "file",
+    "geocoder": "fake",
 }
 
 
@@ -151,7 +152,15 @@ def test_ac12_settings_defaults_for_auth(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_https_web_origin_refuses_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("EMAIL_BACKEND", "COOKIE_SECURE", "SECRET_KEY", "SMTP_URL"):
+    for name in (
+        "EMAIL_BACKEND",
+        "COOKIE_SECURE",
+        "SECRET_KEY",
+        "SMTP_URL",
+        "GEOCODER",
+        "NOMINATIM_URL",
+        "NOMINATIM_USER_AGENT",
+    ):
         monkeypatch.delenv(name, raising=False)
     https: dict[str, Any] = {
         "database_url": _DSN,
@@ -168,6 +177,44 @@ def test_https_web_origin_refuses_dev_defaults(monkeypatch: pytest.MonkeyPatch) 
         Settings(**https, secret_key=_SECRET, cookie_secure=True)
 
     monkeypatch.setenv("EMAIL_BACKEND", "file")  # from the environment counts as explicit
+    monkeypatch.setenv("GEOCODER", "fake")
     assert Settings(**https, secret_key=_SECRET, cookie_secure=True).cookie_secure is True
     # Plain http (local dev) keeps the dev defaults working.
     assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=DEV_SECRET_KEY).secret_key
+
+
+def test_ac12_geocoder_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("GEOCODER", "NOMINATIM_URL", "NOMINATIM_USER_AGENT"):
+        monkeypatch.delenv(name, raising=False)
+    required: dict[str, Any] = {"database_url": _DSN, "redis_url": _REDIS, "secret_key": _SECRET}
+
+    settings = Settings(**required)
+    assert settings.geocoder == "fake"
+    assert settings.nominatim_user_agent == "rent-app-dev/0.0.1"
+    assert settings.nominatim_url == "https://nominatim.openstreetmap.org"
+
+    for bad_agent in ("rent-app (ops@example.com)", ""):
+        with pytest.raises(ValidationError, match="NOMINATIM_USER_AGENT") as excinfo:
+            Settings(**required, nominatim_user_agent=bad_agent)
+        if bad_agent:
+            assert bad_agent not in str(excinfo.value)
+            assert "ops@example.com" not in str(excinfo.value)
+
+    https: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "web_origin": "https://rent.example",
+    }
+    without_geocoder = {k: v for k, v in _HTTPS_READY.items() if k != "geocoder"}
+    with pytest.raises(ValidationError, match="GEOCODER must be set explicitly"):
+        Settings(**https, **without_geocoder)
+    with pytest.raises(ValidationError, match="NOMINATIM_USER_AGENT must not be the dev value"):
+        Settings(**https, **without_geocoder, geocoder="nominatim")
+    production = Settings(
+        **https,
+        **without_geocoder,
+        geocoder="nominatim",
+        nominatim_user_agent="rent-app/1.0 (+https://rent.example)",
+    )
+    assert production.geocoder == "nominatim"
+    assert production.nominatim_user_agent == "rent-app/1.0 (+https://rent.example)"

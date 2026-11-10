@@ -36,6 +36,8 @@ PUBLIC_KEYS = {
     "vaad_ils",
     "description",
     "created_at",
+    "lat",
+    "lng",
 }
 
 TODAY = dt.date.today()
@@ -149,6 +151,8 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "arnona_ils": 480,
         "vaad_ils": 150,
         "description": "דירה מוארת",
+        "lat": None,  # not located yet (spec 0003c)
+        "lng": None,
     }
 
     response = client.get(f"/listings/{world.a}")

@@ -54,6 +54,7 @@ curl -b cookies.txt -X POST localhost:8000/listings -H 'Content-Type: applicatio
   "area_id":"'"$AREA"'","city":"גבעתיים","street":"כצנלסון","rooms":3.5,"floor":3,"size_sqm":95,"price_ils":7200,
   "available_from":"2026-12-01","elevator":true,"furnished":"partial","pets_allowed":true}'
 curl -s 'localhost:8000/listings?price_max=8000'  # public search, no cookie; GET /listings/{id} opens one
+curl -s 'localhost:8000/listings?west=34.75&south=32.00&east=34.85&north=32.10'  # map box: only located listings inside it
 ```
 
 ## Make targets
@@ -78,6 +79,7 @@ than `web/package.json` / `web/pnpm-lock.yaml`.
 
 Every variable is listed in `.env.example` with a working local default. Secrets only ever come from the
 environment. Compose publishes Postgres, Redis and the API on `127.0.0.1` only.
+`GEOCODER` picks the worker's geocoder: `fake` (default; deterministic points, no network) or `nominatim` (needs a real `NOMINATIM_USER_AGENT`, no email, when `WEB_ORIGIN` is https).
 
 Every `make` target loads an optional repo-root `.env` (gitignored) and exports its values to the commands
 it runs, including compose interpolation (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN`). Precedence, highest first:

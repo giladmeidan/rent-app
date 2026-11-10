@@ -25,6 +25,8 @@ from app.models import Area, Listing, User
 from app.schemas.listing import ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
+# Changing any of these resets the listing's map location to `pending` (spec 0003c).
+_ADDRESS_FIELDS = ("city", "street", "area_id")
 
 
 class ListingCapReachedError(Exception):
@@ -141,6 +143,9 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         }
         if patch.status is not None:
             values["status"] = patch.status
+        if any(getattr(data, name) != getattr(listing, name) for name in _ADDRESS_FIELDS):
+            # A new address: the worker geocodes it again (spec 0003c); the old point is dropped.
+            values.update(location=None, geocode_status="pending", geocode_attempts=0)
         updated = db.scalars(
             update(Listing)
             .where(Listing.id == listing_id, Listing.owner_id == owner.id)
