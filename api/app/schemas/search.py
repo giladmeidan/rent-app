@@ -108,6 +108,13 @@ class ListingPublic(BaseModel):
     lng: float | None
 
 
+class ListingDetail(ListingPublic):
+    """The public listing page (spec 0004a): `ListingPublic` plus the exact number of applicants
+    (every application except withdrawn ones; declined ones count, they applied)."""
+
+    applicant_count: int
+
+
 class ListingSearchOut(BaseModel):
     items: list[ListingPublic]
     total: int  # rows matching the filters, ignoring `limit` / `offset`
