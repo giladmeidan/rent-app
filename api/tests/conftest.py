@@ -6,6 +6,8 @@ overriding `DATABASE_URL` before any app module is imported, so no dependency ov
 """
 
 import os
+import re
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
@@ -40,6 +42,7 @@ from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
+from scripts.seed import seed_areas  # noqa: E402
 
 get_settings.cache_clear()
 get_database_settings.cache_clear()
@@ -136,3 +139,35 @@ def outbox(client: TestClient) -> Iterator[Outbox]:
     app.dependency_overrides[get_email_sender] = lambda: box
     yield box
     app.dependency_overrides.pop(get_email_sender, None)
+
+
+@pytest.fixture
+def gush_dan(db_engine: Engine) -> uuid.UUID:
+    """The seeded launch area `gush-dan` (via `scripts/seed.py`), by id."""
+    seed_areas(db_engine)
+    with db_engine.connect() as conn:
+        area_id: uuid.UUID = conn.execute(
+            text("SELECT id FROM areas WHERE slug = 'gush-dan'")
+        ).scalar_one()
+    return area_id
+
+
+_CODE_LINE = re.compile(r"^[0-9]{6}$", re.M)
+
+
+def signup(client: TestClient, outbox: Outbox, email: str, role: str) -> TestClient:
+    """Sign `email` up as `role` through the OTP endpoints and return a new `TestClient` holding
+    only that session cookie. `client.cookies` is cleared, so two users signed up in one test never
+    share a cookie jar. Needs the `redis_clean` fixture (rate limits)."""
+    response = client.post("/auth/otp/request", json={"email": email})
+    assert response.status_code == 204
+    match = _CODE_LINE.search(outbox.messages[-1][2])
+    assert match is not None
+    profile = {"display_name": "נועה", "role": role}
+    response = client.post(
+        "/auth/otp/verify", json={"email": email, "code": match.group(), "profile": profile}
+    )
+    assert response.status_code == 201
+    token = response.cookies["rent_session"]
+    client.cookies.clear()
+    return TestClient(client.app, cookies={"rent_session": token})
