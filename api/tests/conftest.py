@@ -8,10 +8,12 @@ overriding `DATABASE_URL` before any app module is imported, so no dependency ov
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -36,12 +38,15 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.redis_client import get_redis  # noqa: E402
+from app.services.email import get_email_sender  # noqa: E402
 
 get_settings.cache_clear()
 get_database_settings.cache_clear()
 get_engine.cache_clear()
 get_ping_engine.cache_clear()
 get_sessionmaker.cache_clear()
+get_redis.cache_clear()
 
 
 def alembic_config(database_url: str) -> Config:
@@ -92,9 +97,9 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on a clean `areas` table."""
+    """Per-test engine on clean `sessions`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE areas"))
+        conn.execute(text("TRUNCATE TABLE sessions, users, areas"))
     yield migrated_db
 
 
@@ -102,3 +107,32 @@ def db_engine(migrated_db: Engine) -> Iterator[Engine]:
 def client(db_engine: Engine) -> Iterator[TestClient]:
     with TestClient(create_app()) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def redis_clean() -> None:
+    """Delete the OTP and rate-limit keys before the test. Tests share the dev Redis, so only these
+    key families are touched, never FLUSHDB."""
+    r = get_redis()
+    for pattern in ("otp:*", "rl:*"):
+        for key in r.scan_iter(match=pattern):
+            r.delete(key)
+
+
+class Outbox:
+    """In-memory `EmailSender`: collects `(to, subject, body)`."""
+
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str, str]] = []
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        self.messages.append((to, subject, body))
+
+
+@pytest.fixture
+def outbox(client: TestClient) -> Iterator[Outbox]:
+    app = cast(FastAPI, client.app)
+    box = Outbox()
+    app.dependency_overrides[get_email_sender] = lambda: box
+    yield box
+    app.dependency_overrides.pop(get_email_sender, None)

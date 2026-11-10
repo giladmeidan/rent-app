@@ -98,3 +98,46 @@ def test_ac4_migration_creates_gist_index_on_geom(migration_db_url: str) -> None
         engine.dispose()
 
     assert method == "gist"
+
+
+def test_ac13_users_sessions_roundtrip(migration_db_url: str) -> None:
+    cfg = alembic_config(migration_db_url)
+
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "base")
+    assert not {"users", "sessions"} & _table_names(migration_db_url)
+    command.upgrade(cfg, "head")
+
+    assert {"users", "sessions"} <= _table_names(migration_db_url)
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.connect() as conn:
+            constraints = set(
+                conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint"
+                        " WHERE conrelid = 'users'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+            indexes = set(
+                conn.execute(
+                    text("SELECT indexname FROM pg_indexes WHERE tablename = 'sessions'")
+                ).scalars()
+            )
+            on_delete = conn.execute(
+                text(
+                    "SELECT confdeltype FROM pg_constraint"
+                    " WHERE conrelid = 'sessions'::regclass AND contype = 'f'"
+                )
+            ).scalar_one()
+    finally:
+        engine.dispose()
+
+    assert {
+        "ck_users_display_name_length",
+        "ck_users_role",
+        "ck_users_account_type",
+    } <= constraints
+    assert "ix_sessions_user_id" in indexes
+    assert on_delete == "c"  # ON DELETE CASCADE

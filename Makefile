@@ -21,12 +21,16 @@ export TEST_DATABASE_URL ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_P
 export REDIS_URL         ?= redis://localhost:$(or $(REDIS_PORT),6379)/0
 export WEB_ORIGIN        ?= http://localhost:5173
 export API_PORT          ?= 8000
+export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
 .PHONY: dev down migrate seed test lint
 
 ## dev: start db+redis, wait for Postgres, migrate, seed, start api (reload) and worker, then wait
-## for /health: a settings error leaves the uvicorn reloader running but serving nothing
+## for /health: a settings error leaves the uvicorn reloader running but serving nothing.
+## `.outbox` is created 0777 first: the api (uid 10001) writes it, and Docker would create a missing
+## bind-mount source as root:root 755.
 dev:
+	mkdir -p .outbox && chmod 0777 .outbox
 	$(COMPOSE) up -d --wait db redis
 	$(MAKE) migrate
 	$(MAKE) seed
@@ -38,9 +42,10 @@ dev:
 	done; \
 	echo "api not healthy after 60 s; see: $(COMPOSE) logs api" >&2; exit 1
 
-## down: stop the stack and remove its volumes
+## down: stop the stack, remove its volumes and empty the email outbox
 down:
 	$(COMPOSE) down -v --remove-orphans
+	rm -f .outbox/*.json
 
 ## migrate: alembic upgrade head against DATABASE_URL
 migrate:

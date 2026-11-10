@@ -1,7 +1,7 @@
 ---
 id: 0001a
 title: A person signs up or logs in with an email one-time code, choosing owner or seeker at signup, and the API knows who they are on every request via a session cookie
-status: verified
+status: in-review
 depends_on: [0000a]
 reviewers: [code, qa, security]   # security: OTP, sessions, cookies, rate limits, email PII
 estimate: 1 coder run
@@ -123,9 +123,10 @@ Redis (all keys TTL-bound; `email` below is the normalised address):
   A new request overwrites the previous code. Deleted on success or when `attempts` reaches `OTP_MAX_ATTEMPTS`.
   A 422 `profile_required` does **not** increment `attempts`.
 - `rl:otp:email:{email}` (limit 3, window 900 s), `rl:otp:email:day:{email}` (limit 10, window 86 400 s),
-  `rl:otp:ip:{ip}` (limit 10, window 900 s). Each is created with `SET key 0 EX window NX` and then `INCR`
-  inside one `MULTI`, so a crash between the two can never leave a counter without a TTL (a permanent
-  lockout). `ip` is `request.client.host` (no proxy headers; the reverse proxy at deploy time, Slice 12,
+  `rl:otp:ip:{ip}` (limit 10, window 900 s). One Lua script reads all three first; if any is at its limit
+  it counts nothing (a refused request never uses up a budget, review round 1). Otherwise each is created
+  with `SET key 0 EX window NX` and then `INCR`ed in the same script, so a counter can never exist without
+  a TTL (a permanent lockout). `ip` is `request.client.host` (no proxy headers; the reverse proxy at deploy time, Slice 12,
   sets the real client IP).
 
 Backwards compatibility: additive tables; nothing running depends on them.
@@ -170,7 +171,7 @@ None in this part. The login/signup screens that consume these endpoints are `00
 - [ ] AC12 Given `SECRET_KEY` missing or shorter than 32 chars, When `Settings()` is built, Then a validation error whose message does not echo the value; Given `EMAIL_BACKEND=smtp` without `SMTP_URL`, Then a validation error; Given only `DATABASE_URL`, Then `DatabaseSettings()` still builds — `api/tests/test_config.py::test_ac12_secret_key_and_smtp_url_required`
 - [ ] AC13 Given an empty DB, When `upgrade head` → `downgrade base` → `upgrade head`, Then `users` and `sessions` exist at the end with `ck_users_display_name_length`, `ck_users_role`, `ck_users_account_type` and `ix_sessions_user_id` present (queried from `pg_constraint` / `pg_indexes`) — new function `api/tests/test_migrations.py::test_ac13_users_sessions_roundtrip` reusing the `_mig` database fixture; `test_ac4_autogenerate_sees_no_diff_with_postgis_extensions` stays green
 - [ ] AC14 Given `EMAIL_BACKEND=file` and a non-existent `EMAIL_OUTBOX_DIR` under `tmp_path`, When two codes are requested in the same second, Then the directory is created and exactly two `.json` files appear with `to`, `subject`, `body`, `sent_at` — `api/tests/test_auth.py::test_ac14_file_backend_writes_outbox`
-- [ ] AC15 Given a request with `Origin: http://localhost:5173` (the test `WEB_ORIGIN`), When `GET /me`, Then the response carries `Access-Control-Allow-Origin: http://localhost:5173` and `Access-Control-Allow-Credentials: true`; Given `Origin: http://evil.example`, Then neither header — `api/tests/test_auth.py::test_ac15_cors_allows_credentials_for_web_origin_only`
+- [ ] AC15 Given a request with `Origin: http://localhost:5173` (the test `WEB_ORIGIN`), When `GET /me`, Then the response carries `Access-Control-Allow-Origin: http://localhost:5173` and `Access-Control-Allow-Credentials: true`; Given `Origin: http://evil.example`, Then no `Access-Control-Allow-Origin` header (Starlette always emits `Allow-Credentials` when configured; browsers ignore it without a matching `Allow-Origin`, so `Allow-Origin` is the protective header) — `api/tests/test_auth.py::test_ac15_cors_allows_credentials_for_web_origin_only`
 - [ ] AC16 Given 10 requests for one email spread over the day counter only (the 15-min counter reset by deleting its key between batches), When an 11th arrives, Then 429 — `api/tests/test_auth.py::test_ac16_daily_email_rate_limit`
 - [ ] AC17 Given the email sender raises `EmailUnavailable`, When a code is requested, Then 503 `email_unavailable`, no `otp:{email}` key remains, and the rate-limit counter was incremented — `api/tests/test_auth.py::test_ac17_email_failure_is_503_and_counted`
 - [ ] NF1 The OTP code appears nowhere in API log output at any level (`caplog` over AC1 at DEBUG) and nowhere in any response body — `api/tests/test_auth.py::test_nf1_code_never_logged`
@@ -196,6 +197,15 @@ E2E: none in this part (`0001b` AC7 covers the browser flow through the file out
   addresses (quoted local parts). Tests and the `0001b` e2e use `…@example.com`. Acceptable.
 - The daily cap (10 codes/email/day) can lock out a legitimate person who mistypes a lot; 10 is generous for
   a login flow and the 429 message in `0001b` says to try later. Revisit with Slice 10 trust metrics.
+- **Deployment constraint (review round 1):** `SameSite=Lax` sends the cookie only when web and API share
+  one registrable domain. Cloudflare Pages + Fly/Railway defaults (`*.pages.dev` + `*.fly.dev`, both on
+  the public suffix list) would never send it and break `0001b` in production; Slice 12 must serve both
+  under one domain (e.g. `app.X` / `api.X`). Logged in FOLLOWUPS.
+- **Accepted risk (orchestrator, review round 1):** the 10 codes/day per-email cap lets an attacker lock a
+  chosen account out of login for a day with 10 requests spread over ~45 min (refused requests no longer
+  count, so a burst cannot do it). Accepted for MVP; revisit in Slice 10 (trust) with an email-confirmed
+  unlock or a soft cap.
+- AC15 resolved by the orchestrator (2026-11-09): the "no Allow-Credentials for other origins" clause was dropped; Starlette cannot do it and `Allow-Origin` is what protects. The xfail test is removed.
 - No open product questions: roles at signup, no phone in this slice, and display-name-only signup were
   decided by Gilad on 2026-11-09 and recorded in `specs/PRODUCT.md`.
 
@@ -210,6 +220,16 @@ alone, concurrent-insert rule; Hebrew email copy given; `test_email.py` in Scope
 Verifier notes (2026-11-09): round 1 rejected with 8 findings, all applied above; Gilad waived the second verifier round (one verifier round per spec, like reviewers), so the orchestrator set `verified`.
 
 ## Digest (filled by orchestrator after verification)
+
+    Spec 0001a — Auth API: email OTP, sessions, roles   READY TO MERGE — PR #2, head 689d888, CI green
+    Shipped: email one-time code signup/login with owner|seeker role, 30-day HttpOnly session cookie, GET /me, logout; SMS adapter stubbed.
+    Demo (make dev, then): 1. `curl -X POST :8000/auth/otp/request -d '{"email":"you@example.com"}' -H 'content-type: application/json'` → 204, code in newest `.outbox/*.json`
+                           2. `curl -c c.txt -X POST :8000/auth/otp/verify -d '{"email":"you@example.com","code":"123456","profile":{"display_name":"נועה","role":"owner"}}' -H 'content-type: application/json'` → 201
+                           3. `curl -b c.txt :8000/me` → your user; `curl -b c.txt -X POST :8000/auth/logout` → 204
+    Tests: +53 (88 total, 35 from 0000a unchanged in assertions; 2 adjusted their setup for the new https rule)   CI: api job 55 s
+    Findings: 0 blockers, 1 major fixed (429'd requests burned the daily cap → one Lua script checks before counting), 6 minors fixed, 2 follow-ups logged (Slice 12: one domain for web+API because of SameSite=Lax; per-IP verify limit / IPv6 buckets / global send cap), 1 accepted risk (10 requests over ~45 min lock a chosen email out for a day — MVP, revisit Slice 10), 14 nits ignored.
+    Changed in PRODUCT.md: rows "Account roles" and "Signup data" (2026-11-09).
+    Next spec I propose: 0001b — Auth web (verified, waiting; build in a new session after this merges).  Needs your decisions: none open.
 
     Spec 0001a — Auth API: email OTP, sessions, roles   (verified, part 1 of 2, builds on the 0000a branch)
     What a user can do after this: request a 6-digit code by email, verify it to sign up (name + owner/seeker) or log in, and stay logged in for 30 days via an HttpOnly cookie; GET /me and logout work.
