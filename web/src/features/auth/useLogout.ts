@@ -14,6 +14,12 @@ export function useLogout() {
     mutationFn: logout,
     onSuccess: () => {
       queryClient.setQueryData<UserOut | null>(ME_KEY, null);
+      // Per-user data lives under ['me', …]; the next person on this device must not see it.
+      queryClient.removeQueries({
+        queryKey: ME_KEY,
+        exact: false,
+        predicate: (q) => q.queryKey.length > 1,
+      });
     },
   });
 }

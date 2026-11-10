@@ -44,6 +44,14 @@ export function AuthMenu() {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
+      {me.data.role === 'owner' && (
+        <Link
+          to="/me/listings"
+          className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+        >
+          {t('header.myListings')}
+        </Link>
+      )}
       <span className="truncate text-[15px] font-semibold">
         {t('header.greeting', { name: me.data.display_name })}
       </span>

@@ -10,13 +10,15 @@
   "common": {
     "loading": "טוען…",
     "error": "משהו השתבש",
-    "retry": "נסו שוב"
+    "retry": "נסו שוב",
+    "back": "חזרה"
   },
   "header": {
     "login": "כניסה",
     "signup": "הרשמה",
     "logout": "התנתקות",
-    "greeting": "שלום, {{name}}"
+    "greeting": "שלום, {{name}}",
+    "myListings": "המודעות שלי"
   },
   "auth": {
     "login": {
@@ -51,6 +53,97 @@
       "tooMany": "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות",
       "nameLength": "השם צריך להיות באורך 2 עד 40 תווים",
       "invalidEmail": "כתובת האימייל לא תקינה"
+    }
+  },
+  "listings": {
+    "new": {
+      "title": "מודעה חדשה"
+    },
+    "steps": {
+      "type": "סוג",
+      "details": "פרטים",
+      "preview": "תצוגה מקדימה"
+    },
+    "next": "הבא",
+    "publish": "פרסום המודעה",
+    "type": {
+      "label": "מה מפרסמים?",
+      "apartment": "דירה שלמה",
+      "room": "חדר בדירת שותפים"
+    },
+    "fields": {
+      "area": "אזור",
+      "city": "עיר",
+      "street": "רחוב",
+      "streetHint": "בלי מספר בית — הכתובת המדויקת נשלחת רק למי שתאשרו",
+      "rooms": "מספר חדרים",
+      "floor": "קומה",
+      "of": "מתוך",
+      "totalFloors": "סך הקומות בבניין",
+      "size": "שטח",
+      "price": "שכר דירה חודשי",
+      "availableFrom": "תאריך כניסה",
+      "entryFlexible": "גמיש ±2 שבועות",
+      "elevator": "מעלית",
+      "parking": "חניה",
+      "furnished": "ריהוט",
+      "pets": "חיות מחמד מותרות",
+      "arnona": "ארנונה (לחודשיים)",
+      "vaad": "ועד בית (לחודש)",
+      "optional": "לא חובה",
+      "choose": "בחירה…",
+      "description": "על הדירה",
+      "charsLeft": "נשארו {{count}} תווים"
+    },
+    "units": {
+      "sqm": "מ״ר",
+      "ils": "₪",
+      "perMonth": "/ חודש"
+    },
+    "furnished": {
+      "none": "לא מרוהטת",
+      "partial": "מרוהטת חלקית",
+      "full": "מרוהטת"
+    },
+    "errors": {
+      "required": "שדה חובה",
+      "range": "הערך צריך להיות בין {{min}} ל-{{max}}",
+      "floors": "מספר הקומות בבניין לא יכול להיות קטן מהקומה",
+      "tooLong": "עד {{max}} תווים",
+      "dateRange": "התאריך צריך להיות בשנתיים הקרובות",
+      "capReached": "הגעתם למכסה של {{cap}} מודעות פעילות. אפשר להשהות מודעה כדי לפרסם חדשה",
+      "areaInactive": "האזור שנבחר לא פעיל כרגע"
+    },
+    "preview": {
+      "hint": "ככה המודעה תיראה למחפשים. אפשר לחזור ולתקן."
+    },
+    "card": {
+      "title": "{{rooms}} חדרים, רחוב {{street}}, {{city}}",
+      "floorOf": "קומה {{floor}} מתוך {{total}}",
+      "floor": "קומה {{floor}}",
+      "availableFrom": "כניסה {{date}}",
+      "immediate": "כניסה מיידית",
+      "elevator": "מעלית",
+      "noElevator": "ללא מעלית",
+      "parkingOne": "חניה",
+      "parkingMany": "{{count}} חניות",
+      "pets": "חיות מחמד",
+      "room": "חדר בדירת שותפים"
+    },
+    "mine": {
+      "title": "המודעות שלי",
+      "new": "מודעה חדשה",
+      "empty": "עוד אין לכם מודעות. המודעה הראשונה לוקחת שתי דקות.",
+      "count": "{{live}} מתוך {{cap}} מודעות פעילות"
+    },
+    "status": {
+      "live": "פעילה",
+      "paused": "מושהית",
+      "expired": "פג תוקף"
+    },
+    "actions": {
+      "pause": "השהיה",
+      "resume": "הפעלה מחדש"
     }
   }
 }
