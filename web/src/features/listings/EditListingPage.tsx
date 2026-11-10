@@ -21,10 +21,9 @@ export function EditListingPage() {
   const { id } = useParams();
   const listings = useMyListings();
   const expiredHeading = useRef<HTMLHeadingElement>(null);
-  const listingId = listings.data?.find((l) => l.id === id)?.id;
-  const readOnly =
-    listings.data !== undefined &&
-    listings.data.some((l) => l.id === listingId && isPastExpiry(l, new Date()));
+  const now = new Date();
+  const listing = listings.data?.find((l) => l.id === id);
+  const readOnly = listing !== undefined && isPastExpiry(listing, now);
   // Focus the explanation on arrival (the hook runs before any early return).
   useEffect(() => {
     if (readOnly) expiredHeading.current?.focus();
@@ -49,7 +48,6 @@ export function EditListingPage() {
     );
   }
 
-  const listing = listings.data.find((l) => l.id === id);
   if (listing === undefined) {
     return (
       <section className={`${section} gap-4`}>
@@ -59,7 +57,7 @@ export function EditListingPage() {
     );
   }
 
-  if (isPastExpiry(listing, new Date())) {
+  if (readOnly) {
     return (
       <section className={`${section} gap-4`}>
         <BackToMine />
