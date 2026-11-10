@@ -1,7 +1,7 @@
 ---
 id: 0001a
 title: A person signs up or logs in with an email one-time code, choosing owner or seeker at signup, and the API knows who they are on every request via a session cookie
-status: in-review
+status: done
 depends_on: [0000a]
 reviewers: [code, qa, security]   # security: OTP, sessions, cookies, rate limits, email PII
 estimate: 1 coder run
@@ -243,3 +243,5 @@ Verifier notes (2026-11-09): round 1 rejected with 8 findings, all applied above
            .outbox bind mount on Linux CI is root-owned while the api runs as uid 10001 — mitigation: make dev chmods it first.
     Reviewers: code, qa, security   Estimated: 1 coder run, 1 review round
     Links: specs/0001a-auth-api.md · PRODUCT.md "OTP", "Account roles", "Signup data" · no Design artboard (API only)
+
+    Spec 0001a — Auth API   MERGED 87a8e64 (PR #2, 2026-11-10), CI api job 49 s, 88 tests.

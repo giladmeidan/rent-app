@@ -1,7 +1,7 @@
 ---
 id: 0000b
 title: A developer opens http://localhost:5173 after `make dev` and sees a Hebrew RTL app shell listing the active launch areas from the API, with i18n-check, e2e smoke and the web/e2e CI jobs in place
-status: in-review
+status: done
 depends_on: [0000a]
 reviewers: [code, qa, ux]   # ux: new screen (app shell + areas list, four states, RTL)
 estimate: 1 coder run
@@ -135,3 +135,15 @@ specified the e2e readiness wait.
            Cold docker builds in the e2e CI job threaten NF1 — mitigation: docker layer cache before relaxing budget.
     Reviewers: code, qa, ux   Estimated: 1 coder run, ~1–2 review rounds
     Links: specs/0000b-foundations-web.md · PRODUCT.md "Language", "Platform" · design/screens-v1/Main.dc.html (shell only)
+
+## Digest (merged)
+
+    Spec 0000b — Foundations: web shell   MERGED f5af4f3 (PR #3, 2026-11-10)
+    Shipped: `make dev` also starts the web; http://localhost:5173 shows the Hebrew RTL shell listing the launch areas.
+    Demo: 1. `make dev`  2. open http://localhost:5173  3. stop the api container and reload — error card with "נסו שוב".
+    Tests: +10 unit (vitest), +0 integration, +1 e2e   CI: api 52 s · web 38 s · e2e 2 min 06 s (NF1 budget 10 min)
+    Findings: 0 blockers, 3 majors fixed (checker missed Hebrew in props; make test after a fresh make dev; 7 s error state),
+              4 one-line minors fixed, 8 follow-ups logged in FOLLOWUPS.md, 0 waived.
+    Also in this PR: CI tiering (Speed rule 8) — api+web on push, e2e on the `ready-to-merge` label and on main.
+    Changed in PRODUCT.md: nothing. Open: the artboard says "דירתי", the app says "דירה" (PRODUCT.md, until Slice 9).
+    Next spec I propose: 0001b — Auth web (verified; needs no decisions).
