@@ -1,7 +1,7 @@
 ---
 id: 0004c
 title: An owner lists the applicants of one of their listings with each applicant's name and message, shortlists or declines them, and sees applicant and new-applicant counts on "my listings"
-status: in-review
+status: done
 depends_on: [0004a]
 reviewers: [code, qa, security]   # security: a seeker's name and free-text message shown to another user (PII), ownership checks on two ids; qa: status transitions
 estimate: 1 coder run
