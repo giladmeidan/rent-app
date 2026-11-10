@@ -2,13 +2,21 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import i18n from '../../../app/i18n';
+import { failMap, lastProps, resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
 import { deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
 import { publicListing } from '../../search/__tests__/fixtures';
 import { ListingPage } from '../ListingPage';
 
+vi.mock(
+  '../../../components/map/MapCanvas',
+  () => import('../../../components/map/__tests__/fakeMapCanvas'),
+);
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetFakeMap();
 });
 
 const render = (id: string) =>
@@ -144,5 +152,55 @@ describe('ListingPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('כצנלסון');
     expect(api.calls(`GET /listings/${katznelson.id}`)).toHaveLength(2);
+  });
+
+  it('ac6_listing_page_approximate_map', async () => {
+    const located = publicListing({ lat: 32.08, lng: 34.8 });
+    const address = i18n.t('listing.address', { street: located.street, city: located.city });
+    const section = () =>
+      screen.getByRole('heading', { level: 2, name: he.listing.location }).closest('section');
+
+    // A point: the approximate map inside "location", above the text that stays.
+    mockApi({ [`GET /listings/${located.id}`]: [json(located)] });
+    let view = render(located.id);
+    const region = await screen.findByRole('region', { name: he.listing.mapLabel });
+    const location = section();
+    expect(location).not.toBeNull();
+    expect(location).toContainElement(region);
+    expect(lastProps()).toMatchObject({
+      center: [34.8, 32.08],
+      zoom: 14,
+      interactive: false,
+      approximate: true,
+    });
+    expect(lastProps().pins).toBeUndefined();
+    expect(within(region).queryAllByRole('button')).toHaveLength(0);
+    expect(within(location as HTMLElement).getByText(address)).toBeVisible();
+    expect(within(location as HTMLElement).getByText(he.listing.locationHint)).toBeVisible();
+
+    // The map cannot be shown: it is removed, the text stays.
+    failMap();
+    expect(screen.queryByRole('region', { name: he.listing.mapLabel })).toBeNull();
+    expect(screen.getByText(address)).toBeVisible();
+    expect(screen.getByText(he.listing.locationHint)).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // No point: the section as before, no map.
+    const unlocated = publicListing({ lat: null, lng: null });
+    mockApi({ [`GET /listings/${unlocated.id}`]: [json(unlocated)] });
+    view = render(unlocated.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('region', { name: he.listing.mapLabel })).toBeNull();
+    expect(lastProps).toThrow();
+    const plain = section();
+    expect(plain?.children).toHaveLength(3);
+    expect(
+      screen.getByText(
+        i18n.t('listing.address', { street: unlocated.street, city: unlocated.city }),
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(he.listing.locationHint)).toBeVisible();
   });
 });
