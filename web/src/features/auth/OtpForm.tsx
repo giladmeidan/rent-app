@@ -115,9 +115,9 @@ export function OtpForm({ withProfile, initialRole = null }: Props) {
   const firstRadioRef = useRef<HTMLInputElement>(null);
   const backToEmailRef = useRef(false);
 
-  const request = useMutation({ mutationFn: requestCode });
-  const resend = useMutation({ mutationFn: requestCode });
-  const verify = useMutation({ mutationFn: verifyCode });
+  const request = useMutation({ mutationFn: requestCode, gcTime: 0 });
+  const resend = useMutation({ mutationFn: requestCode, gcTime: 0 });
+  const verify = useMutation({ mutationFn: verifyCode, gcTime: 0 });
 
   const askProfile = withProfile || profileNeeded;
 
@@ -337,6 +337,15 @@ export function OtpForm({ withProfile, initialRole = null }: Props) {
           dir="ltr"
           maxLength={6}
           value={code}
+          onPaste={(e) => {
+            e.preventDefault();
+            setCode(
+              e.clipboardData
+                .getData('text')
+                .replace(/[^0-9]/g, '')
+                .slice(0, 6),
+            );
+          }}
           onChange={(e) => {
             setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6));
           }}

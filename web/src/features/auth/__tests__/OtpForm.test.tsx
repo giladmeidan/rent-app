@@ -60,4 +60,20 @@ describe('OtpForm', () => {
     expect(api.calls('POST /auth/otp/request')).toHaveLength(3);
     expect(screen.getByRole('alert')).toHaveTextContent(he.auth.errors.tooMany);
   });
+
+  it('paste_with_spaces_keeps_six_digits', async () => {
+    mockApi({ 'POST /auth/otp/request': [empty(204)] });
+    renderAt('/login', <OtpForm withProfile={false} />);
+
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+
+    const code = screen.getByLabelText(he.auth.code.label);
+    fireEvent.paste(code, { clipboardData: { getData: () => '123 456' } });
+    expect(code).toHaveValue('123456');
+    expect(screen.getByRole('button', { name: he.auth.verify })).toBeEnabled();
+  });
 });

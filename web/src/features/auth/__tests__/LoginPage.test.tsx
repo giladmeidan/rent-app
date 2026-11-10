@@ -22,7 +22,9 @@ async function reachStep2() {
 
 function submitCode(code: HTMLElement, value: string) {
   fireEvent.change(code, { target: { value } });
-  fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+  const verify = screen.getByRole('button', { name: he.auth.verify });
+  verify.focus();
+  fireEvent.click(verify);
 }
 
 describe('LoginPage', () => {
