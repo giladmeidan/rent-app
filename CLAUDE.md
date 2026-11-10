@@ -43,6 +43,15 @@ and delegates. It never writes application code itself. Delegation chain:
    changes are only `*.md`, `specs/` or `design/` runs no CI (the filter looks at the whole PR, not one push). Nothing merges unless `api`, `web` and `e2e` are all green on the
    PR's head commit. Any new slow job (anything over ~1 minute) joins the label-gated tier, not the push tier.
 
+9. **Consult Gilad on high-value calls (Gilad, 2026-11-10).** While a spec is being built or reviewed, anything
+   that changes what the product does, what it costs, or what a later slice can do is Gilad's choice, not the
+   spec session's: a product behaviour the spec leaves open, a new paid service or a dependency swap with
+   long-term weight, a schema or API shape a later slice depends on, a security trade-off, or dropping an AC.
+   The spec session messages the orchestrator with the question, 2–3 options and a recommendation, and keeps
+   building everything that does not hinge on it; the orchestrator puts it to Gilad in a digest line
+   ("Decisions I need from you") and relays the answer, which is written into `specs/PRODUCT.md` or the spec
+   the same day. Minor and mechanical choices stay with the agents; a review minor is never such a question.
+
 Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/`:
 `/spec <slice-title>`, `/build <spec-id>`, `/review <spec-id>`, `/digest <spec-id>`.
 
