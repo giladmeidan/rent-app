@@ -1,7 +1,7 @@
 ---
 id: 0002a
 title: An owner creates an apartment or room listing through the API, sees their own listings, and can edit, pause or resume one, with the 3-active-listings cap and the active-area rule enforced
-status: verified
+status: in-progress
 depends_on: [0001a]
 reviewers: [code, qa, security]   # security: ownership checks on PATCH (IDOR), role gate, cap race
 estimate: 1 coder run
