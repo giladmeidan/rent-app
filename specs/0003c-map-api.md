@@ -1,7 +1,7 @@
 ---
 id: 0003c
 title: Live listings get an approximate map location from their city and street (Nominatim, in the worker), and public search can filter by a map bounding box and returns that approximate point
-status: in-review
+status: done
 depends_on: [0003a]
 reviewers: [code, qa, perf, security]   # perf: new spatial predicate on the public search path; security: a home's location (PII-adjacent), outbound HTTP to a third party, new config; qa: bbox and failure edge cases
 estimate: 1 coder run
