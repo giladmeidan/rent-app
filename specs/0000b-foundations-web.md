@@ -1,7 +1,7 @@
 ---
 id: 0000b
 title: A developer opens http://localhost:5173 after `make dev` and sees a Hebrew RTL app shell listing the active launch areas from the API, with i18n-check, e2e smoke and the web/e2e CI jobs in place
-status: verified
+status: in-progress
 depends_on: [0000a]
 reviewers: [code, qa, ux]   # ux: new screen (app shell + areas list, four states, RTL)
 estimate: 1 coder run
