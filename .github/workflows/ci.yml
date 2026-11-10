@@ -65,7 +65,8 @@ jobs:
       - name: Test (pytest against the postgis + redis service containers)
         run: make test-api
 
-  # `make client` gets DATABASE_URL / REDIS_URL / WEB_ORIGIN from the Makefile defaults; nothing connects.
+  # `make client` gets DATABASE_URL / REDIS_URL / WEB_ORIGIN / SECRET_KEY from the Makefile defaults;
+  # nothing connects.
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 10
