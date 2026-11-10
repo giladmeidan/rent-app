@@ -1,7 +1,7 @@
 ---
 id: 0003d
 title: Anyone switches /search to a map of the results (MapLibre on public OSM tiles), pans and zooms to search that area, opens a listing from its pin, and sees the approximate location on the listing page
-status: in-review
+status: done
 depends_on: [0003c]
 reviewers: [code, qa, ux, perf]   # ux: new map view, toggle, pins, listing-page map; perf: a ~1 MB library on the search page (must stay lazy) and third-party tile traffic; no security: public read-only data, no credentials, no new endpoint
 estimate: 1 coder run
