@@ -1,5 +1,6 @@
 import { api } from '../../api/client';
 import type { components, operations } from '../../api/schema';
+import type { Bbox } from '../../components/map/config';
 import { ApiError, type ListingPublic } from '../listings/api';
 import { FEATURES, type Filters } from './filters';
 
@@ -9,12 +10,27 @@ type SearchQuery = NonNullable<operations['search_listings_listings_get']['param
 
 export const PAGE_SIZE = 20;
 
+export type SearchOptions = {
+  /** Only listings inside this box (`0003c`'s `west` / `south` / `east` / `north`). */
+  bbox?: Bbox | undefined;
+  /** The page size instead of `PAGE_SIZE`. */
+  limit?: number | undefined;
+};
+
 /**
  * One page of `GET /listings`. Only the filters that are set are sent: `0003a` answers an empty
- * value (`pets=`) with a 422, so an unset filter must be absent, never blank.
+ * value (`pets=`) with a 422, so an unset filter must be absent, never blank. `view` is not a
+ * filter and is never sent.
  */
-export async function searchListings(filters: Filters, offset: number): Promise<ListingSearchOut> {
-  const query: SearchQuery = { limit: PAGE_SIZE, offset };
+export async function searchListings(
+  filters: Filters,
+  offset: number,
+  opts: SearchOptions = {},
+): Promise<ListingSearchOut> {
+  const query: SearchQuery = { limit: opts.limit ?? PAGE_SIZE, offset };
+  if (opts.bbox !== undefined) {
+    [query.west, query.south, query.east, query.north] = opts.bbox;
+  }
   if (filters.price_min !== undefined) query.price_min = filters.price_min;
   if (filters.price_max !== undefined) query.price_max = filters.price_max;
   if (filters.rooms_min !== undefined) query.rooms_min = filters.rooms_min;

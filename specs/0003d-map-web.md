@@ -1,7 +1,7 @@
 ---
 id: 0003d
 title: Anyone switches /search to a map of the results (MapLibre on public OSM tiles), pans and zooms to search that area, opens a listing from its pin, and sees the approximate location on the listing page
-status: verified
+status: done
 depends_on: [0003c]
 reviewers: [code, qa, ux, perf]   # ux: new map view, toggle, pins, listing-page map; perf: a ~1 MB library on the search page (must stay lazy) and third-party tile traffic; no security: public read-only data, no credentials, no new endpoint
 estimate: 1 coder run
@@ -28,9 +28,12 @@ on R2 once R2 is approved", "Stack — MapLibre+OSM tiles", "Search — the stre
   '/map/osm-raster.json'`; `GUSH_DAN_BOUNDS: [number, number, number, number] = [34.74, 31.95, 34.95, 32.17]`
   (west, south, east, north; same box as `api/scripts/seed.py`'s `GUSH_DAN_WKT`; comment `shortcut: one launch
   area, read the area's box from the API when a second area is added`); `MAP_RESULTS_LIMIT = 50`;
-  `MAP_MIN_ZOOM = 8` (the search map cannot zoom out past central Israel); `roundBbox(b)` (lng clamped to
-  [-180, 180], lat to [-90, 90], then each value to 4 decimals; MapLibre's world copies can report longitudes
-  beyond +-180 when zoomed out, which `0003c` answers with a 422); `mapLocale(t)` → the MapLibre `locale` object
+  `MAP_MIN_ZOOM = 8` (the search map cannot zoom out past central Israel); `MAP_MAX_ZOOM = 19` (the raster
+  source's `maxzoom`; above it tiles are only upscaled, and at z21–22 a phone-width box rounds to zero width);
+  `roundBbox(b)` (lng clamped to [-180, 180], lat to [-90, 90], then each value to 4 decimals; MapLibre's world
+  copies can report longitudes beyond +-180 when zoomed out, which `0003c` answers with a 422; never a degenerate
+  box: if rounding leaves `west >= east`, `east = west + 0.0001`, or `west = 180 - 0.0001` when that passes 180,
+  and the same for `south >= north` with 90); `mapLocale(t)` → the MapLibre `locale` object
   for the controls this app shows: at least `Map.Title`, `NavigationControl.ZoomIn`, `NavigationControl.ZoomOut`,
   `NavigationControl.ResetBearing`, `AttributionControl.ToggleAttribution` and `Marker.Title`, plus any other key
   the pinned version's `defaultLocale` uses for a shown control (the coder checks the names against it), mapped to
@@ -39,16 +42,17 @@ on R2 once R2 is approved", "Stack — MapLibre+OSM tiles", "Search — the stre
   through `import()` inside an effect, so the library is a separate chunk loaded only when a map is shown). Props:
   `label: string` (region name), `bounds?: [w, s, e, n]` (initial `fitBounds`) or `center?: [lng, lat]` + `zoom?:
   number`, `pins?: Pin[]` (`{ id, lng, lat, text, label }`), `selectedId?: string`, `onPinClick?: (id) => void`,
-  `onMoveEnd?: (bbox: [w, s, e, n]) => void` (from `map.getBounds()`, fired on every `moveend`, including the one
-  after the initial fit), `interactive?: boolean` (default `true`), `approximate?: boolean` (draws a ~56 px
+  `onMoveEnd?: (bbox: [w, s, e, n]) => void` (from `map.getBounds()`, fired on every `moveend`; the first box is
+  reported on `load`, for the initial fit), `interactive?: boolean` (default `true`), `approximate?: boolean` (draws a ~56 px
   translucent accent circle at `center`, `aria-hidden`), `busy?: boolean` (results pending), `minZoom?: number`,
   `onError?: () => void`, `className?: string`. `onError` fires **only** when the `import()` fails, when `new
   Map()` throws or emits `webglcontextcreationerror`, or on an `error` event before `load`; `error` events after
-  `load` (a failed tile, an OSM 429, going offline) are ignored, so one bad tile never replaces the map. The
+  `load` (a failed tile, an OSM 429, going offline) are ignored, and tile and source errors before `load` are
+  ignored too (events carrying `tile` or `sourceId`), so one bad tile never replaces the map. The
   effect sets a `cancelled` flag in its cleanup and checks it after the `import()` resolves, so React `StrictMode`
   (`main.tsx`) mounting twice in dev never creates two maps in one container. Renders `<div role="region"
   aria-label={label} aria-busy={busy || !loaded}>` containing the map container and, until the map's `load`
-  event, a `Skeleton` covering it. Map options: `style: MAP_STYLE_URL`, `minZoom`, `locale: mapLocale(t)`,
+  event, a `Skeleton` covering it. Map options: `style: MAP_STYLE_URL`, `minZoom`, `maxZoom: MAP_MAX_ZOOM`, `locale: mapLocale(t)`,
   `attributionControl: false` plus an
   `AttributionControl({ compact: false })` (OSM attribution always expanded), a `NavigationControl({ showCompass:
   false })` when interactive, `dragRotate: false`, `pitchWithRotate: false`, `touchPitch: false`,
@@ -213,7 +217,7 @@ Request params are compared as a set from `new URL(call.request.url).searchParam
 - [ ] AC8 Given `make dev` is up (worker on `GEOCODER=fake`), When Playwright signs up a fresh owner and posts a listing with street `e2e <run id>` through `page.request` exactly as `web/e2e/search.spec.ts` does, then polls `GET /listings/{id}` (no cookie) until `lat` is non-null (timeout 30 s; the sweep runs every 10 s), then routes `https://tile.openstreetmap.org/**` with `page.context().route(...)` (so requests from MapLibre's workers are caught too) to a 1x1 PNG (so CI never calls OSM), clears cookies and opens `/search`, Then no request URL contains `maplibre` while the list is shown; When `search.view.map` is pressed, Then `search.map.unavailable` has count 0 (a WebGL failure reports as such, not as a pin timeout), a `maplibre` module is requested (AC8 runs on the compose Vite dev server, so this is the pre-bundled `/node_modules/.vite/deps/maplibre-gl.js`), the region `search.map.label` is visible, the attribution text `OpenStreetMap` is visible, and a pin button whose accessible name contains the street is visible within 15 s; When it is pressed, Then a card with that street appears; When the card's title is pressed, Then the URL is `/listings/{id}` and the region `listing.mapLabel` is visible; When the page is reloaded on `/search?view=map`, Then the map view is shown again — `web/e2e/map.spec.ts::ac8_visitor_finds_a_listing_on_the_map`
 - [ ] NF1 `make i18n-check`, `eslint`, `prettier --check`, `tsc --noEmit`, `make build-web` clean; `0003b`'s and `0002b`'s tests pass unchanged except for the `view` additions — CI `web` job
 - [ ] NF2 Bundle: `maplibre-gl` (JS and CSS) is only in a lazily loaded chunk. After `make build-web`, the entry script named in `web/dist/index.html` contains no string unique to the library's code (e.g. `maplibregl-ctrl-attrib`; the bare name `maplibre` is not a valid check, since the entry refers to the lazy chunk by file name), and the entry grows by less than about 10 kB against `main`; AC8 proves the list view never downloads the library; the perf reviewer writes the chunk size and the number of tile requests for one open + three pans at 390 px into the digest — perf review + AC8
-- [ ] NF3 (amends `0003b` NF3: the map viewport is component state by design; filters stay URL-only) OSM tile usage policy: tiles only from the style file (no prefetch, no extra sources), `maxzoom` 19, no service-worker caching of tile URLs (the PWA's workbox config is unchanged and does not match `tile.openstreetmap.org`), attribution expanded and visible (AC8), the browser's default referrer policy kept; and Nominatim is never called from the browser — code review
+- [ ] NF3 (amends `0003b` NF3: the map viewport is component state by design; filters stay URL-only) OSM tile usage policy: tiles only from the style file (no prefetch, no extra sources), `maxzoom` 19, no service-worker caching of tile URLs (the PWA's workbox has no runtime route matching `tile.openstreetmap.org`, and `globIgnores` keeps the lazy `maplibre-gl-*` chunks out of the precache), attribution expanded and visible (AC8), the browser's default referrer policy kept; and Nominatim is never called from the browser — code review
 - [ ] NF4 Accessibility: every control labelled; toggle buttons with `aria-pressed`; pins are `<button>`s with names (AC3), ≥ 44 px hit area and a visible focus ring; count line `aria-live="polite"`; focus to the opened card (AC5); the ux reviewer checks 390 px and 1280 px in a browser, keyboard only: toolbar → toggle → map → pins → card → listing → back — ux review
 
 ## Tests to write
@@ -253,6 +257,17 @@ under the default newest sort, so the fresh listing is among the first 50 pins; 
   ever needed.
 - Builds after `0003c`'s PR is open (Speed rule 3): branch from `spec/0003c-map-api`, run `make client` against it,
   rebase after it merges. Only one web spec builds at a time on port 5173 (Speed rule 2).
+- **Open question from the build (coder, 2026-11-10) — the service worker precaches the map library.** The PWA's
+  `generateSW` precaches every `**/*.{js,css,html}` in `dist/`, so after `make build-web` the lazy
+  `maplibre-gl-*.js` (1,104 kB, 298 kB gzip) and `maplibre-gl-*.css` (71 kB) are in the precache manifest
+  (8 entries, 1,511 KiB, was 5 entries, 352 KiB): every visitor whose browser installs the service worker
+  downloads the library in the background on the first visit, list view or not. The code split itself holds
+  (NF2's entry check passes and AC8 proves the page never requests it), but in production the laziness is
+  undone by the precache. NF3 says the workbox config is unchanged, so the build leaves it as it is. Options:
+  (a) `workbox.globIgnores: ['**/maplibre-gl-*']` in `vite.config.ts` (one line; the map then needs the network
+  the first time, which it does anyway for tiles) **[recommended]**; (b) (a) plus a `runtimeCaching` CacheFirst
+  rule for those files, so a map opened once is cached; (c) keep the precache (offline-ready library, ~300 kB
+  gzip extra for every first visit). Not changed in this build; the perf reviewer will see it.
 
 ## Verifier findings — one round, 10 findings, all applied
 1. `useSearch(filtersWithoutView, filters.view !== 'map')`: no list request in map view; `useMapSearch` keys on `filtersWithoutView` (Scope `useSearch.ts` / `SearchPage.tsx`, AC3).

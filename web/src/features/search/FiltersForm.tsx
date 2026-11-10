@@ -12,7 +12,7 @@ import {
   type Filters,
 } from './filters';
 
-type FormKey = Exclude<keyof Filters, 'sort'>;
+type FormKey = Exclude<keyof Filters, 'sort' | 'view'>;
 /** Every filter the form owns, present (as `undefined` when unset) so it overrides the URL's. */
 export type FormFilters = { [K in FormKey]: Filters[K] };
 

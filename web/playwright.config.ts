@@ -7,5 +7,15 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   reporter: 'list',
   use: { baseURL: 'http://localhost:5173', trace: 'retain-on-failure' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Software WebGL for the map (spec 0003d): recent Chrome no longer falls back to it on its
+        // own, and the GPU-less CI runner has no other WebGL.
+        launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
+      },
+    },
+  ],
 });
