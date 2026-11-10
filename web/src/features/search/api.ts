@@ -1,9 +1,9 @@
 import { api } from '../../api/client';
 import type { components, operations } from '../../api/schema';
-import { ApiError } from '../listings/api';
+import { ApiError, type ListingPublic } from '../listings/api';
 import { FEATURES, type Filters } from './filters';
 
-export type ListingPublic = components['schemas']['ListingPublic'];
+export type { ListingPublic };
 export type ListingSearchOut = components['schemas']['ListingSearchOut'];
 type SearchQuery = NonNullable<operations['search_listings_listings_get']['parameters']['query']>;
 
