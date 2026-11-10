@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { json, mockApi } from '../../auth/__tests__/harness';
+import { searchListings } from '../api';
 import { countActive, parseFilters, toSearchParams, type Filters } from '../filters';
+import { at, expected, page, query } from './fixtures';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const parse = (query: string) => parseFilters(new URLSearchParams(query));
 
@@ -101,5 +108,41 @@ describe('filters', () => {
     expect(
       toSearchParams({ price_min: undefined, pets: undefined, sort: undefined }).toString(),
     ).toBe('');
+  });
+
+  it('ac2_view_param_and_bbox_query', async () => {
+    // Only the exact `map` is kept.
+    expect(parse('view=map')).toEqual({ view: 'map' });
+    for (const query of ['view=list', 'view=MAP', 'view=']) {
+      expect(parse(query), query).toEqual({});
+    }
+    // Written last, after `sort`; not counted as a filter.
+    const withView = parse('view=map&sort=price_asc&pets=true');
+    expect(toSearchParams(withView).toString()).toBe('pets=true&sort=price_asc&view=map');
+    expect(countActive(withView)).toBe(1);
+    expect(countActive(parse('view=map'))).toBe(0);
+
+    // Never sent; the bbox and limit are sent when given.
+    const api = mockApi({ 'GET /listings': [json(page([])), json(page([]))] });
+    const filters: Filters = { price_max: 8000, pets: true };
+    await searchListings({ ...filters, view: 'map' }, 0);
+    await searchListings(filters, 0, { bbox: [34.7712, 32.0412, 34.8299, 32.1099], limit: 50 });
+    const plain = at(api.calls('GET /listings'), 0).request;
+    const boxed = at(api.calls('GET /listings'), 1).request;
+    expect(query(plain)).toEqual(
+      expected({ price_max: '8000', pets: 'true', limit: '20', offset: '0' }),
+    );
+    expect(query(boxed)).toEqual(
+      expected({
+        price_max: '8000',
+        pets: 'true',
+        west: '34.7712',
+        south: '32.0412',
+        east: '34.8299',
+        north: '32.1099',
+        limit: '50',
+        offset: '0',
+      }),
+    );
   });
 });
