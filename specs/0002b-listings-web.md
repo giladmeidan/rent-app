@@ -1,7 +1,7 @@
 ---
 id: 0002b
 title: An owner creates a listing from the web app in a short wizard (type → details → preview → publish) and sees, pauses and resumes their listings on a "my listings" page
-status: in-progress
+status: in-review
 depends_on: [0001b, 0002a]
 reviewers: [code, qa, ux]   # ux: two new screens + header link; no security: no uploads, no new credentials, data is the listing's public facts
 estimate: 1 coder run
