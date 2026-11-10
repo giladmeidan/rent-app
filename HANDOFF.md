@@ -22,23 +22,22 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–3 API, list search, text safety, listing edit, expired read-only (`0002f`), map API (`0003c`), apply API
-(`0004a`) and inbox API (`0004c`) are merged. In flight from Gilad's session "Spec continuation from handoff":
-`0003d` (PR #15, in CI) and `0004b` (building). Left in Slice 4: `0004d`.
+Slices 1–3 are merged (map web `0003d` PR #15, ec7d6ec). Slice 4: `0004a` and `0004c` merged; `0004b` open as
+PR #16 (in CI); `0004d` worktree prepared, build not started. Work runs from Gilad's session
+"Spec continuation from handoff"; other sessions should plan/spec only (no builds, merges or worktree changes).
 
 Last updated:
 2026-11-11
 
 ## Current Work
-- **0003d Map web** — [PR #15](https://github.com/giladmeidan/rent-app/pull/15), head `cf49689`, pushed once,
-  `ready-to-merge`; `api`/`web` green, `e2e` was pending. Review: 1 blocker + 2 majors fixed (zoom-in 422, early
-  tile error, SW precached the lazy map lib), 10 minors fixed/logged. Auto-fix is on for the PR (its session wakes
-  on CI failure / conflict / comment). Stack down. On merge: mark `done`, remove `../rent-app-0003d` + branch.
-- **0004b Apply web** — building in session "Build 0004b — Apply web" (worktree `../rent-app-0004b`, branch
-  `spec/0004b-apply-web` from main a8f6190, stack `rent-app-0004b` on 5446/6392/8014, holds 5173). No PR yet.
-  Likely conflicts with #15 on the listing page and `he.json` — it merges `origin/main` before its one push.
-- **0004d Inbox web** (`verified`; view count removed per Gilad, e9d77dc) — ready once 0004b's PR is open; web
-  spec, so it starts only when 0004b frees 5173.
+- **0004b Apply web** — [PR #16](https://github.com/giladmeidan/rent-app/pull/16), head `4307ded`, pushed once,
+  `ready-to-merge`; `api` green, `web`/`e2e` were pending. Review: 2 majors fixed (a background refetch error
+  wiped the apply draft; a previous seeker's cached applications could show after the next login in the same
+  tab), minors fixed/logged. Stack down. On merge: mark `done`, remove `../rent-app-0004b` + branch — but only
+  after 0004d no longer needs it (0004d is branched from it; rule 10).
+- **0004d Inbox web** (`verified`) — worktree `../rent-app-0004d`, branch `spec/0004d-inbox-web` from
+  `origin/spec/0004b-apply-web` (4307ded) + main, `.env` on 5447/6393/8015. Needs 5173 (free). Build not started;
+  when #16 merges, it merges `origin/main`.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -65,6 +64,8 @@ Last updated:
   counter, migration `0005`. Review: 0 blockers, 0 majors.
 - [x] 0004c Inbox API — PR #14 (dabac4c): owner lists applicants, shortlists / declines; `MyListingOut` carries
   `applicant_count` and `new_applicant_count` (no `view_count`). Review: 0 blockers, 0 majors.
+- [x] 0003d Map web — PR #15 (ec7d6ec): `/search` list/map toggle with price pins searching the visible area;
+  approximate-area map on the listing page. Review: 1 blocker + 2 majors fixed.
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -75,12 +76,10 @@ Last updated:
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **PR #15 (0003d)**: when `e2e` is green, ask Gilad to merge; merge with `--match-head-commit`; mark `done`;
-   remove worktree + branch (rule 10).
-2. **0004b**: when its session reports the PR, ask Gilad; merge after `api`/`web`/`e2e` green on head; clean up.
-3. **0004d**: once 0004b's PR is open and 5173 is free, prepare `../rent-app-0004d` (own `.env`, e.g.
-   5447/6393/8015, branch from main or 0004b's branch) and start `/build 0004d` (ask Gilad with a button if the
-   turn is automated).
+1. **0004d**: start `/build 0004d` in `../rent-app-0004d` (ask Gilad with a button if the turn is automated).
+2. **PR #16 (0004b)**: when `api`/`web`/`e2e` are green on its head, ask Gilad; merge with `--match-head-commit`;
+   mark `done`; tell the 0004d session to merge `origin/main`; remove the 0004b worktree + branch.
+3. **0004d PR**: merge on Gilad's word after green CI; clean up. That completes Slice 4.
 4. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
    unthrottled and writes a row per hit; owner PATCH rate limit (Slice 5); 0004d re-fetch on 404/409.
 5. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0005`), then
@@ -89,8 +88,8 @@ Last updated:
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
    number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
    photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-7. **Next slice**: Slice 5 (Chat — opens on owner shortlist) is not specced yet; it can be specced and verified
-   in another session while 0004b/0004d build.
+7. **Next slice**: Slice 5 (Chat — opens on owner shortlist) is not specced yet; spec and verify it (can run in
+   another session while 0004d builds).
 8. Housekeeping: archive finished build sessions (0001b … 0004c) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
 
@@ -183,7 +182,7 @@ CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
 - 2026-11-11 (early) — Gilad's session: 0002f built and merged (PR #11); 0004a (PR #13) and 0004c (PR #14) built
-  and merged; Gilad answered 0004c Q-A/Q-B; 0003d open as PR #15; 0004b building.
+  and merged; Gilad answered 0004c Q-A/Q-B; 0003d merged (PR #15); 0004b open as PR #16; 0004d prepared.
 - 2026-11-10 (after midnight) — Slice 4 specced as four specs (0004a–d), verified, Gilad accepted Q1–Q6;
   Gilad will start 0002f and Slice 4 builds in his own sessions.
 - 2026-11-10 (late night) — 0002e built and merged (PR #10); 0003c/0003d/0002f specced and verified; 0003c build
