@@ -1,7 +1,7 @@
 ---
 id: 0004b
 title: A seeker applies from the listing page with a short message, follows their applications and withdraws one on "my applications"; a visitor is asked to log in and comes back to the listing; everyone sees the applicant count
-status: verified
+status: in-review
 depends_on: [0004a]
 reviewers: [code, qa, ux, security]   # ux: a new screen and a changed one; security: the login return path (`?next=`, open-redirect rule from FOLLOWUPS 0001b) and a user-to-user message form; qa: states and error mapping
 estimate: 1 coder run

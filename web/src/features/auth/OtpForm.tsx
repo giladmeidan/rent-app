@@ -6,7 +6,9 @@ import { useNavigate } from 'react-router';
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { ErrorState } from '../../components/ErrorState';
+import { safeNext } from './next';
 import { RoleChoice } from './RoleChoice';
+import { clearSession } from './useLogout';
 import { ME_KEY } from './useMe';
 
 type OtpVerifyIn = components['schemas']['OtpVerifyIn'];
@@ -80,6 +82,8 @@ type Props = {
    * when verify answers `profile_required`. */
   withProfile: boolean;
   initialRole?: Role | null;
+  /** Where a successful verify goes: a path already checked by `safeNext`. */
+  next?: string;
 };
 
 type Step1Error = 'tooMany' | 'failed' | null;
@@ -89,7 +93,7 @@ type Step2Error = 'invalidCode' | 'tooMany' | 'failed' | null;
  * Two-step email-code form shared by /signup and /login. The email and code live in this
  * component's state only (never storage or the URL).
  */
-export function OtpForm({ withProfile, initialRole = null }: Props) {
+export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -207,8 +211,11 @@ export function OtpForm({ withProfile, initialRole = null }: Props) {
       {
         onSuccess: (result) => {
           if (result.kind === 'ok') {
+            // Drop whatever the previous person in this tab left under ['me', …] first.
+            clearSession(queryClient);
             queryClient.setQueryData<UserOut | null>(ME_KEY, result.user);
-            navigate('/');
+            // `replace`: Back does not return to /login. `safeNext` again, as defence in depth.
+            navigate(safeNext(next), { replace: true });
             return;
           }
           if (result.kind === 'profileRequired' && !withProfile) {

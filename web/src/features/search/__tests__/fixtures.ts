@@ -1,5 +1,6 @@
 // Fixtures for the search and public listing tests; the fetch mock and render helpers are the auth
 // harness's.
+import type { ListingDetail } from '../../listings/api';
 import type { ListingPublic, ListingSearchOut } from '../api';
 
 let n = 0;
@@ -30,6 +31,11 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     lng: null,
     ...overrides,
   };
+}
+
+/** `GET /listings/{id}`'s shape: a public listing plus its applicant count. */
+export function listingDetail(overrides: Partial<ListingDetail> = {}): ListingDetail {
+  return { ...publicListing(), applicant_count: 0, ...overrides };
 }
 
 /** `count` fresh listings. */

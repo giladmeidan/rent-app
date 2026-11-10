@@ -116,11 +116,13 @@ i18n-check: web/node_modules/.modules.yaml
 	$(PNPM) exec node scripts/i18n-check.mjs
 
 ## e2e: playwright smoke suite against the running compose stack (`make dev` first); waits up to
-## 90 s each for the api /health and the web before starting
+## 90 s each for the api /health and the web, then clears the stack's Redis rate-limit keys (`rl:*`)
+## so a rerun within 15 min does not hit the OTP limit of 10 per IP (dev / CI compose stack only)
 e2e: web/node_modules/.modules.yaml
 	$(PNPM) exec playwright install --with-deps chromium
 	$(call wait_for,$(API_HEALTH),90,api)
 	$(call wait_for,$(WEB_URL),90,web)
+	$(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'
 	$(PNPM) exec playwright test
 
 ## build-web: production build (tsc --noEmit, vite build with the PWA manifest and service worker) into web/dist

@@ -6,7 +6,7 @@ import i18n from '../../../app/i18n';
 import { failMap, lastProps, resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
 import { deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
-import { publicListing } from '../../search/__tests__/fixtures';
+import { listingDetail } from '../../search/__tests__/fixtures';
 import { ListingPage } from '../ListingPage';
 
 vi.mock(
@@ -39,7 +39,7 @@ function facts(): Record<string, string> {
 }
 
 // 0002a AC1's listing.
-const katznelson = publicListing({
+const katznelson = listingDetail({
   city: 'גבעתיים',
   street: 'כצנלסון',
   rooms: 3.5,
@@ -62,7 +62,10 @@ describe('ListingPage', () => {
   it('ac7_public_listing_page', async () => {
     // Pending: skeletons, and the back link already.
     const pending = deferred();
-    mockApi({ [`GET /listings/${katznelson.id}`]: [pending.promise] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [pending.promise],
+    });
     let view = render(katznelson.id);
     expect(screen.getAllByTestId('skeleton').length).toBeGreaterThanOrEqual(3);
     expect(back()).toHaveLength(1);
@@ -70,7 +73,10 @@ describe('ListingPage', () => {
     vi.unstubAllGlobals();
 
     // 200: the title block, the facts, the description with its line break, the location.
-    mockApi({ [`GET /listings/${katznelson.id}`]: [json(katznelson)] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json(katznelson)],
+    });
     view = render(katznelson.id);
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
       '3.5 חדרים, רחוב כצנלסון, גבעתיים',
@@ -102,14 +108,17 @@ describe('ListingPage', () => {
     vi.unstubAllGlobals();
 
     // No arnona / vaad, no description, no parking, no pets, no elevator, entry not flexible.
-    const plain = publicListing({
+    const plain = listingDetail({
       arnona_ils: null,
       vaad_ils: null,
       description: null,
       parking_spots: 2,
       available_from: '2020-01-01',
     });
-    mockApi({ [`GET /listings/${plain.id}`]: [json(plain)] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${plain.id}`]: [json(plain)],
+    });
     view = render(plain.id);
     await screen.findByRole('heading', { level: 1 });
     const plainPairs = facts();
@@ -132,7 +141,10 @@ describe('ListingPage', () => {
         () => json({ detail: [{ type: 'uuid_parsing', loc: ['path'], msg: 'x' }] }, 422),
       ],
     ] as const) {
-      mockApi({ [`GET /listings/${id}`]: [reply()] });
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        [`GET /listings/${id}`]: [reply()],
+      });
       view = render(id);
       expect(
         await screen.findByRole('heading', { level: 1, name: he.listing.notFound }),
@@ -146,6 +158,7 @@ describe('ListingPage', () => {
 
     // 500: ErrorState; retry re-requests.
     const api = mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
       [`GET /listings/${katznelson.id}`]: [json({ detail: 'boom' }, 500), json(katznelson)],
     });
     render(katznelson.id);
@@ -155,13 +168,16 @@ describe('ListingPage', () => {
   });
 
   it('ac6_listing_page_approximate_map', async () => {
-    const located = publicListing({ lat: 32.08, lng: 34.8 });
+    const located = listingDetail({ lat: 32.08, lng: 34.8 });
     const address = i18n.t('listing.address', { street: located.street, city: located.city });
     const section = () =>
       screen.getByRole('heading', { level: 2, name: he.listing.location }).closest('section');
 
     // A point: the approximate map inside "location", above the text that stays.
-    mockApi({ [`GET /listings/${located.id}`]: [json(located)] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${located.id}`]: [json(located)],
+    });
     let view = render(located.id);
     const region = await screen.findByRole('region', { name: he.listing.mapLabel });
     const location = section();
@@ -188,8 +204,11 @@ describe('ListingPage', () => {
     resetFakeMap();
 
     // No point: the section as before, no map.
-    const unlocated = publicListing({ lat: null, lng: null });
-    mockApi({ [`GET /listings/${unlocated.id}`]: [json(unlocated)] });
+    const unlocated = listingDetail({ lat: null, lng: null });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${unlocated.id}`]: [json(unlocated)],
+    });
     view = render(unlocated.id);
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('region', { name: he.listing.mapLabel })).toBeNull();
