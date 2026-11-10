@@ -90,6 +90,8 @@ services:
       # The browser calls the API directly on its host port (no Vite proxy). Must stay `localhost`:
       # the page origin is http://localhost:5173, the only origin the API's CORS allows.
       VITE_API_URL: http://localhost:${API_PORT:-8000}
+      # The MapLibre style (spec 0003d): public OSM raster tiles until self-hosted Protomaps.
+      VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-/map/osm-raster.json}
     ports:
       - "127.0.0.1:5173:5173"
     volumes:
