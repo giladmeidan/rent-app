@@ -52,6 +52,13 @@ and delegates. It never writes application code itself. Delegation chain:
    ("Decisions I need from you") and relays the answer, which is written into `specs/PRODUCT.md` or the spec
    the same day. Minor and mechanical choices stay with the agents; a review minor is never such a question.
 
+10. **Clean up after a spec (Gilad, 2026-11-10).** A spec's compose stack and worktree exist only while the spec
+    is being built. The spec session's last step, after its final report, is `make down` in its worktree (stops
+    the `rent-app-NNNN` containers, removes their volumes, empties its `.outbox/`). After the PR merges, the
+    orchestrator runs `git worktree remove ../rent-app-NNNN` and `git branch -d spec/NNNN-…` from the main
+    checkout and notes it in the handoff; a worktree is kept only while a dependent web half is still branched
+    from it. Never leave a stack running "in case": it burns CPU and ports and confuses `docker ps`.
+
 Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/`:
 `/spec <slice-title>`, `/build <spec-id>`, `/review <spec-id>`, `/digest <spec-id>`.
 
