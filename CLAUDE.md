@@ -32,8 +32,12 @@ and delegates. It never writes application code itself. Delegation chain:
    ux, qa and perf reviews of small specs, review fixes that are mechanical, and docs. When in doubt, the
    stronger one.
 7. **CI once per round.** Agents commit locally and run `make lint` / `make test` there; they push only when
-   the round is complete (the build, then the fixes), so CI runs on the last commit, not on each one. Nothing
-   merges unless CI is green on the PR's head commit.
+   the round is complete (the build, then the fixes), so CI runs on the last commit, not on each one.
+8. **Light CI on push, full CI before merge.** A push runs only the fast jobs (`api`, `web`: lint, types, unit
+   tests, i18n-check; about a minute). The slow `e2e` job runs only when the PR carries the `ready-to-merge`
+   label — the spec session adds it once the review fixes are pushed — and on `main`. A PR, or a push to `main`, whose
+   changes are only `*.md`, `specs/` or `design/` runs no CI (the filter looks at the whole PR, not one push). Nothing merges unless `api`, `web` and `e2e` are all green on the
+   PR's head commit. Any new slow job (anything over ~1 minute) joins the label-gated tier, not the push tier.
 
 Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/`:
 `/spec <slice-title>`, `/build <spec-id>`, `/review <spec-id>`, `/digest <spec-id>`.
