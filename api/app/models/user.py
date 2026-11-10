@@ -3,7 +3,7 @@
 import datetime as dt
 import uuid
 
-from sqlalchemy import CheckConstraint, DateTime, Text, text
+from sqlalchemy import CheckConstraint, DateTime, SmallInteger, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,7 @@ class User(Base):
         ),
         CheckConstraint("role IN ('owner', 'seeker')", name="ck_users_role"),
         CheckConstraint("account_type IN ('individual', 'broker')", name="ck_users_account_type"),
+        CheckConstraint("listing_cap BETWEEN 0 AND 100", name="ck_users_listing_cap"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -35,3 +36,5 @@ class User(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Live listings allowed at once (spec 0002a; PRODUCT.md "Owner cap: 3 … admin may raise").
+    listing_cap: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("3"))

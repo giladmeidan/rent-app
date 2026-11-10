@@ -40,6 +40,21 @@ ls -t .outbox/*.json | head -1 | xargs cat
 `make down` empties `.outbox/`. If an earlier `docker compose up` (without `make dev`) left a root-owned
 `.outbox/`, `make dev` fails at `chmod`: remove it once with `sudo rm -rf .outbox`. Real delivery: `EMAIL_BACKEND=smtp` plus `SMTP_URL` (see `.env.example`).
 
+## Posting a listing locally
+
+An owner session is needed: sign up with `"role":"owner"` (verify with the code from `.outbox/`, saving the
+cookie), take an `area_id` from `GET /areas`, then post; `GET /me/listings` lists your own listings and
+`PATCH /listings/{id}` with `{"status":"paused"}` pauses one (at most 3 are live at once):
+
+```sh
+curl -c cookies.txt -X POST localhost:8000/auth/otp/verify -H 'Content-Type: application/json' \
+  -d '{"email":"me@example.com","code":"123456","profile":{"display_name":"נועה","role":"owner"}}'
+AREA=$(curl -s localhost:8000/areas | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
+curl -b cookies.txt -X POST localhost:8000/listings -H 'Content-Type: application/json' -d '{"listing_type":"apartment",
+  "area_id":"'"$AREA"'","city":"גבעתיים","street":"כצנלסון","rooms":3.5,"floor":3,"size_sqm":95,"price_ils":7200,
+  "available_from":"2026-12-01","elevator":true,"furnished":"partial","pets_allowed":true}'
+```
+
 ## Make targets
 
 | target | what it does |

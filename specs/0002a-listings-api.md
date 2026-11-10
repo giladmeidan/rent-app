@@ -1,7 +1,7 @@
 ---
 id: 0002a
 title: An owner creates an apartment or room listing through the API, sees their own listings, and can edit, pause or resume one, with the 3-active-listings cap and the active-area rule enforced
-status: verified
+status: in-review
 depends_on: [0001a]
 reviewers: [code, qa, security]   # security: ownership checks on PATCH (IDOR), role gate, cap race
 estimate: 1 coder run
@@ -214,3 +214,22 @@ so the orchestrator set `verified`.
            PATCH on another owner's listing — mitigation: 404 with the ownership predicate in SQL, security reviewer checks it.
     Reviewers: code, qa, security   Estimated: 1 coder run, 1 review round
     Links: specs/0002a-listings-api.md · PRODUCT.md "Brokers" (cap), "Launch area", "Scope", "Trust (MVP)" · design/screens-v1/CreateListing.dc.html, Listing.dc.html (field list)
+
+    Spec 0002a — Listings API: create, my listings, edit/pause/resume   IN REVIEW · PR #5 (giladmeidan/rent-app), head = this commit
+    Shipped: an owner POSTs an apartment or room listing (type, rooms, floor, size, price, entry date, elevator, parking,
+             furnished, pets, arnona, vaad, description, city, street, launch area), lists their own with GET /me/listings and
+             edits, pauses or resumes one with PATCH /listings/{id}; a 4th live listing is 409, a seeker is 403, another owner's
+             listing is 404; a listing expires 30 days after creation (nothing renews it yet).
+    Demo: 1) make dev; sign up as an owner via /auth/otp/request + /auth/otp/verify (code in .outbox/), AREA from GET /areas
+          2) the curl in README "Posting a listing locally" → 201 with rooms 3.5; repeat it 3 more times → the 4th is 409 listing_cap_reached
+          3) PATCH /listings/{id} {"status":"paused"} → 200; POST again → 201; GET /me/listings → 4 rows, newest first
+    Tests: +0 unit, +16 integration (AC1–AC10 by name, plus CRLF, blank description, PATCH area re-check and 3 review regressions;
+           123 collected vs 88 on main), +0 e2e   CI: api 59 s · web 1 min 04 s · e2e label-gated, runs on this head
+    Findings: 0 blockers, 1 major fixed (FastAPI's default 422 handler echoed `input`: NaN/Infinity or a lone surrogate in a body
+              gave a 500 and logged the body, email included; pre-existing on /auth too; now a custom handler without `input`),
+              2 minors fixed (display_name message restored, invisible code points escaped in source), 4 follow-ups logged
+              (lax number coercion, resumed-but-expired shows "active", more invisible characters before 0003a, unbounded total
+              rows per owner / unpaginated list), 11 nits dropped
+    Changed in PRODUCT.md: nothing (the 6 assumptions in Risks stand, pending Gilad's batch approval of the verified digest above)
+    Next spec I propose: 0002b — Owner posts a listing (web wizard + my listings), already verified; start from this branch.
+              Note for 0002b: a resumed listing whose expires_at is past returns status "active"; render it as expired.

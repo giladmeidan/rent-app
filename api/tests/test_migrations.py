@@ -141,3 +141,93 @@ def test_ac13_users_sessions_roundtrip(migration_db_url: str) -> None:
     } <= constraints
     assert "ix_sessions_user_id" in indexes
     assert on_delete == "c"  # ON DELETE CASCADE
+
+
+_LISTINGS_CHECKS = {
+    "ck_listings_type",
+    "ck_listings_status",
+    "ck_listings_city_length",
+    "ck_listings_street_length",
+    "ck_listings_rooms",
+    "ck_listings_floor",
+    "ck_listings_total_floors",
+    "ck_listings_size_sqm",
+    "ck_listings_price_ils",
+    "ck_listings_parking_spots",
+    "ck_listings_furnished",
+    "ck_listings_arnona_ils",
+    "ck_listings_vaad_ils",
+    "ck_listings_description_length",
+}
+
+
+def test_ac10_listings_roundtrip(migration_db_url: str) -> None:
+    cfg = alembic_config(migration_db_url)
+
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "base")
+    assert "listings" not in _table_names(migration_db_url)
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "0002")
+    assert "listings" not in _table_names(migration_db_url)
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.connect() as conn:
+            assert not conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns"
+                    " WHERE table_name = 'users' AND column_name = 'listing_cap'"
+                )
+            ).all()
+    finally:
+        engine.dispose()
+    command.upgrade(cfg, "head")
+
+    assert "listings" in _table_names(migration_db_url)
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.connect() as conn:
+            checks = set(
+                conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint"
+                        " WHERE conrelid = 'listings'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+            on_delete = {
+                table: action
+                for table, action in conn.execute(
+                    text(
+                        "SELECT confrelid::regclass::text, confdeltype FROM pg_constraint"
+                        " WHERE conrelid = 'listings'::regclass AND contype = 'f'"
+                    )
+                ).tuples()
+            }
+            indexes = set(
+                conn.execute(
+                    text("SELECT indexname FROM pg_indexes WHERE tablename = 'listings'")
+                ).scalars()
+            )
+            listing_cap = conn.execute(
+                text(
+                    "SELECT data_type, is_nullable, column_default FROM information_schema.columns"
+                    " WHERE table_name = 'users' AND column_name = 'listing_cap'"
+                )
+            ).one()
+            users_checks = set(
+                conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint"
+                        " WHERE conrelid = 'users'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+    finally:
+        engine.dispose()
+
+    assert checks == _LISTINGS_CHECKS
+    assert on_delete == {"users": "c", "areas": "r"}  # CASCADE, RESTRICT
+    assert {"ix_listings_owner_id", "ix_listings_area_id"} <= indexes
+    assert tuple(listing_cap) == ("smallint", "NO", "3")
+    assert "ck_users_listing_cap" in users_checks
