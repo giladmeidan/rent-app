@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { signUpOwner } from './helpers';
@@ -19,6 +19,17 @@ function israelDay(days: number): string {
   const date = new Date(`${today}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+/** Every OSM tile is the 1x1 PNG, except the first `failing` requests, answered 500. */
+async function routeTiles(page: Page, failing = 0) {
+  let seen = 0;
+  await page.context().route('https://tile.openstreetmap.org/**', (route) => {
+    seen += 1;
+    return seen <= failing
+      ? route.fulfill({ status: 500, body: '' })
+      : route.fulfill({ status: 200, contentType: 'image/png', body: TILE });
+  });
 }
 
 test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
@@ -68,11 +79,7 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     .not.toBeNull();
 
   // Tiles answered locally, MapLibre's workers included; every request URL is recorded.
-  await page
-    .context()
-    .route('https://tile.openstreetmap.org/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'image/png', body: TILE }),
-    );
+  await routeTiles(page);
   const urls: string[] = [];
   page.context().on('request', (r) => urls.push(r.url()));
 
@@ -119,4 +126,42 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
       .getByRole('group', { name: he.search.view.label })
       .getByRole('button', { name: he.search.view.map }),
   ).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('map_survives_one_failed_tile', async ({ page }) => {
+  await routeTiles(page, 1);
+  await page.goto('/search?view=map');
+  const region = page.getByRole('region', { name: he.search.map.label });
+  await expect(region).toBeVisible();
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await expect(page.getByTestId('map-unavailable')).toHaveCount(0);
+});
+
+test('map_max_zoom_never_422_on_390px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routeTiles(page);
+  const statuses: number[] = [];
+  page.on('response', (r) => {
+    if (r.url().includes('/listings?')) statuses.push(r.status());
+  });
+
+  await page.goto('/search?view=map');
+  const region = page.getByRole('region', { name: he.search.map.label });
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+
+  // Zoom in to the limit, one step per answered search (each step's `moveend` is a new box); the
+  // button is disabled at `MAP_MAX_ZOOM`.
+  const zoomIn = region.getByRole('button', { name: he.map.zoomIn });
+  for (let i = 0; i < 20 && (await zoomIn.isEnabled()); i += 1) {
+    await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/listings?')),
+      zoomIn.click(),
+    ]);
+  }
+  await expect(zoomIn).toBeDisabled();
+  await expect(region).toHaveAttribute('aria-busy', 'false');
+
+  expect(statuses.length).toBeGreaterThan(1);
+  expect(statuses.filter((status) => status !== 200)).toEqual([]);
+  await expect(page.getByText(he.common.error)).toHaveCount(0);
 });
