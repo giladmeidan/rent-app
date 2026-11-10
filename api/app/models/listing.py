@@ -1,27 +1,37 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
-Every CHECK, FK and index here matches migration 0003 exactly (autogenerate must see no diff).
-A listing is **live** while `status = 'active' AND expires_at > now()`."""
+Every CHECK, FK and index here matches migrations 0003 and 0004 exactly (autogenerate must see no
+diff). A listing is **live** while `status = 'active' AND expires_at > now()`.
+
+Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
+`approximate_point`), never the geocoder's raw point; the worker fills it while `geocode_status` is
+`pending`. `lat` / `lng` are deferred read-only expressions over it, loaded only by the public
+search queries (`services/search.py` `_public_listings`)."""
 
 import datetime as dt
 import uuid
 from decimal import Decimal
+from typing import Any
 
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
     Numeric,
     SmallInteger,
     Text,
+    cast,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.models import Base
 
@@ -47,8 +57,18 @@ class Listing(Base):
         CheckConstraint("arnona_ils BETWEEN 0 AND 20000", name="ck_listings_arnona_ils"),
         CheckConstraint("vaad_ils BETWEEN 0 AND 5000", name="ck_listings_vaad_ils"),
         CheckConstraint("char_length(description) <= 2000", name="ck_listings_description_length"),
+        CheckConstraint(
+            "geocode_status IN ('pending', 'ok', 'not_found', 'failed')",
+            name="ck_listings_geocode_status",
+        ),
+        CheckConstraint("geocode_attempts BETWEEN 0 AND 5", name="ck_listings_geocode_attempts"),
+        CheckConstraint(
+            "(geocode_status = 'ok') = (location IS NOT NULL)", name="ck_listings_location_status"
+        ),
         Index("ix_listings_owner_id", "owner_id"),
         Index("ix_listings_area_id", "area_id"),
+        # Explicit GiST index (like `ix_areas_geom`), hence `spatial_index=False` on the column.
+        Index("ix_listings_location", "location", postgresql_using="gist"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -91,3 +111,24 @@ class Listing(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Deferred: no endpoint returns it (the public sees `lat` / `lng`); the worker writes it.
+    location: Mapped[Any] = mapped_column(
+        Geography(geometry_type="POINT", srid=4326, spatial_index=False),
+        nullable=True,
+        deferred=True,
+    )
+    geocode_status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'pending'")
+    )
+    geocode_attempts: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=text("0")
+    )
+    # Deferred: only `_public_listings()` undefers them (owner endpoints never load them).
+    lat: Mapped[float | None] = column_property(
+        func.ST_Y(cast(location, Geometry(geometry_type="POINT", srid=4326)), type_=Float),
+        deferred=True,
+    )
+    lng: Mapped[float | None] = column_property(
+        func.ST_X(cast(location, Geometry(geometry_type="POINT", srid=4326)), type_=Float),
+        deferred=True,
+    )
