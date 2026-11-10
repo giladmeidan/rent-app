@@ -110,7 +110,7 @@ def test_ac1_owner_creates_listing(
     )
     created = dt.datetime.fromisoformat(body["created_at"])
     expires = dt.datetime.fromisoformat(body["expires_at"])
-    assert dt.timedelta(days=29) <= expires - created <= dt.timedelta(days=31)
+    assert dt.timedelta(days=89) <= expires - created <= dt.timedelta(days=91)
     assert _count(db_engine) == 1
     row = _row(db_engine, body["id"])
     assert str(row["rooms"]) == "3.5"
