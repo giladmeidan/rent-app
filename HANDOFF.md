@@ -23,16 +23,14 @@ Overall: IN_PROGRESS
 
 Current focus:
 Slices 1–2, list search (`0003a`/`0003b`), text safety (`0002d`) and web listing edit (`0002e`) are merged.
-In flight: `0003c` map API build (fix round). Verified and waiting: `0002f`, `0003d`, `0004a`–`0004d`.
+Nothing in flight from the orchestrator. `0003c` merged (PR #12, 2117474). Verified and waiting: `0002f`,
+`0003d`, `0004a`–`0004d` (a `../rent-app-0004a` worktree exists, branched from 0003c's head, Gilad's session).
 **Gilad starts `0002f` and the Slice 4 builds himself in other sessions** — the orchestrator does not start them.
 
 Last updated:
 2026-11-10
 
 ## Current Work
-- **0003c Map API** — building in session "Build 0003c — Map API" (worktree `../rent-app-0003c`, branch
-  `spec/0003c-map-api`, stack `rent-app-0003c` on 5442/6388/8010, `make dev-api`). No PR yet. On merge: remove
-  the worktree and branch, mark `done`, then start `0003d`.
 - **0002f Expired listing read-only** (`specs/0002f-expired-listing-read-only.md`, `verified`, 9202a5d) —
   worktree prepared at `../rent-app-0002f` (branch `spec/0002f-expired-read-only`, `.env` on 5443/6389/8011);
   Gilad will build it in a different session. It is a web spec: it needs port 5173 (free now).
@@ -61,6 +59,8 @@ Last updated:
   fixed in the one round.
 - [x] 0002e Edit listing web — PR #10 (9023687): `/me/listings/:id/edit` reuses the wizard, sends only changed
   fields. Review: 0 blockers, 0 majors; one push.
+- [x] 0003c Map API — PR #12 (2117474): worker geocoding via Nominatim (paced, cached, paused on outages),
+  approximate public point, bbox filter and `lat`/`lng` on `GET /listings`, migration `0004`.
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -70,9 +70,9 @@ Last updated:
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **0003c**: when its session reports the PR, ask Gilad to merge (he approves each merge); merge with
-   `--match-head-commit` after `api`, `web`, `e2e` are green; clean up (rule 10).
-2. **0003d**: after 0003c merges and 5173 is free (0002f not building), prepare `../rent-app-0003d` with its own
+1. **Shared stack**: run `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (DB is at `0003`; main
+   now has `0004`), then `make dev` with the same ports when 5173 is free.
+2. **0003d**: 0003c is merged; start once 5173 is free (0002f not building), prepare `../rent-app-0003d` with its own
    `.env` and start `/build 0003d` (ask Gilad with a button if the turn is automated).
 3. **0002f**: Gilad builds it in another session from `../rent-app-0002f`; when its PR is green, merge on
    Gilad's word and clean up.
