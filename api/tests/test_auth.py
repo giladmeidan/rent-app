@@ -505,6 +505,7 @@ def test_ac7_display_name_rejects_blank_letters_and_private_use(
     detail = response.json()["detail"]
     assert detail[0]["type"] == "value_error"
     assert detail[0]["loc"] == ["body", "profile", "display_name"]
+    assert detail[0]["msg"] == "Value error, display_name contains control or invisible characters"
     assert _scalar(db_engine, "SELECT count(*) FROM users") == 0
     assert get_redis().hget(f"otp:{EMAIL}", "attempts") == b"0"
     # The code stays valid, and a plain Hebrew name still signs up.
