@@ -1,4 +1,5 @@
-"""Owner listings: create, list own, edit / pause / resume (spec 0002a).
+"""Owner listings: create, list own (with applicant counts, 0004c), edit / pause / resume (spec
+0002a).
 
 Cap (PRODUCT.md "Owner cap: 3 active listings per account, admin may raise"): an owner may have at
 most `users.listing_cap` **live** listings (`status = 'active' AND expires_at > now()`). Creating
@@ -21,7 +22,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Area, Listing, User
+from app.models import Application, Area, Listing, User
 from app.schemas.listing import ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
@@ -95,13 +96,27 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
     return listing
 
 
-def list_own_listings(db: Session, owner: User) -> Sequence[Listing]:
-    """Every listing of `owner` (active, paused and expired), newest first, in one query."""
-    return db.scalars(
-        select(Listing)
+def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, int]]:
+    """Every listing of `owner` (active, paused and expired), newest first, with its applicant
+    count (every application but withdrawn ones) and new-applicant count (`submitted`; spec
+    0004c). One statement: the counts are correlated scalar subqueries, each an index range scan
+    on `uq_applications_listing_seeker (listing_id, seeker_id)`."""
+    applicants = (
+        select(func.count())
+        .where(Application.listing_id == Listing.id, Application.status != "withdrawn")
+        .scalar_subquery()
+    )
+    new_applicants = (
+        select(func.count())
+        .where(Application.listing_id == Listing.id, Application.status == "submitted")
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(Listing, applicants, new_applicants)
         .where(Listing.owner_id == owner.id)
         .order_by(Listing.created_at.desc(), Listing.id)
-    ).all()
+    ).tuples()
+    return rows.all()
 
 
 def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:

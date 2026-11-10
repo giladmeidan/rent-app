@@ -1,7 +1,7 @@
 ---
 id: 0004c
-title: An owner lists the applicants of one of their listings with each applicant's name and message, shortlists or declines them, and sees applicant, new-applicant and view counts on "my listings"
-status: verified
+title: An owner lists the applicants of one of their listings with each applicant's name and message, shortlists or declines them, and sees applicant and new-applicant counts on "my listings"
+status: in-review
 depends_on: [0004a]
 reviewers: [code, qa, security]   # security: a seeker's name and free-text message shown to another user (PII), ownership checks on two ids; qa: status transitions
 estimate: 1 coder run
@@ -11,8 +11,8 @@ estimate: 1 coder run
 After this ships, an owner calls `GET /listings/{id}/applications` for one of their listings (any state: live,
 paused, expired) and gets its applicants — display name, message, status, date — newest first; `PATCH
 /listings/{id}/applications/{application_id}` with `{"status": "shortlisted" | "submitted" | "declined"}` moves
-an applicant onto or off the shortlist or declines them; and `GET /me/listings` carries `applicant_count`,
-`new_applicant_count` and `view_count` per listing. Shortlisting is the status Slice 5 opens chat on (PRODUCT.md
+an applicant onto or off the shortlist or declines them; and `GET /me/listings` carries `applicant_count` and
+`new_applicant_count` per listing (no `view_count`: owners do not see it, Gilad 2026-11-10). Shortlisting is the status Slice 5 opens chat on (PRODUCT.md
 "Chat — opens only on owner shortlist"); this spec stores it and nothing more. Serves Dev Plan slice 4 (Apply +
 inbox), part c of four (see `0004a` Goal for the split); the web inbox is `0004d`.
 
@@ -20,7 +20,7 @@ inbox), part c of four (see `0004a` Goal for the split); the web inbox is `0004d
 **In:**
 - `api/app/schemas/application.py` (from `0004a`) gains `ApplicantStatus = Literal['submitted', 'shortlisted',
   'declined']`, `ApplicantOut` and `ApplicantStatusIn` (see API). `api/app/schemas/listing.py` gains
-  `MyListingOut(ListingOut)` with `applicant_count: int`, `new_applicant_count: int`, `view_count: int`.
+  `MyListingOut(ListingOut)` with `applicant_count: int`, `new_applicant_count: int` (no `view_count`).
 - `api/app/services/applications.py` (from `0004a`) gains:
   - `list_applicants(db, owner, listing_id) -> Sequence[tuple[Application, str]]` (application, applicant
     display name): first `select(Listing.id).where(Listing.id == listing_id, Listing.owner_id == owner.id)` —
@@ -44,8 +44,8 @@ inbox), part c of four (see `0004a` Goal for the split); the web inbox is `0004d
 - `api/app/services/listings.py` `list_own_listings`: still **one** statement; selects `Listing` plus two
   correlated scalar subqueries (`select(func.count()).where(Application.listing_id == Listing.id,
   Application.status != 'withdrawn').scalar_subquery()` and the same with `status == 'submitted'`), served by
-  `uq_applications_listing_seeker`'s index; returns `Sequence[tuple[Listing, int, int]]`. `view_count` is the
-  column from `0004a`.
+  `uq_applications_listing_seeker`'s index; returns `Sequence[tuple[Listing, int, int]]`. `0004a`'s view counter
+  and the `listings.view_count` column stay as they are; nothing in this spec exposes them to the owner.
 - `api/app/routers/applications.py` (from `0004a`): the two owner endpoints, `current_owner`; both map
   `ListingNotFoundError` / `ApplicationNotFoundError` → 404 `not_found` and the PATCH maps
   `InvalidTransitionError` → 409 `invalid_transition`, with `responses=` entries for 401 / 403 / 404 / 409 (`ErrorOut`)
@@ -66,15 +66,15 @@ inbox), part c of four (see `0004a` Goal for the split); the web inbox is `0004d
 **New dependencies:** none.
 
 ## Data
-None new. Reads and updates `applications` (`0004a`); reads `users.display_name` and `listings.view_count`.
+None new. Reads and updates `applications` (`0004a`); reads `users.display_name`.
 No migration.
 
 ## API
 `ApplicantOut`: `id`, `status: ApplicantStatus`, `message`, `applicant_name` (the seeker's `display_name`),
 `created_at`, `updated_at`. **Not** `seeker_id`, email, `listing_id`, or any other user column (NF2).
 `ApplicantStatusIn`: `status: ApplicantStatus` (required; `withdrawn` or anything else is a 422).
-`MyListingOut`: every `ListingOut` field plus `applicant_count` (non-withdrawn), `new_applicant_count`
-(`submitted`), `view_count`. `POST /listings` and `PATCH /listings/{id}` keep returning `ListingOut` (no counts).
+`MyListingOut`: every `ListingOut` field plus `applicant_count` (non-withdrawn) and `new_applicant_count`
+(`submitted`); no `view_count` (owners do not see it). `POST /listings` and `PATCH /listings/{id}` keep returning `ListingOut` (no counts).
 
 Transition table (owner side; rows = target, columns = current status):
 | target ↓ / current → | submitted | shortlisted | declined | withdrawn |
@@ -108,7 +108,7 @@ as `\uXXXX` escapes in the tests (and here).
 - [ ] AC3 Given A with 3 applications and listing C with 25, When the owner lists each (after one warm-up request and `statements.clear()`), Then each measured request executes exactly 3 `before_cursor_execute` statements (session lookup, ownership check, one containing `FROM applications`) — `test_inbox.py::test_ac3_applicants_is_three_statements`
 - [ ] AC4 Given, for each of the 9 cells of the transition table's first three columns, a fresh application on A (9 seekers via `make_seeker` + `make_application(status=<current>, updated_at=now() − 1 day)`), When the owner PATCHes it to the cell's target, Then the cell's status code; each 200 returns `ApplicantOut` with the target status and `applicant_name`, and the row stores it; on the three no-op cells `updated_at` is unchanged, on the other 200 cells it moved; each 409 is `{"detail":"invalid_transition"}` and the row is unchanged; Given listing E of the owner paused (SQL) with a submitted application, When it is PATCHed to `shortlisted`, Then 200; Given a seeker S signed up with `signup(client, outbox, "s@example.com", "seeker")` who applied to A through `0004a`'s endpoint, When the owner shortlists then declines S's application, Then S's `GET /me/applications` shows `shortlisted`, then `declined`; `GET /listings/{A}`'s `applicant_count` is the same before and after every PATCH — `test_inbox.py::test_ac4_status_transitions`
 - [ ] AC5 Given A (owner X) with application P, and X's listing B with application Q, and listing D of owner Y with application R, When X PATCHes `/listings/{A}/applications/{Q}` (wrong listing), `/listings/{D}/applications/{R}` (Y's), `/listings/{A}/applications/<random uuid>`, and a withdrawn application on A, Then 404 `not_found` with identical bodies and nothing changes; When X sends `{"status": "withdrawn"}`, `{"status": "open"}`, `{}`, or a non-uuid id, Then 422; with no cookie → 401; with a seeker's cookie → 403 `owner_only` — `test_inbox.py::test_ac5_patch_ownership_and_validation`
-- [ ] AC6 Given the owner's listings A (applications: 2 submitted, 1 shortlisted, 1 declined, 1 withdrawn; `view_count` 7 by SQL) and B (none), When `GET /me/listings`, Then A has `applicant_count` 4, `new_applicant_count` 2, `view_count` 7 and B has 0 / 0 / 0, every item's keys are `ListingOut`'s plus exactly those three, and after one warm-up request and `statements.clear()` the measured request executes exactly 2 `before_cursor_execute` statements; `POST /listings` and `PATCH /listings/{id}` responses have none of the three keys — `test_inbox.py::test_ac6_my_listings_counts`
+- [ ] AC6 Given the owner's listings A (applications: 2 submitted, 1 shortlisted, 1 declined, 1 withdrawn; `view_count` 7 by SQL, to prove it is not exposed) and B (none), When `GET /me/listings`, Then A has `applicant_count` 4, `new_applicant_count` 2 and B has 0 / 0, every item's keys are `ListingOut`'s plus exactly those two (`view_count` not among them), and after one warm-up request and `statements.clear()` the measured request executes exactly 2 `before_cursor_execute` statements; `POST /listings` and `PATCH /listings/{id}` responses have neither key — `test_inbox.py::test_ac6_my_listings_counts`
 - [ ] NF1 `make lint` clean (ruff, mypy --strict); `make client` regenerates `web/src/api/schema.d.ts` with the two operations, `ApplicantOut` and `MyListingOut` — CI `api` and `web` jobs
 - [ ] NF2 Privacy: the owner learns of an applicant only `display_name` and the message; `ApplicantOut` lists its fields explicitly and both the list query and the PATCH's `RETURNING` select `users.display_name` only (never the `User` entity) — AC1 key set + security reviewer
 
@@ -125,6 +125,8 @@ pass unchanged. Unit: none (the transition table is proven cell by cell in AC4).
   (b) The owner can undo a decline (`declined` → `submitted`), for example within the inbox session.
 - Also inherited: `0004a` Q1 (notifications: none in Slice 4 — so the counts in AC6 are how an owner notices new
   applicants), Q3 (the seeker does not learn the owner's identity), Q5 (the seeker sees `declined`).
+
+Gilad 2026-11-10: Q-A keep newest created_at first (a re-apply counts as new); Q-B owners do not see view_count, applicant counts only.
 
 **Assumptions (orchestrator, not Gilad calls):** "remove from shortlist" (`shortlisted` → `submitted`) is allowed,
 as the artboard shows "הסרה מהרשימה"; Slice 5 decides what that does to an open chat. "New" = `submitted`. The
@@ -155,7 +157,7 @@ Also applied for consistency with `0004a` finding 3: AC3 and AC6 count statement
 
     Spec 0004c - Inbox API: applicants per listing, shortlist / decline, counts on my listings   (verified, part 3 of 4, depends on 0004a)
     What a user can do after this: an owner lists the applicants of any of their listings (name and message only), moves
-             them onto or off the shortlist or declines them, and sees applicants / new applicants / views per listing
+             them onto or off the shortlist or declines them, and sees applicants / new applicants per listing
              on /me/listings.
     Decisions I need from you (built on the recommendation meanwhile):
       Q6. Is a decline final? (a) yes, the web asks for confirmation first [rec] (b) the owner can undo a decline.
