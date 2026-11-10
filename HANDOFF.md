@@ -17,12 +17,11 @@ them as `general-purpose` agents told to read their definition file first.
 Overall: IN_PROGRESS
 
 Current focus:
-Spec 0001a (Auth API) is built, reviewed and awaiting Gilad's merge as PR #2. Spec 0001b (Auth web)
-is verified and is the next build, but it also depends on 0000b (web shell), which is verified and
-not built yet.
+Spec 0001a (Auth API) is built, reviewed and awaiting Gilad's merge as PR #2. Spec 0000b (web shell)
+is verified and is the next build, in a **new session** (Gilad, 2026-11-10). 0001b (Auth web) follows it.
 
 Last updated:
-2026-11-09
+2026-11-10
 
 ## Current Work
 **Spec 0001a — Auth API: email OTP, sessions, roles.** PR https://github.com/giladmeidan/rent-app/pull/2,
@@ -45,11 +44,17 @@ in "ready to merge" shape is in the spec's `## Digest`. **Only Gilad merges.** A
 ## Next Steps
 1. Gilad merges PR #2 (0001a). Then remove the `rent-app-0001a` worktree and branch; the shared test
    DB `rent_test` is at revision 0001 — the next `make test` on main migrates it to 0002, which is fine.
-2. Build 0000b (web shell) first — 0001b depends on it. Before `/build 0000b`, update its UI section to
+2. **Build 0000b (web shell) in a new session** — 0001b depends on it. Brief for that session:
+   start in `/Users/giladmeidan/rent_app/rent-app`, read `CLAUDE.md`, this file, and
+   `specs/0000b-foundations-web.md`. Work in a git worktree `../rent-app-0000b` on branch
+   `spec/0000b-foundations-web` from `main` (give it its own `.env` with `DB_PORT=5434 REDIS_PORT=6380`;
+   reuse the shared compose stack, do not restart it). Before the coder starts, edit the spec's UI section:
    reference `design/screens-v1/Main.dc.html` for shell structure and tokens (it still says "no Design
-   artboard exists") and note: CORS allows exactly `WEB_ORIGIN` (`http://localhost:5173`); api publishes
-   on `127.0.0.1` so a Vite proxy must target IPv4; `make client` must pass env vars (incl. `SECRET_KEY`)
-   to `export_openapi.py`; `API_PORT` exists.
+   artboard exists"), and note: CORS allows exactly `WEB_ORIGIN` (`http://localhost:5173`, not
+   `127.0.0.1`); api publishes on `127.0.0.1` so a Vite proxy must target IPv4; `make client` must pass
+   env vars (incl. `SECRET_KEY` once 0001a is merged) to `export_openapi.py`; `API_PORT` exists.
+   Then coder → reviewers (code, qa, ux) once → coder fixes → orchestrator brief check → digest → PR.
+   Tooling: Node 22 + `pnpm` (machine has Node 20.x via nvm; install 22). All agents Opus / high effort.
 3. Build 0001b (`specs/0001b-auth-web.md`, verified) in a **new session**: coder → reviewers (code, qa,
    ux, security) once → coder fixes → orchestrator brief check → digest → PR. Its Playwright AC7 reads
    codes from `.outbox/*.json`.
@@ -137,6 +142,7 @@ API at http://127.0.0.1:8000 (`/health`, `/areas`, `/docs`; 0001a: `/auth/otp/re
 `/auth/otp/verify`, `/me`, `/auth/logout`). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-10 — Gilad: build 0000b in a new session; handoff updated with its brief.
 - 2026-11-09 (evening) — Slice 1 specced (0001a/0001b, one verifier round each), 0001a built in a
   worktree, reviewed once (code/qa/security), fixed; PR #2 open, CI green, 88 tests. Gilad: one
   verifier round, handoff only at spec end, 0001b in a new session.
