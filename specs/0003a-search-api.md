@@ -1,7 +1,7 @@
 ---
 id: 0003a
 title: Anyone, logged in or not, searches live apartment listings through the API with price, rooms, entry-date and feature filters, sorted and paged, and opens one listing by id
-status: in-progress
+status: in-review
 depends_on: [0002a]
 reviewers: [code, qa, perf]   # perf: the first public query path; qa: filter edge cases; no security: read-only, no new auth, exposure is pinned by AC2
 estimate: 1 coder run
