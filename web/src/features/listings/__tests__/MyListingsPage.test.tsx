@@ -138,25 +138,34 @@ describe('MyListingsPage', () => {
     );
   });
 
-  it('ac10_edit_link_on_every_card', async () => {
+  it('ac1_edit_link_only_before_expiry', async () => {
     const live = listing({ street: '\u05d0\u05d7\u05d3' });
     const paused = listing({ street: '\u05e9\u05ea\u05d9\u05d9\u05dd', status: 'paused' });
     const expired = listing({
       street: '\u05e9\u05dc\u05d5\u05e9',
       expires_at: '2020-01-01T00:00:00Z',
     });
-    mockApi({ 'GET /me/listings': [json([live, paused, expired])] });
+    const pausedExpired = listing({
+      street: '\u05d0\u05e8\u05d1\u05e2',
+      status: 'paused',
+      expires_at: '2020-01-01T00:00:00Z',
+    });
+    mockApi({ 'GET /me/listings': [json([live, paused, expired, pausedExpired])] });
     let view = render();
     const cards = await screen.findAllByRole('article');
-    expect(cards).toHaveLength(3);
-    [live, paused, expired].forEach((l, i) => {
+    expect(cards).toHaveLength(4);
+    [live, paused, expired, pausedExpired].forEach((l, i) => {
       const card = cards[i] as HTMLElement;
       const title = i18n.t('listings.card.title', { rooms: '3', street: l.street, city: l.city });
-      const link = within(card).getByRole('link', { name: he.listings.actions.edit });
-      expect(link).toHaveAttribute('href', `/me/listings/${l.id}/edit`);
-      expect(link).toHaveAccessibleDescription(title);
-      const describedBy = document.getElementById(link.getAttribute('aria-describedby') ?? '');
-      expect(describedBy).toHaveTextContent(title);
+      if (i < 2) {
+        const link = within(card).getByRole('link', { name: he.listings.actions.edit });
+        expect(link).toHaveAttribute('href', `/me/listings/${l.id}/edit`);
+        expect(link).toHaveAccessibleDescription(title);
+        const describedBy = document.getElementById(link.getAttribute('aria-describedby') ?? '');
+        expect(describedBy).toHaveTextContent(title);
+      } else {
+        expect(within(card).queryByRole('link', { name: he.listings.actions.edit })).toBeNull();
+      }
       for (const button of within(card).queryAllByRole('button')) {
         expect(button).toHaveAccessibleDescription(title);
       }
@@ -164,6 +173,9 @@ describe('MyListingsPage', () => {
     // The pause / resume buttons exist on the live and paused cards (and carry the description).
     expect(within(cards[0] as HTMLElement).getAllByRole('button')).toHaveLength(1);
     expect(within(cards[1] as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    // Expired: no button; paused past expiry keeps its resume button (pause / resume unchanged).
+    expect(within(cards[2] as HTMLElement).queryAllByRole('button')).toHaveLength(0);
+    expect(within(cards[3] as HTMLElement).getAllByRole('button')).toHaveLength(1);
     // (The harness's location probe is an <output>, which is also a status.)
     expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
     view.unmount();

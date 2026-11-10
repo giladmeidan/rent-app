@@ -14,6 +14,11 @@ export function listingState(
   return 'expired';
 }
 
+/** Past expiry (`expires_at <= now`), whatever the status: such a listing is read-only (spec 0002f). */
+export function isPastExpiry(listing: Pick<ListingOut, 'expires_at'>, now: Date): boolean {
+  return new Date(listing.expires_at) <= now;
+}
+
 const tone: Record<ListingState, string> = {
   live: 'bg-accent-tint text-accent-text',
   paused: 'bg-line text-muted',

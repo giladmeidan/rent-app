@@ -1,7 +1,7 @@
 ---
 id: 0002f
 title: An owner can no longer edit an expired listing — its card has no edit link, and the edit URL explains that renewal comes later
-status: verified
+status: done
 depends_on: []           # 0002e is merged (9023687)
 reviewers: [code, qa]    # small change on an existing screen and route; no ux: no new layout, one message block reusing EmptyState; no security: no API change
 estimate: 1 coder run (small)
