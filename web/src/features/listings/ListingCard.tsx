@@ -1,8 +1,13 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 import type { ListingOut } from './api';
 import { formatDate, formatIls, formatRooms } from './format';
+
+// The focus ring of the title link, drawn around the whole card.
+const linkedCard =
+  'relative has-[a:focus-visible]:outline has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-accent';
 
 /** The facts a card shows: a created listing, or the wizard's body before it is published. */
 export type CardFacts = Pick<
@@ -30,10 +35,15 @@ type Props = {
   badge?: ReactNode;
   /** Below the chips (the row's action and its error). */
   children?: ReactNode;
+  /** Makes the title a link (search results); its hit area covers the whole card. */
+  to?: string;
 };
 
-/** The wizard's preview and the "my listings" row: Listing.dc.html's title block and chips. */
-export function ListingCard({ listing, today, badge, children }: Props) {
+/**
+ * The wizard's preview, the "my listings" row and a search result: Listing.dc.html's title block
+ * and chips.
+ */
+export function ListingCard({ listing, today, badge, children, to }: Props) {
   const { t } = useTranslation();
 
   const chips: string[] = [];
@@ -62,8 +72,16 @@ export function ListingCard({ listing, today, badge, children }: Props) {
       : t('listings.card.availableFrom', { date: formatDate(listing.available_from) }),
   ];
 
+  const title = t('listings.card.title', {
+    rooms: formatRooms(listing.rooms),
+    street: listing.street,
+    city: listing.city,
+  });
+
   return (
-    <article className="overflow-hidden rounded-2xl border border-line bg-white">
+    <article
+      className={`overflow-hidden rounded-2xl border border-line bg-white ${to === undefined ? '' : linkedCard}`}
+    >
       <div className="flex h-[120px] items-center justify-center bg-[#DDD6CE]">
         <svg
           aria-hidden="true"
@@ -94,11 +112,18 @@ export function ListingCard({ listing, today, badge, children }: Props) {
           {badge}
         </div>
         <h2 className="break-words text-lg font-bold leading-snug">
-          {t('listings.card.title', {
-            rooms: formatRooms(listing.rooms),
-            street: listing.street,
-            city: listing.city,
-          })}
+          {to === undefined ? (
+            title
+          ) : (
+            // The pseudo-element stretches the link over the card (the artboard's card is one
+            // link), so the tap target is the card while the accessible name stays the title.
+            <Link
+              to={to}
+              className="outline-none after:absolute after:inset-0 after:content-[''] hover:underline"
+            >
+              {title}
+            </Link>
+          )}
         </h2>
         <p className="flex flex-wrap gap-x-[10px] text-sm text-muted">
           {facts.map((fact, i) => (

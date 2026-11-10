@@ -1,7 +1,7 @@
 ---
 id: 0003b
 title: Anyone opens /search, filters live apartments by price, rooms, entry date and features, sorts and pages the results, and opens a public listing page
-status: verified
+status: in-review
 depends_on: [0003a, 0002b]
 reviewers: [code, qa, ux]   # ux: two new screens + header link; no security: public read-only data, no new credentials; no perf: query cost is 0003a's NF2, the page renders ≤ 20 cards per fetch
 estimate: 1 coder run

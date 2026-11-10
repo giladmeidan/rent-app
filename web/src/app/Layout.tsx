@@ -1,15 +1,18 @@
 import { useTranslation } from 'react-i18next';
-import { Link, Outlet } from 'react-router';
+import { Link, NavLink, Outlet } from 'react-router';
 
 import { AuthMenu } from '../features/auth/AuthMenu';
 
-/** The shell on every route: brand at the inline start, the auth menu at the inline end. */
+/**
+ * The shell on every route: brand and the search link at the inline start, the auth menu at the
+ * inline end; the row wraps on a narrow screen.
+ */
 export function Layout() {
   const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-[640px] px-4">
       <header className="pb-2 pt-[18px]">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Link
             to="/"
             className="flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -32,7 +35,15 @@ export function Layout() {
             </span>
             <span className="text-xl font-extrabold">{t('app.title')}</span>
           </Link>
-          <AuthMenu />
+          <NavLink
+            to="/search"
+            className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-[current=page]:text-accent-text aria-[current=page]:underline aria-[current=page]:underline-offset-4"
+          >
+            {t('header.search')}
+          </NavLink>
+          <div className="ms-auto flex min-w-0 items-center">
+            <AuthMenu />
+          </div>
         </div>
         <p className="mt-1 text-muted">{t('app.tagline')}</p>
       </header>
