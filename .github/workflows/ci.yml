@@ -1,9 +1,15 @@
 name: ci
 
+# Tiering (spec 0000b): api and web run on every PR push; e2e only when the PR carries the
+# `ready-to-merge` label (the `labeled` event starts it) and on pushes to main. Changes that touch
+# only Markdown, specs/ or design/ run no CI.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths-ignore: ["**.md", "specs/**", "design/**"]
   push:
     branches: [main]
+    paths-ignore: ["**.md", "specs/**", "design/**"]
 
 # Least privilege for the GITHUB_TOKEN: the jobs only read the repository.
 permissions:
@@ -55,6 +61,79 @@ jobs:
       - name: Install Python and dependencies
         run: uv --directory api sync --frozen
       - name: Lint (ruff + mypy --strict)
-        run: make lint
+        run: make lint-api
       - name: Test (pytest against the postgis + redis service containers)
-        run: make test
+        run: make test-api
+
+  # `make client` gets DATABASE_URL / REDIS_URL / WEB_ORIGIN / SECRET_KEY from the Makefile defaults;
+  # nothing connects.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.16"
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - name: Install dependencies
+        run: |
+          uv --directory api sync --frozen
+          pnpm --dir web install --frozen-lockfile
+      - name: Generate the API client (OpenAPI export, no server)
+        run: make client
+      - name: i18n-check
+        run: make i18n-check
+      - name: Lint (eslint + prettier --check + tsc --noEmit)
+        run: make lint-web
+      - name: Test (vitest)
+        run: make test-web
+      - name: Build (tsc + vite build, PWA manifest and service worker)
+        run: make build-web
+
+  e2e:
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.16"
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - name: Install dependencies
+        run: |
+          uv --directory api sync --frozen
+          pnpm --dir web install --frozen-lockfile
+          echo "PLAYWRIGHT_VERSION=$(node -p "require('./web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_ENV"
+      # On a hit `playwright install` (in make e2e) skips the download; --with-deps still installs OS packages.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      - name: Start the compose stack (db, redis, migrate, seed, api, worker, web)
+        run: make dev
+      - name: Smoke suite (playwright)
+        run: make e2e
+      - name: Compose logs
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs

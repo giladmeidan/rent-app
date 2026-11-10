@@ -77,5 +77,21 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      # The browser calls the API directly on its host port (no Vite proxy). Must stay `localhost`:
+      # the page origin is http://localhost:5173, the only origin the API's CORS allows.
+      VITE_API_URL: http://localhost:${API_PORT:-8000}
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ../web:/app
+      # Keep the image's Linux node_modules; the host's (if any) is for another platform.
+      - /app/node_modules
+
 volumes:
   pgdata:

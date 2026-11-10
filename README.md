@@ -5,20 +5,25 @@ Agent conventions live in `CLAUDE.md`; product decisions in `specs/PRODUCT.md`; 
 
 ## Prerequisites
 
-- Docker (with Compose v2) — Postgres+PostGIS, Redis, the API and the worker run in containers.
+- Docker (with Compose v2) — Postgres+PostGIS, Redis, the API, the worker and the web dev server run in containers.
 - [uv](https://docs.astral.sh/uv/) — Python dependency manager; it installs Python 3.12 itself.
+- Node 22 (`web/.nvmrc`) and [pnpm](https://pnpm.io/) (version pinned in `web/package.json` → `packageManager`;
+  `corepack enable` provides it) — for the web targets (`client`, `i18n-check`, `e2e`, the web halves of `test`/`lint`).
 - GNU make.
 
 ## Quick start
 
 ```sh
 cp .env.example .env     # optional: local overrides (see Configuration); the defaults already work
-make dev                 # db + redis up, alembic upgrade head, seed, then api (reload) + worker
+make dev                 # db + redis up, alembic upgrade head, seed, then api (reload) + worker + web (vite)
 curl localhost:8000/health   # {"status":"ok","db":"ok","redis":"ok"}
 curl localhost:8000/areas    # [{"id":"…","slug":"gush-dan","name_he":"גוש דן"}]
+open http://localhost:5173   # the Hebrew RTL shell listing the launch areas
 ```
 
 The API is published on `127.0.0.1:${API_PORT:-8000}`; the examples assume the default port.
+The web is published on `127.0.0.1:5173`; open it as `http://localhost:5173`, the only origin the API's CORS
+allows (`WEB_ORIGIN`). The browser calls the API at `http://localhost:${API_PORT}` (`VITE_API_URL`, set by compose).
 Interactive API docs: http://localhost:8000/docs. Stop everything (and drop the data volume) with `make down`.
 
 ## Logging in locally
@@ -39,14 +44,19 @@ ls -t .outbox/*.json | head -1 | xargs cat
 
 | target | what it does |
 | --- | --- |
-| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000) and `worker` (arq), and fails unless the api answers `/health` within 60 s (then see `docker compose -f infra/docker-compose.yml logs api`) |
+| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000), `worker` (arq) and `web` (Vite on 5173, source bind-mounted), and fails unless the api answers `/health` and the web answers within 60 s each (then see `docker compose -f infra/docker-compose.yml logs api` / `web`) |
 | `make down` | `docker compose down -v` — stops the stack and removes volumes; empties `.outbox/` |
 | `make migrate` | `alembic upgrade head` against `DATABASE_URL` |
 | `make seed` | inserts the launch areas (idempotent) |
-| `make test` | API pytest. Needs Postgres at `TEST_DATABASE_URL` and Redis at `REDIS_URL` (the compose `db`/`redis`; the test database is created on first run) |
-| `make lint` | `ruff check`, `ruff format --check`, `mypy --strict` |
+| `make test` | `test-api` then `test-web`. `test-api`: pytest; needs Postgres at `TEST_DATABASE_URL` and Redis at `REDIS_URL` (the compose `db`/`redis`; the test database is created on first run). `test-web`: vitest |
+| `make lint` | `lint-api` then `lint-web`. `lint-api`: `ruff check`, `ruff format --check`, `mypy --strict`. `lint-web`: `eslint`, `prettier --check`, `tsc --noEmit` (runs `make client` first if `web/src/api/schema.d.ts` is missing) |
+| `make client` | exports the OpenAPI schema with `api/scripts/export_openapi.py` (no server) and generates `web/src/api/schema.d.ts` (git-ignored) with `openapi-typescript`. Re-run after changing the API |
+| `make i18n-check` | fails, printing `file:line`, on hardcoded Hebrew or English (≥ 2 Latin words) in `web/src/**/*.tsx` and on `t('key')` keys missing from `web/src/locales/he.json`. Test files and `locales/` are skipped; the English check also skips JSX attributes other than `title`/`placeholder`/`aria-label`/`alt` (Hebrew fails in any attribute); put `// i18n-ignore-next-line` above a line that is a false positive |
+| `make e2e` | Playwright smoke suite against the running stack (`make dev` first): installs Chromium, waits up to 90 s for `/health` and the web, then runs `web/e2e/` |
+| `make build-web` | production build of the web (`tsc --noEmit`, `vite build` with the PWA manifest and service worker) into `web/dist` |
 
-Web targets (`client`, `e2e`, `i18n-check`) and the web halves of `test`/`lint` arrive with spec `0000b`.
+The web targets install `web/node_modules` with `pnpm install --frozen-lockfile` when pnpm's `web/node_modules/.modules.yaml` is missing or older
+than `web/package.json` / `web/pnpm-lock.yaml`.
 
 ## Configuration
 
@@ -75,9 +85,11 @@ services `db` / `redis`.
 
 ```
 api/            FastAPI app (app/), Alembic migrations (alembic/), scripts/, tests/
-infra/          docker-compose.yml, Dockerfile.api
+web/            Vite + React + TS app: src/{app,features,components,locales,api}, e2e/, scripts/
+infra/          docker-compose.yml, Dockerfile.api, Dockerfile.web
 specs/          one spec per slice + PRODUCT.md
-.github/        CI: ruff, mypy --strict, pytest against postgis + redis service containers
+.github/        CI: api (ruff, mypy --strict, pytest) and web (client, i18n-check, eslint, prettier, tsc, vitest, build) on every PR push;
+                e2e (compose + playwright) only on PRs labelled `ready-to-merge` and on pushes to main; Markdown/specs/design-only changes run no CI
 ```
 
 ## Scripts
