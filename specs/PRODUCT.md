@@ -1,6 +1,6 @@
 # Standing product decisions (read before writing any spec)
 
-Updated: 2026-11-09. Full reasoning in the Product Plan doc.
+Updated: 2026-11-10. Full reasoning in the Product Plan doc.
 
 | Topic | Decision |
 | --- | --- |
@@ -17,7 +17,8 @@ Updated: 2026-11-09. Full reasoning in the Product Plan doc.
 | OTP | Email OTP in Slice 1; SMS adapter stubbed behind an interface; switched on at launch readiness |
 | Matching | Hard filters (budget overlap, move-in window ±4 weeks, shared area, deal-breakers) then weighted distance score, 0–100, with top-3 agreeing / top-1 differing explanation |
 | Chat | Opens only on owner shortlist or mutual interest; never one-sided |
-| Trust (MVP) | Phone/email-verified accounts, report button everywhere, rate limits, listing auto-expiry 30 days, deposit-before-viewing warning in chat |
+| Trust (MVP) | Phone/email-verified accounts, report button everywhere, rate limits, listing auto-expiry **3 months (90 days from creation)** (changed from 30 days, Gilad 2026-11-10), deposit-before-viewing warning in chat |
+| Listings | Decided 2026-11-10 (0002a batch): a listing has the CreateListing/Listing artboards' facts, no photos until `0002c`; **no drafts** (live on publish, the wizard's preview is the review step); a room listing uses the apartment fields until Slice 7 and is hidden from search until then; arnona is entered as the bi-monthly bill, vaad monthly; the 3-listing cap counts **live** listings only (paused or expired free a slot; a total-rows cap per owner is a later follow-up) |
 | Stack | React+TS+Vite+Tailwind, FastAPI, PostgreSQL+PostGIS, Redis, arq worker, MapLibre+OSM tiles, Nominatim, Cloudflare R2/Pages, Fly.io or Railway |
 
 ## Slice order (Dev Plan)
