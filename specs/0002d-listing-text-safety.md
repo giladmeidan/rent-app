@@ -1,7 +1,7 @@
 ---
 id: 0002d
 title: Public listing text (city, street, description) and display names can no longer carry invisible filler, private-use or non-characters, lone surrogates or combining-mark stacks, and a city or street must contain a letter or digit
-status: in-progress
+status: in-review
 depends_on: []           # 0002a, 0002b, 0003a are merged
 reviewers: [code, security, qa]   # security: input sanitisation on now-public text; qa: tightens validation on 3 endpoints + validate.ts (Sonnet/medium)
 estimate: 1 coder run
