@@ -13,7 +13,7 @@ and get the **live apartment** listings in active launch areas that match, with 
 `GET /listings/{id}` for one of them. Serves Dev Plan slice 3 (Seeker search), part a of two; part b (`0003b`) is the
 web search page and the public listing page. PRODUCT.md rows: "Launch area — listings outside are hidden",
 "Gender preference — hard filter on ROOM listings" (so rooms stay hidden until Slice 7, see Risks),
-"Trust (MVP) — listing auto-expiry 30 days" (expired = hidden).
+"Trust (MVP) — listing auto-expiry 3 months (90 days)" (expired = hidden).
 
 ## Scope
 **In:**
@@ -33,7 +33,7 @@ web search page and the public listing page. PRODUCT.md rows: "Launch area — l
   `city='גבעתיים'`, `street='כצנלסון'`, `rooms=Decimal('3.5')`, `floor=3`, `total_floors=5`, `size_sqm=95`,
   `price_ils=7200`, `available_from=today+30`, `entry_flexible=True`, `elevator=True`, `parking_spots=1`,
   `furnished='partial'`, `pets_allowed=True`, `arnona_ils=480`, `vaad_ils=150`, `description='דירה מוארת'`,
-  `status='active'`, `expires_at=now()+30 days`; overrides may set any column including `created_at`. They bypass
+  `status='active'`, `expires_at=now()+90 days`; overrides may set any column including `created_at`. They bypass
   the service and its cap on purpose (tests need > 3 rows per owner); `0002a` tests keep using the HTTP `signup`
   helper. `test_search.py` defines its own copy of `0002a`'s `statements` fixture (`event.listen(db_engine,
   "before_cursor_execute", …)`); `test_listings.py` is not touched.

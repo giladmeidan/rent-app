@@ -222,7 +222,7 @@ def make_listing(
         "vaad_ils": 150,
         "description": "דירה מוארת",
         "status": "active",
-        "expires_at": dt.datetime.now(dt.UTC) + dt.timedelta(days=30),
+        "expires_at": dt.datetime.now(dt.UTC) + dt.timedelta(days=90),
         **overrides,
     }
     columns = ", ".join(values)

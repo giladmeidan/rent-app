@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.models import Area, Listing, User
 from app.schemas.listing import ListingIn, ListingPatch
 
-LISTING_TTL_DAYS = 30
+LISTING_TTL_DAYS = 90
 
 
 class ListingCapReachedError(Exception):
