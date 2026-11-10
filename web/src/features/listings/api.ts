@@ -48,9 +48,11 @@ export async function patchListing(id: string, body: ListingPatch): Promise<List
 }
 
 export type ListingPublic = components['schemas']['ListingPublic'];
+/** `ListingPublic` plus the exact applicant count (0004a), on `GET /listings/{id}` only. */
+export type ListingDetail = components['schemas']['ListingDetail'];
 
 /** A live listing as anyone sees it. 404 (not live, or unknown) and 422 (malformed id) throw. */
-export async function fetchPublicListing(id: string): Promise<ListingPublic> {
+export async function fetchPublicListing(id: string): Promise<ListingDetail> {
   const { data, error, response } = await api.GET('/listings/{listing_id}', {
     params: { path: { listing_id: id } },
   });

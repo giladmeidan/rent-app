@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
 import { deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
-import { publicListing } from '../../search/__tests__/fixtures';
+import { listingDetail } from '../../search/__tests__/fixtures';
 import { ListingPage } from '../ListingPage';
 
 afterEach(() => {
@@ -31,7 +31,7 @@ function facts(): Record<string, string> {
 }
 
 // 0002a AC1's listing.
-const katznelson = publicListing({
+const katznelson = listingDetail({
   city: 'גבעתיים',
   street: 'כצנלסון',
   rooms: 3.5,
@@ -54,7 +54,10 @@ describe('ListingPage', () => {
   it('ac7_public_listing_page', async () => {
     // Pending: skeletons, and the back link already.
     const pending = deferred();
-    mockApi({ [`GET /listings/${katznelson.id}`]: [pending.promise] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [pending.promise],
+    });
     let view = render(katznelson.id);
     expect(screen.getAllByTestId('skeleton').length).toBeGreaterThanOrEqual(3);
     expect(back()).toHaveLength(1);
@@ -62,7 +65,10 @@ describe('ListingPage', () => {
     vi.unstubAllGlobals();
 
     // 200: the title block, the facts, the description with its line break, the location.
-    mockApi({ [`GET /listings/${katznelson.id}`]: [json(katznelson)] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json(katznelson)],
+    });
     view = render(katznelson.id);
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
       '3.5 חדרים, רחוב כצנלסון, גבעתיים',
@@ -94,14 +100,17 @@ describe('ListingPage', () => {
     vi.unstubAllGlobals();
 
     // No arnona / vaad, no description, no parking, no pets, no elevator, entry not flexible.
-    const plain = publicListing({
+    const plain = listingDetail({
       arnona_ils: null,
       vaad_ils: null,
       description: null,
       parking_spots: 2,
       available_from: '2020-01-01',
     });
-    mockApi({ [`GET /listings/${plain.id}`]: [json(plain)] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${plain.id}`]: [json(plain)],
+    });
     view = render(plain.id);
     await screen.findByRole('heading', { level: 1 });
     const plainPairs = facts();
@@ -124,7 +133,10 @@ describe('ListingPage', () => {
         () => json({ detail: [{ type: 'uuid_parsing', loc: ['path'], msg: 'x' }] }, 422),
       ],
     ] as const) {
-      mockApi({ [`GET /listings/${id}`]: [reply()] });
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        [`GET /listings/${id}`]: [reply()],
+      });
       view = render(id);
       expect(
         await screen.findByRole('heading', { level: 1, name: he.listing.notFound }),
@@ -138,6 +150,7 @@ describe('ListingPage', () => {
 
     // 500: ErrorState; retry re-requests.
     const api = mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
       [`GET /listings/${katznelson.id}`]: [json({ detail: 'boom' }, 500), json(katznelson)],
     });
     render(katznelson.id);

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
+import { ApplySection } from '../applications/ApplySection';
 import { ApiError } from './api';
 import { formatDate, formatIls, formatRooms, todayInIsrael } from './format';
 import { ListingFacts } from './ListingFacts';
@@ -117,6 +118,8 @@ export function ListingPage() {
           </p>
           <p className="text-sm text-muted">{t('listing.locationHint')}</p>
         </section>
+
+        <ApplySection listing={l} />
       </article>
     );
   }
