@@ -10,7 +10,6 @@ import { ApiError, type ListingOut } from './api';
 import { DetailsStep } from './DetailsStep';
 import { todayInIsrael } from './format';
 import { PreviewStep, type PublishError } from './PreviewStep';
-import { listingState } from './StatusBadge';
 import { TypeStep } from './TypeStep';
 import { useCreateListing } from './useCreateListing';
 import { MY_LISTINGS_KEY } from './useMyListings';
@@ -152,7 +151,6 @@ export function ListingWizard({ listing }: Props) {
   const edit = usePatchListing(base?.id ?? '');
   const active = editing ? edit : create;
   const today = todayInIsrael();
-  const expired = listing !== undefined && listingState(listing, new Date()) === 'expired';
 
   // One active area is preselected; a selection that is no longer offered is dropped.
   const withArea = (values: ListingForm): ListingForm => {
@@ -401,11 +399,6 @@ export function ListingWizard({ listing }: Props) {
             style={{ width: `${String((step / 3) * 100)}%` }}
           />
         </div>
-        {expired && (
-          <p className="rounded-xl bg-warn px-3 py-2 text-start text-sm font-semibold text-warn-text">
-            {t('listings.edit.expiredHint')}
-          </p>
-        )}
       </div>
 
       <div
