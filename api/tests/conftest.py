@@ -5,12 +5,14 @@ service container) and Redis at `REDIS_URL`. The app under test is pointed at th
 overriding `DATABASE_URL` before any app module is imported, so no dependency overrides are needed.
 """
 
+import datetime as dt
 import os
 import re
 import uuid
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from alembic import command
@@ -40,6 +42,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.models import Listing  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
@@ -171,3 +174,61 @@ def signup(client: TestClient, outbox: Outbox, email: str, role: str) -> TestCli
     token = response.cookies["rent_session"]
     client.cookies.clear()
     return TestClient(client.app, cookies={"rent_session": token})
+
+
+def make_owner(engine: Engine, email: str) -> uuid.UUID:
+    """Insert an owner `users` row directly (no OTP, no session) and return its id."""
+    with engine.begin() as conn:
+        owner_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO users (email, display_name, role) "
+                "VALUES (:email, 'בעלים', 'owner') RETURNING id"
+            ),
+            {"email": email},
+        ).scalar_one()
+    return owner_id
+
+
+_LISTING_COLUMNS = frozenset(Listing.__table__.columns.keys())
+
+
+def make_listing(
+    engine: Engine, owner_id: uuid.UUID, area_id: uuid.UUID, **overrides: Any
+) -> uuid.UUID:
+    """Insert a live apartment listing directly and return its id. `overrides` may set any column
+    (including `created_at`). Bypasses the service and its owner cap on purpose: search tests need
+    more than 3 rows per owner."""
+    unknown = set(overrides) - _LISTING_COLUMNS
+    if unknown:
+        raise ValueError(f"not listings columns: {sorted(unknown)}")
+    values: dict[str, Any] = {
+        "owner_id": owner_id,
+        "area_id": area_id,
+        "listing_type": "apartment",
+        "city": "גבעתיים",
+        "street": "כצנלסון",
+        "rooms": Decimal("3.5"),
+        "floor": 3,
+        "total_floors": 5,
+        "size_sqm": 95,
+        "price_ils": 7200,
+        "available_from": dt.date.today() + dt.timedelta(days=30),
+        "entry_flexible": True,
+        "elevator": True,
+        "parking_spots": 1,
+        "furnished": "partial",
+        "pets_allowed": True,
+        "arnona_ils": 480,
+        "vaad_ils": 150,
+        "description": "דירה מוארת",
+        "status": "active",
+        "expires_at": dt.datetime.now(dt.UTC) + dt.timedelta(days=30),
+        **overrides,
+    }
+    columns = ", ".join(values)
+    params = ", ".join(f":{name}" for name in values)
+    with engine.begin() as conn:
+        listing_id: uuid.UUID = conn.execute(
+            text(f"INSERT INTO listings ({columns}) VALUES ({params}) RETURNING id"), values
+        ).scalar_one()
+    return listing_id
