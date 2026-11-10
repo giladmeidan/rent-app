@@ -1,0 +1,48 @@
+import { api } from '../../api/client';
+import type { components } from '../../api/schema';
+
+export type ListingIn = components['schemas']['ListingIn'];
+export type ListingOut = components['schemas']['ListingOut'];
+export type ListingPatch = components['schemas']['ListingPatch'];
+export type ListingType = ListingOut['listing_type'];
+export type ListingStatus = ListingOut['status'];
+export type Furnished = ListingOut['furnished'];
+
+/** The create body as the wizard sends it: every key present, `rooms` a JSON number. */
+export type ListingInBody = Required<Omit<ListingIn, 'rooms'>> & { rooms: number };
+
+/** A non-2xx answer. A network failure is the `TypeError` fetch throws, never this. */
+export class ApiError extends Error {
+  readonly status: number;
+  /** The body's `detail`: a code string such as `listing_cap_reached`, or FastAPI's error list. */
+  readonly detail: unknown;
+
+  constructor(method: string, path: string, status: number, body: unknown) {
+    super(`${method} ${path}: HTTP ${String(status)}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail =
+      typeof body === 'object' && body !== null && 'detail' in body ? body.detail : undefined;
+  }
+}
+
+export async function createListing(body: ListingInBody): Promise<ListingOut> {
+  const { data, error, response } = await api.POST('/listings', { body });
+  if (data === undefined) throw new ApiError('POST', '/listings', response.status, error);
+  return data;
+}
+
+export async function fetchMyListings(): Promise<ListingOut[]> {
+  const { data, error, response } = await api.GET('/me/listings');
+  if (data === undefined) throw new ApiError('GET', '/me/listings', response.status, error);
+  return data;
+}
+
+export async function patchListing(id: string, body: ListingPatch): Promise<ListingOut> {
+  const { data, error, response } = await api.PATCH('/listings/{listing_id}', {
+    params: { path: { listing_id: id } },
+    body,
+  });
+  if (data === undefined) throw new ApiError('PATCH', '/listings/{id}', response.status, error);
+  return data;
+}

@@ -11,6 +11,7 @@ export default {
         muted: '#57534E',
         accent: { DEFAULT: '#0E7C6B', tint: '#E6F4F1', text: '#0B5F52' },
         line: '#E7E5E4',
+        warn: { DEFAULT: '#FEF3C7', text: '#92400E' },
       },
     },
   },
