@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -100,5 +100,36 @@ describe('DetailsStep', () => {
       i18n.t('listings.errors.tooLong', { max: 80 }),
     );
     expect(api.calls('POST /listings')).toHaveLength(0);
+  });
+
+  it('price_reentry_by_keyboard_selects_value', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    const price = field(f.price) as HTMLInputElement;
+
+    change(f.price, '7200');
+    expect(price).toHaveValue('7,200');
+
+    // Tab back in: the bare digits, all selected, so typing replaces them.
+    act(() => {
+      price.focus();
+    });
+    expect(price).toHaveValue('7200');
+    expect([price.selectionStart, price.selectionEnd]).toEqual([0, 4]);
+
+    act(() => {
+      price.blur();
+    });
+    expect(price).toHaveValue('7,200');
+
+    // A click places the caret itself: no forced selection.
+    fireEvent.pointerDown(price);
+    act(() => {
+      price.focus();
+    });
+    expect(price).toHaveValue('7200');
+    expect(price.selectionStart).toBe(price.selectionEnd);
   });
 });

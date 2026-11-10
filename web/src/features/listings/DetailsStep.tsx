@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AreaOut } from '../../api/client';
@@ -49,7 +49,16 @@ type Props = {
 /** Step 2: the listing's facts, in CreateListing.dc.html's order. */
 export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: Props) {
   const { t } = useTranslation();
+  // The price shows `7,200` at rest and the bare digits while focused. The swap re-renders the
+  // value, which drops the select-all a browser gives a field entered by Tab, so typing would
+  // append ("72009"): re-select it, unless a pointer put the caret there.
   const [priceFocused, setPriceFocused] = useState(false);
+  const priceRef = useRef<HTMLInputElement>(null);
+  const pricePointer = useRef(false);
+  useLayoutEffect(() => {
+    if (priceFocused && !pricePointer.current) priceRef.current?.select();
+    pricePointer.current = false;
+  }, [priceFocused]);
 
   const errorId = (name: FieldName) => `${fieldId(name)}-error`;
   const hintId = (name: FieldName) => `${fieldId(name)}-hint`;
@@ -153,7 +162,10 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
     </div>
   );
 
-  const charsLeft = Math.max(0, LIMITS.description - visibleLength(form.description));
+  const charsLeft = Math.max(
+    0,
+    LIMITS.description - visibleLength(form.description, { multiline: true }),
+  );
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -252,6 +264,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
         <div className={`${box} min-h-[52px]`}>
           <input
             {...a11y('price_ils')}
+            ref={priceRef}
             type="text"
             inputMode="numeric"
             autoComplete="off"
@@ -260,6 +273,9 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
                 ? form.price_ils
                 : formatIls(Number(form.price_ils))
             }
+            onPointerDown={() => {
+              pricePointer.current = true;
+            }}
             onFocus={() => setPriceFocused(true)}
             onBlur={() => setPriceFocused(false)}
             onChange={(e) => onChange({ price_ils: e.target.value.replace(/\D/g, '') })}
