@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -244,5 +244,31 @@ describe('ListingWizard', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('ac4_publish_double_click_posts_once', async () => {
+    const post = deferred();
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [post.promise],
+      'GET /me/listings': [json([])],
+    });
+    await toPreview();
+
+    // Both clicks land before React re-renders the button as disabled.
+    act(() => {
+      fireEvent.click(publishButton());
+      fireEvent.click(publishButton());
+    });
+    await vi.waitFor(() => {
+      expect(publishButton()).toBeDisabled();
+    });
+    expect(api.calls('POST /listings')).toHaveLength(1);
+
+    post.resolve(json(listing(), 201));
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(api.calls('POST /listings')).toHaveLength(1);
   });
 });

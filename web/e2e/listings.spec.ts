@@ -56,7 +56,8 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByRole('button', { name: he.listings.next }).click();
 
   await expect(page.getByText(he.listings.preview.hint)).toBeVisible();
-  await page.getByRole('button', { name: he.listings.publish }).click();
+  // A double click publishes once (the second click lands before the button re-renders disabled).
+  await page.getByRole('button', { name: he.listings.publish }).dblclick();
 
   // My listings.
   await expect(page).toHaveURL('/me/listings');

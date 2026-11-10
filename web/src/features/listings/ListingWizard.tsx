@@ -122,8 +122,17 @@ export function ListingWizard() {
     setStep(next);
   }
 
+  // `disabled={isPending}` only takes effect after a re-render; a same-tick double click (or Enter
+  // twice) would send two POSTs and create two listings.
+  const publishing = useRef(false);
+
   function publish() {
+    if (publishing.current) return;
+    publishing.current = true;
     create.mutate(toListingIn(current), {
+      onSettled: () => {
+        publishing.current = false;
+      },
       onSuccess: () => navigate('/me/listings'),
       onError: (error) => {
         const kind = outcome(error);
@@ -157,7 +166,7 @@ export function ListingWizard() {
           break;
         }
       }
-    } else if (!create.isPending) {
+    } else {
       publish();
     }
   }
