@@ -26,6 +26,8 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     vaad_ils: null,
     description: null,
     created_at: '2026-11-01T10:00:00Z',
+    lat: null,
+    lng: null,
     ...overrides,
   };
 }

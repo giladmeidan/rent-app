@@ -14,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -113,6 +114,26 @@ def db_engine(migrated_db: Engine) -> Iterator[Engine]:
 def client(db_engine: Engine) -> Iterator[TestClient]:
     with TestClient(create_app()) as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches the network (spec 0003c NF1): every real httpx transport raises. Starlette's
+    `TestClient` and `httpx.MockTransport` use their own transports and are unaffected."""
+
+    def refuse(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
+        raise RuntimeError("network disabled in tests")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", refuse)
+
+
+@pytest.fixture
+def geo_clean() -> None:
+    """Delete the test sweeps' Redis keys (`test-geo:*`) before the test. The spec stack's worker
+    uses `geo:*` on the same Redis; those are never touched."""
+    r = get_redis()
+    for key in r.scan_iter(match="test-geo:*"):
+        r.delete(key)
 
 
 @pytest.fixture
@@ -232,3 +253,16 @@ def make_listing(
             text(f"INSERT INTO listings ({columns}) VALUES ({params}) RETURNING id"), values
         ).scalar_one()
     return listing_id
+
+
+def set_location(engine: Engine, listing_id: uuid.UUID, lng: float, lat: float) -> None:
+    """Mark a listing located at `(lng, lat)` (`geocode_status = 'ok'`), as the worker would."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE listings SET geocode_status = 'ok',"
+                " location = ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography"
+                " WHERE id = :id"
+            ),
+            {"id": listing_id, "lng": lng, "lat": lat},
+        )

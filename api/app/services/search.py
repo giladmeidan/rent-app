@@ -6,6 +6,9 @@ preference (PRODUCT.md "Gender preference — hard filter on ROOM listings"); li
 active area are hidden (PRODUCT.md "Launch area"). Both public functions below build on it and
 no other code here states any part of it, so search and the listing page can never disagree.
 
+The optional map box (spec 0003c) filters on the listing's **approximate** point, the same point the
+response's `lat` / `lng` show, so it reveals nothing the response does not.
+
 Nothing here reads the caller's session: a cookie changes nothing, and a non-public listing is
 indistinguishable from an unknown id (`ListingNotFoundError`, a 404)."""
 
@@ -13,8 +16,9 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from geoalchemy2 import Geography
 from sqlalchemy import Integer, Select, and_, cast, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from app.models import Area, Listing
 from app.schemas.search import SearchParams
@@ -22,12 +26,16 @@ from app.services.listings import ListingNotFoundError
 
 # A flexible-entry listing ("גמיש ±2 שבועות") counts as available this many days earlier.
 FLEXIBLE_ENTRY_DAYS = 14
+# Plain `::geography` (no typmod): the map box is a polygon, the column a point.
+_GEOGRAPHY = Geography(geometry_type=None)
 
 
 def _public_listings() -> Select[tuple[Listing]]:
-    """Every listing the public may see. The only statement of the visibility rule."""
+    """Every listing the public may see. The only statement of the visibility rule. Loads the
+    approximate point (`lat` / `lng`) in the same statement."""
     return (
         select(Listing)
+        .options(undefer(Listing.lat), undefer(Listing.lng))
         .join(Area, Area.id == Listing.area_id)
         .where(
             Listing.status == "active",
@@ -65,6 +73,11 @@ def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
         query = query.where(Listing.elevator.is_(True))
     if params.parking:
         query = query.where(Listing.parking_spots >= 1)
+    if params.bbox is not None:
+        # On the approximate point, the one the response shows; a NULL location never matches.
+        west, south, east, north = params.bbox
+        envelope = cast(func.ST_MakeEnvelope(west, south, east, north, 4326), _GEOGRAPHY)
+        query = query.where(func.ST_Intersects(Listing.location, envelope))
     return query
 
 
