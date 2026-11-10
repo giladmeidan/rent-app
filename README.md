@@ -57,6 +57,26 @@ curl -s 'localhost:8000/listings?price_max=8000'  # public search, no cookie; GE
 curl -s 'localhost:8000/listings?west=34.75&south=32.00&east=34.85&north=32.10'  # map box: only located listings inside it
 ```
 
+Applying needs a **seeker** session: sign up as above with `"role":"seeker"` and another email, saving the
+cookie to `seeker.txt`, then apply to a live listing (`LISTING_ID`, an `id` from `GET /listings`) with a
+message of 1–500 characters (one application per listing; again only after withdrawing). `GET
+/me/applications` lists yours with their status, `POST /me/applications/{id}/withdraw` withdraws one, and `GET
+/listings/{id}` shows `applicant_count`:
+
+```sh
+curl -b seeker.txt -X POST localhost:8000/listings/$LISTING_ID/applications -H 'Content-Type: application/json' \
+  -d '{"message":"שלום, אנחנו זוג שקט ומחפשים דירה לטווח ארוך"}'
+```
+
+Back as the owner, `GET /listings/{id}/applications` lists a listing's applicants (display name and message,
+newest first), `PATCH /listings/{id}/applications/{application_id}` with `{"status":"shortlisted"}`,
+`"submitted"` or `"declined"` shortlists, un-shortlists or declines one (a decline is final), and `GET
+/me/listings` shows `applicant_count` and `new_applicant_count` per listing:
+
+```sh
+curl -s -b cookies.txt localhost:8000/listings/$LISTING_ID/applications
+```
+
 ## Make targets
 
 | target | what it does |

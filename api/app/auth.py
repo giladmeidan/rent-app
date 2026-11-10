@@ -33,3 +33,11 @@ def current_owner(user: Annotated[User, Depends(current_user)]) -> User:
     if user.role != "owner":
         raise HTTPException(status_code=403, detail="owner_only")
     return user
+
+
+def current_seeker(user: Annotated[User, Depends(current_user)]) -> User:
+    """The logged-in seeker; 401 `unauthenticated` without a session, 403 `seeker_only` for an
+    owner (spec 0004a)."""
+    if user.role != "seeker":
+        raise HTTPException(status_code=403, detail="seeker_only")
+    return user

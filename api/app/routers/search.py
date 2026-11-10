@@ -1,4 +1,5 @@
-"""Public search endpoints (spec 0003a). Thin: all logic is in `services/search.py`.
+"""Public search endpoints (spec 0003a). Thin: all logic is in `services/search.py`; the listing
+page's view counter and applicant count (spec 0004a) are in `services/applications.py`.
 
 Both are **public**: no session dependency, so a cookie is ignored and no session query runs.
 A listing that is not public is a 404 `not_found`, the same body as an unknown id."""
@@ -11,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.schemas.error import ErrorOut
-from app.schemas.search import ListingPublic, ListingSearchOut, SearchParams
+from app.schemas.search import ListingDetail, ListingPublic, ListingSearchOut, SearchParams
+from app.services import applications as applications_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
 
@@ -32,7 +34,7 @@ def search_listings(params: Annotated[SearchParams, Query()], db: DbDep) -> List
 
 @router.get(
     "/listings/{listing_id}",
-    response_model=ListingPublic,
+    response_model=ListingDetail,
     responses={
         404: {
             "model": ErrorOut,
@@ -42,9 +44,15 @@ def search_listings(params: Annotated[SearchParams, Query()], db: DbDep) -> List
         **_DB_DOWN,
     },
 )
-def get_listing(listing_id: uuid.UUID, db: DbDep) -> ListingPublic:
+def get_listing(listing_id: uuid.UUID, db: DbDep) -> ListingDetail:
+    """A public listing with its applicant count; counts one view (`listings.view_count`). A 404
+    counts nothing."""
     try:
         listing = search_service.get_public_listing(db, listing_id)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
-    return ListingPublic.model_validate(listing)
+    count = applications_service.record_view(db, listing.id)
+    # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
+    return ListingDetail(
+        **ListingPublic.model_validate(listing).model_dump(), applicant_count=count
+    )

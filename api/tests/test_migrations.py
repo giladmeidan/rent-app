@@ -346,3 +346,119 @@ def test_ac1_listing_location_migration_roundtrip(migration_db_url: str) -> None
             assert _listing_columns(conn) >= _LOCATION_COLUMNS
     finally:
         engine.dispose()
+
+
+def _applications_exists(conn: Any) -> bool:
+    return bool(
+        conn.execute(text("SELECT to_regclass('public.applications') IS NOT NULL")).scalar()
+    )
+
+
+def test_ac10_applications_migration_roundtrip(migration_db_url: str) -> None:
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0004")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            owner_id = conn.execute(
+                text(
+                    "INSERT INTO users (email, display_name, role)"
+                    " VALUES ('owner@example.com', 'owner', 'owner') RETURNING id"
+                )
+            ).scalar_one()
+            seeker_id = conn.execute(
+                text(
+                    "INSERT INTO users (email, display_name, role)"
+                    " VALUES ('seeker@example.com', 'seeker', 'seeker') RETURNING id"
+                )
+            ).scalar_one()
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at)"
+                    " VALUES (:owner, :area, 'apartment', 'city', 'street', 3, 1, 80, 6000,"
+                    " current_date, false, 'none', false, now() + interval '90 days')"
+                    " RETURNING id"
+                ),
+                {"owner": owner_id, "area": area_id},
+            ).scalar_one()
+
+        command.upgrade(cfg, "0005")
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    text("SELECT view_count FROM listings WHERE id = :id"), {"id": listing_id}
+                ).scalar_one()
+                == 0
+            )
+            constraints = {
+                name: kind
+                for name, kind in conn.execute(
+                    text(
+                        "SELECT conname, contype FROM pg_constraint"
+                        " WHERE conrelid = 'applications'::regclass"
+                    )
+                ).tuples()
+            }
+            on_delete = {
+                table: action
+                for table, action in conn.execute(
+                    text(
+                        "SELECT confrelid::regclass::text, confdeltype FROM pg_constraint"
+                        " WHERE conrelid = 'applications'::regclass AND contype = 'f'"
+                    )
+                ).tuples()
+            }
+            indexes = set(
+                conn.execute(
+                    text("SELECT indexname FROM pg_indexes WHERE tablename = 'applications'")
+                ).scalars()
+            )
+        assert constraints["ck_applications_status"] == "c"
+        assert constraints["ck_applications_message_length"] == "c"
+        assert constraints["uq_applications_listing_seeker"] == "u"
+        assert on_delete == {"listings": "c", "users": "c"}  # both ON DELETE CASCADE
+        assert {"ix_applications_seeker_id", "uq_applications_listing_seeker"} <= indexes
+
+        insert = (
+            "INSERT INTO applications (listing_id, seeker_id, message, status)"
+            " VALUES (:listing, :seeker, :message, :status)"
+        )
+        ids = {"listing": listing_id, "seeker": seeker_id}
+        with engine.begin() as conn:
+            conn.execute(text(insert), {**ids, "message": "Hello", "status": "submitted"})
+        for params, constraint in (
+            ({"message": "Again", "status": "submitted"}, "uq_applications_listing_seeker"),
+            ({"message": "Hello", "status": "open"}, "ck_applications_status"),
+            ({"message": "", "status": "submitted"}, "ck_applications_message_length"),
+        ):
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                if constraint != "uq_applications_listing_seeker":
+                    conn.execute(text("DELETE FROM applications"))
+                conn.execute(text(insert), {**ids, **params})
+
+        command.downgrade(cfg, "0004")
+        with engine.connect() as conn:
+            assert not _applications_exists(conn)
+            assert "view_count" not in _listing_columns(conn)
+            assert (
+                conn.execute(
+                    text("SELECT count(*) FROM listings WHERE id = :id"), {"id": listing_id}
+                ).scalar_one()
+                == 1
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert _applications_exists(conn)
+            assert "view_count" in _listing_columns(conn)
+    finally:
+        engine.dispose()

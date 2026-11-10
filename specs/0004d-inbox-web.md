@@ -10,7 +10,7 @@ estimate: 1 coder run
 ## Goal
 After this ships, an owner sees on each card of `/me/listings` a link "מועמדויות (12) · 5 חדשות", opens
 `/me/listings/:id/applicants`, and gets the applicant inbox of `design/screens-v1/Inbox.dc.html` /
-`InboxDesktop.dc.html` without the parts later slices own: the listing's title and views, totals (applicants,
+`InboxDesktop.dc.html` without the parts later slices own: the listing's title and price, totals (applicants,
 shortlisted, new), filters (all / new / shortlist / declined), and one card per applicant with name, status,
 date and message, with "לרשימה הקצרה", "הסרה מהרשימה" and "דחייה". Serves Dev Plan slice 4 (Apply + inbox),
 part d of four (split in `0004a` Goal). API: `0004c`. PRODUCT.md "Chat — opens only on owner shortlist" (the
@@ -22,8 +22,8 @@ shortlist is stored here; chat is Slice 5).
   `fetchMyListings(): Promise<MyListingOut[]>`. `useMyListings` is typed by it (key unchanged).
   `usePatchListing.ts` `onSuccess`: **merge** the PATCH result into the cached row (`{ ...listing, ...updated }`,
   `setQueryData<MyListingOut[]>`) instead of replacing it, because `PATCH /listings/{id}` returns `ListingOut`
-  without the three counts (one line; AC7 pins it). `useCreateListing.ts` `onSuccess`: prepend `{ ...created,
-  applicant_count: 0, new_applicant_count: 0, view_count: 0 }` with `setQueryData<MyListingOut[]>` (the POST's
+  without the two counts (one line; AC7 pins it). `useCreateListing.ts` `onSuccess`: prepend `{ ...created,
+  applicant_count: 0, new_applicant_count: 0 }` with `setQueryData<MyListingOut[]>` (the POST's
   `ListingOut` has no counts either; verifier 1).
 - `web/src/features/applicants/` (new feature folder):
   - `api.ts`: `ApplicantOut`, `ApplicantStatus` (generated schema); `fetchApplicants(listingId)`,
@@ -51,7 +51,7 @@ shortlist is stored here; chat is Slice 5).
 - `web/src/locales/he.json`: the keys in UI.
 - Tests: `web/src/features/applicants/__tests__/ApplicantsPage.test.tsx` (new), `fixtures.ts` (new:
   `applicant(overrides)` → `ApplicantOut`); `web/src/features/listings/__tests__/fixtures.ts` `listing()` returns
-  `MyListingOut` (`applicant_count: 0, new_applicant_count: 0, view_count: 0` defaults); additions to
+  `MyListingOut` (`applicant_count: 0, new_applicant_count: 0` defaults); additions to
   `MyListingsPage.test.tsx` and `RequireOwner.test.tsx` (the applicants path joins its `PATHS` / `TITLES` and
   route tree, with `'GET /listings/A/applications': [json([])]`).
 - E2E: `web/e2e/inbox.spec.ts` (new), using `0004b`'s `signUp` (with its `name` option, so the seeker is
@@ -62,6 +62,8 @@ shortlist is stored here; chat is Slice 5).
 - Match score, "sorted by match", the applicant's age / household / occupation / move-in / "why the match is high"
   (artboards): Slice 6 and 7. Phone-verified badge: Slice 10/12.
 - "צ'אט" and "הצעת סיור" (InboxDesktop detail pane): Slice 5.
+- The listing's view count (artboard header): Gilad, 2026-11-10 — owners see applicant counts only; `MyListingOut`
+  has no `view_count` (`0004c` Q-B).
 - The desktop two-pane layout (list + selected applicant detail): one responsive column (`max-w-[640px]`), as
   `0003b` chose for search; FOLLOWUPS candidate for Slice 9.
 - An all-listings inbox ("כל המודעות" on desktop, "מועמדויות" in the artboard's bottom tab bar): per listing only.
@@ -76,7 +78,7 @@ None. Consumes `0004c`'s API.
 No endpoint is added or changed here. Consumed:
 | Method | Path | Auth rule | Request | Response | Errors |
 | --- | --- | --- | --- | --- | --- |
-| GET | /me/listings (`0004c`) | owner session | – | 200 `list[MyListingOut]` (with `applicant_count`, `new_applicant_count`, `view_count`) | 401 · 403 · 503 |
+| GET | /me/listings (`0004c`) | owner session | – | 200 `list[MyListingOut]` (with `applicant_count`, `new_applicant_count`) | 401 · 403 · 503 |
 | GET | /listings/{id}/applications (`0004c`) | owner session, own listing | – | 200 `list[ApplicantOut]` | 401 · 403 · 404 · 422 · 503 |
 | PATCH | /listings/{id}/applications/{application_id} (`0004c`) | owner session, own listing, application of that listing | `{"status": "shortlisted" \| "submitted" \| "declined"}` | 200 `ApplicantOut` | 401 · 403 · 404 · 409 `invalid_transition` · 422 · 503 |
 | PATCH | /listings/{id} (`0002a`, from the pause / resume button) | owner session, own listing | `{"status": …}` | 200 `ListingOut` (no counts: merged into the cache) | unchanged |
@@ -95,7 +97,7 @@ card on "my listings" follows `0002e`'s edit link. Single column `max-w-[640px]`
 - not found (the id is not in the owner's list — another owner's, unknown, malformed): `<h1>`
   `applicants.notFound` and the back link; **no** `GET /listings/{id}/applications` is sent.
 - found: `<h1>` `applicants.title`; under it the listing's `listings.card.title` (`<p>`, bold) and a muted line
-  `formatIls(price_ils)` `listings.units.ils` · `applicants.views` (`{{count}}` = `view_count`); then:
+  `formatIls(price_ils)` `listings.units.ils` (no view count: Gilad, 2026-11-10); then:
   - applicants loading (`data === undefined`): three `Skeleton` cards in a `<ul aria-busy>`; error (`data ===
     undefined`): `ErrorState`, retry refetches;
   - empty (no applicants): `EmptyState` `applicants.empty`; no totals, no filters;
@@ -142,7 +144,6 @@ focus is never lost after an action (the card's `<h2>`, else the pressed filter 
 | key | value |
 | --- | --- |
 | `applicants.title` | `מועמדויות` |
-| `applicants.views` | `{{count}} צפיות` |
 | `applicants.stats.total` | `מועמדויות` |
 | `applicants.stats.shortlisted` | `ברשימה הקצרה` |
 | `applicants.stats.new` | `חדשות` |
@@ -173,7 +174,7 @@ Unit tests use the existing harness (`mockApi`, `renderRoutes`, `testQueryClient
 are written as `\uXXXX` escapes in the tests (and here).
 - [ ] AC1 Given `/me` resolves to an owner and `GET /me/listings` returns `[listing({ id: A })]`, When `/me/listings/A/applicants` is opened, Then `<h1>` `applicants.title`; Given `/me` 401 → `/login`; a seeker → `/`; `/me` pending → skeleton and no redirect — the path joins `PATHS` / `TITLES` and the route tree of the existing test — `web/src/features/listings/__tests__/RequireOwner.test.tsx::ac1_owner_only_routes`
 - [ ] AC2 Given `GET /me/listings` pending → skeleton with `aria-busy`; failing → `ErrorState`, retry refetches; returning only A, When `/me/listings/B/applicants`, `/me/listings/<random uuid>/applicants` and `/me/listings/abc/applicants` are opened, Then `<h1>` `applicants.notFound` with a link to `/me/listings`, and no `GET /listings/…/applications` request; Given A found and `GET /listings/A/applications` pending → skeleton cards with `aria-busy`; failing → `ErrorState`, retry refetches; `[]` → `applicants.empty` and no filter group — `web/src/features/applicants/__tests__/ApplicantsPage.test.tsx::ac2_states`
-- [ ] AC3 Given A with `view_count: 214`, `price_ils: 7200` and five applicants (2 submitted, 2 shortlisted, 1 declined), Then the listing's `listings.card.title`, `applicants.views` with 214, totals 5 / 2 / 2, filter buttons `applicants.filter.all` (5), `.new` (2), `.shortlisted` (2), `.declined` (1) with only "all" `aria-pressed="true"` and five cards; When `.new` is clicked, Then exactly the two submitted cards and `.new` pressed; When `.declined`, Then one; Given a list with no declined applicant, When `.declined` is clicked, Then `applicants.emptyFilter` — `ApplicantsPage.test.tsx::ac3_header_totals_and_filters`
+- [ ] AC3 Given A with `price_ils: 7200` and five applicants (2 submitted, 2 shortlisted, 1 declined), Then the listing's `listings.card.title`, the price line with no view count (no `צפיות`), totals 5 / 2 / 2, filter buttons `applicants.filter.all` (5), `.new` (2), `.shortlisted` (2), `.declined` (1) with only "all" `aria-pressed="true"` and five cards; When `.new` is clicked, Then exactly the two submitted cards and `.new` pressed; When `.declined`, Then one; Given a list with no declined applicant, When `.declined` is clicked, Then `applicants.emptyFilter` — `ApplicantsPage.test.tsx::ac3_header_totals_and_filters`
 - [ ] AC4 Given an applicant `applicant_name: "\u05de\u05d9\u05db\u05dc"`, `status: "submitted"`, `message: "line one\nline two"`, Then the card shows the initial `"\u05de"` (`aria-hidden`), an `<h2>` with the name, the chip `applicants.status.submitted`, `applicants.appliedAt` with the formatted date, the message on two lines, and the buttons `applicants.actions.shortlist` and `applicants.actions.decline` whose `aria-describedby` names the `<h2>`; Given `shortlisted`, Then `applicants.actions.unshortlist` and `decline`; Given `declined`, Then the chip `applicants.status.declined` and no buttons — `ApplicantsPage.test.tsx::ac4_applicant_card`
 - [ ] AC5 Given the submitted applicant P on A, When `applicants.actions.shortlist` is clicked with the PATCH `deferred()`, Then exactly one `PATCH /listings/A/applications/P` with body exactly `{"status": "shortlisted"}` and `credentials: 'include'`, both buttons disabled and the clicked one `aria-busy`; on 200 Then the chip `applicants.status.shortlisted`, the buttons `unshortlist` + `decline`, the totals' shortlisted count +1 and new −1, focus on the card's `<h2>`, the `role="status"` line contains the name, and the `['me','listings']` query is invalidated; Given filter `.new` is pressed, When a submitted applicant is shortlisted (200), Then that card is gone from the list and focus is on the `.new` filter button; When `unshortlist` is clicked, Then the body is `{"status": "submitted"}`; When `decline` is clicked and `window.confirm` (spied) returns `false`, Then it was called with the `applicants.declineConfirm` text containing the name and no PATCH is sent; returning `true`, Then the body is `{"status": "declined"}` and on 200 the card has no buttons — `ApplicantsPage.test.tsx::ac5_shortlist_unshortlist_decline`
 - [ ] AC6 Given a click on `shortlist`, When the PATCH answers 404 (and the refetch no longer contains P), Then `GET /listings/A/applications` is requested again, `applicants.errors.gone` shows (`role="alert"`) and focus is on the pressed filter button; 409 `{"detail":"invalid_transition"}` (the refetch returns P as `declined`) → requested again, `common.error` in the card and focus on the card's `<h2>`; 401 → the location is `/login` (via `setQueryData(ME_KEY, null)`); 403, with `'GET /me': [json(owner), json(seeker)]` → the location is `/` (via the `ME_KEY` invalidation, not a hard navigate); a network error → `common.error` in the card, the chip still reads `applicants.status.submitted` and the buttons are enabled again; Given a cached inbox and a `GET /me/listings` background refetch that fails after a successful action, Then the inbox stays on screen (no `ErrorState`) — `ApplicantsPage.test.tsx::ac6_action_errors`
@@ -223,7 +224,7 @@ one column on desktop for now.
 
     Spec 0004d - Inbox web: the owner's applicants inbox   (verified, part 4 of 4, web, depends on 0004b + 0004c)
     What a user can do after this: an owner sees "applicants (N) · M new" on each card of /me/listings, opens the
-             listing's inbox with totals, views and four filters, reads each applicant's name and message, and
+             listing's inbox with totals and four filters, reads each applicant's name and message, and
              shortlists, un-shortlists or declines (with a confirmation).
     Decisions I need from you: none new; it follows 0004c's Q6 (a decline is final and confirmed) and 0004a's Q1 (no
              notifications: the "new" badge is the signal) [both on the rec].

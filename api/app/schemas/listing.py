@@ -193,3 +193,13 @@ class ListingOut(BaseModel):
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime
+
+
+class MyListingOut(ListingOut):
+    """One of the caller's own listings on `GET /me/listings` (0004c): `ListingOut` plus its
+    applicant count (every application but withdrawn ones) and new-applicant count (`submitted`).
+    No `view_count`: owners do not see it (Gilad, 2026-11-10). `POST` / `PATCH /listings` keep
+    returning `ListingOut`."""
+
+    applicant_count: int
+    new_applicant_count: int

@@ -158,8 +158,8 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
     response = client.get(f"/listings/{world.a}")
     assert response.status_code == 200
     one = response.json()
-    assert set(one) == PUBLIC_KEYS
-    assert one == item
+    assert set(one) == PUBLIC_KEYS | {"applicant_count"}  # spec 0004a
+    assert one == {**item, "applicant_count": 0}
 
 
 def test_ac3_price_and_rooms_ranges(

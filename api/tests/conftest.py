@@ -43,7 +43,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import Listing  # noqa: E402
+from app.models import Application, Listing  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
@@ -104,9 +104,10 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `listings`, `sessions`, `users` and `areas` tables."""
+    """Per-test engine on clean `applications`, `listings`, `sessions`, `users` and `areas`
+    tables."""
     with migrated_db.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE listings, sessions, users, areas"))
+        conn.execute(text("TRUNCATE TABLE applications, listings, sessions, users, areas"))
     yield migrated_db
 
 
@@ -210,7 +211,48 @@ def make_owner(engine: Engine, email: str) -> uuid.UUID:
     return owner_id
 
 
+def make_seeker(
+    engine: Engine, email: str, display_name: str = "\u05de\u05d9\u05db\u05dc"
+) -> uuid.UUID:
+    """Insert a seeker `users` row directly (no OTP, no session) and return its id."""
+    with engine.begin() as conn:
+        seeker_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO users (email, display_name, role) "
+                "VALUES (:email, :display_name, 'seeker') RETURNING id"
+            ),
+            {"email": email, "display_name": display_name},
+        ).scalar_one()
+    return seeker_id
+
+
 _LISTING_COLUMNS = frozenset(Listing.__table__.columns.keys())
+_APPLICATION_COLUMNS = frozenset(Application.__table__.columns.keys())
+
+
+def make_application(
+    engine: Engine, listing_id: uuid.UUID, seeker_id: uuid.UUID, **overrides: Any
+) -> uuid.UUID:
+    """Insert an application directly and return its id. Defaults: `message='Hello'`,
+    `status='submitted'`; `overrides` may set any column (including `created_at`). Bypasses the
+    service and its rate limit."""
+    unknown = set(overrides) - _APPLICATION_COLUMNS
+    if unknown:
+        raise ValueError(f"not applications columns: {sorted(unknown)}")
+    values: dict[str, Any] = {
+        "listing_id": listing_id,
+        "seeker_id": seeker_id,
+        "message": "Hello",
+        "status": "submitted",
+        **overrides,
+    }
+    columns = ", ".join(values)
+    params = ", ".join(f":{name}" for name in values)
+    with engine.begin() as conn:
+        application_id: uuid.UUID = conn.execute(
+            text(f"INSERT INTO applications ({columns}) VALUES ({params}) RETURNING id"), values
+        ).scalar_one()
+    return application_id
 
 
 def make_listing(
