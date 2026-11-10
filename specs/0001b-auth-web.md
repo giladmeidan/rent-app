@@ -1,7 +1,7 @@
 ---
 id: 0001b
 title: A person signs up (as owner or seeker) or logs in from the web app with an email code, and the header shows who they are with a logout button
-status: in-review
+status: done
 depends_on: [0000b, 0001a]
 reviewers: [code, qa, ux, security]   # ux: two new screens + header state; security: credentials handling in the client, no code leakage
 estimate: 1 coder run
@@ -207,3 +207,5 @@ Verifier notes (2026-11-09): round 1 rejected with 14 findings, all applied abov
     Changed in PRODUCT.md: nothing (dependency change recorded in this spec's Scope)
     Next spec I propose: 0002a — Owner posts a listing (API)  (needs your decisions: listing fields and required photos
               per PRODUCT.md "Listing data"; whether a listing can be published without a verified phone)
+
+    Spec 0001b — Auth web   MERGED 2352515 (PR #4, 2026-11-10), CI api 51 s · web 46 s · e2e 2 min 14 s.

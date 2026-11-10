@@ -16,7 +16,11 @@ and delegates. It never writes application code itself. Delegation chain:
    fixes → digest and reports back only the PR link, the CI result and the digest. The orchestrator never reads
    diffs or agent transcripts into its own context.
 2. **Queue.** The orchestrator moves to the next `verified` spec on its own; it does not wait for a new session
-   or a go-ahead between specs. Gilad approves spec digests in batches.
+   or a go-ahead between specs. Gilad approves spec digests in batches. A spec is **ready to build** when it is
+   `verified` and every spec in its `depends_on` is merged or open as a PR. The orchestrator starts a build
+   session for **every** ready spec at once, not one at a time (Gilad, 2026-11-10); the only serialisation is
+   `depends_on`. Exception: the Vite dev server is pinned to port 5173 on this Mac, so two **web** specs do not
+   build at the same time locally — an API spec and a web spec, or two API specs, do.
 3. **Parallel.** Specs with no `depends_on` between them build at the same time, each in its own worktree
    (`../rent-app-NNNN`) with its own `.env` (`COMPOSE_PROJECT_NAME=rent-app-NNNN` and its own `DB_PORT`,
    `REDIS_PORT`, `API_PORT`). A web half starts from the API half's branch as soon as that PR is open and
