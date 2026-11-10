@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { addDays } from '../format';
+import { listing } from './fixtures';
 import {
+  changedFields,
   cleanText,
   emptyForm,
+  formFromListing,
   toListingIn,
   validate,
   type FieldName,
@@ -268,5 +271,78 @@ describe('validate', () => {
       city: '\u05d0\u05d1',
       street: '\u05d2',
     });
+  });
+
+  it('ac11_form_from_listing_and_changed_fields', () => {
+    const nulls = { total_floors: null, arnona_ils: null, vaad_ils: null, description: null };
+    const stored = [
+      listing({ ...nulls, rooms: 3 }),
+      listing({ ...nulls, rooms: 3.5 }),
+      listing({ ...nulls, rooms: 12 }),
+      listing({
+        rooms: 3.5,
+        total_floors: 5,
+        arnona_ils: 480,
+        vaad_ils: 0,
+        parking_spots: 2,
+        furnished: 'partial',
+        elevator: true,
+        pets_allowed: true,
+        entry_flexible: true,
+        description: '\u05e9\u05d5\u05e8\u05d4\n\u05e9\u05e0\u05d9\u05d9\u05d4',
+        available_from: addDays(today, -40),
+      }),
+      listing({ listing_type: 'room', available_from: addDays(today, -1) }),
+    ];
+    for (const l of stored) {
+      const form = formFromListing(l);
+      expect(changedFields(l, toListingIn(form)), l.id).toEqual({});
+      expect(validate(form, today), l.id).toEqual({});
+    }
+
+    const l = listing({
+      rooms: 3.5,
+      total_floors: 5,
+      city: '\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd',
+    });
+    const form = formFromListing(l);
+    expect(form).toMatchObject({
+      rooms: '3.5',
+      floor: String(l.floor),
+      total_floors: '5',
+      price_ils: String(l.price_ils),
+      parking_spots: '0',
+      arnona_ils: '',
+      vaad_ils: '',
+      description: '',
+    });
+    const diff = (patch: Partial<ListingForm>) =>
+      changedFields(l, toListingIn({ ...form, ...patch }));
+
+    expect(diff({ total_floors: '' })).toEqual({ total_floors: null });
+    expect(diff({ description: '  ' })).toEqual({});
+    expect(
+      changedFields({ ...l, description: 'x' }, toListingIn({ ...form, description: '  ' })),
+    ).toEqual({ description: null });
+    expect(diff({ rooms: '4' })).toEqual({ rooms: 4 });
+    // Cleaned before the compare: surrounding spaces are no change.
+    expect(diff({ city: ' \u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd ' })).toEqual({});
+    const other = '00000000-0000-0000-0000-00000000b2b2';
+    expect(diff({ area_id: other })).toEqual({ area_id: other });
+    expect(diff({ price_ils: '7500', arnona_ils: '480' })).toEqual({
+      price_ils: 7500,
+      arnona_ils: 480,
+    });
+    // `status` is never a key, whatever changes.
+    const everything = diff({
+      listing_type: 'room',
+      rooms: '5',
+      floor: '9',
+      price_ils: '9000',
+      elevator: true,
+      furnished: 'full',
+    });
+    expect(Object.keys(everything)).not.toContain('status');
+    expect(Object.keys(changedFields({ ...l, status: 'paused' }, toListingIn(form)))).toEqual([]);
   });
 });

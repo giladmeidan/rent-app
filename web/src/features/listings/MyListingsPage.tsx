@@ -1,5 +1,6 @@
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -15,39 +16,56 @@ import { usePatchListing } from './usePatchListing';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 function ListingRow({ listing, now, today }: { listing: ListingOut; now: Date; today: string }) {
   const { t } = useTranslation();
   const patch = usePatchListing(listing.id);
   const state = listingState(listing, now);
+  const titleId = useId();
 
-  // Expired listings have no action: renewal is Slice 10.
+  // Expired listings cannot be paused or resumed (renewal is Slice 10); every listing can be edited.
   const next = state === 'live' ? 'paused' : state === 'paused' ? 'active' : null;
   const capReached = patch.error instanceof ApiError && patch.error.status === 409;
 
   return (
     <li>
-      <ListingCard listing={listing} today={today} badge={<StatusBadge state={state} />}>
-        {next !== null && (
-          <div className="flex flex-col items-start gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => patch.mutate({ status: next })}
-              disabled={patch.isPending}
-              aria-busy={patch.isPending}
-              className={`min-h-[44px] rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
-            >
-              {next === 'paused' ? t('listings.actions.pause') : t('listings.actions.resume')}
-            </button>
-            {patch.isError && (
-              <p role="alert" className={fieldError}>
-                {capReached
-                  ? t('listings.errors.capReached', { cap: LISTING_CAP })
-                  : t('common.error')}
-              </p>
+      <ListingCard
+        listing={listing}
+        today={today}
+        badge={<StatusBadge state={state} />}
+        titleId={titleId}
+      >
+        <div className="flex flex-col items-start gap-2 pt-1">
+          <div className="flex flex-wrap gap-2">
+            {next !== null && (
+              <button
+                type="button"
+                onClick={() => patch.mutate({ status: next })}
+                disabled={patch.isPending}
+                aria-busy={patch.isPending}
+                aria-describedby={titleId}
+                className={action}
+              >
+                {next === 'paused' ? t('listings.actions.pause') : t('listings.actions.resume')}
+              </button>
             )}
+            <Link
+              to={`/me/listings/${listing.id}/edit`}
+              aria-describedby={titleId}
+              className={action}
+            >
+              {t('listings.actions.edit')}
+            </Link>
           </div>
-        )}
+          {patch.isError && (
+            <p role="alert" className={fieldError}>
+              {capReached
+                ? t('listings.errors.capReached', { cap: LISTING_CAP })
+                : t('common.error')}
+            </p>
+          )}
+        </div>
       </ListingCard>
     </li>
   );
@@ -56,6 +74,11 @@ function ListingRow({ listing, now, today }: { listing: ListingOut; now: Date; t
 export function MyListingsPage() {
   const { t } = useTranslation();
   const listings = useMyListings();
+  const location = useLocation();
+  // Set by the edit wizard's save (`navigate(…, { state: { saved: true } })`).
+  const state: unknown = location.state;
+  const saved =
+    typeof state === 'object' && state !== null && 'saved' in state && state.saved === true;
   const now = new Date();
   const today = todayInIsrael(now);
 
@@ -101,6 +124,11 @@ export function MyListingsPage() {
         {live !== undefined && (
           <p className="text-sm text-muted">
             {t('listings.mine.count', { live, cap: LISTING_CAP })}
+          </p>
+        )}
+        {saved && (
+          <p role="status" className="text-sm font-semibold text-accent-text">
+            {t('listings.edit.saved')}
           </p>
         )}
       </div>

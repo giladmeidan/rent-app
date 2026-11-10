@@ -17,6 +17,7 @@ import { gushDan, listing, owner } from './fixtures';
 import {
   areasLoaded,
   chooseApartmentAndContinue,
+  errorFor,
   fillValidDetails,
   IN_30_DAYS,
   nextButton,
@@ -211,7 +212,22 @@ describe('ListingWizard', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // 422 with a list detail: common.error, no retry.
+    // 422 with a model-level list detail: common.error, no retry.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [
+        json({ detail: [{ loc: ['body'], msg: 'bad', type: 'value_error' }] }, 422),
+      ],
+    });
+    view = await toPreview();
+    fireEvent.click(publishButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // 422 naming a field: back on step 2, the error under city and focus on it (not the <h1>);
+    // a blur out of city keeps it.
     mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [
@@ -220,8 +236,18 @@ describe('ListingWizard', () => {
     });
     view = await toPreview();
     fireEvent.click(publishButton());
-    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
-    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    await vi.waitFor(() => {
+      expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    });
+    const city = screen.getByLabelText(he.listings.fields.city);
+    expect(errorFor(city)).toHaveTextContent(he.listings.errors.invalid);
+    expect(document.activeElement).toBe(city);
+    act(() => {
+      screen.getByLabelText(he.listings.fields.street).focus();
+    });
+    expect(document.activeElement).not.toBe(city);
+    expect(errorFor(city)).toHaveTextContent(he.listings.errors.invalid);
+    expect(screen.queryByText('bad')).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
 

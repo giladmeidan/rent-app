@@ -37,13 +37,15 @@ type Props = {
   children?: ReactNode;
   /** Makes the title a link (search results); its hit area covers the whole card. */
   to?: string;
+  /** Id of the title, so the row's actions can name the listing (`aria-describedby`). */
+  titleId?: string;
 };
 
 /**
  * The wizard's preview, the "my listings" row and a search result: Listing.dc.html's title block
  * and chips.
  */
-export function ListingCard({ listing, today, badge, children, to }: Props) {
+export function ListingCard({ listing, today, badge, children, to, titleId }: Props) {
   const { t } = useTranslation();
 
   const chips: string[] = [];
@@ -111,7 +113,7 @@ export function ListingCard({ listing, today, badge, children, to }: Props) {
           </p>
           {badge}
         </div>
-        <h2 className="break-words text-lg font-bold leading-snug">
+        <h2 id={titleId} className="break-words text-lg font-bold leading-snug">
           {to === undefined ? (
             title
           ) : (

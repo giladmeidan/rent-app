@@ -3,7 +3,7 @@
 // `toListingIn` builds from a form that passes here is not a 422 (except `unknown_area`, which only
 // the API can know).
 import { addDays } from './format';
-import type { Furnished, ListingInBody, ListingType } from './api';
+import type { Furnished, ListingInBody, ListingOut, ListingPatch, ListingType } from './api';
 
 /** Every input is kept as the string the person typed; `toListingIn` converts. */
 export type ListingForm = {
@@ -73,7 +73,9 @@ export type FieldError =
   | { key: 'listings.errors.range'; min: number; max: number }
   | { key: 'listings.errors.floors' }
   | { key: 'listings.errors.tooLong'; max: number }
-  | { key: 'listings.errors.dateRange' };
+  | { key: 'listings.errors.dateRange' }
+  /** The API rejected the field (a 422 naming it); its English `msg` is never shown. */
+  | { key: 'listings.errors.invalid' };
 
 export type FieldErrors = Partial<Record<FieldName, FieldError>>;
 
@@ -242,4 +244,45 @@ export function toListingIn(form: ListingForm): ListingInBody {
     street: cleanText(form.street),
     area_id: form.area_id,
   };
+}
+
+const fromOptionalInt = (value: number | null) => (value === null ? '' : String(value));
+
+/** The edit wizard's starting form: a stored listing as the strings its inputs hold. */
+export function formFromListing(listing: ListingOut): ListingForm {
+  return {
+    listing_type: listing.listing_type,
+    area_id: listing.area_id,
+    city: listing.city,
+    street: listing.street,
+    rooms: String(listing.rooms),
+    floor: String(listing.floor),
+    total_floors: fromOptionalInt(listing.total_floors),
+    size_sqm: String(listing.size_sqm),
+    price_ils: String(listing.price_ils),
+    available_from: listing.available_from,
+    entry_flexible: listing.entry_flexible,
+    elevator: listing.elevator,
+    parking_spots: String(listing.parking_spots),
+    furnished: listing.furnished,
+    pets_allowed: listing.pets_allowed,
+    arnona_ils: fromOptionalInt(listing.arnona_ils),
+    vaad_ils: fromOptionalInt(listing.vaad_ils),
+    description: listing.description ?? '',
+  };
+}
+
+/**
+ * The `PATCH /listings/{id}` body: every key of `body` (as `toListingIn` builds it) whose value
+ * differs from the stored listing's. A cleared nullable field is already `null` in `body`. Never
+ * `status` (pausing stays on "my listings").
+ */
+export function changedFields(listing: ListingOut, body: ListingInBody): ListingPatch {
+  const patch: Record<string, unknown> = {};
+  for (const key of Object.keys(body) as (keyof ListingInBody)[]) {
+    const same =
+      key === 'rooms' ? Number(listing.rooms) === body.rooms : listing[key] === body[key];
+    if (!same) patch[key] = body[key];
+  }
+  return patch as ListingPatch;
 }

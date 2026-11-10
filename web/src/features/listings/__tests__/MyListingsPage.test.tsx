@@ -1,9 +1,10 @@
 import { fireEvent, screen, within } from '@testing-library/react';
+import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
-import { deferred, json, mockApi, renderAt } from '../../auth/__tests__/harness';
+import { deferred, json, mockApi, renderAt, renderRoutes } from '../../auth/__tests__/harness';
 import { MyListingsPage } from '../MyListingsPage';
 import { listing } from './fixtures';
 
@@ -135,5 +136,48 @@ describe('MyListingsPage', () => {
     expect(within(firstCard).getByRole('alert')).toHaveTextContent(
       i18n.t('listings.errors.capReached', { cap: 3 }),
     );
+  });
+
+  it('ac10_edit_link_on_every_card', async () => {
+    const live = listing({ street: '\u05d0\u05d7\u05d3' });
+    const paused = listing({ street: '\u05e9\u05ea\u05d9\u05d9\u05dd', status: 'paused' });
+    const expired = listing({
+      street: '\u05e9\u05dc\u05d5\u05e9',
+      expires_at: '2020-01-01T00:00:00Z',
+    });
+    mockApi({ 'GET /me/listings': [json([live, paused, expired])] });
+    let view = render();
+    const cards = await screen.findAllByRole('article');
+    expect(cards).toHaveLength(3);
+    [live, paused, expired].forEach((l, i) => {
+      const card = cards[i] as HTMLElement;
+      const title = i18n.t('listings.card.title', { rooms: '3', street: l.street, city: l.city });
+      const link = within(card).getByRole('link', { name: he.listings.actions.edit });
+      expect(link).toHaveAttribute('href', `/me/listings/${l.id}/edit`);
+      expect(link).toHaveAccessibleDescription(title);
+      const describedBy = document.getElementById(link.getAttribute('aria-describedby') ?? '');
+      expect(describedBy).toHaveTextContent(title);
+      for (const button of within(card).queryAllByRole('button')) {
+        expect(button).toHaveAccessibleDescription(title);
+      }
+    });
+    // The pause / resume buttons exist on the live and paused cards (and carry the description).
+    expect(within(cards[0] as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    expect(within(cards[1] as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    // (The harness's location probe is an <output>, which is also a status.)
+    expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // After a save: the status line.
+    mockApi({ 'GET /me/listings': [json([live])] });
+    view = renderRoutes(
+      { pathname: '/me/listings', state: { saved: true } },
+      <Routes>
+        <Route path="/me/listings" element={<MyListingsPage />} />
+      </Routes>,
+    );
+    expect(await screen.findByText(he.listings.edit.saved)).toHaveAttribute('role', 'status');
+    view.unmount();
   });
 });

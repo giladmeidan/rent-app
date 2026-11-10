@@ -5,6 +5,7 @@ import { expect, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
 import { renderRoutes, testQueryClient } from '../../auth/__tests__/harness';
+import { EditListingPage } from '../EditListingPage';
 import { addDays, todayInIsrael } from '../format';
 import { MyListingsPage } from '../MyListingsPage';
 import { NewListingPage } from '../NewListingPage';
@@ -15,6 +16,7 @@ export const routes = (
     <Route path="/login" element={<p>login</p>} />
     <Route path="/listings/new" element={<NewListingPage />} />
     <Route path="/me/listings" element={<MyListingsPage />} />
+    <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
   </Routes>
 );
 

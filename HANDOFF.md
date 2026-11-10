@@ -22,15 +22,23 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1 (auth), 2 (owner posts listing) and 3 list-search (`0003a` API + `0003b` web) are merged, plus the
-`0002d` text-safety hardening. Nothing is in flight: no open PRs, no spec worktrees, no spec stacks. Next: spec
-the map (`0003c`) and web listing edit, then Slice 4.
+Slices 1–2, list search (`0003a`/`0003b`), text safety (`0002d`) and web listing edit (`0002e`) are merged.
+In flight: `0003c` map API build; Slice 4 specs being drafted. `0002f` is verified and will be built in a
+separate session (not started by the orchestrator).
 
 Last updated:
 2026-11-10
 
 ## Current Work
-None in flight. The queue is empty of `verified` specs; the next specs must be written (Next Steps 1).
+- **0003c Map API** — building in session "Build 0003c — Map API" (worktree `../rent-app-0003c`, branch
+  `spec/0003c-map-api`, stack `rent-app-0003c` on 5442/6388/8010, `make dev-api`). No PR yet. On merge: remove
+  the worktree and branch, mark `done`, then start `0003d`.
+- **0002f Expired listing read-only** (`specs/0002f-expired-listing-read-only.md`, `verified`, 9202a5d) —
+  worktree prepared at `../rent-app-0002f` (branch `spec/0002f-expired-read-only`, `.env` on 5443/6389/8011);
+  Gilad will build it in a different session. It is a web spec: it needs port 5173 (free now).
+- **0003d Map web** (`verified`, dd9de8b) — waits for `0003c` to merge and for 5173 (not while 0002f builds).
+- **Slice 4** (`0004a` apply API, `0004b` apply web) — a drafter agent is writing them; then one verifier round
+  each, findings applied by the orchestrator, Gilad's questions put to him.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -47,26 +55,30 @@ None in flight. The queue is empty of `verified` specs; the next specs must be w
   surrogates, blank letters (U+3164, U+2800 …), invisible unassigned ranges, >4 stacked combining marks;
   city/street need a letter or digit; the wizard's `cleanText` strips the same set. Security blocker found and
   fixed in the one round.
+- [x] 0002e Edit listing web — PR #10 (9023687): `/me/listings/:id/edit` reuses the wizard, sends only changed
+  fields. Review: 0 blockers, 0 majors; one push.
+- [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
-  Unicode 16/17 gap accepted (dfc332b).
+  Unicode 16/17 gap accepted (dfc332b); "Listing edit" row — expired listings not editable, the rest of
+  0002e as recommended (9202a5d).
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **Write the next specs** (`/spec`), verify each once, then build every ready one (Speed rule 2; two web specs
-   never at once locally because of 5173):
-   - `0003c` map + geocoding: tiles decided (public OSM tiles now, self-hosted Protomaps on R2 later; MapLibre,
-     Nominatim per PRODUCT "Stack"). Likely split `0003c` API (geocode on create/patch, coordinates in search) and
-     a web half. Nominatim usage policy (1 req/s, attribution, caching) belongs in its Risks.
-   - Web listing edit (the API already supports `PATCH /listings/{id}`): edit fields from `/me/listings`.
-   - `GET /me` exposing `listing_cap` (FOLLOWUPS `0002b` · `constants.ts`), small API spec; can pair with edit.
-2. **Gilad's open decisions:** `0003b` digest 1–3 (placeholder copy, single 640 px column on desktop, no
-   apply/share buttons until Slice 4; built as recommended); `0002b` 1–3 (built as recommended); `0002c` photos
-   (R2 bucket on the free tier, photo count/size limits); branch protection (GitHub Pro or a public repo).
-   Write answers into `specs/PRODUCT.md` the same day.
-3. Then `/spec` Slice 4 (apply + inbox).
-4. Housekeeping: archive finished build sessions (0001b, 0002a, 0002b, 0003a, 0003b, 0002d) if Gilad wants a clean
-   sidebar; decide whether to keep `/Users/giladmeidan/rent_app/qa-live-2026-11-10/` (7.4 MB live-QA output outside
-   the repo); product-name mismatch — artboards say "דירתי", the app says "דירה" (until Slice 9).
+1. **0003c**: when its session reports the PR, ask Gilad to merge (he approves each merge); merge with
+   `--match-head-commit` after `api`, `web`, `e2e` are green; clean up (rule 10).
+2. **0003d**: after 0003c merges and 5173 is free (0002f not building), prepare `../rent-app-0003d` with its own
+   `.env` and start `/build 0003d` (ask Gilad with a button if the turn is automated).
+3. **0002f**: Gilad builds it in another session from `../rent-app-0002f`; when its PR is green, merge on
+   Gilad's word and clean up.
+4. **Slice 4 specs**: verify `0004a`/`0004b` once, apply findings, commit, put the questions to Gilad, then build
+   `0004a` (API, parallel-safe) as soon as it is verified.
+5. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
+   not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
+   number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
+   photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
+6. Housekeeping: archive finished build sessions (0001b … 0002e) if Gilad wants; decide on
+   `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9). The shared stack's web
+   container is stopped (5173 was lent to builds); `make dev` with `DB_PORT=5434 REDIS_PORT=6380` brings it back.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -90,8 +102,8 @@ None in flight. The queue is empty of `verified` specs; the next specs must be w
 ## Important Files
 - `CLAUDE.md` — process, Speed rules 1–10, hard rules. Read first.
 - `specs/PRODUCT.md` — standing decisions incl. "Listings", "Search" and "Trust (MVP)" rows.
-- `specs/FOLLOWUPS.md` — 45 open deferred minors (7 from 0003b, 3 from 0002d).
-- `specs/0003a-search-api.md`, `specs/0003b-search-web.md` — what the map spec builds on.
+- `specs/FOLLOWUPS.md` — ~49 open deferred minors (7 from 0003b, 3 from 0002d).
+- `specs/0003c-map-api.md`, `specs/0003d-map-web.md`, `specs/0002f-expired-listing-read-only.md` — the queue.
 - `design/README.md` + `design/screens-v1/*.dc.html` — artboards (reference a missing `support.js`).
 
 ## Important Decisions
@@ -156,6 +168,8 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-10 (late night) — 0002e built and merged (PR #10); 0003c/0003d/0002f specced and verified; 0003c build
+  started; Gilad: expired listings read-only (0002f), rest of 0002e accepted; Slice 4 drafting started.
 - 2026-11-10 (night) — Gilad accepted 0003a 1–7; shared stack migrated; 0003b and 0002d (new text-safety spec,
   one verifier round, 6 findings applied) built in parallel; Speed rule 7 changed to one push per spec;
   PR #8 and #9 merged on Gilad's instruction; worktrees and branches removed.
