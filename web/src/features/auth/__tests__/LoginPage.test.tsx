@@ -1,18 +1,23 @@
-import { fireEvent, screen } from '@testing-library/react';
-import { Route, Routes } from 'react-router';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { Route, Routes, useNavigationType } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
+import { application } from '../../applications/__tests__/fixtures';
+import { MyApplicationsPage } from '../../applications/MyApplicationsPage';
 import { LoginPage } from '../LoginPage';
+import { OtpForm } from '../OtpForm';
 import {
   currentPath,
   empty,
   json,
   mockApi,
+  deferred,
   networkError,
   noa,
   renderAt,
   renderRoutes,
+  testQueryClient,
 } from './harness';
 
 const unauthenticated = json({ detail: 'unauthenticated' }, 401);
@@ -166,5 +171,60 @@ describe('LoginPage', () => {
       expect(currentPath()).toBe('/listings/A');
     });
     expect(screen.getByText('listing')).toBeVisible();
+    cleanup();
+
+    // Defence in depth: OtpForm itself re-checks `next` before navigating.
+    mockApi({
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json(noa, 200)],
+    });
+    renderAt('/login', <OtpForm withProfile={false} next="//evil.example" />);
+    submitCode(await reachStep2(), '123456');
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/');
+    });
+  });
+
+  it('ac10_login_clears_the_previous_session', async () => {
+    // How the page was reached: a `replace` keeps /login out of the history (Back skips it).
+    function Landing() {
+      return (
+        <>
+          <output data-testid="navigation">{useNavigationType()}</output>
+          <MyApplicationsPage />
+        </>
+      );
+    }
+    const routes = (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/me/applications" element={<Landing />} />
+      </Routes>
+    );
+    // The previous person's list is still cached in this tab (their session ended without a 401
+    // from a seeker call, e.g. a logout in another tab).
+    const previous = application({ message: 'the previous seeker wrote this' });
+    const client = testQueryClient();
+    client.setQueryData(['me', 'applications'], [previous]);
+    const list = deferred();
+    mockApi({
+      'GET /me': [unauthenticated],
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json(noa, 200)],
+      'GET /me/applications': [list.promise],
+    });
+    renderRoutes('/login?next=%2Fme%2Fapplications', routes, client);
+    submitCode(await reachStep2(), '123456');
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/applications');
+    });
+    expect(screen.getByTestId('navigation')).toHaveTextContent('REPLACE');
+    expect(screen.queryByText(previous.message)).toBeNull();
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.getByRole('list', { name: he.common.loading })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(client.getQueryData(['me'])).toEqual(noa);
   });
 });

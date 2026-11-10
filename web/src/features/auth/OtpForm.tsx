@@ -6,7 +6,9 @@ import { useNavigate } from 'react-router';
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { ErrorState } from '../../components/ErrorState';
+import { safeNext } from './next';
 import { RoleChoice } from './RoleChoice';
+import { clearSession } from './useLogout';
 import { ME_KEY } from './useMe';
 
 type OtpVerifyIn = components['schemas']['OtpVerifyIn'];
@@ -209,8 +211,11 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
       {
         onSuccess: (result) => {
           if (result.kind === 'ok') {
+            // Drop whatever the previous person in this tab left under ['me', …] first.
+            clearSession(queryClient);
             queryClient.setQueryData<UserOut | null>(ME_KEY, result.user);
-            navigate(next);
+            // `replace`: Back does not return to /login. `safeNext` again, as defence in depth.
+            navigate(safeNext(next), { replace: true });
             return;
           }
           if (result.kind === 'profileRequired' && !withProfile) {
