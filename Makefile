@@ -1,5 +1,6 @@
 # Rent App — developer targets. See CLAUDE.md → Commands.
-# Web targets (client, e2e, i18n-check) and the web parts of test/lint arrive with spec 0000b.
+# `test` and `lint` run the api half then the web half; `*-api` / `*-web` run one half (CI uses those).
+# Web targets need Node 22 and pnpm (web/.nvmrc; pnpm version in web/package.json → packageManager).
 
 # Optional repo-root `.env` (gitignored; start from `.env.example`), parsed by infra/dotenv.awk:
 # `KEY=value` lines, value optionally in single or double quotes (stripped, as compose does), no
@@ -7,13 +8,15 @@
 # loaded with `?=` and exported, so precedence is
 #   `make VAR=…` > shell environment (`VAR=… make dev`) > `.env` > the defaults below.
 # Exported values reach every recipe: uv/pytest/alembic and compose interpolation
-# (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml).
+# (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml; `API_PORT` also
+# sets the web's `VITE_API_URL`).
 ifneq (,$(wildcard .env))
 $(foreach kv,$(shell awk -f infra/dotenv.awk .env),$(if $(filter !%,$(kv)),$(warning .env line $(kv:!%=%) ignored: not KEY=value (see .env.example)),$(eval export $(kv))))
 endif
 
 COMPOSE := docker compose $(if $(wildcard .env),--env-file .env) -f infra/docker-compose.yml
 UV      := uv --directory api
+PNPM    := pnpm --dir web
 
 # Local defaults match infra/docker-compose.yml and .env.example.
 export DATABASE_URL      ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent
@@ -23,10 +26,25 @@ export WEB_ORIGIN        ?= http://localhost:5173
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev down migrate seed test lint
+.PHONY: dev down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e
 
-## dev: start db+redis, wait for Postgres, migrate, seed, start api (reload) and worker, then wait
-## for /health: a settings error leaves the uvicorn reloader running but serving nothing.
+# The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
+API_HEALTH := http://127.0.0.1:$(API_PORT)/health
+WEB_URL    := http://localhost:5173
+
+# $(call wait_for,url,seconds,service): poll url until it answers 2xx; fail after `seconds`.
+define wait_for
+@echo "waiting for $(1) ..."
+@for _ in $$(seq $(2)); do \
+  curl -fs -m 2 -o /dev/null $(1) && echo "$(3) is up" && exit 0; \
+  sleep 1; \
+done; \
+echo "$(3) not up after $(2) s; see: $(COMPOSE) logs $(3)" >&2; exit 1
+endef
+
+## dev: start db+redis, wait for Postgres, migrate, seed, start api (reload), worker and web (vite),
+## then wait for /health (a settings error leaves the uvicorn reloader running but serving nothing)
+## and for the web. -V gives web a fresh node_modules volume, so a changed lockfile is picked up.
 ## `.outbox` is created 0777 first: the api (uid 10001) writes it, and Docker would create a missing
 ## bind-mount source as root:root 755.
 dev:
@@ -34,13 +52,9 @@ dev:
 	$(COMPOSE) up -d --wait db redis
 	$(MAKE) migrate
 	$(MAKE) seed
-	$(COMPOSE) up -d --build api worker
-	@echo "waiting for http://127.0.0.1:$(API_PORT)/health ..."
-	@for _ in $$(seq 60); do \
-	  curl -fs -m 2 -o /dev/null http://127.0.0.1:$(API_PORT)/health && echo "api is up" && exit 0; \
-	  sleep 1; \
-	done; \
-	echo "api not healthy after 60 s; see: $(COMPOSE) logs api" >&2; exit 1
+	$(COMPOSE) up -d --build -V api worker web
+	$(call wait_for,$(API_HEALTH),60,api)
+	$(call wait_for,$(WEB_URL),60,web)
 
 ## down: stop the stack, remove its volumes and empty the email outbox
 down:
@@ -55,12 +69,51 @@ migrate:
 seed:
 	$(UV) run python scripts/seed.py
 
-## test: api pytest (needs Postgres at TEST_DATABASE_URL and Redis at REDIS_URL)
-test:
+## test: api pytest (needs Postgres at TEST_DATABASE_URL and Redis at REDIS_URL), then web vitest
+test: test-api test-web
+
+test-api:
 	$(UV) run pytest -q
 
-## lint: api ruff (lint + format) and mypy --strict
-lint:
+test-web: web/node_modules
+	$(PNPM) exec vitest run
+
+## lint: api ruff (lint + format) and mypy --strict, then web eslint, prettier --check, tsc --noEmit
+lint: lint-api lint-web
+
+lint-api:
 	$(UV) run ruff check .
 	$(UV) run ruff format --check .
 	$(UV) run mypy --strict app scripts tests alembic
+
+lint-web: web/node_modules web/src/api/schema.d.ts
+	$(PNPM) exec eslint .
+	$(PNPM) exec prettier --check .
+	$(PNPM) exec tsc --noEmit
+
+## client: export the OpenAPI schema (no server needed) into web/src/api/schema.d.ts (git-ignored)
+client: SHELL := /bin/bash
+client: .SHELLFLAGS := -o pipefail -c
+client: web/node_modules
+	$(UV) run python scripts/export_openapi.py | $(PNPM) exec openapi-typescript -o src/api/schema.d.ts
+
+# Generated on first use by lint-web; run `make client` again after changing the API.
+web/src/api/schema.d.ts:
+	$(MAKE) client
+
+## i18n-check: fail on hardcoded Hebrew/English in web/src/**/*.tsx or t() keys missing from he.json
+i18n-check: web/node_modules
+	$(PNPM) exec node scripts/i18n-check.mjs
+
+## e2e: playwright smoke suite against the running compose stack (`make dev` first); waits up to
+## 90 s each for the api /health and the web before starting
+e2e: web/node_modules
+	$(PNPM) exec playwright install --with-deps chromium
+	$(call wait_for,$(API_HEALTH),90,api)
+	$(call wait_for,$(WEB_URL),90,web)
+	$(PNPM) exec playwright test
+
+# pnpm install whenever the manifest or lockfile is newer than the last install.
+web/node_modules: web/package.json web/pnpm-lock.yaml
+	$(PNPM) install --frozen-lockfile
+	@touch $@
