@@ -97,7 +97,7 @@ step `aria-current="step"`, done steps with the check icon), and a progress bar 
   `listings.furnished.none/partial/full` (default `none`), `Switch` `listings.fields.pets`, optional `listings.fields.arnona`
   and `listings.fields.vaad` (number, hint `listings.fields.optional`), `listings.fields.description`
   (`<textarea>`, counter `listings.fields.charsLeft` `{{count}}`, max 2000).
-  Validation on `listings.next` (not on every keystroke; after the first attempt, on blur): `validate.ts`
+  Validation on `listings.next` (not on every keystroke). After the first attempt a new error appears on blur, and an error already shown updates or clears as soon as its field changes (so a fixed field's message does not shift the layout under the next click): `validate.ts`
   returns per-field keys — `listings.errors.required`, `listings.errors.range` (`{{min}}`, `{{max}}`),
   `listings.errors.floors`, `listings.errors.tooLong` (`{{max}}`), `listings.errors.dateRange`; each shown
   under its field with `role="alert"` and `aria-describedby` on the input; focus moves to the first invalid
