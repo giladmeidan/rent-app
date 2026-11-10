@@ -18,6 +18,7 @@ from app.schemas.auth import OtpRequestIn, OtpVerifyIn, UserOut
 from app.schemas.error import ErrorOut
 from app.services import auth as auth_service
 from app.services.email import EmailSender, EmailUnavailable, get_email_sender
+from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["auth"])
 
@@ -42,7 +43,7 @@ def request_otp(
     ip = request.client.host if request.client else "unknown"
     try:
         auth_service.request_otp(r, sender, body.email, ip)
-    except auth_service.RateLimitedError as exc:
+    except RateLimitedError as exc:
         raise HTTPException(
             status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
         ) from None
