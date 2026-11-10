@@ -1,9 +1,15 @@
 name: ci
 
+# Tiering (spec 0000b): api and web run on every PR push; e2e only when the PR carries the
+# `ready-to-merge` label (the `labeled` event starts it) and on pushes to main. Changes that touch
+# only Markdown, specs/ or design/ run no CI.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths-ignore: ["**.md", "specs/**", "design/**"]
   push:
     branches: [main]
+    paths-ignore: ["**.md", "specs/**", "design/**"]
 
 # Least privilege for the GITHUB_TOKEN: the jobs only read the repository.
 permissions:
@@ -90,8 +96,11 @@ jobs:
         run: make lint-web
       - name: Test (vitest)
         run: make test-web
+      - name: Build (tsc + vite build, PWA manifest and service worker)
+        run: make build-web
 
   e2e:
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -113,6 +122,13 @@ jobs:
         run: |
           uv --directory api sync --frozen
           pnpm --dir web install --frozen-lockfile
+          echo "PLAYWRIGHT_VERSION=$(node -p "require('./web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_ENV"
+      # On a hit `playwright install` (in make e2e) skips the download; --with-deps still installs OS packages.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
       - name: Start the compose stack (db, redis, migrate, seed, api, worker, web)
         run: make dev
       - name: Smoke suite (playwright)
