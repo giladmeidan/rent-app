@@ -23,8 +23,8 @@ Overall: IN_PROGRESS
 
 Current focus:
 Slices 1–2, list search (`0003a`/`0003b`), text safety (`0002d`) and web listing edit (`0002e`) are merged.
-In flight: `0003c` map API build; Slice 4 specs being drafted. `0002f` is verified and will be built in a
-separate session (not started by the orchestrator).
+In flight: `0003c` map API build (fix round). Verified and waiting: `0002f`, `0003d`, `0004a`–`0004d`.
+**Gilad starts `0002f` and the Slice 4 builds himself in other sessions** — the orchestrator does not start them.
 
 Last updated:
 2026-11-10
@@ -37,8 +37,12 @@ Last updated:
   worktree prepared at `../rent-app-0002f` (branch `spec/0002f-expired-read-only`, `.env` on 5443/6389/8011);
   Gilad will build it in a different session. It is a web spec: it needs port 5173 (free now).
 - **0003d Map web** (`verified`, dd9de8b) — waits for `0003c` to merge and for 5173 (not while 0002f builds).
-- **Slice 4** (`0004a` apply API, `0004b` apply web) — a drafter agent is writing them; then one verifier round
-  each, findings applied by the orchestrator, Gilad's questions put to him.
+- **Slice 4** (all `verified`, c27f1d2; decisions in PRODUCT "Applications", 231148b) — Gilad starts these in
+  other sessions, not the orchestrator:
+  - `0004a` apply API (depends 0003c; ready once 0003c's PR is open; migration `0005`, down_revision `0004`;
+    reviewers code, qa, security, perf).
+  - `0004b` apply web (depends 0004a) and `0004c` inbox API (depends 0004a) — can build in parallel.
+  - `0004d` inbox web (depends 0004b + 0004c). 0004b and 0004d are web specs: not at the same time (5173).
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -57,10 +61,12 @@ Last updated:
   fixed in the one round.
 - [x] 0002e Edit listing web — PR #10 (9023687): `/me/listings/:id/edit` reuses the wizard, sends only changed
   fields. Review: 0 blockers, 0 majors; one push.
-- [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6).
+- [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
+  0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
   Unicode 16/17 gap accepted (dfc332b); "Listing edit" row — expired listings not editable, the rest of
-  0002e as recommended (9202a5d).
+  0002e as recommended (9202a5d); "Applications" row —
+  Slice 4 Q1–Q6 accepted (231148b).
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
@@ -70,8 +76,8 @@ Last updated:
    `.env` and start `/build 0003d` (ask Gilad with a button if the turn is automated).
 3. **0002f**: Gilad builds it in another session from `../rent-app-0002f`; when its PR is green, merge on
    Gilad's word and clean up.
-4. **Slice 4 specs**: verify `0004a`/`0004b` once, apply findings, commit, put the questions to Gilad, then build
-   `0004a` (API, parallel-safe) as soon as it is verified.
+4. **Slice 4**: Gilad starts `0004a` (once 0003c's PR is open), then `0004b`/`0004c`, then `0004d`, in his own
+   sessions. The orchestrator merges on Gilad's word after `api`, `web`, `e2e` are green, and cleans up.
 5. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
    number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
@@ -168,6 +174,8 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-10 (after midnight) — Slice 4 specced as four specs (0004a–d), verified, Gilad accepted Q1–Q6;
+  Gilad will start 0002f and Slice 4 builds in his own sessions.
 - 2026-11-10 (late night) — 0002e built and merged (PR #10); 0003c/0003d/0002f specced and verified; 0003c build
   started; Gilad: expired listings read-only (0002f), rest of 0002e accepted; Slice 4 drafting started.
 - 2026-11-10 (night) — Gilad accepted 0003a 1–7; shared stack migrated; 0003b and 0002d (new text-safety spec,
