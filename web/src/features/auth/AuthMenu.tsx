@@ -52,7 +52,9 @@ export function AuthMenu() {
           {t('header.myListings')}
         </Link>
       )}
-      <span className="truncate text-[15px] font-semibold">
+      <span
+        className={`truncate text-[15px] font-semibold ${me.data.role === 'owner' ? 'max-sm:hidden' : ''}`}
+      >
         {t('header.greeting', { name: me.data.display_name })}
       </span>
       <button

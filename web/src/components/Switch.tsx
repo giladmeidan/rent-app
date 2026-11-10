@@ -8,17 +8,21 @@ type Props = {
 
 /**
  * A native checkbox with `role="switch"` (keyboard and checked state come free) and a visible
- * label, drawn as the 52×32 toggle of CreateListing.dc.html: the thumb sits at the inline start
- * when off and slides to the inline end, on an accent track, when on.
+ * label that fills the row's height (≥ 44 px tap target), drawn as the 52×32 toggle of
+ * CreateListing.dc.html: the thumb sits at the inline start when off and slides to the inline end,
+ * on an accent track, when on.
  */
 export function Switch({ label, checked, onChange }: Props) {
   const id = useId();
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-[14px]">
-      <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer text-[15px] font-semibold">
+    <div className="flex items-stretch justify-between gap-3 px-4">
+      <label
+        htmlFor={id}
+        className="flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center py-[14px] text-[15px] font-semibold"
+      >
         {label}
       </label>
-      <span className="relative inline-flex h-8 w-[52px] shrink-0">
+      <span className="relative inline-flex h-8 w-[52px] shrink-0 self-center">
         <input
           id={id}
           type="checkbox"

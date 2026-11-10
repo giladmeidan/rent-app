@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe('AuthMenu for an owner', () => {
-  it('ac9_header_link_and_logout_drops_my_listings', async () => {
+  it('header_link_and_logout_drops_my_listings', async () => {
     mockApi({ 'GET /me': [json(owner)], 'POST /auth/logout': [empty(204)] });
     const client = testQueryClient();
     client.setQueryData<ListingOut[]>(MY_LISTINGS_KEY, [listing()]);
