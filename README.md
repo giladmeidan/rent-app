@@ -79,6 +79,7 @@ than `web/package.json` / `web/pnpm-lock.yaml`.
 
 Every variable is listed in `.env.example` with a working local default. Secrets only ever come from the
 environment. Compose publishes Postgres, Redis and the API on `127.0.0.1` only.
+`GEOCODER` picks the worker's geocoder: `fake` (default; deterministic points, no network) or `nominatim` (needs a real `NOMINATIM_USER_AGENT`, no email, when `WEB_ORIGIN` is https).
 
 Every `make` target loads an optional repo-root `.env` (gitignored) and exports its values to the commands
 it runs, including compose interpolation (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN`). Precedence, highest first:
