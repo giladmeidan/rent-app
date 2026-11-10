@@ -96,12 +96,14 @@ export const LIMITS = {
 
 // Control, format (bidi marks, zero-width), line- and paragraph-separator, private-use characters,
 // lone surrogates, the 66 non-characters and the blank letters (Hangul fillers U+115F, U+1160,
-// U+3164, U+FFA0 and braille blank U+2800): the API rejects them (`visible_characters_only`),
+// U+3164, U+FFA0 and braille blank U+2800) and the default-ignorable code points that are
+// unassigned in the API's Unicode tables (U+2065, U+FFF0-U+FFF8, U+E0000-U+E00FF and
+// U+E01F0-U+E0FFF; review B1): the API rejects them (`visible_characters_only`),
 // except ZWNJ / ZWJ and, in the description, `\n`. With the `u` flag a lone surrogate is one code
 // point of category `Cs`; a valid pair is the character it encodes. The API's cap on combining marks
 // in a row is not mirrored: such a body falls through to the publish error.
 const INVISIBLE =
-  /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}\p{Noncharacter_Code_Point}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}]/gu;
+  /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}\p{Noncharacter_Code_Point}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}\u{2065}\u{FFF0}-\u{FFF8}\u{E0000}-\u{E00FF}\u{E01F0}-\u{E0FFF}]/gu;
 const JOINERS = new Set(['\u200c', '\u200d']);
 /** City and street need one letter or digit (`require_alnum` in the API). */
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;

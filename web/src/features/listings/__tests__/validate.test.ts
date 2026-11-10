@@ -201,6 +201,26 @@ describe('validate', () => {
     expect(cleanText('a\nb')).toBe('ab');
   });
 
+  it('ac8_clean_text_strips_unassigned_default_ignorables', () => {
+    // Review B1: unassigned in the API's Unicode tables, rendered as nothing by browsers.
+    for (const ch of [
+      '\u{e0080}',
+      '\u2065',
+      '\ufff0',
+      '\ufff8',
+      '\u{e0000}',
+      '\u{e00ff}',
+      '\u{e01f0}',
+      '\u{e0fff}',
+    ]) {
+      const name = `U+${ch.codePointAt(0)?.toString(16)}`;
+      expect(cleanText(`a${ch}b`), name).toBe('ab');
+      expect(cleanText(ch), `${name} alone`).toBe('');
+    }
+    // A variation selector between the ranges stays.
+    expect(cleanText('\u05d0\u{e0100}')).toBe('\u05d0\u{e0100}');
+  });
+
   it('ac8_clean_text_strips_all_66_noncharacters', () => {
     const nonCharacters = [
       ...Array.from({ length: 32 }, (_, i) => 0xfdd0 + i),
