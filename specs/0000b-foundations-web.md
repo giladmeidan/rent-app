@@ -1,7 +1,7 @@
 ---
 id: 0000b
 title: A developer opens http://localhost:5173 after `make dev` and sees a Hebrew RTL app shell listing the active launch areas from the API, with i18n-check, e2e smoke and the web/e2e CI jobs in place
-status: in-progress
+status: in-review
 depends_on: [0000a]
 reviewers: [code, qa, ux]   # ux: new screen (app shell + areas list, four states, RTL)
 estimate: 1 coder run
@@ -111,6 +111,11 @@ E2E (smoke): AC8 against the compose stack; `make e2e` waits for `GET /health` 2
 - Hebrew copy in `he.json` and the manifest name "דירה" are placeholders; Slice 9 owns final branding. Not a blocker — the strings are specified, nothing to guess.
 - e2e in CI builds the compose images cold; if NF1 is at risk, cache docker layers (`docker/build-push-action` cache) before relaxing the budget.
 - No open product questions.
+- Coder note (2026-11-10), for the orchestrator to fold into Scope → New dependencies or reject: four web dev
+  packages not named above were needed and are pinned in `web/package.json`: `@types/react`, `@types/react-dom`
+  (React 18 ships no types), `@types/node` (scripts, configs and the checker tests under `tsc`), and
+  `@testing-library/dom` (required peer of `@testing-library/react` 16). TypeScript is pinned to 5.9.3, not the
+  latest 7.x, because `typescript-eslint` 8.72 requires `<6.1` and `openapi-typescript` 7.13 requires `^5`.
 
 Verifier notes (2026-11-08): split from `0000`; added `ux` reviewer; gave every i18n key a placeholder value;
 excluded test files from the checker and added AC6/AC7 to pin the checker's behaviour; added the loading-state
