@@ -1,6 +1,7 @@
 """Owner listings API (spec 0002a): AC1-AC9."""
 
 import datetime as dt
+import json
 import threading
 import time
 import uuid
@@ -191,7 +192,7 @@ _TOO_FAR = (dt.date.today() + dt.timedelta(days=3 * 365)).isoformat()
         {"listing_type": "villa"},
         {"furnished": "yes"},
         {"parking_spots": 6},
-        {"description": "דירה ‮מוארת"},
+        {"description": "דירה \u202eמוארת"},
         {"city": "גבעת\nיים"},
         {"elevator": None},  # removed from the body below
     ],
@@ -441,3 +442,76 @@ def test_ac9_concurrent_creates_respect_cap(
         id=owner_id,
     )
     assert live == cap
+
+
+_RAW_HEADERS = {"Content-Type": "application/json"}
+
+
+def _raw(body: dict[str, Any], **literals: str) -> bytes:
+    """JSON bytes with `literals` (field -> raw JSON token such as NaN) spliced in; non-ASCII and
+    lone surrogates stay as \\u escapes, so the parser, not the client, produces them."""
+    sent = {**body, **{key: f"__{key}__" for key in literals}}
+    text_ = json.dumps(sent)
+    for key, token in literals.items():
+        text_ = text_.replace(f'"__{key}__"', token)
+    return text_.encode("utf-8", "surrogatepass")
+
+
+def _assert_clean_422(response: httpx.Response) -> None:
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert isinstance(detail, list) and detail
+    for entry in detail:
+        assert "input" not in entry
+        assert {"type", "loc", "msg"} <= entry.keys()
+
+
+@pytest.mark.parametrize(
+    ("field", "token"),
+    [("price_ils", "1e999999"), ("rooms", "NaN"), ("size_sqm", "Infinity")],
+)
+def test_review_nonfinite_number_is_422_not_500(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine, field: str, token: str
+) -> None:
+    response = owner.post(
+        "/listings", content=_raw(_body(gush_dan), **{field: token}), headers=_RAW_HEADERS
+    )
+    _assert_clean_422(response)
+    assert _count(db_engine) == 0
+
+    listing = _create(owner, gush_dan)
+    response = owner.patch(
+        f"/listings/{listing['id']}", content=_raw({}, **{field: token}), headers=_RAW_HEADERS
+    )
+    _assert_clean_422(response)
+    assert _row(db_engine, listing["id"])["description"] == listing["description"]
+
+
+def test_review_lone_surrogate_is_422_not_500(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    response = owner.post(
+        "/listings", content=_raw(_body(gush_dan, city="ab\ud800")), headers=_RAW_HEADERS
+    )
+    _assert_clean_422(response)
+    assert _count(db_engine) == 0
+
+    listing = _create(owner, gush_dan)
+    response = owner.patch(
+        f"/listings/{listing['id']}",
+        content=_raw({"description": "\ud800"}),
+        headers=_RAW_HEADERS,
+    )
+    _assert_clean_422(response)
+    assert _row(db_engine, listing["id"])["description"] == listing["description"]
+    assert _count(db_engine) == 1
+
+
+def test_review_validation_error_never_echoes_request_body(client: TestClient) -> None:
+    response = client.post(
+        "/auth/otp/verify",
+        content=b'{"email":"x@example.com","x":NaN}',
+        headers=_RAW_HEADERS,
+    )
+    _assert_clean_422(response)
+    assert "x@example.com" not in response.text
