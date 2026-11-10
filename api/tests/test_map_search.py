@@ -9,7 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 
-from tests.conftest import make_listing, make_owner, set_location
+from app.db import make_engine
+from tests.conftest import TEST_DATABASE_URL, make_listing, make_owner, set_location
 
 BOX = "west=34.75&south=32.00&east=34.85&north=32.10"
 GUSH_DAN_BOX = "west=34.74&south=31.95&east=34.95&north=32.17"
@@ -82,6 +83,41 @@ def test_ac9_bbox_filters_on_the_approximate_point(
     assert (one["lat"], one["lng"]) == (32.08, 34.8)
     pending = client.get(f"/listings/{c}").json()
     assert (pending["lat"], pending["lng"]) == (None, None)
+
+
+_WIDE_BOXES = (
+    ("west=-180&south=-90&east=180&north=90", 1),  # the whole world
+    ("west=-10&south=30&east=80&north=40", 1),
+    ("west=-180&south=-85&east=180&north=85", 1),
+    ("west=-90&south=-1&east=90&north=1", 0),  # a band around the equator, not 32 N
+)
+
+
+def test_ac9_wide_boxes_are_planar_lng_lat_rectangles(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    listing_id = make_listing(db_engine, owner, gush_dan)
+    set_location(db_engine, listing_id, 34.80, 32.08)
+
+    for box, total in _WIDE_BOXES:
+        response = client.get(f"/listings?{box}")
+        assert response.status_code == 200, (box, response.text)
+        body = response.json()
+        assert body["total"] == total, box
+        assert [item["id"] for item in body["items"]] == [str(listing_id)] * total, box
+
+
+def test_nf2_app_connections_run_without_jit() -> None:
+    for connect_args in (None, {"options": "-c search_path=public"}):
+        engine = make_engine(TEST_DATABASE_URL, connect_args)
+        try:
+            with engine.connect() as conn:
+                assert conn.execute(text("SHOW jit")).scalar_one() == "off"
+                if connect_args:
+                    assert conn.execute(text("SHOW search_path")).scalar_one() == "public"
+        finally:
+            engine.dispose()
 
 
 _BAD_BOXES = (

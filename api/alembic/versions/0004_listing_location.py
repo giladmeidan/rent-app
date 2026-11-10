@@ -50,7 +50,13 @@ def upgrade() -> None:
         "listings",
         "(geocode_status = 'ok') = (location IS NOT NULL)",
     )
-    op.create_index("ix_listings_location", "listings", ["location"], postgresql_using="gist")
+    # On the planar cast: the map box compares `location::geometry` (services/search.py).
+    op.create_index(
+        "ix_listings_location",
+        "listings",
+        [sa.text("(location::geometry)")],
+        postgresql_using="gist",
+    )
 
 
 def downgrade() -> None:

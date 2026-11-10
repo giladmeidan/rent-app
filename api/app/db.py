@@ -14,20 +14,29 @@ from app.config import get_database_settings
 # `tcp_user_timeout` (ms) also drops a pooled connection whose writes go unacknowledged; libpq
 # ignores it on other platforms.
 CONNECT_TIMEOUT_S = 2
-_CONNECT_ARGS = {"connect_timeout": CONNECT_TIMEOUT_S, "tcp_user_timeout": 5000}
+# `jit=off`: the app's short OLTP queries never gain from LLVM JIT, and a fresh connection paid
+# 150-190 ms of JIT compilation on the whole-area search count (spec 0003c, NF2).
+_CONNECT_ARGS: dict[str, Any] = {
+    "connect_timeout": CONNECT_TIMEOUT_S,
+    "tcp_user_timeout": 5000,
+    "options": "-c jit=off",
+}
 
 
 def make_engine(
     database_url: str, connect_args: dict[str, Any] | None = None, **kwargs: Any
 ) -> Engine:
     """Engine for a `postgresql+psycopg://` URL with the app connection settings (lazy connect);
-    `connect_args` are added to them. `hide_parameters` keeps bound values (user data) out of
-    exception messages and logs."""
+    `connect_args` are added to them; their server `options` (e.g. Alembic's `search_path`) are
+    appended to the app's, never replace them. `hide_parameters` keeps bound values (user data)
+    out of exception messages and logs."""
+    extra = dict(connect_args or {})
+    options = " ".join(filter(None, (_CONNECT_ARGS["options"], extra.pop("options", None))))
     return create_engine(
         database_url,
         pool_pre_ping=True,
         hide_parameters=True,
-        connect_args={**_CONNECT_ARGS, **(connect_args or {})},
+        connect_args={**_CONNECT_ARGS, **extra, "options": options},
         **kwargs,
     )
 

@@ -35,6 +35,10 @@ from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.models import Base
 
+# Plain `::geometry` (no typmod): the cast `ix_listings_location` is built on. A typmod'd cast such
+# as `geometry(POINT,4326)` is a different expression, and the planner would not use the index.
+PLAIN_GEOMETRY = Geometry(geometry_type=None)
+
 
 class Listing(Base):
     __tablename__ = "listings"
@@ -67,8 +71,9 @@ class Listing(Base):
         ),
         Index("ix_listings_owner_id", "owner_id"),
         Index("ix_listings_area_id", "area_id"),
-        # Explicit GiST index (like `ix_areas_geom`), hence `spatial_index=False` on the column.
-        Index("ix_listings_location", "location", postgresql_using="gist"),
+        # Explicit GiST index on the planar cast (`location::geometry`), the expression the map-box
+        # filter compares (services/search.py), hence `spatial_index=False` on the column.
+        Index("ix_listings_location", text("(location::geometry)"), postgresql_using="gist"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -125,10 +130,10 @@ class Listing(Base):
     )
     # Deferred: only `_public_listings()` undefers them (owner endpoints never load them).
     lat: Mapped[float | None] = column_property(
-        func.ST_Y(cast(location, Geometry(geometry_type="POINT", srid=4326)), type_=Float),
+        func.ST_Y(cast(location, PLAIN_GEOMETRY), type_=Float),
         deferred=True,
     )
     lng: Mapped[float | None] = column_property(
-        func.ST_X(cast(location, Geometry(geometry_type="POINT", srid=4326)), type_=Float),
+        func.ST_X(cast(location, PLAIN_GEOMETRY), type_=Float),
         deferred=True,
     )

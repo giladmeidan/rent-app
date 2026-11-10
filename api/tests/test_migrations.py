@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
+from app.models import Base
 from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import TEST_DATABASE_URL, alembic_config, drop_database, ensure_database
 
@@ -307,6 +308,19 @@ def test_ac1_listing_location_migration_roundtrip(migration_db_url: str) -> None
             ).one()
             assert tuple(row) == ("pending", 0, True)
             assert _location_index_method(conn) == "gist"
+            # On the planar cast the map box compares (services/search.py); autogenerate does not
+            # compare index expressions, so this pins the model's and the migration's.
+            assert (
+                conn.execute(
+                    text("SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_listings_location'")
+                )
+                .scalar_one()
+                .endswith("USING gist (((location)::geometry))")
+            )
+        (model_index,) = (
+            i for i in Base.metadata.tables["listings"].indexes if i.name == "ix_listings_location"
+        )
+        assert [str(e) for e in model_index.expressions] == ["(location::geometry)"]
         for assignment, constraint in (
             ("geocode_status = 'ok'", "ck_listings_location_status"),
             ("geocode_attempts = 6", "ck_listings_geocode_attempts"),

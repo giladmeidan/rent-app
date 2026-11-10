@@ -16,18 +16,16 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from geoalchemy2 import Geography
 from sqlalchemy import Integer, Select, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
 from app.models import Area, Listing
+from app.models.listing import PLAIN_GEOMETRY
 from app.schemas.search import SearchParams
 from app.services.listings import ListingNotFoundError
 
 # A flexible-entry listing ("גמיש ±2 שבועות") counts as available this many days earlier.
 FLEXIBLE_ENTRY_DAYS = 14
-# Plain `::geography` (no typmod): the map box is a polygon, the column a point.
-_GEOGRAPHY = Geography(geometry_type=None)
 
 
 def _public_listings() -> Select[tuple[Listing]]:
@@ -75,9 +73,12 @@ def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
         query = query.where(Listing.parking_spots >= 1)
     if params.bbox is not None:
         # On the approximate point, the one the response shows; a NULL location never matches.
+        # Planar: a lng/lat rectangle on the point's `::geometry` cast (the `ix_listings_location`
+        # expression), exact for any valid box. On `geography` the box's edges would be great-circle
+        # arcs: wrong for wide boxes, and an error for a 180-degree-wide one.
         west, south, east, north = params.bbox
-        envelope = cast(func.ST_MakeEnvelope(west, south, east, north, 4326), _GEOGRAPHY)
-        query = query.where(func.ST_Intersects(Listing.location, envelope))
+        envelope = func.ST_MakeEnvelope(west, south, east, north, 4326)
+        query = query.where(func.ST_Intersects(cast(Listing.location, PLAIN_GEOMETRY), envelope))
     return query
 
 
