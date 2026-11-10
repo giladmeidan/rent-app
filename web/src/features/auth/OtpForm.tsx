@@ -80,6 +80,8 @@ type Props = {
    * when verify answers `profile_required`. */
   withProfile: boolean;
   initialRole?: Role | null;
+  /** Where a successful verify goes: a path already checked by `safeNext`. */
+  next?: string;
 };
 
 type Step1Error = 'tooMany' | 'failed' | null;
@@ -89,7 +91,7 @@ type Step2Error = 'invalidCode' | 'tooMany' | 'failed' | null;
  * Two-step email-code form shared by /signup and /login. The email and code live in this
  * component's state only (never storage or the URL).
  */
-export function OtpForm({ withProfile, initialRole = null }: Props) {
+export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -208,7 +210,7 @@ export function OtpForm({ withProfile, initialRole = null }: Props) {
         onSuccess: (result) => {
           if (result.kind === 'ok') {
             queryClient.setQueryData<UserOut | null>(ME_KEY, result.user);
-            navigate('/');
+            navigate(next);
             return;
           }
           if (result.kind === 'profileRequired' && !withProfile) {

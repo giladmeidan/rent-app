@@ -1,9 +1,19 @@
 import { fireEvent, screen } from '@testing-library/react';
+import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
 import { LoginPage } from '../LoginPage';
-import { currentPath, empty, json, mockApi, networkError, noa, renderAt } from './harness';
+import {
+  currentPath,
+  empty,
+  json,
+  mockApi,
+  networkError,
+  noa,
+  renderAt,
+  renderRoutes,
+} from './harness';
 
 const unauthenticated = json({ detail: 'unauthenticated' }, 401);
 
@@ -119,5 +129,42 @@ describe('LoginPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
     expect(screen.queryByRole('radio')).toBeNull();
     expect(screen.queryByText(he.auth.noAccountYet)).toBeNull();
+  });
+
+  it('ac10_login_returns_to_next', async () => {
+    const routes = (
+      <Routes>
+        <Route path="/" element={<p>home</p>} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/listings/:id" element={<p>listing</p>} />
+      </Routes>
+    );
+
+    // A safe `next`: the verified person lands there; an unsafe one falls back to `/`.
+    for (const [next, target] of [
+      ['%2Flistings%2FA', '/listings/A'],
+      ['%2F%2Fevil.example', '/'],
+    ] as const) {
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [json(noa, 200)],
+      });
+      const view = renderRoutes(`/login?next=${next}`, routes);
+      submitCode(await reachStep2(), '123456');
+      await vi.waitFor(() => {
+        expect(currentPath()).toBe(target);
+      });
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // Already logged in: straight to `next`.
+    mockApi({ 'GET /me': [json(noa)] });
+    renderRoutes('/login?next=%2Flistings%2FA', routes);
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/listings/A');
+    });
+    expect(screen.getByText('listing')).toBeVisible();
   });
 });
