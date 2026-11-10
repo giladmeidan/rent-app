@@ -9,7 +9,7 @@ import { ApiError, type ListingOut } from './api';
 import { LISTING_CAP } from './constants';
 import { todayInIsrael } from './format';
 import { ListingCard } from './ListingCard';
-import { listingState, StatusBadge } from './StatusBadge';
+import { isPastExpiry, listingState, StatusBadge } from './StatusBadge';
 import { useMyListings } from './useMyListings';
 import { usePatchListing } from './usePatchListing';
 
@@ -24,7 +24,7 @@ function ListingRow({ listing, now, today }: { listing: ListingOut; now: Date; t
   const state = listingState(listing, now);
   const titleId = useId();
 
-  // Expired listings cannot be paused or resumed (renewal is Slice 10); every listing can be edited.
+  // Expired listings cannot be paused or resumed (renewal is Slice 10); a listing past its expiry cannot be edited either (0002f).
   const next = state === 'live' ? 'paused' : state === 'paused' ? 'active' : null;
   const capReached = patch.error instanceof ApiError && patch.error.status === 409;
 
@@ -50,13 +50,15 @@ function ListingRow({ listing, now, today }: { listing: ListingOut; now: Date; t
                 {next === 'paused' ? t('listings.actions.pause') : t('listings.actions.resume')}
               </button>
             )}
-            <Link
-              to={`/me/listings/${listing.id}/edit`}
-              aria-describedby={titleId}
-              className={action}
-            >
-              {t('listings.actions.edit')}
-            </Link>
+            {!isPastExpiry(listing, now) && (
+              <Link
+                to={`/me/listings/${listing.id}/edit`}
+                aria-describedby={titleId}
+                className={action}
+              >
+                {t('listings.actions.edit')}
+              </Link>
+            )}
           </div>
           {patch.isError && (
             <p role="alert" className={fieldError}>

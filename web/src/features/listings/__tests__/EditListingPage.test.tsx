@@ -393,38 +393,41 @@ describe('EditListingPage', () => {
     expect(bodies).toStrictEqual([{ price_ils: 7500 }, { price_ils: 7500 }]);
   });
 
-  it('ac8_expired_listing_editable_with_hint', async () => {
-    const hint = () => screen.queryByText(he.listings.edit.expiredHint);
+  it('ac2_past_expiry_listing_is_read_only', async () => {
+    const past = '2020-01-01T00:00:00Z';
+    for (const status of ['active', 'paused'] as const) {
+      const a = stored({ status, expires_at: past });
+      const api = mockApi({
+        'GET /me': [() => json(owner)],
+        'GET /me/listings': [() => json([a]), never],
+        'GET /areas': [() => json([gushDan])],
+        [`PATCH /listings/${a.id}`]: [() => json(a)],
+      });
+      const view = renderEdit(a.id);
+      const heading = await screen.findByRole('heading', {
+        level: 1,
+        name: he.listings.edit.expiredTitle,
+      });
+      await vi.waitFor(() => {
+        expect(heading).toHaveFocus();
+      });
+      expect(screen.getByText(he.listings.edit.expiredBody)).toBeVisible();
+      expect(backLink()).toHaveAttribute('href', '/me/listings');
+      for (const role of ['textbox', 'combobox', 'spinbutton']) {
+        expect(screen.queryAllByRole(role)).toHaveLength(0);
+      }
+      expect(api.calls(`PATCH /listings/${a.id}`)).toHaveLength(0);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
 
-    const a = stored({ status: 'active', expires_at: '2020-01-01T00:00:00Z' });
-    const { api, view } = await openEdit(a, [() => json({ ...a, price_ils: 7500 })]);
-    expect(hint()).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
-    expect(progress()).toHaveAttribute('aria-valuenow', '1');
-    expect(hint()).toBeVisible();
-    fireEvent.click(nextButton());
-    change(f.price, '7500');
-    fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
-    expect(hint()).toBeVisible();
-    fireEvent.click(saveButton());
-    await vi.waitFor(() => {
-      expect(currentPath()).toBe('/me/listings');
-    });
-    expect(api.calls(`PATCH /listings/${a.id}`).map((c) => c.body)).toStrictEqual([
-      { price_ils: 7500 },
-    ]);
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // Live and paused (even past its expiry): no hint.
-    for (const other of [
-      stored(),
-      stored({ status: 'paused' }),
-      stored({ status: 'paused', expires_at: '2020-01-01T00:00:00Z' }),
-    ]) {
+  it('ac3_live_and_paused_before_expiry_still_editable', async () => {
+    for (const other of [stored(), stored({ status: 'paused' })]) {
       const opened = await openEdit(other);
-      expect(hint()).toBeNull();
+      expect(title()).toBeVisible();
+      expect(screen.queryByText(he.listings.edit.expiredTitle)).toBeNull();
+      expect(screen.queryByText(he.listings.edit.expiredBody)).toBeNull();
       opened.view.unmount();
       vi.unstubAllGlobals();
     }
