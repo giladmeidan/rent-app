@@ -51,10 +51,11 @@ ls -t .outbox/*.json | head -1 | xargs cat
 | `make test` | `test-api` then `test-web`. `test-api`: pytest; needs Postgres at `TEST_DATABASE_URL` and Redis at `REDIS_URL` (the compose `db`/`redis`; the test database is created on first run). `test-web`: vitest |
 | `make lint` | `lint-api` then `lint-web`. `lint-api`: `ruff check`, `ruff format --check`, `mypy --strict`. `lint-web`: `eslint`, `prettier --check`, `tsc --noEmit` (runs `make client` first if `web/src/api/schema.d.ts` is missing) |
 | `make client` | exports the OpenAPI schema with `api/scripts/export_openapi.py` (no server) and generates `web/src/api/schema.d.ts` (git-ignored) with `openapi-typescript`. Re-run after changing the API |
-| `make i18n-check` | fails, printing `file:line`, on hardcoded Hebrew or English (≥ 2 Latin words) in `web/src/**/*.tsx` and on `t('key')` keys missing from `web/src/locales/he.json`. Test files, `locales/` and JSX attributes other than `title`/`placeholder`/`aria-label`/`alt` are skipped; put `// i18n-ignore-next-line` above a line that is a false positive |
+| `make i18n-check` | fails, printing `file:line`, on hardcoded Hebrew or English (≥ 2 Latin words) in `web/src/**/*.tsx` and on `t('key')` keys missing from `web/src/locales/he.json`. Test files and `locales/` are skipped; the English check also skips JSX attributes other than `title`/`placeholder`/`aria-label`/`alt` (Hebrew fails in any attribute); put `// i18n-ignore-next-line` above a line that is a false positive |
 | `make e2e` | Playwright smoke suite against the running stack (`make dev` first): installs Chromium, waits up to 90 s for `/health` and the web, then runs `web/e2e/` |
+| `make build-web` | production build of the web (`tsc --noEmit`, `vite build` with the PWA manifest and service worker) into `web/dist` |
 
-The web targets install `web/node_modules` with `pnpm install --frozen-lockfile` when it is missing or older
+The web targets install `web/node_modules` with `pnpm install --frozen-lockfile` when pnpm's `web/node_modules/.modules.yaml` is missing or older
 than `web/package.json` / `web/pnpm-lock.yaml`.
 
 ## Configuration
@@ -87,7 +88,8 @@ api/            FastAPI app (app/), Alembic migrations (alembic/), scripts/, tes
 web/            Vite + React + TS app: src/{app,features,components,locales,api}, e2e/, scripts/
 infra/          docker-compose.yml, Dockerfile.api, Dockerfile.web
 specs/          one spec per slice + PRODUCT.md
-.github/        CI: api (ruff, mypy --strict, pytest), web (client, i18n-check, eslint, prettier, tsc, vitest), e2e (compose + playwright)
+.github/        CI: api (ruff, mypy --strict, pytest) and web (client, i18n-check, eslint, prettier, tsc, vitest, build) on every PR push;
+                e2e (compose + playwright) only on PRs labelled `ready-to-merge` and on pushes to main; Markdown/specs/design-only changes run no CI
 ```
 
 ## Scripts

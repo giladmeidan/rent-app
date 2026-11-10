@@ -8,3 +8,11 @@ Minor findings deferred by the coder. Format: `- [ ] NNNN · file:line · what �
 - [ ] 0001a · api/app/routers/auth.py (cookie) · Slice 12 must serve web and API under one registrable domain (`app.X` / `api.X`): the `SameSite=Lax` session cookie is never sent between `*.pages.dev` and `*.fly.dev` (public suffix list), which breaks 0001b in production · deployment decision, not code; review round 1 minor 7
 - [ ] 0001a · api/app/services/auth.py:_count_request · per-IP limit on `POST /auth/otp/verify`, IPv6 rate-limit buckets per /64 instead of /128, and a global email send cap (today ~960 code requests/day per IP across emails) · needs real client IPs behind the Slice 12 reverse proxy (`request.client.host` is the proxy until then); review round 1 minor 8
 - [ ] 0001a · api/app/services/auth.py:OTP_RATE_LIMIT_EMAIL_DAY · 10 requests over ~45 min still lock a chosen account out of login for a day · accepted for MVP by the orchestrator (spec Risks); revisit in Slice 10 (trust) with an email-confirmed unlock or a soft cap
+- [ ] 0000b · web/scripts/i18n-check.mjs · `t()`'s later arguments (e.g. `defaultValue`) are not scanned for hardcoded copy · review round 1 minor, deferred
+- [ ] 0000b · web/scripts/i18n-check.mjs · `LATIN_WORD` misses words with apostrophes or brackets ("don't", "(beta)") · review round 1 minor, deferred
+- [ ] 0000b · web/scripts/i18n-check.mjs · `t(variable)` and conditional keys are not validated against he.json · review round 1 minor, deferred
+- [ ] 0000b · web/src/features/areas/AreasList.tsx · the loading list is announced as an empty list by screen readers; use `role="status"` / visually hidden text · review round 1 minor, deferred
+- [ ] 0000b · web/src/components/ErrorState.tsx · the retry button's focus ring is the same colour as the button · review round 1 minor, deferred
+- [ ] 0000b · web/src/components/ErrorState.tsx · no busy indication on the retry button while refetching · review round 1 minor, deferred
+- [ ] 0000b · web/src/components/ErrorState.tsx · error copy does not distinguish offline from a server error · review round 1 minor, deferred
+- [ ] 0000b · .github/workflows/ci.yml (e2e) · docker layer cache for the compose build · not needed for NF1 yet; review round 1 minor, deferred
