@@ -1,7 +1,7 @@
 ---
 id: 0001b
 title: A person signs up (as owner or seeker) or logs in from the web app with an email code, and the header shows who they are with a logout button
-status: verified
+status: in-progress
 depends_on: [0000b, 0001a]
 reviewers: [code, qa, ux, security]   # ux: two new screens + header state; security: credentials handling in the client, no code leakage
 estimate: 1 coder run
