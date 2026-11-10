@@ -1,7 +1,7 @@
 ---
 id: 0001b
 title: A person signs up (as owner or seeker) or logs in from the web app with an email code, and the header shows who they are with a logout button
-status: verified
+status: done
 depends_on: [0000b, 0001a]
 reviewers: [code, qa, ux, security]   # ux: two new screens + header state; security: credentials handling in the client, no code leakage
 estimate: 1 coder run
@@ -18,7 +18,7 @@ Slice 9's landing CTAs, and nothing links to it in this slice.
 
 ## Scope
 **In:**
-- Routing: `react-router-dom` (new dependency). `web/src/app/App.tsx` wraps the tree in `BrowserRouter`;
+- Routing: `react-router` 7.x in library mode (new dependency; see **New dependencies**). `web/src/app/App.tsx` wraps the tree in `BrowserRouter`;
   `web/src/app/routes.tsx` declares `/` (the `AreasList` from `0000b`), `/login`, `/signup` and a catch-all
   `*` → `<Navigate to="/" replace />`, all inside `web/src/app/Layout.tsx`, which renders the header
   (`app.title`, `app.tagline`, `AuthMenu`) above an `<Outlet />`. `0000b` AC8 smoke must still pass.
@@ -42,7 +42,12 @@ Slice 9's landing CTAs, and nothing links to it in this slice.
   Protected routes / redirects to `/login` (nothing to protect yet; Slice 2 adds the first). Phone fields.
   "Remember me" (sessions are 30 days fixed). Email change. Any API change.
 
-**New dependencies** (pinned in `web/package.json`): `react-router-dom` 6.x. Tests use `fireEvent` from
+**New dependencies** (pinned in `web/package.json`): `react-router` 7.x in library (non-framework) mode, which
+includes the former `react-router-dom` surface (`BrowserRouter`, `Routes`, `Route`, `Navigate`, `Outlet`, `Link`,
+`useNavigate`, `useSearchParams`, `MemoryRouter`). Originally specced as `react-router-dom` 6.x; changed during
+the 0001b review (2026-11-10, orchestrator decision) because every 6.x release carries GHSA-wrjc-x8rr-h8h6 (open
+redirect via backslash in `Link`/`useNavigate`) and GHSA-337j-9hxr-rhxg (SSR `deserializeErrors`), fixed only in
+`react-router` ≥ 7.18.0. Tests use `fireEvent` from
 `@testing-library/react` only (no `user-event`); native radio arrow-key behaviour is browser-provided and
 is checked by the ux reviewer in a browser, not in jsdom.
 
@@ -189,3 +194,18 @@ Verifier notes (2026-11-09): round 1 rejected with 14 findings, all applied abov
            No artboard for login/signup — mitigation: tokens from Main.dc.html, field anatomy from CreateListing.dc.html; ux reviewer compares.
     Reviewers: code, qa, ux, security   Estimated: 1 coder run, 1 review round
     Links: specs/0001b-auth-web.md · PRODUCT.md "Account roles", "Signup data", "Language" · design/screens-v1/Main.dc.html (header, CTAs), CreateListing.dc.html (form anatomy)
+
+    Spec 0001b — Auth web: signup / login / header   IN REVIEW · PR #4 (giladmeidan/rent-app), head = this commit
+    Shipped: /signup and /login with an emailed 6-digit code (owner / seeker choice + name on signup, revealed inline on
+             login when the email is new); header shows שלום, {name} with התנתקות, or כניסה / הרשמה when logged out.
+    Demo: 1) make dev → http://localhost:5173/signup, pick "יש לי דירה / חדר", enter a name and x@example.com, שלחו לי קוד
+          2) open the newest .outbox/*.json, copy the 6 digits, paste into the code field, כניסה → lands on / with the greeting
+          3) התנתקות → header shows כניסה; /login with the same email now logs in without the profile step
+    Tests: +9 unit (AC1–AC6, AC8, AC9 + paste), +0 integration, +1 e2e (AC7 via the outbox)   CI: api 51 s · web 46 s · e2e label-gated
+    Findings: 0 blockers, 1 major fixed (react-router-dom 6.x advisories → react-router 7.18.5), 3 minors fixed (AC5 focus
+              test, mutation gcTime 0, paste of a spaced code), 7 follow-ups logged in FOLLOWUPS.md, 15 nits dropped
+    Changed in PRODUCT.md: nothing (dependency change recorded in this spec's Scope)
+    Next spec I propose: 0002a — Owner posts a listing (API)  (needs your decisions: listing fields and required photos
+              per PRODUCT.md "Listing data"; whether a listing can be published without a verified phone)
+
+    Spec 0001b — Auth web   MERGED 2352515 (PR #4, 2026-11-10), CI api 51 s · web 46 s · e2e 2 min 14 s.

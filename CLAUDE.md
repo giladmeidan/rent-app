@@ -16,7 +16,11 @@ and delegates. It never writes application code itself. Delegation chain:
    fixes → digest and reports back only the PR link, the CI result and the digest. The orchestrator never reads
    diffs or agent transcripts into its own context.
 2. **Queue.** The orchestrator moves to the next `verified` spec on its own; it does not wait for a new session
-   or a go-ahead between specs. Gilad approves spec digests in batches.
+   or a go-ahead between specs. Gilad approves spec digests in batches. A spec is **ready to build** when it is
+   `verified` and every spec in its `depends_on` is merged or open as a PR. The orchestrator starts a build
+   session for **every** ready spec at once, not one at a time (Gilad, 2026-11-10); the only serialisation is
+   `depends_on`. Exception: the Vite dev server is pinned to port 5173 on this Mac, so two **web** specs do not
+   build at the same time locally — an API spec and a web spec, or two API specs, do.
 3. **Parallel.** Specs with no `depends_on` between them build at the same time, each in its own worktree
    (`../rent-app-NNNN`) with its own `.env` (`COMPOSE_PROJECT_NAME=rent-app-NNNN` and its own `DB_PORT`,
    `REDIS_PORT`, `API_PORT`). A web half starts from the API half's branch as soon as that PR is open and
@@ -38,6 +42,22 @@ and delegates. It never writes application code itself. Delegation chain:
    label — the spec session adds it once the review fixes are pushed — and on `main`. A PR, or a push to `main`, whose
    changes are only `*.md`, `specs/` or `design/` runs no CI (the filter looks at the whole PR, not one push). Nothing merges unless `api`, `web` and `e2e` are all green on the
    PR's head commit. Any new slow job (anything over ~1 minute) joins the label-gated tier, not the push tier.
+
+9. **Consult Gilad on high-value calls (Gilad, 2026-11-10).** While a spec is being built or reviewed, anything
+   that changes what the product does, what it costs, or what a later slice can do is Gilad's choice, not the
+   spec session's: a product behaviour the spec leaves open, a new paid service or a dependency swap with
+   long-term weight, a schema or API shape a later slice depends on, a security trade-off, or dropping an AC.
+   The spec session messages the orchestrator with the question, 2–3 options and a recommendation, and keeps
+   building everything that does not hinge on it; the orchestrator puts it to Gilad in a digest line
+   ("Decisions I need from you") and relays the answer, which is written into `specs/PRODUCT.md` or the spec
+   the same day. Minor and mechanical choices stay with the agents; a review minor is never such a question.
+
+10. **Clean up after a spec (Gilad, 2026-11-10).** A spec's compose stack and worktree exist only while the spec
+    is being built. The spec session's last step, after its final report, is `make down` in its worktree (stops
+    the `rent-app-NNNN` containers, removes their volumes, empties its `.outbox/`). After the PR merges, the
+    orchestrator runs `git worktree remove ../rent-app-NNNN` and `git branch -d spec/NNNN-…` from the main
+    checkout and notes it in the handoff; a worktree is kept only while a dependent web half is still branched
+    from it. Never leave a stack running "in case": it burns CPU and ports and confuses `docker ps`.
 
 Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/`:
 `/spec <slice-title>`, `/build <spec-id>`, `/review <spec-id>`, `/digest <spec-id>`.
