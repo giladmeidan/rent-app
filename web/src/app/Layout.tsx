@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router';
 
 import { AuthMenu } from '../features/auth/AuthMenu';
 

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router';
 
 import type { Role } from '../../api/client';
 import { OtpForm } from './OtpForm';

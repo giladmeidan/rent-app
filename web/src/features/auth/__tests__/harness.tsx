@@ -2,11 +2,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { vi } from 'vitest';
 
 import type { UserOut } from '../../../api/client';
-import { routerFuture } from '../../../app/routes';
 
 export const noa: UserOut = {
   id: '00000000-0000-0000-0000-0000000000aa',
@@ -78,7 +77,7 @@ export function testQueryClient(retry: boolean | number = false) {
 export function renderRoutes(path: string, routes: ReactNode, client = testQueryClient()) {
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[path]} future={routerFuture}>
+      <MemoryRouter initialEntries={[path]}>
         {routes}
         <Location />
       </MemoryRouter>
