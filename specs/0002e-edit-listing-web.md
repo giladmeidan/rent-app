@@ -1,7 +1,7 @@
 ---
 id: 0002e
 title: An owner opens one of their listings from "my listings", edits its facts in the same wizard they published it with, and saves only what changed
-status: in-progress
+status: in-review
 depends_on: []           # 0002a, 0002b, 0002d, 0003b are merged
 reviewers: [code, qa, ux]   # ux: new route + edit link on a changed screen; no security: no new endpoint, ownership is 0002a's PATCH (404 in SQL), no PII
 estimate: 1 coder run
