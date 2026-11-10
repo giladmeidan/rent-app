@@ -10,6 +10,31 @@ and delegates. It never writes application code itself. Delegation chain:
 
     orchestrator → spec-verifier → coder → reviewers (chosen per spec) → Gilad merges
 
+## Speed rules (Gilad, 2026-11-10)
+1. **One session per spec.** The orchestrator session only keeps the queue: it starts a separate Claude Code
+   session for each spec, in that spec's worktree, running `/build NNNN`. That session runs coder → reviewers →
+   fixes → digest and reports back only the PR link, the CI result and the digest. The orchestrator never reads
+   diffs or agent transcripts into its own context.
+2. **Queue.** The orchestrator moves to the next `verified` spec on its own; it does not wait for a new session
+   or a go-ahead between specs. Gilad approves spec digests in batches.
+3. **Parallel.** Specs with no `depends_on` between them build at the same time, each in its own worktree
+   (`../rent-app-NNNN`) with its own `.env` (`COMPOSE_PROJECT_NAME=rent-app-NNNN` and its own `DB_PORT`,
+   `REDIS_PORT`, `API_PORT`). A web half starts from the API half's branch as soon as that PR is open and
+   rebases after it merges. The next slice is specced and verified while the current one builds. When two PRs
+   touch the same file, the second to merge rebases.
+4. **One review round.** Reviewers are chosen by risk, not by habit: an infra/skeleton spec gets `code` only.
+   Blockers and majors are fixed; minors go straight to `specs/FOLLOWUPS.md` unless the fix is one line; nits
+   are dropped. After the fixes the spec session checks them itself; reviewers are not re-run.
+5. **No duplicate documents.** The PR body and the review digest live on the GitHub PR only (no `PR-NNNN.md`
+   or `REVIEW-*.md` in the repo, no per-finding reply list). The repo keeps one thing: the spec's `## Digest`.
+6. **Model per task.** Whoever spawns an agent picks its model and effort for the job: Opus/high for the
+   spec-verifier, the coder on auth, money, data or migrations, and the security reviewer; Sonnet/medium for
+   ux, qa and perf reviews of small specs, review fixes that are mechanical, and docs. When in doubt, the
+   stronger one.
+7. **CI once per round.** Agents commit locally and run `make lint` / `make test` there; they push only when
+   the round is complete (the build, then the fixes), so CI runs on the last commit, not on each one. Nothing
+   merges unless CI is green on the PR's head commit.
+
 Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/`:
 `/spec <slice-title>`, `/build <spec-id>`, `/review <spec-id>`, `/digest <spec-id>`.
 
@@ -59,7 +84,7 @@ Findings are graded: **blocker** (spec not met, data loss, security, broken auth
 **nit** (taste; folded at the bottom, no action).
 Every finding: `file:line`, the rule or AC it breaks, suggested fix. Digest first line = counts per severity.
 Blockers need a failing test or a concrete repro. A review with only nits on a non-trivial PR is re-run stricter.
-Max 3 review rounds; a 3rd rejection returns the spec to the orchestrator as a spec defect.
+One review round (Speed rules 4); a blocker that survives the fixes returns the spec to the orchestrator as a spec defect.
 
 ## Working with Gilad
 Gilad has ~5 h/week. He reads spec digests and review digests, not diffs. The orchestrator
