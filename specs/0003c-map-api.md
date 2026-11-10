@@ -1,7 +1,7 @@
 ---
 id: 0003c
 title: Live listings get an approximate map location from their city and street (Nominatim, in the worker), and public search can filter by a map bounding box and returns that approximate point
-status: in-progress
+status: in-review
 depends_on: [0003a]
 reviewers: [code, qa, perf, security]   # perf: new spatial predicate on the public search path; security: a home's location (PII-adjacent), outbound HTTP to a third party, new config; qa: bbox and failure edge cases
 estimate: 1 coder run
@@ -252,6 +252,9 @@ end to end). NF2 is a reviewer measurement.
   only (stored points do not move). Acceptable.
 - Two sweeps never overlap (Redis lock, 60 s expiry); if a worker dies mid-sweep the lock expires after 60 s and
   the next sweep resumes. Rows are committed one by one, so a crash loses at most one result.
+- Coder note (build): Scope says a non-finite Nominatim coordinate gives `None`, AC7 says
+  `[{"lat": "nan", "lon": "34.8"}]` raises `GeocoderUnavailable(stop_sweep=False)`. Built as AC7 (a
+  `nan` / `inf` coordinate is a malformed payload, retried, never cached as "not found").
 - This branch starts from `main` (0003a and 0003b merged). It touches `services/listings.py` (`update_listing`) and
   the search schema/service, which no open PR touches today.
 
