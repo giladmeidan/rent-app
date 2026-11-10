@@ -73,6 +73,14 @@ describe('i18n-check', () => {
     expect(output).not.toContain('A.tsx:5:');
   });
 
+  it('fails on Hebrew in any attribute, not only the checked ones', () => {
+    const { status, output } = runOn({
+      'C.tsx': 'export const C = () => <EmptyState message="אין אזורים" />;\n',
+    });
+    expect(status).toBe(1);
+    expect(output).toContain('C.tsx:1: hardcoded Hebrew');
+  });
+
   it('skips the line after an i18n-ignore-next-line comment', () => {
     const { status, output } = runOn({
       'B.tsx': [

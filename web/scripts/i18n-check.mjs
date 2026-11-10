@@ -4,7 +4,8 @@
 //
 // Scans every .tsx under srcDir except locales/, any __tests__/ directory and *.test.tsx. A string
 // literal, template chunk or JSX text is a hit when it contains a Hebrew letter or two consecutive
-// Latin words. JSX attribute values are ignored except title, placeholder, aria-label and alt.
+// Latin words. For the Latin check, JSX attribute values are ignored except title, placeholder,
+// aria-label and alt; Hebrew fails in any attribute.
 // Only .tsx is scanned, so the other allowed literals (web/public/manifest.webmanifest and
 // vite.config.ts, which holds the PWA manifest name) are never read. A line directly below a
 // comment containing `i18n-ignore-next-line` is skipped. Prints file:line per hit; exits 1 on any.
@@ -110,12 +111,14 @@ function checkFile(path) {
       !ts.isImportDeclaration(node.parent) &&
       !ts.isExportDeclaration(node.parent)
     ) {
+      // Hebrew fails anywhere; the attribute exemption applies to the Latin heuristic only.
       const attribute = enclosingAttribute(node);
-      if (attribute === undefined || CHECKED_ATTRIBUTES.has(attribute)) {
-        if (HEBREW.test(value)) report(node, `hardcoded Hebrew ${JSON.stringify(value.trim())}`);
-        else if (hasTwoLatinWords(value.trim()))
-          report(node, `hardcoded text ${JSON.stringify(value.trim())}`);
-      }
+      if (HEBREW.test(value)) report(node, `hardcoded Hebrew ${JSON.stringify(value.trim())}`);
+      else if (
+        (attribute === undefined || CHECKED_ATTRIBUTES.has(attribute)) &&
+        hasTwoLatinWords(value.trim())
+      )
+        report(node, `hardcoded text ${JSON.stringify(value.trim())}`);
     }
     ts.forEachChild(node, visit);
   };
