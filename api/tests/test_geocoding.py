@@ -39,12 +39,12 @@ from app.services.geocoding import (
 from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import Outbox, make_listing, make_owner, set_location, signup
 
-KATZ = "כצנלסון"  # make_listing's default street
-GIV = "גבעתיים"  # make_listing's default city
-WEIZ = "ויצמן"
-BIALIK = "ביאליק"
-HERZL = "הרצל"
-RAMAT_GAN = "רמת גן"
+KATZ = "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df"  # make_listing's default street
+GIV = "\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd"  # make_listing's default city
+WEIZ = "\u05d5\u05d9\u05e6\u05de\u05df"
+BIALIK = "\u05d1\u05d9\u05d0\u05dc\u05d9\u05e7"
+HERZL = "\u05d4\u05e8\u05e6\u05dc"
+RAMAT_GAN = "\u05e8\u05de\u05ea \u05d2\u05df"
 
 SECRET = "test-secret-for-approximate-points-0123"
 PREFIX = "test-geo:"
@@ -370,6 +370,28 @@ def test_ac5_failures_keep_listing_live_and_off_the_map(
 
 
 @pytest.mark.usefixtures("geo_clean")
+def test_ac5_a_failed_row_goes_behind_fresh_ones(
+    gush_dan: uuid.UUID, db_engine: Engine, owner_id: uuid.UUID
+) -> None:
+    an_hour_ago = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
+    failed_once = make_listing(
+        db_engine, owner_id, gush_dan, street=WEIZ, geocode_attempts=1, updated_at=an_hour_ago
+    )
+    fresh = make_listing(db_engine, owner_id, gush_dan, street=BIALIK)
+    outage = Stub(FakeClock(), default=GeocoderUnavailable(stop_sweep=False))
+
+    assert _sweep(db_engine, outage) == _counts(retry=1)
+    assert [street for _, street, _ in outage.calls] == [BIALIK]
+    assert _geo(db_engine, fresh) == Geo("pending", 1, None, None)
+    assert _geo(db_engine, failed_once) == Geo("pending", 1, None, None)
+    get_redis().delete(PAUSE)
+
+    healthy = Stub(FakeClock())
+    assert _sweep(db_engine, healthy) == _counts(located=2)
+    assert [street for _, street, _ in healthy.calls] == [WEIZ, BIALIK]  # then by updated_at
+
+
+@pytest.mark.usefixtures("geo_clean")
 def test_ac6_result_for_a_changed_address_is_dropped(
     gush_dan: uuid.UUID, db_engine: Engine, owner_id: uuid.UUID
 ) -> None:
@@ -423,7 +445,7 @@ class Nominatim:
         self.requests.append(request)
         return self.respond(request)
 
-    def geocode(self, street: str = f"{KATZ} 12א") -> Point | None:
+    def geocode(self, street: str = f"{KATZ} 12\u05d0") -> Point | None:
         client = httpx.Client(
             transport=httpx.MockTransport(self.handler),
             base_url="https://nominatim.test",
@@ -514,11 +536,24 @@ def test_ac8_approximate_point_street_query_and_fake_geocoder() -> None:
     assert approximate_point(other_id, POINT, SECRET) != approximate_point(fixed, POINT, SECRET)
     assert approximate_point(fixed, POINT, SECRET + "x") != approximate_point(fixed, POINT, SECRET)
 
-    for street in (f"{KATZ} 12", f"{KATZ}  12א ", f"12 {KATZ}"):
-        assert street_query(street) == KATZ
+    house_numbers = (
+        f"{KATZ} 12",
+        f"{KATZ}  12\u05d0 ",
+        f"12 {KATZ}",
+        f"{KATZ} 12,",
+        f"{KATZ} 12/3",
+        f"{KATZ} 12-14",
+        f"{KATZ} 12A",
+        f"{KATZ} #12",
+        f"{KATZ} 12\u05d0\u05f3",
+        f"{KATZ} 12\u05d0'",
+    )
+    for street in house_numbers:
+        assert street_query(street) == KATZ, street
+    assert street_query(f"{KATZ}12") == f"{KATZ}12"  # space-less: out of scope (FOLLOWUPS)
     assert street_query("12") == ""
-    assert street_query("ה-12") == "ה-12"
-    assert street_query(f"ה-12  {KATZ}") == f"ה-12 {KATZ}"
+    assert street_query("\u05d4-12") == "\u05d4-12"
+    assert street_query(f"\u05d4-12  {KATZ}") == f"\u05d4-12 {KATZ}"
 
     fake = FakeGeocoder()
     point = fake.geocode(GIV, KATZ, GUSH_DAN_ENVELOPE)

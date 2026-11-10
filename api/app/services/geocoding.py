@@ -54,7 +54,11 @@ _CACHE_NONE = b"none"
 NOMINATIM_MIN_INTERVAL_S = 1.1
 NOMINATIM_TIMEOUT_S = 3.0
 
-_HOUSE_NUMBER = re.compile(r"\d+[א-ת]?")
+# A whole token that is a house number: ASCII digits, optionally `#` first, a `/` or `-` range or
+# sub-number, one Latin or Hebrew letter, a geresh (`\u05f3` or `'`) and a trailing `,` or `.`:
+# `12`, `12,`, `12/3`, `12-14`, `12A`, `#12`, `12\u05d0\u05f3`. A token that starts with a letter
+# (`\u05d4-12`) is not one; neither is a space-less `<street>12` (FOLLOWUPS).
+_HOUSE_NUMBER = re.compile(r"#?[0-9]+(?:[/-][0-9]+)?[A-Za-z\u05d0-\u05ea]?[\u05f3']?[,.]?")
 
 
 class GeocoderUnavailable(Exception):  # noqa: N818  (the name the spec fixes)
@@ -76,7 +80,7 @@ class Geocoder(Protocol):
 
 
 def street_query(street: str) -> str:
-    """`street` without its house-number tokens (`12`, `12א`), whitespace collapsed. An empty
+    """`street` without its house-number tokens (`_HOUSE_NUMBER`), whitespace collapsed. An empty
     result means "not found", without a request."""
     return " ".join(token for token in street.split() if not _HOUSE_NUMBER.fullmatch(token))
 
@@ -176,7 +180,7 @@ def get_geocoder() -> Geocoder:
 
 def approximate_point(listing_id: uuid.UUID, point: Point, secret: str) -> Point:
     """`point` moved by a deterministic per-listing offset of `k * 0.0001` degrees per axis,
-    `k = ±(1 + u % 20)` (never zero, at most `JITTER_DEG`), rounded to 4 decimals. Keyed by
+    `k = +-(1 + u % 20)` (never zero, at most `JITTER_DEG`), rounded to 4 decimals. Keyed by
     `secret`, so the offset cannot be undone from the listing id alone."""
     h = hmac.new(secret.encode(), b"geo:" + listing_id.bytes, hashlib.sha256).digest()
 
@@ -250,7 +254,9 @@ def geocode_pending(
                 Listing.status == "active",
                 Listing.expires_at > func.now(),
             )
-            .order_by(Listing.updated_at, Listing.id)
+            # Rows that already failed go behind fresh ones, so one failing address cannot hold the
+            # head of the queue after every pause.
+            .order_by(Listing.geocode_attempts, Listing.updated_at, Listing.id)
             .limit(SWEEP_BATCH)
         ).all()
         db.commit()  # no transaction stays open across geocoder calls
