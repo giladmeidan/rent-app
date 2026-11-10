@@ -1,4 +1,4 @@
-import { cleanup as unmount, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup as unmount, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +11,7 @@ import {
   mockApi,
   networkError,
   renderRoutes,
+  testQueryClient,
 } from '../../auth/__tests__/harness';
 import { LoginPage } from '../../auth/LoginPage';
 import { ListingPage } from '../../listings/ListingPage';
@@ -45,7 +46,7 @@ const routes = (
   </Routes>
 );
 
-const renderListing = () => renderRoutes('/listings/A', routes);
+const renderListing = (client = testQueryClient()) => renderRoutes('/listings/A', routes, client);
 
 /** The apply section, once the listing has loaded. */
 async function section() {
@@ -79,14 +80,19 @@ const appliedText = (app: MyApplicationOut) =>
 const charsLeft = (count: number) => i18n.t('listings.fields.charsLeft', { count });
 
 /** A seeker on `/listings/A` whose `GET /me/applications` answers `mine`. */
-function renderSeeker(mine: Reply[], extra: Record<string, Reply[]> = {}, count = 0) {
+function renderSeeker(
+  mine: Reply[],
+  extra: Record<string, Reply[]> = {},
+  count = 0,
+  client = testQueryClient(),
+) {
   const api = mockApi({
     'GET /me': [json(seeker)],
     [LISTING]: [listingReply(count)],
     [MINE]: mine,
     ...extra,
   });
-  renderListing();
+  renderListing(client);
   return api;
 }
 
@@ -102,6 +108,12 @@ function type(field: HTMLElement, value: string) {
 }
 
 const submit = () => screen.getByRole('button', { name: he.applications.form.submit });
+
+/** Clicks submit as a pointer does: the button takes focus first. */
+function send() {
+  submit().focus();
+  fireEvent.click(submit());
+}
 
 /** The ids in `el`'s `aria-describedby`. */
 const describedBy = (el: HTMLElement) => (el.getAttribute('aria-describedby') ?? '').split(' ');
@@ -236,7 +248,7 @@ describe('ApplySection', () => {
       [APPLY]: [json({ detail: 'already_applied' }, 409)],
     });
     type(await openForm(), MESSAGE);
-    fireEvent.click(submit());
+    send();
     const s = await section();
     expect(await s.findByText(appliedText(existing))).toBeVisible();
     expect(s.queryByRole('textbox')).toBeNull();
@@ -247,17 +259,18 @@ describe('ApplySection', () => {
     renderSeeker([json([])], { [APPLY]: [json({ detail: 'rate_limited' }, 429)] });
     let field = await openForm();
     type(field, MESSAGE);
-    fireEvent.click(submit());
+    send();
     const limited = await screen.findByRole('alert');
     expect(limited).toHaveTextContent(he.applications.errors.rateLimited);
     expect(field).toHaveValue(MESSAGE);
     expect(describedBy(field)).toContain(limited.id);
+    expect(field).toHaveFocus();
     cleanup();
 
     // 404: the listing no longer takes applications; the form is gone.
     renderSeeker([json([])], { [APPLY]: [json({ detail: 'not_found' }, 404)] });
     type(await openForm(), MESSAGE);
-    fireEvent.click(submit());
+    send();
     expect(await screen.findByRole('alert')).toHaveTextContent(he.applications.errors.unavailable);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: he.applications.form.submit })).toBeNull();
@@ -270,7 +283,7 @@ describe('ApplySection', () => {
     });
     field = await openForm();
     type(field, MESSAGE);
-    fireEvent.click(submit());
+    send();
     const invalid = await screen.findByRole('alert');
     expect(invalid).toHaveTextContent(he.listings.errors.invalid);
     expect(describedBy(field)).toContain(invalid.id);
@@ -282,7 +295,7 @@ describe('ApplySection', () => {
     // 401: the session is forgotten, so /login renders its form instead of bouncing back.
     renderSeeker([json([])], { [APPLY]: [unauthenticated()] });
     type(await openForm(), MESSAGE);
-    fireEvent.click(submit());
+    send();
     await vi.waitFor(() => {
       expect(currentPath()).toBe(`/login?next=${NEXT}`);
     });
@@ -294,19 +307,36 @@ describe('ApplySection', () => {
     expect(currentPath()).toBe(`/login?next=${NEXT}`);
     cleanup();
 
-    // 403: the generic error.
+    // 403: the generic error, focus back on the textarea.
     renderSeeker([json([])], { [APPLY]: [json({ detail: 'seeker_only' }, 403)] });
-    type(await openForm(), MESSAGE);
-    fireEvent.click(submit());
+    field = await openForm();
+    type(field, MESSAGE);
+    send();
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(field).toHaveFocus();
     cleanup();
 
     // Network error: the generic error with retry, which re-sends the same body.
     api = renderSeeker([json([])], {
       [APPLY]: [networkError, () => json(application({ status: 'submitted' }), 201)],
     });
+    field = await openForm();
+    type(field, `  ${MESSAGE} `);
+    send();
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(field).toHaveFocus();
+    // Editing the text drops the server error, so retry only ever re-sends an unchanged body.
+    type(field, `${MESSAGE}!`);
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.calls(APPLY)).toHaveLength(1);
+    cleanup();
+
+    api = renderSeeker([json([])], {
+      [APPLY]: [networkError, () => json(application({ status: 'submitted' }), 201)],
+    });
     type(await openForm(), `  ${MESSAGE} `);
-    fireEvent.click(submit());
+    send();
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
     fireEvent.click(screen.getByRole('button', { name: he.common.retry }));
     expect(await (await section()).findByRole('status')).toHaveTextContent(he.applications.sent);
@@ -361,6 +391,41 @@ describe('ApplySection', () => {
     fireEvent.click(await s.findByRole('button', { name: he.common.retry }));
     expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
     expect(api.calls(MINE)).toHaveLength(2);
+    cleanup();
+
+    // A background refetch of the list fails: the cached list stays, so the open form and the
+    // seeker's draft survive (no ErrorState).
+    let client = testQueryClient();
+    api = renderSeeker([json([]), networkError], {}, 0, client);
+    let field = await openForm();
+    type(field, MESSAGE);
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['me', 'applications'] });
+      // TanStack notifies observers on a timeout; let the error reach the section.
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(api.calls(MINE)).toHaveLength(2);
+    expect(client.getQueryState(['me', 'applications'])?.status).toBe('error');
+    s = await section();
+    expect(s.getByRole('textbox', { name: he.applications.form.label })).toHaveValue(MESSAGE);
+    expect(s.queryByRole('button', { name: he.common.retry })).toBeNull();
+    cleanup();
+
+    // A background refetch of /me fails: the cached seeker stays logged in, form and draft kept.
+    client = testQueryClient();
+    api = renderSeeker([json([])], { 'GET /me': [json(seeker), networkError] }, 0, client);
+    field = await openForm();
+    type(field, MESSAGE);
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['me'], exact: true });
+      // TanStack notifies observers on a timeout; let the error reach the section.
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(api.calls('GET /me')).toHaveLength(2);
+    expect(client.getQueryState(['me'])?.status).toBe('error');
+    s = await section();
+    expect(s.queryByText(he.applications.loginPrompt)).toBeNull();
+    expect(s.getByRole('textbox', { name: he.applications.form.label })).toHaveValue(MESSAGE);
     cleanup();
 
     // The list answers 401: the session is gone; the visitor prompt.

@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +11,7 @@ import {
   mockApi,
   networkError,
   renderRoutes,
+  testQueryClient,
 } from '../../auth/__tests__/harness';
 import { RequireSeeker } from '../../auth/RequireSeeker';
 import { seeker } from '../../listings/__tests__/fixtures';
@@ -39,9 +40,13 @@ const routes = (
 );
 
 /** A seeker on "my applications" whose list answers `mine`. */
-function renderPage(mine: Reply[], extra: Record<string, Reply[]> = {}) {
+function renderPage(
+  mine: Reply[],
+  extra: Record<string, Reply[]> = {},
+  client = testQueryClient(),
+) {
   const api = mockApi({ 'GET /me': [json(seeker)], [MINE]: mine, ...extra });
-  const view = renderRoutes(PATH, routes);
+  const view = renderRoutes(PATH, routes, client);
   return { api, view };
 }
 
@@ -91,6 +96,25 @@ describe('MyApplicationsPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
+    // A background refetch fails: the cached list stays on the page (no ErrorState).
+    const client = testQueryClient();
+    const cached = to('L1', { status: 'submitted' });
+    const refetching = renderPage([json([cached]), networkError], {}, client);
+    view = refetching.view;
+    await screen.findByRole('article');
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['me', 'applications'] });
+      // TanStack notifies observers on a timeout; let the error reach the page.
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(refetching.api.calls(MINE)).toHaveLength(2);
+    expect(client.getQueryState(['me', 'applications'])?.status).toBe('error');
+    expect(cards()).toHaveLength(1);
+    expect(screen.getByText(titleOf(cached))).toBeVisible();
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
     // Empty: the message and a way to search.
     ({ view } = renderPage([json([])]));
     expect(await screen.findByText(he.applications.mine.empty)).toBeVisible();
@@ -117,6 +141,8 @@ describe('MyApplicationsPage', () => {
       const link = within(heading).getByRole('link');
       expect(link).toHaveTextContent(titleOf(app));
       expect(link).toHaveAttribute('href', `/listings/${app.listing.id}`);
+      // A 44 px target that reads as a link.
+      expect(link).toHaveClass('inline-flex', 'min-h-[44px]', 'underline', 'text-accent-text');
       expect(card.getByText(/6,000[\s‎‏]*₪/)).toBeVisible();
       expect(card.getByTestId('application-status')).toHaveTextContent(
         he.applications.status[app.status as 'submitted'],
@@ -180,6 +206,20 @@ describe('MyApplicationsPage', () => {
     const first = within(cards()[0] as HTMLElement);
     expect(await first.findByRole('alert')).toHaveTextContent(he.common.error);
     expect(within(cards()[1] as HTMLElement).queryByRole('alert')).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // 404 (the application is gone): the list is requested again and the card shows the error.
+    ({ api, view } = renderPage([() => json([app])], {
+      [withdrawRoute(app)]: [json({ detail: 'not_found' }, 404)],
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
+    await vi.waitFor(() => {
+      expect(api.calls(MINE)).toHaveLength(2);
+    });
+    expect(await within(cards()[0] as HTMLElement).findByRole('alert')).toHaveTextContent(
+      he.common.error,
+    );
     view.unmount();
     vi.unstubAllGlobals();
 

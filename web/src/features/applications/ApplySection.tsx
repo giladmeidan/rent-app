@@ -78,16 +78,20 @@ function ApplyForm({ apply }: { apply: Apply }) {
       onError: (error) => {
         // 401 (log in and come back) and 409 `already_applied` (refetch) are the hook's.
         if (hasStatus(error, 401) || hasStatus(error, 409)) return;
+        // 404 removes the form; every other error keeps it, with focus back on the text.
+        if (hasStatus(error, 404)) {
+          setUnavailable(true);
+          return;
+        }
         if (hasStatus(error, 429)) setServerErr('rateLimited');
-        else if (hasStatus(error, 404)) setUnavailable(true);
         else if (
           error instanceof ApiError &&
           error.status === 422 &&
           isMessageError(error.detail)
         ) {
           setFieldErr('invalid');
-          fieldRef.current?.focus();
         } else setServerErr('failed');
+        fieldRef.current?.focus();
       },
     });
   }
@@ -157,6 +161,8 @@ function ApplyForm({ apply }: { apply: Apply }) {
             onChange={(e) => {
               setMessage(e.target.value);
               setFieldErr(null);
+              // Retry re-sends the last body, so it is offered only while the text is unchanged.
+              setServerErr(null);
             }}
             aria-invalid={fieldErr !== null}
             aria-describedby={describedBy}
@@ -277,13 +283,19 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
         <Skeleton className="h-[52px] w-full" />
       </div>
     );
-  } else if (me.isError || me.data === null || hasStatus(mine.error, 401)) {
-    // A failed /me renders the logged-out state, as the header does; a 401 on the list clears the
-    // session (useMyApplications), which lands here too.
+  } else if (
+    me.data === null ||
+    (me.isError && me.data === undefined) ||
+    hasStatus(mine.error, 401)
+  ) {
+    // A failed first /me renders the logged-out state, as the header does; a failed background
+    // refetch keeps the cached person (and an open form). A 401 on the list clears the session
+    // (useMyApplications), which lands here too.
     controls = visitor;
   } else if (!isSeeker) {
     controls = null;
-  } else if (mine.isError) {
+  } else if (mine.isError && mine.data === undefined) {
+    // Only when nothing is cached: a failed background refetch keeps the list and the draft.
     controls = <ErrorState onRetry={() => void mine.refetch()} />;
   } else {
     const application = mine.data?.find((a) => a.listing.id === listing.id);

@@ -50,7 +50,10 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
           <ApplicationStatusChip status={application.status} />
         </div>
         <h2 id={titleId} className="break-words text-lg font-bold leading-snug">
-          <Link to={`/listings/${listing.id}`} className={`rounded hover:underline ${focusRing}`}>
+          <Link
+            to={`/listings/${listing.id}`}
+            className={`inline-flex min-h-[44px] items-center rounded text-accent-text underline underline-offset-4 ${focusRing}`}
+          >
             {t('listings.card.title', {
               rooms: formatRooms(listing.rooms),
               street: listing.street,
@@ -117,7 +120,8 @@ export function MyApplicationsPage() {
         ))}
       </ul>
     );
-  } else if (applications.isError) {
+  } else if (applications.isError && applications.data === undefined) {
+    // Only when nothing is cached: a failed background refetch keeps the list on the page.
     body = <ErrorState onRetry={() => void applications.refetch()} />;
   } else if (applications.data.length === 0) {
     body = (
