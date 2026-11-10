@@ -28,7 +28,7 @@ class ProfileIn(BaseModel):
     @classmethod
     def _visible_characters_only(cls, value: str) -> str:
         """No control, format or separator characters, newlines included (`schemas/_text.py`)."""
-        return visible_characters_only(value)
+        return visible_characters_only(value, field="display_name")
 
 
 class OtpVerifyIn(BaseModel):
