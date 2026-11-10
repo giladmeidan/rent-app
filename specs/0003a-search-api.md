@@ -188,7 +188,7 @@ so the orchestrator set `verified`.
          &sort=price_asc 5.5 / 5.9 ms · (c) offset=10000 6.8 / 10.9 ms — all < 50 ms, seq scans, all shared-buffer hits; no index
     Findings: 0 blockers, 0 majors, 0 waived, 5 minors logged in FOLLOWUPS (shared rooms serialiser, repeated params last-wins,
               two notes for 0003b: omit empty params, map 422 by type/loc; search index at ~50k listings), 6 nits dropped
-    Changed in PRODUCT.md: nothing (the 7 product assumptions in Risks stand, pending Gilad's batch approval of the digest above)
+    Changed in PRODUCT.md: "Search" row — Gilad accepted decisions 1–7 as recommended (2026-11-10)
     Heads-up: FOLLOWUPS' 0002a entry "visible_characters_only lets invisible fillers through … do before 0003a" is still open,
               and listings are public from this PR on (city / street / description); worth a small spec before launch, not a blocker.
     Next spec I propose: 0003b — Search web (verified; depends on 0003a + 0002b, so it starts once 0002b's PR is open and 5173 is free)
