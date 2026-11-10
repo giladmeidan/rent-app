@@ -87,10 +87,18 @@ describe('DetailsStep', () => {
     );
     expect(field(f.city)).toHaveFocus();
 
-    // After the first attempt, errors update on blur.
+    // After the first attempt: a fixed field's error goes at once (no layout jump on the next
+    // click); a newly invalid field is reported on blur, not while typing.
     change(f.city, 'גבעתיים');
-    fireEvent.blur(field(f.city));
     expect(field(f.city)).toHaveAttribute('aria-invalid', 'false');
+    change(f.street, 'כצנלסון');
+    expect(field(f.street)).toHaveAttribute('aria-invalid', 'false');
+    change(f.street, 'א'.repeat(81));
+    expect(field(f.street)).toHaveAttribute('aria-invalid', 'false');
+    fireEvent.blur(field(f.street));
+    expect(errorFor(field(f.street))).toHaveTextContent(
+      i18n.t('listings.errors.tooLong', { max: 80 }),
+    );
     expect(api.calls('POST /listings')).toHaveLength(0);
   });
 });

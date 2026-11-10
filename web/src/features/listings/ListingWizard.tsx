@@ -78,10 +78,13 @@ export function ListingWizard() {
   const today = todayInIsrael();
 
   // One active area is preselected; a selection that is no longer offered is dropped.
-  let areaId = '';
-  if (areas.data?.length === 1) areaId = areas.data[0]?.id ?? '';
-  else if (areas.data?.some((area) => area.id === form.area_id)) areaId = form.area_id;
-  const current: ListingForm = { ...form, area_id: areaId };
+  const withArea = (values: ListingForm): ListingForm => {
+    let areaId = '';
+    if (areas.data?.length === 1) areaId = areas.data[0]?.id ?? '';
+    else if (areas.data?.some((area) => area.id === values.area_id)) areaId = values.area_id;
+    return { ...values, area_id: areaId };
+  };
+  const current = withArea(form);
 
   const fieldId = (name: FieldName) => `${id}-${name}`;
 
@@ -96,7 +99,22 @@ export function ListingWizard() {
   }, [step]);
 
   function update(patch: Partial<ListingForm>) {
-    setForm((old) => ({ ...old, ...patch }));
+    const next = { ...form, ...patch };
+    setForm(next);
+    // After the first attempt a shown error goes (or changes) as soon as its field is fixed, so
+    // nothing below it moves on the blur that a click on the next control causes. New errors still
+    // wait for blur or "next".
+    if (attempted) {
+      const found = validate(withArea(next), today);
+      setErrors((shown) => {
+        const kept: FieldErrors = {};
+        for (const name of FIELD_ORDER) {
+          const error = found[name];
+          if (shown[name] !== undefined && error !== undefined) kept[name] = error;
+        }
+        return kept;
+      });
+    }
   }
 
   function goTo(next: Step) {
