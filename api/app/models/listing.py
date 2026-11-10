@@ -1,7 +1,7 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
-Every CHECK, FK and index here matches migrations 0003 and 0004 exactly (autogenerate must see no
-diff). A listing is **live** while `status = 'active' AND expires_at > now()`.
+Every CHECK, FK and index here matches migrations 0003, 0004 and 0005 exactly (autogenerate must
+see no diff). A listing is **live** while `status = 'active' AND expires_at > now()`.
 
 Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
 `approximate_point`), never the geocoder's raw point; the worker fills it while `geocode_status` is
@@ -128,6 +128,9 @@ class Listing(Base):
     geocode_attempts: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=text("0")
     )
+    # Public listing-page views (spec 0004a, `services/applications.py` `record_view`); approximate
+    # by design (bots, refetches and the owner count). Never in a public schema.
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     # Deferred: only `_public_listings()` undefers them (owner endpoints never load them).
     lat: Mapped[float | None] = column_property(
         func.ST_Y(cast(location, PLAIN_GEOMETRY), type_=Float),
