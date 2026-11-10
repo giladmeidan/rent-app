@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router';
 
+import { MyApplicationsPage } from '../features/applications/MyApplicationsPage';
 import { AreasList } from '../features/areas/AreasList';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireOwner } from '../features/auth/RequireOwner';
+import { RequireSeeker } from '../features/auth/RequireSeeker';
 import { SignupPage } from '../features/auth/SignupPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
@@ -25,6 +27,9 @@ export function AppRoutes() {
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings" element={<MyListingsPage />} />
           <Route path="me/listings/:id/edit" element={<EditListingPage />} />
+        </Route>
+        <Route element={<RequireSeeker />}>
+          <Route path="me/applications" element={<MyApplicationsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -78,4 +78,35 @@ describe('AuthMenu', () => {
     expect(screen.getByRole('link', { name: he.header.signup })).toBeVisible();
     expect(api.calls('GET /me')).toHaveLength(1);
   });
+
+  it('ac9_my_applications_link', async () => {
+    // A seeker: "my applications", not "my listings".
+    mockApi({ 'GET /me': [json(noa)] });
+    let view = renderRoutes('/', <AuthMenu />);
+    expect(await screen.findByRole('link', { name: he.header.myApplications })).toHaveAttribute(
+      'href',
+      '/me/applications',
+    );
+    expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An owner: "my listings" only.
+    mockApi({ 'GET /me': [json({ ...noa, role: 'owner' })] });
+    view = renderRoutes('/', <AuthMenu />);
+    expect(await screen.findByRole('link', { name: he.header.myListings })).toHaveAttribute(
+      'href',
+      '/me/listings',
+    );
+    expect(screen.queryByRole('link', { name: he.header.myApplications })).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A visitor: neither.
+    mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)] });
+    renderRoutes('/', <AuthMenu />);
+    expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
+    expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
+    expect(screen.queryByRole('link', { name: he.header.myApplications })).toBeNull();
+  });
 });
