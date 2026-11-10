@@ -197,9 +197,9 @@ class ListingOut(BaseModel):
 
 class MyListingOut(ListingOut):
     """One of the caller's own listings on `GET /me/listings` (0004c): `ListingOut` plus its
-    applicant count (every application but withdrawn ones), new-applicant count (`submitted`) and
-    view count (approximate, `0004a`). `POST` / `PATCH /listings` keep returning `ListingOut`."""
+    applicant count (every application but withdrawn ones) and new-applicant count (`submitted`).
+    No `view_count`: owners do not see it (Gilad, 2026-11-10). `POST` / `PATCH /listings` keep
+    returning `ListingOut`."""
 
     applicant_count: int
     new_applicant_count: int
-    view_count: int

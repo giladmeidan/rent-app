@@ -57,7 +57,6 @@ def my_listings(owner: OwnerDep, db: DbDep) -> list[MyListingOut]:
             **dict(ListingOut.model_validate(listing)),
             applicant_count=applicant_count,
             new_applicant_count=new_applicant_count,
-            view_count=listing.view_count,
         )
         for listing, applicant_count, new_applicant_count in listings_service.list_own_listings(
             db, owner

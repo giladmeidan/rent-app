@@ -25,7 +25,7 @@ from tests.test_listings import _body
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
 APPLICANT_KEYS = {"id", "status", "message", "applicant_name", "created_at", "updated_at"}
-COUNT_KEYS = {"applicant_count", "new_applicant_count", "view_count"}
+COUNT_KEYS = {"applicant_count", "new_applicant_count"}
 LISTING_OUT_KEYS = set(ListingOut.model_fields)
 NOT_FOUND = {"detail": "not_found"}
 INVALID_TRANSITION = {"detail": "invalid_transition"}
@@ -372,6 +372,7 @@ def test_ac6_my_listings_counts(
     for n, status in enumerate(("submitted", "submitted", "shortlisted", "declined", "withdrawn")):
         seeker_id = make_seeker(db_engine, f"{status}-{n}@example.com")
         make_application(db_engine, listing_a, seeker_id, status=status)
+    # Owners do not see view_count (Gilad, 2026-11-10): set, to prove it is not exposed.
     _execute(db_engine, "UPDATE listings SET view_count = 7 WHERE id = :id", id=str(listing_a))
 
     response = owner.get("/me/listings")
@@ -381,12 +382,12 @@ def test_ac6_my_listings_counts(
     assert set(by_id) == {str(listing_a), str(listing_b)}
     for item in by_id.values():
         assert set(item) == LISTING_OUT_KEYS | COUNT_KEYS
+        assert "view_count" not in item
     counts = {
-        listing_id: tuple(item[key] for key in sorted(COUNT_KEYS))
+        listing_id: (item["applicant_count"], item["new_applicant_count"])
         for listing_id, item in by_id.items()
     }
-    # sorted(COUNT_KEYS): applicant_count, new_applicant_count, view_count
-    assert counts == {str(listing_a): (4, 2, 7), str(listing_b): (0, 0, 0)}
+    assert counts == {str(listing_a): (4, 2), str(listing_b): (0, 0)}
 
     owner.get("/me/listings")  # warm-up: a first connect sends its own setup statements
     statements.clear()
