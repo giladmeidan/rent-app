@@ -73,6 +73,16 @@ export async function signUpOwner(page: Page): Promise<string> {
   return signUp(page, 'owner');
 }
 
+/** Creates (or rotates) the invite link of the room `listingId` through the API with the page's
+ * (owner) session (0008d) and returns its token; a caller builds the link as
+ * `/flatmates/join#${token}`. */
+export async function createInvite(page: Page, listingId: string): Promise<string> {
+  const created = await page.request.post(`${API}/listings/${listingId}/flatmate-invite`);
+  expect(created.status()).toBe(201);
+  const { token } = (await created.json()) as { token: string };
+  return token;
+}
+
 /** `YYYY-MM-DD`, `days` from today in Israel. */
 function israelDay(days: number): string {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
