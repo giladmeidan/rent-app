@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
@@ -37,12 +37,17 @@ function Back() {
 }
 
 /** The link, shown once after a create or rotate: a read-only LTR input and "copy". Keyed by
- * the token, so a rotate starts with "copied" off. */
+ * the token, so a rotate starts with "copied" off. It mounts only after a create or rotate in
+ * this tab, and takes the focus then (the button pressed may be gone). */
 function InviteUrl({ url }: { url: string }) {
   const { t } = useTranslation();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   async function copy() {
     try {
@@ -88,30 +93,52 @@ function InviteUrl({ url }: { url: string }) {
 
 /** Create, then (rotate | disable). The token lives in this component's state only: after a
  * reload the link is "active" and can be rotated, never shown again (0008d). */
-function InviteBlock({ listingId, active }: { listingId: string; active: boolean }) {
+function InviteBlock({
+  listingId,
+  active,
+  onDisabled,
+}: {
+  listingId: string;
+  active: boolean;
+  onDisabled: () => void;
+}) {
   const { t } = useTranslation();
   const create = useCreateInvite(listingId);
   const disable = useDisableInvite(listingId);
   const [token, setToken] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const busy = create.isPending || disable.isPending;
+  // Same-tick guard: `busy` is render state, so a fast double click would send two POSTs, and the
+  // second would rotate away the link just shown.
+  const inFlight = useRef(false);
 
   function onCreate(confirmText?: string) {
-    if (busy) return;
+    if (inFlight.current) return;
     if (confirmText !== undefined && !window.confirm(confirmText)) return;
+    inFlight.current = true;
     setFailed(false);
     create.mutate(undefined, {
       onSuccess: (result) => setToken(result.token),
       onError: () => setFailed(true),
+      onSettled: () => {
+        inFlight.current = false;
+      },
     });
   }
 
   function onDisable() {
-    if (busy || !window.confirm(t('flatmates.invite.disableConfirm'))) return;
+    if (inFlight.current || !window.confirm(t('flatmates.invite.disableConfirm'))) return;
+    inFlight.current = true;
     setFailed(false);
     disable.mutate(undefined, {
-      onSuccess: () => setToken(null),
+      onSuccess: () => {
+        setToken(null);
+        onDisabled();
+      },
       onError: () => setFailed(true),
+      onSettled: () => {
+        inFlight.current = false;
+      },
     });
   }
 
@@ -180,11 +207,19 @@ function FlatmateRow({
   const remove = useRemoveFlatmate(listingId);
   const name = flatmate.display_name;
   const nameId = useId();
+  // Same-tick guard, as the invite block's.
+  const inFlight = useRef(false);
 
   function onRemove() {
-    if (remove.isPending) return;
+    if (inFlight.current) return;
     if (!window.confirm(t('flatmates.list.removeConfirm', { name }))) return;
-    remove.mutate(flatmate.id, { onSuccess: onRemoved });
+    inFlight.current = true;
+    remove.mutate(flatmate.id, {
+      onSuccess: onRemoved,
+      onSettled: () => {
+        inFlight.current = false;
+      },
+    });
   }
 
   return (
@@ -235,6 +270,7 @@ export function FlatmatesPage() {
   const isRoom = listing?.listing_type === 'room';
   const flatmates = useFlatmates(id, isRoom);
   const listTitleId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   // A removal turns the link off (0008d): the invite block remounts and drops a shown link.
   const [removals, setRemovals] = useState(0);
 
@@ -295,10 +331,21 @@ export function FlatmatesPage() {
     <section className={section}>
       <Back />
       <div className="flex flex-col gap-1">
-        <h1 className="text-start text-2xl font-extrabold">{t('flatmates.title')}</h1>
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-start text-2xl font-extrabold focus:outline-none"
+        >
+          {t('flatmates.title')}
+        </h1>
         <p className="text-start font-bold">{cardTitle(t, listing)}</p>
       </div>
-      <InviteBlock key={removals} listingId={listing.id} active={listing.flatmate_invite_active} />
+      <InviteBlock
+        key={removals}
+        listingId={listing.id}
+        active={listing.flatmate_invite_active}
+        onDisabled={() => headingRef.current?.focus()}
+      />
       <h2 id={listTitleId} className="text-start text-lg font-bold">
         {t('flatmates.list.title')}
       </h2>

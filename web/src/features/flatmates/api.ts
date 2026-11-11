@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { api } from '../../api/client';
 import type { components } from '../../api/schema';
 import { CONVERSATIONS_KEY } from '../chat/useConversations';
-import { ApiError } from '../listings/api';
+import { ApiError, type MyListingOut } from '../listings/api';
 import { MY_LISTINGS_KEY } from '../listings/useMyListings';
 
 /** A new invite link's token: returned by the create / rotate POST only, never readable again. */
@@ -86,20 +86,32 @@ export async function joinFlat(token: string): Promise<JoinOut> {
   return data;
 }
 
-/** Creates or rotates the link; "my listings" (`flatmate_invite_active`) refetches either way. */
+/** Sets the room's `flatmate_invite_active` in the cached "my listings". */
+function setInviteActive(queryClient: QueryClient, listingId: string, active: boolean) {
+  queryClient.setQueryData<MyListingOut[]>(MY_LISTINGS_KEY, (listings) =>
+    listings?.map((l) => (l.id === listingId ? { ...l, flatmate_invite_active: active } : l)),
+  );
+}
+
+/** Creates or rotates the link; "my listings" (`flatmate_invite_active`) refetches either way.
+ * Not awaited: the caller shows the new token at once, and a shown token wins over the state. */
 export function useCreateInvite(listingId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => createInvite(listingId),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY });
+    },
   });
 }
 
-/** Turns the link off; "my listings" refetches. */
+/** Turns the link off: the cached state turns off at once (no flash of the active-link block),
+ * then "my listings" refetches, and the mutation settles once it is back. */
 export function useDisableInvite(listingId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => disableInvite(listingId),
+    onSuccess: () => setInviteActive(queryClient, listingId, false),
     onSettled: () => queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY }),
   });
 }
@@ -129,13 +141,16 @@ export function useRemoveFlatmate(listingId: string) {
 }
 
 /** The preview of the invite `token` (a POST, never the token in a URL), or nothing while `token`
- * is null. No retry: a 404 or 429 is the answer. */
+ * is null. No retry and no refetch on focus or reconnect: each POST spends the rate-limit budget,
+ * and a 404 or 429 is the answer. */
 export function useInvitePreview(token: string | null) {
   return useQuery({
     queryKey: previewKey(token ?? ''),
     queryFn: () => previewInvite(token ?? ''),
     enabled: token !== null,
     retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     staleTime: Infinity,
   });
 }

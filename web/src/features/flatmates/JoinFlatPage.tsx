@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 
-import type { UserOut } from '../../api/client';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from '../auth/next';
-import { ME_KEY, useMe } from '../auth/useMe';
+import { clearSession } from '../auth/useLogout';
+import { useMe } from '../auth/useMe';
 import { ApiError } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
 import { useInvitePreview, useJoinFlat } from './api';
@@ -88,7 +88,14 @@ export function JoinFlatPage() {
 
   useEffect(() => {
     if (!hashPending) return;
-    const raw = location.hash.slice(1);
+    // Decoded and trimmed as the API trims (`#<token>%20` still works); a malformed escape is not
+    // a token.
+    let raw = '';
+    try {
+      raw = decodeURIComponent(location.hash.slice(1)).trim();
+    } catch {
+      raw = '';
+    }
     // A hash wins over a stored token; one that is not a token is dropped and not stored.
     if (isInviteToken(raw)) stashInviteToken(raw);
     else clearInviteToken();
@@ -125,24 +132,32 @@ function JoinFlow() {
     }
   }, [preview.data, preview.isError, preview.error]);
 
-  // A 401 from either call: the session ended. `/me` turns null and the page sends the person to
-  // the login, the token kept.
+  // A 401 from either call: the session ended. The session is cleared (`/me` turns null) and the
+  // page sends the person to the login, the token kept for the way back.
   const expired =
     (preview.error instanceof ApiError && preview.error.status === 401) ||
     (join.error instanceof ApiError && join.error.status === 401);
   useEffect(() => {
-    if (expired) queryClient.setQueryData<UserOut | null>(ME_KEY, null);
+    if (expired) clearSession(queryClient, { keepInviteToken: true });
   }, [expired, queryClient]);
 
+  // Same-tick guard: `join.isPending` is render state, so a fast double click would send twice.
+  const inFlight = useRef(false);
+
   function onJoin() {
-    if (token === null || join.isPending) return;
+    if (token === null || inFlight.current) return;
+    inFlight.current = true;
     join.mutate(token, {
       onSuccess: () => {
         clearInviteToken();
-        void navigate('/chat', { state: { joined: true } });
+        // `replace`: Back from the chats does not land on the spent link's "invalid" text.
+        void navigate('/chat', { replace: true, state: { joined: true } });
       },
       onError: (error) => {
         if (isFinal(error)) clearInviteToken();
+      },
+      onSettled: () => {
+        inFlight.current = false;
       },
     });
   }
@@ -151,7 +166,9 @@ function JoinFlow() {
   if (token === null) {
     return (
       <Frame>
-        <p className={`${card} ${message}`}>{t('flatmates.join.invalid')}</p>
+        <p role="alert" className={`${card} ${message}`}>
+          {t('flatmates.join.invalid')}
+        </p>
       </Frame>
     );
   }

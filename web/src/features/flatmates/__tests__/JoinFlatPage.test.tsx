@@ -15,6 +15,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { LoginPage } from '../../auth/LoginPage';
 import { RequireUser } from '../../auth/RequireUser';
+import { clearSession } from '../../auth/useLogout';
 import { ME_KEY } from '../../auth/useMe';
 import { ChatListPage } from '../../chat/ChatListPage';
 import { cardTitle } from '../../listings/cardTitle';
@@ -84,12 +85,21 @@ describe('JoinFlatPage', () => {
     expect(screen.getByText('הוזמנת על ידי רוני')).toBeVisible();
     expect(api.calls(PREVIEW)[0]?.body).toEqual({ token: T });
     expect(currentPath()).toBe('/flatmates/join');
+    // Two clicks in the same tick send one join.
+    fireEvent.click(button);
     fireEvent.click(button);
     await waitFor(() => {
       expect(button).toBeDisabled();
     });
     fireEvent.click(button);
-    expect(api.calls(JOIN)).toHaveLength(1);
+    await waitFor(() => {
+      expect(api.calls(JOIN)).toHaveLength(1);
+    });
+    expect(
+      api.fetchMock.mock.calls.filter(
+        ([r]) => new URL(r.url).pathname === '/flatmate-invites/join',
+      ),
+    ).toHaveLength(1);
     expect(api.calls(JOIN)[0]?.body).toEqual({ token: T });
     expect(readInviteToken()).toBe(T);
     joining.resolve(json({ listing_id: P.listing.id }));
@@ -130,6 +140,17 @@ describe('JoinFlatPage', () => {
       expect(api.calls(PREVIEW)).toHaveLength(1); // no retry
       reset(view);
     }
+
+    // A 401 on the preview: the session is cleared and the page goes to the login with a bare
+    // `next`, the token still stored for the way back.
+    ({ api, view } = renderJoin({ [PREVIEW]: [err(401, 'unauthenticated')] }));
+    await waitFor(() => {
+      expect(currentPath()).toBe('/login?next=%2Fflatmates%2Fjoin');
+    });
+    expect(readInviteToken()).toBe(T);
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toBe(T);
+    expect(api.calls(PREVIEW)).toHaveLength(1);
+    reset(view);
 
     // A failing preview (5xx): ErrorState, the token kept; retry previews again.
     ({ api, view } = renderJoin({ [PREVIEW]: [err(500, 'boom'), json(P)] }));
@@ -219,6 +240,8 @@ describe('JoinFlatPage', () => {
       fireEvent.click(button);
       expect(await screen.findByText(he.flatmates.join.done)).toBeVisible();
       expect(window.location.pathname).toBe('/chat');
+      // Every step replaced the entry: Back does not return to the spent join page.
+      expect(window.history.length).toBe(length);
       // The chat list clears the entry's `joined` state: a reload or Back does not repeat it.
       await waitFor(() => {
         expect((window.history.state as { usr?: unknown } | null)?.usr ?? null).toBeNull();
@@ -251,11 +274,29 @@ describe('JoinFlatPage', () => {
     expect(api.calls(PREVIEW)).toHaveLength(0);
     reset(view);
 
+    // The hash is decoded and trimmed, as the API trims: `#<token>%20` works.
+    ({ api, view } = renderJoin({ [PREVIEW]: [json(P)] }, `/flatmates/join#${T}%20`));
+    await cta();
+    expect(api.calls(PREVIEW)[0]?.body).toEqual({ token: T });
+    expect(currentPath()).toBe('/flatmates/join');
+    reset(view);
+
     // A hash wins over a stored token.
     stashInviteToken('older-token');
     ({ api, view } = renderJoin({ [PREVIEW]: [json(P)] }));
     await cta();
     expect(api.calls(PREVIEW)[0]?.body).toEqual({ token: T });
     reset(view);
+  });
+  it('ac4_logout_forgets_the_stashed_token', () => {
+    // Logout (and any other session clear) forgets a stashed invite, so the next person on this
+    // tab never sees it; the login itself keeps it, as its way back to the join page.
+    const client = testQueryClient();
+    stashInviteToken(T);
+    clearSession(client, { keepInviteToken: true });
+    expect(readInviteToken()).toBe(T);
+    clearSession(client);
+    expect(readInviteToken()).toBeNull();
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 });

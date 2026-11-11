@@ -87,9 +87,13 @@ describe('FlatmatesPage', () => {
     expect(screen.getByText(cardTitle(i18n.t, ROOM))).toBeVisible();
     expect(screen.getByText(he.flatmates.invite.hint)).toBeVisible();
     expect(screen.queryByRole('textbox')).toBeNull();
+    // Two clicks in the same tick send one POST (a second would rotate the link just shown).
+    fireEvent.click(button(he.flatmates.invite.create));
     fireEvent.click(button(he.flatmates.invite.create));
     const input = await screen.findByRole('textbox', { name: he.flatmates.invite.linkLabel });
     expect(input).toHaveValue(linkOf('T'));
+    // The create button is gone: the focus moves to the link.
+    expect(input).toHaveFocus();
     expect(input).toHaveAttribute('readonly');
     expect(input).toHaveAttribute('dir', 'ltr');
     expect(input).toHaveClass('text-start');
@@ -122,7 +126,7 @@ describe('FlatmatesPage', () => {
 
     // After a remount with an active link: no token, the "active" text, rotate and disable.
     ({ api, view } = renderPage({
-      mine: [json([ACTIVE])],
+      mine: [json([ACTIVE]), json([ACTIVE]), json([ROOM])],
       extra: { [CREATE]: [json({ token: 'T2' }, 201)], [DISABLE]: [empty()] },
     }));
     expect(await screen.findByText(he.flatmates.invite.active)).toBeVisible();
@@ -144,14 +148,15 @@ describe('FlatmatesPage', () => {
     expect(await screen.findByRole('textbox')).toHaveValue(linkOf('T2'));
     expect(api.calls(CREATE)).toHaveLength(1);
 
-    // Confirmed disable: the DELETE, and the shown link goes.
+    // Confirmed disable (two clicks, one DELETE): the shown link goes, straight to the "create"
+    // state with no "active" flash, and the focus moves to the heading.
     fireEvent.click(button(he.flatmates.invite.disable));
-    await waitFor(() => {
-      expect(api.calls(DISABLE)).toHaveLength(1);
-    });
-    await waitFor(() => {
-      expect(screen.queryByRole('textbox')).toBeNull();
-    });
+    fireEvent.click(button(he.flatmates.invite.disable));
+    expect(await screen.findByRole('button', { name: he.flatmates.invite.create })).toBeVisible();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByText(he.flatmates.invite.active)).toBeNull();
+    expect(api.calls(DISABLE)).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: he.flatmates.title })).toHaveFocus();
     reset(view);
 
     // A 500 on create: `common.error` inline, as an alert.
@@ -218,8 +223,9 @@ describe('FlatmatesPage', () => {
     expect(confirm).toHaveBeenCalledWith(i18n.t('flatmates.list.removeConfirm', { name: 'דנה' }));
     expect(api.calls(removeRoute(dana))).toHaveLength(0);
 
-    // Confirmed: the DELETE, then the list and "my listings" refetch.
+    // Confirmed (two clicks in one tick, one DELETE): then the list and "my listings" refetch.
     confirm.mockReturnValue(true);
+    fireEvent.click(removeDana);
     fireEvent.click(removeDana);
     await waitFor(() => {
       expect(screen.queryByText('דנה')).toBeNull();
