@@ -1,7 +1,7 @@
 ---
 id: 0006b
 title: A seeker with a profile sees a 0–100 match score with its top-3 agreeing / top-1 differing criteria on every search result and on the listing page, and search sorts by match by default
-status: in-progress
+status: in-review
 depends_on: [0006a]      # the profile table and the three owner-preference columns
 reviewers: [code, qa, perf, security]   # perf: a computed ORDER BY on the public search hot path, paging over it; qa: the scoring table; security: public endpoints start reading the session, responses now differ per caller
 estimate: 1 coder run
