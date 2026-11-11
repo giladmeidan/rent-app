@@ -401,4 +401,121 @@ describe('ListingPage', () => {
     expect(within(section()).getByRole('link', { name: he.match.card.edit })).toBeVisible();
     view.unmount();
   });
+
+  it('ac7_room_facts_and_lifestyle', async () => {
+    const visitor = { 'GET /me': [json({ detail: 'unauthenticated' }, 401)] };
+    const roomFacts = () => screen.getByRole('region', { name: he.rooms.facts.title });
+    /** A `<dl>` of `section` as `["label: value", …]`. */
+    const rowsOf = (dl: HTMLElement) =>
+      within(dl)
+        .getAllByRole('term')
+        .map((dt) => `${dt.textContent ?? ''}: ${dt.nextElementSibling?.textContent ?? ''}`);
+    const show = async (overrides: Parameters<typeof listingDetail>[0]) => {
+      const l = listingDetail({
+        listing_type: 'room',
+        rooms: 3,
+        street: 'הרצל',
+        city: 'תל אביב',
+        gender_preference: 'men',
+        flatmates_count: 2,
+        flatmate_ages: [27, 30],
+        lifestyle: { cleanliness: 3, kosher: 1 },
+        description: 'חדר מואר',
+        ...overrides,
+      });
+      mockApi({ ...visitor, [`GET /listings/${l.id}`]: [json(l)] });
+      const view = render(l.id);
+      await screen.findByRole('heading', { level: 1 });
+      return view;
+    };
+
+    // A seeker's response: the title, who it is for, the flatmates with ages, and the flat's
+    // lifestyle in the questionnaire's order.
+    let view = await show({});
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'חדר ב\u05be3 חדרים, רחוב הרצל, תל אביב',
+    );
+    expect(rowsOf(within(roomFacts()).getByTestId('room-facts'))).toEqual([
+      'העדפת מגדר: גברים',
+      'שותפים בדירה: 2 שותפים (27, 30)',
+    ]);
+    const lifestyleHeading = within(roomFacts()).getByRole('heading', {
+      level: 3,
+      name: he.lifestyle.title.flat,
+    });
+    const lifestyle = within(roomFacts()).getByTestId('room-lifestyle');
+    expect(lifestyleHeading.nextElementSibling).toBe(lifestyle);
+    expect(rowsOf(lifestyle)).toEqual(['ניקיון: בקפדנות', 'כשרות: לא כשר']);
+    // After the facts grid, before the description.
+    const section = roomFacts();
+    expect(section.previousElementSibling?.tagName).toBe('DL');
+    expect(section.nextElementSibling).toContainElement(screen.getByTestId('listing-description'));
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No answers: no lifestyle heading.
+    view = await show({ lifestyle: {} });
+    expect(
+      within(roomFacts()).queryByRole('heading', { name: he.lifestyle.title.flat }),
+    ).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A visitor's or an owner's response (room privacy): no ages, no answers, nothing empty.
+    view = await show({ flatmate_ages: [], lifestyle: {} });
+    expect(rowsOf(within(roomFacts()).getByTestId('room-facts'))).toEqual([
+      'העדפת מגדר: גברים',
+      'שותפים בדירה: 2 שותפים',
+    ]);
+    expect(roomFacts()).not.toHaveTextContent('(');
+    expect(within(roomFacts()).getAllByRole('heading')).toHaveLength(1);
+    expect(within(roomFacts()).queryByTestId('room-lifestyle')).toBeNull();
+    expect(screen.queryByText(he.lifestyle.title.flat)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Any gender; a legacy room without a count.
+    view = await show({ gender_preference: 'any', flatmates_count: null, flatmate_ages: [] });
+    expect(rowsOf(within(roomFacts()).getByTestId('room-facts'))).toEqual(['העדפת מגדר: לא משנה']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An apartment: no room section.
+    const flat = listingDetail();
+    mockApi({ ...visitor, [`GET /listings/${flat.id}`]: [json(flat)] });
+    render(flat.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('region', { name: he.rooms.facts.title })).toBeNull();
+    expect(screen.queryByText(he.rooms.facts.title)).toBeNull();
+  });
+
+  it('ac11_match_card_lifestyle', async () => {
+    const room = listingDetail({
+      listing_type: 'room',
+      flatmates_count: 2,
+      price_ils: 7200,
+      lifestyle: { cleanliness: 3, guests: 1, night: 2 },
+      match: { score: 90, agrees: ['budget', 'lifestyle'], differs: null },
+    });
+    mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [
+        json(
+          profile({
+            budget_max_ils: 7500,
+            lifestyle: { cleanliness: 3, guests: 1, night: 3, kosher: 1 },
+          }),
+        ),
+      ],
+      [`GET /listings/${room.id}`]: [json(room)],
+    });
+    render(room.id);
+    const section = await screen.findByRole('region', { name: he.match.card.title });
+    const items = await within(section).findAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual([
+      'התקציב שלך (עד 7,500 ₪) מתאים למחיר',
+      'אורח החיים שלך קרוב לזה שבדירה (תשובות זהות: 2 מתוך 3)',
+    ]);
+  });
 });

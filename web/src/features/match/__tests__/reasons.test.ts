@@ -283,6 +283,51 @@ const rows: Row[] = [
   },
 ];
 
+// The `lifestyle` criterion (spec 0007f), worded from both sides' answers.
+const topics = (names: string[]) =>
+  new Intl.ListFormat('he', { type: 'conjunction' }).format(names);
+const lifestyleRows: Row[] = [
+  {
+    name: 'agree with equal answers: the counts',
+    criterion: 'lifestyle',
+    kind: 'agree',
+    listing: { listing_type: 'room', lifestyle: { cleanliness: 3, guests: 1, night: 2 } },
+    profile: { lifestyle: { cleanliness: 3, guests: 1, night: 3, kosher: 1 } },
+    reason: 'אורח החיים שלך קרוב לזה שבדירה (תשובות זהות: 2 מתוך 3)',
+    short: 'אורח חיים דומה',
+  },
+  {
+    name: 'agree one step apart (same 0): no counts',
+    criterion: 'lifestyle',
+    kind: 'agree',
+    listing: { listing_type: 'room', lifestyle: { night: 2 } },
+    profile: { lifestyle: { night: 3 } },
+    reason: 'אורח החיים שלך קרוב לזה שבדירה',
+    short: 'אורח חיים דומה',
+  },
+  {
+    name: 'differ: the first three differing topics',
+    criterion: 'lifestyle',
+    kind: 'differ',
+    listing: {
+      listing_type: 'room',
+      lifestyle: { cleanliness: 1, guests: 3, night: 1, social: 3 },
+    },
+    profile: { lifestyle: { cleanliness: 3, guests: 1, night: 3, social: 1 } },
+    reason: `אורח החיים שונה: ${topics(['ניקיון', 'אורחים', 'שעות לילה'])}`,
+    short: 'אורח חיים שונה',
+  },
+  {
+    name: 'differ with nothing differing now (the profile changed): the short line',
+    criterion: 'lifestyle',
+    kind: 'differ',
+    listing: { listing_type: 'room', lifestyle: { cleanliness: 3 } },
+    profile: { lifestyle: { cleanliness: 3 } },
+    reason: 'אורח חיים שונה',
+    short: 'אורח חיים שונה',
+  },
+];
+
 // Without the profile (pending or failed), only the `move_in` differ chip is left out.
 const withoutProfile: [Criterion, ReasonKind, Partial<ListingPublic>, string | null][] = [
   ['move_in', 'differ', { available_from: inDays(70) }, null],
@@ -299,6 +344,8 @@ const withoutProfile: [Criterion, ReasonKind, Partial<ListingPublic>, string | n
   ['pets', 'agree', { pets_allowed: true }, 'חיות מחמד'],
   ['pets', 'agree', { pets_allowed: false }, 'בלי חיות — מתאים'],
   ['pets', 'differ', {}, 'ללא חיות מחמד'],
+  ['lifestyle', 'agree', { listing_type: 'room' }, 'אורח חיים דומה'],
+  ['lifestyle', 'differ', { listing_type: 'room' }, 'אורח חיים שונה'],
 ];
 
 type OwnerRow = {
@@ -539,6 +586,13 @@ const ownerRows: OwnerRow[] = [
 
 describe('reasons', () => {
   it.each(rows)('ac2_reason_copy: $name', (row) => {
+    const listing = publicListing(row.listing);
+    const seeker = profile(row.profile);
+    expect(seekerReason(row.criterion, row.kind, listing, seeker, i18n.t)).toBe(row.reason);
+    expect(seekerShort(row.criterion, row.kind, listing, seeker, i18n.t)).toBe(row.short);
+  });
+
+  it.each(lifestyleRows)('ac11_lifestyle_copy: $name', (row) => {
     const listing = publicListing(row.listing);
     const seeker = profile(row.profile);
     expect(seekerReason(row.criterion, row.kind, listing, seeker, i18n.t)).toBe(row.reason);

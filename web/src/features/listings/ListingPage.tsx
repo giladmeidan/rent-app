@@ -8,8 +8,10 @@ import { Skeleton } from '../../components/Skeleton';
 import { ApplySection } from '../applications/ApplySection';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
+import { RoomFacts } from '../rooms/RoomFacts';
 import { ApiError } from './api';
-import { formatDate, formatIls, formatRooms, todayInIsrael } from './format';
+import { cardTitle } from './cardTitle';
+import { formatDate, formatIls, todayInIsrael } from './format';
 import { ListingFacts } from './ListingFacts';
 import { OwnerPreferences } from './OwnerPreferences';
 import { usePublicListing } from './usePublicListing';
@@ -90,13 +92,7 @@ export function ListingPage() {
             </p>
             {l.match !== null && <MatchBadge score={l.match.score} />}
           </div>
-          <h1 className="break-words text-xl font-bold leading-snug">
-            {t('listings.card.title', {
-              rooms: formatRooms(l.rooms),
-              street: l.street,
-              city: l.city,
-            })}
-          </h1>
+          <h1 className="break-words text-xl font-bold leading-snug">{cardTitle(t, l)}</h1>
           <p className="flex flex-wrap gap-x-[10px] text-sm text-muted">
             {facts.map((fact, i) => (
               <span key={fact} className="flex gap-x-[10px]">
@@ -108,6 +104,8 @@ export function ListingPage() {
         </div>
 
         <ListingFacts listing={l} />
+
+        {l.listing_type === 'room' && <RoomFacts listing={l} />}
 
         {l.description !== null && (
           <section className="flex flex-col gap-2">

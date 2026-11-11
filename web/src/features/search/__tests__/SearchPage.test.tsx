@@ -598,4 +598,207 @@ describe('SearchPage', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('ac2_type_filter', async () => {
+    const typeGroup = () => group(he.search.type.legend);
+    const apartmentBox = () =>
+      typeGroup().getByRole('checkbox', { name: he.search.type.apartment });
+    const roomBox = () => typeGroup().getByRole('checkbox', { name: he.search.type.room });
+
+    // Both on by default, and nothing is sent for them.
+    let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    let view = render('/search');
+    await screen.findByText(he.search.countOne);
+    openPanel();
+    expect(apartmentBox()).toBeChecked();
+    expect(roomBox()).toBeChecked();
+    expect(apartmentBox()).toBeEnabled();
+    expect(roomBox()).toBeEnabled();
+    expect(screen.queryByText(he.search.type.hint)).toBeNull();
+    expect(apartmentBox()).not.toHaveAttribute('aria-describedby');
+    expect(query(sent(api, 0))).toEqual(expected({ limit: '20', offset: '0' }));
+
+    // Rooms only: in the URL and the request, one active filter, the last box locked and explained.
+    fireEvent.click(apartmentBox());
+    apply();
+    expect(currentPath()).toBe('/search?listing_type=room');
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    expect(query(sent(api, 1))).toEqual(
+      expected({ listing_type: 'room', limit: '20', offset: '0' }),
+    );
+    expect(
+      screen.getByRole('button', { name: i18n.t('search.filtersActive', { count: 1 }) }),
+    ).toBeVisible();
+    expect(apartmentBox()).not.toBeChecked();
+    expect(roomBox()).toBeChecked();
+    expect(roomBox()).toBeDisabled();
+    expect(apartmentBox()).toBeEnabled();
+    expect(screen.getByText(he.search.type.hint)).toBeVisible();
+    expect(roomBox()).toHaveAccessibleDescription(he.search.type.hint);
+    expect(apartmentBox()).toHaveAccessibleDescription(he.search.type.hint);
+
+    // Both again: the key goes.
+    fireEvent.click(apartmentBox());
+    expect(screen.queryByText(he.search.type.hint)).toBeNull();
+    expect(roomBox()).toBeEnabled();
+    apply();
+    expect(currentPath()).toBe('/search');
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(3);
+    });
+    expect(query(sent(api, 2))).toEqual(expected({ limit: '20', offset: '0' }));
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // From the URL: apartments only; a type with no results offers "ניקוי", which re-checks both.
+    api = mockApi({ [SEARCH]: [json(page([], 0)), json(page([publicListing()]))] });
+    view = render('/search?listing_type=apartment');
+    expect(await screen.findByText(he.search.empty)).toBeVisible();
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'apartment', limit: '20', offset: '0' }),
+    );
+    openPanel();
+    expect(apartmentBox()).toBeChecked();
+    expect(apartmentBox()).toBeDisabled();
+    expect(roomBox()).not.toBeChecked();
+    fireEvent.click(screen.getAllByRole('button', { name: he.search.clear })[0] as HTMLElement);
+    expect(currentPath()).toBe('/search');
+    expect(apartmentBox()).toBeChecked();
+    expect(roomBox()).toBeChecked();
+    expect(screen.queryByText(he.search.type.hint)).toBeNull();
+    view.unmount();
+  });
+
+  it('ac5_similar_age_chip', async () => {
+    const year = new Date().getUTCFullYear();
+    const room = publicListing({
+      street: 'חדר',
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 2,
+      flatmate_ages: [27, 30],
+    });
+    const flat = publicListing({ street: 'דירה' });
+    const listChips = (street: string) =>
+      within(within(cardOf(street)).getByTestId('listing-chips'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
+    const cardOf = (street: string) => {
+      const card = screen
+        .getAllByRole('article')
+        .find((article) => within(article).queryByRole('link', { name: new RegExp(street) }));
+      if (card === undefined) throw new Error(`no card for ${street}`);
+      return card;
+    };
+
+    // A seeker 28 years old: the chip leads the room's chips (teal), not the apartment's.
+    let api = mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [json(profile({ gender: 'woman', birth_year: year - 28 }))],
+      [SEARCH]: [json(page([room, flat]))],
+    });
+    let view = render('/search');
+    expect(await screen.findByText(he.rooms.card.similarAge)).toBeVisible();
+    expect(listChips('חדר')[0]).toBe(he.rooms.card.similarAge);
+    expect(within(cardOf('חדר')).getByText(he.rooms.card.similarAge)).toHaveClass(
+      'bg-accent-tint',
+      'text-accent-text',
+    );
+    expect(listChips('דירה')).not.toContain(he.rooms.card.similarAge);
+    expect(screen.getAllByText(he.rooms.card.similarAge)).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No chip: a seeker 40 years old, one without a birth year, one whose profile failed.
+    for (const reply of [
+      json(profile({ gender: 'woman', birth_year: year - 40 })),
+      json(profile({ gender: 'woman', birth_year: null })),
+      json({ detail: 'boom' }, 500),
+    ]) {
+      api = mockApi({
+        [ME]: [json(noa)],
+        [PROFILE]: [reply],
+        [SEARCH]: [json(page([room, flat]))],
+      });
+      view = render('/search');
+      await screen.findByText(i18n.t('search.count', { count: 2 }));
+      await vi.waitFor(() => {
+        expect(api.calls(PROFILE)).toHaveLength(1);
+      });
+      await settle();
+      expect(screen.queryByText(he.rooms.card.similarAge)).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // A visitor and an owner: no chip, and no profile request.
+    for (const me of [unauthenticated(), json(owner)]) {
+      api = mockApi({
+        [ME]: [me],
+        [PROFILE]: [json(profile({ birth_year: year - 28 }))],
+        [SEARCH]: [json(page([room, flat]))],
+      });
+      view = render('/search');
+      await screen.findByText(i18n.t('search.count', { count: 2 }));
+      await vi.waitFor(() => {
+        expect(api.calls(ME)).toHaveLength(1);
+      });
+      await settle();
+      expect(screen.queryByText(he.rooms.card.similarAge)).toBeNull();
+      expect(api.calls(PROFILE)).toHaveLength(0);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac6_room_with_match_chips', async () => {
+    const matchChips = (card: HTMLElement) =>
+      within(within(card).getByTestId('match-chips'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
+    const alike = publicListing({
+      street: 'דומה',
+      listing_type: 'room',
+      flatmates_count: 2,
+      lifestyle: { cleanliness: 3 },
+      match: { score: 88, agrees: ['lifestyle', 'budget'], differs: null },
+    });
+    const unlike = publicListing({
+      street: 'שונה',
+      listing_type: 'room',
+      flatmates_count: 2,
+      lifestyle: { cleanliness: 1 },
+      match: { score: 59, agrees: ['budget'], differs: 'lifestyle' },
+    });
+    const flat = publicListing({
+      street: 'דירה',
+      match: { score: 100, agrees: ['budget'], differs: null },
+    });
+    mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [json(profile({ lifestyle: { cleanliness: 3 } }))],
+      [SEARCH]: [json(page([alike, unlike, flat], 3, 'match'))],
+    });
+    render('/search');
+    expect(await screen.findByText('התאמה 88%')).toBeVisible();
+    const [first, second, third] = screen.getAllByRole('article');
+    if (first === undefined || second === undefined || third === undefined) {
+      throw new Error('three cards expected');
+    }
+    // The room cards keep 0006f's badge and chips; the lifestyle chips are worded.
+    expect(within(first).getByText(he.listings.card.room)).toBeVisible();
+    expect(matchChips(first)).toEqual([he.match.short.lifestyle.agree]);
+    expect(within(first).getByText(he.match.short.lifestyle.agree)).toHaveClass('bg-accent-tint');
+    expect(within(second).getByText('התאמה 59%')).toBeVisible();
+    expect(matchChips(second)).toEqual([
+      he.match.short.budget.agree,
+      he.match.short.lifestyle.differ,
+    ]);
+    expect(within(second).getByText(he.match.short.lifestyle.differ)).toHaveClass('bg-warn');
+    expect(within(third).getByText('התאמה 100%')).toBeVisible();
+    expect(matchChips(third)).toEqual([he.match.short.budget.agree]);
+    expect(within(third).queryByText(he.listings.card.room)).toBeNull();
+  });
 });

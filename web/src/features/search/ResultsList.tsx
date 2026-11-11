@@ -75,6 +75,7 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
                   listing={listing}
                   today={today}
                   to={`/listings/${listing.id}`}
+                  seekerBirthYear={profile?.birth_year}
                   badge={listing.match && <MatchBadge score={listing.match.score} />}
                 >
                   {listing.match && (

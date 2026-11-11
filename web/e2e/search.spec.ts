@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { latestCode, uniqueEmail } from './helpers';
+import { latestCode, postListing, uniqueEmail } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
@@ -19,6 +19,9 @@ function israelDay(days: number): string {
 test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   const email = uniqueEmail();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  // Minted on its own: it neither contains nor is contained in `street` (cards are found by
+  // substring), spec 0007f AC12.
+  const roomStreet = `חדר ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // A fresh owner, signed up through the outbox (as auth.spec.ts).
   await page.goto('/signup');
@@ -65,6 +68,15 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   });
   expect(created.status()).toBe(201);
   const { id } = (await created.json()) as { id: string };
+  // And a women-only room with two flatmates, their ages and two answers (0007f AC12).
+  const roomId = await postListing(page, roomStreet, {
+    listing_type: 'room',
+    price_ils: 7200,
+    gender_preference: 'women',
+    flatmates_count: 2,
+    flatmate_ages: [27, 30],
+    lifestyle: { cleanliness: 3, kosher: 1 },
+  });
 
   // A visitor: no session.
   await page.context().clearCookies();
@@ -98,4 +110,45 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   await page.reload();
   await expect(title).toContainText(street);
   await expect(page.getByText(he.listing.locationHint)).toBeVisible();
+
+  await test.step('ac12 the visitor finds the room, filters by type and opens it', async () => {
+    // A visitor gets no flatmate ages and no lifestyle answers (PRODUCT.md "Rooms", room privacy).
+    const twoFlatmates = he.rooms.flatmates.many.replace('{{count}}', '2');
+    const roomCard = page.getByRole('article').filter({ hasText: roomStreet });
+    await page.goto('/search');
+    await expect(card).toHaveCount(1);
+    await expect(roomCard).toHaveCount(1);
+    await expect(roomCard.getByText(he.listings.card.room, { exact: true })).toBeVisible();
+    await expect(roomCard.getByText(twoFlatmates, { exact: true })).toBeVisible();
+    await expect(
+      roomCard.getByText(
+        he.rooms.card.forGender.replace('{{who}}', he.rooms.genderPreference.women),
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(roomCard).not.toContainText('27, 30');
+
+    // Rooms only: the apartment goes, the room stays.
+    await page.getByRole('button', { name: he.search.filters, exact: true }).click();
+    await page
+      .getByRole('group', { name: he.search.type.legend, exact: true })
+      .getByRole('checkbox', { name: he.search.type.apartment })
+      .uncheck();
+    await page.getByRole('button', { name: he.search.apply }).click();
+    await expect(page).toHaveURL('/search?listing_type=room');
+    await expect(page.getByRole('list', { name: he.common.loading })).toHaveCount(0);
+    await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
+    await expect(roomCard).toHaveCount(1);
+    await expect(card).toHaveCount(0);
+
+    // The room's page: its facts, and nothing private.
+    await roomCard.getByRole('link').click();
+    await expect(page).toHaveURL(`/listings/${roomId}`);
+    const facts = page.getByRole('region', { name: he.rooms.facts.title });
+    await expect(facts).toBeVisible();
+    await expect(facts).toContainText(he.rooms.facts.gender);
+    await expect(facts).toContainText(he.rooms.facts.flatmates);
+    await expect(page.getByText(he.lifestyle.title.flat)).toHaveCount(0);
+    await expect(page.getByText('27, 30')).toHaveCount(0);
+  });
 });

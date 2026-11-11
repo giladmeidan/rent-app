@@ -5,7 +5,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM, roundBbox, type Bbox } from '../../components/map/config';
 import { MapCanvas, type Pin } from '../../components/map/MapCanvas';
-import { formatIls, formatRooms, todayInIsrael } from '../listings/format';
+import { cardTitle } from '../listings/cardTitle';
+import { formatIls, todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
@@ -47,11 +48,7 @@ export function SearchMap({ filters, profile, onShowList }: Props) {
       if (item.lat === null || item.lng === null) continue;
       const price = formatIls(item.price_ils);
       const label = t('search.map.pin', {
-        title: t('listings.card.title', {
-          rooms: formatRooms(item.rooms),
-          street: item.street,
-          city: item.city,
-        }),
+        title: cardTitle(t, item),
         price,
       });
       result.push({
@@ -129,6 +126,7 @@ export function SearchMap({ filters, profile, onShowList }: Props) {
             listing={selected}
             today={todayInIsrael()}
             to={`/listings/${selected.id}`}
+            seekerBirthYear={profile?.birth_year}
             badge={selected.match && <MatchBadge score={selected.match.score} />}
           >
             {selected.match && (

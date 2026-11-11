@@ -550,4 +550,172 @@ describe('ApplySection', () => {
     expect(api.calls(MINE)).toHaveLength(2);
     expect(api.calls(PROFILE)).toHaveLength(1);
   });
+
+  it('ac8_room_misfit', async () => {
+    const MISFIT = 'החדר לא מתאים לפרטים שבפרופיל שלך, ולכן אי אפשר להגיש אליו מועמדות.';
+    const room = (overrides: Parameters<typeof listingDetail>[0] = {}) => [
+      () =>
+        json(listingDetail({ id: 'A', listing_type: 'room', flatmates_count: 2, ...overrides })),
+    ];
+    const noControls = (s: ReturnType<typeof within>) => {
+      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByRole('textbox')).toBeNull();
+      expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+      expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
+    };
+
+    // `room_fit: false`: the line, no button, no form, no gate, even while the profile is pending.
+    const pending = deferred();
+    const api = renderSeeker([json([])], {
+      [LISTING]: room({ gender_preference: 'women', room_fit: false }),
+      [PROFILE]: [pending.promise],
+    });
+    let s = await settled();
+    expect(s.getByText(MISFIT)).toBeVisible();
+    expect(s.getByText(countText(0))).toBeVisible();
+    noControls(s);
+    expect(s.queryByTestId('skeleton')).toBeNull();
+    expect(api.calls(PROFILE)).toHaveLength(1);
+    cleanup();
+
+    // A profile that cannot be read changes nothing either.
+    renderSeeker([json([])], {
+      [LISTING]: room({ room_fit: false }),
+      [PROFILE]: [json({ detail: 'boom' }, 500)],
+    });
+    s = await settled();
+    expect(s.getByText(MISFIT)).toBeVisible();
+    expect(s.queryByRole('button', { name: he.common.retry })).toBeNull();
+    noControls(s);
+    cleanup();
+
+    // `room_fit: true`, or `null` on an `any` room: the apply button.
+    for (const fit of [true, null]) {
+      renderSeeker([json([])], { [LISTING]: room({ gender_preference: 'any', room_fit: fit }) });
+      s = await settled();
+      expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+      expect(s.queryByText(MISFIT)).toBeNull();
+      cleanup();
+    }
+
+    // An apartment (`room_fit: null`) is unchanged.
+    renderSeeker([json([])]);
+    s = await settled();
+    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(s.queryByText(MISFIT)).toBeNull();
+    cleanup();
+
+    // Already applied: the applied state, not the line.
+    const live = application({ status: 'submitted' });
+    renderSeeker([json([live])], { [LISTING]: room({ room_fit: false }) });
+    s = await settled();
+    expect(await s.findByText(appliedText(live))).toBeVisible();
+    expect(s.queryByText(MISFIT)).toBeNull();
+  });
+
+  it('ac9_room_section_gate', async () => {
+    const GATE =
+      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.';
+    const noProfile = () => json({ detail: 'seeker_profile_not_found' }, 404);
+    const room = (gender_preference: 'any' | 'women') => [
+      () =>
+        json(listingDetail({ id: 'A', listing_type: 'room', gender_preference, room_fit: null })),
+    ];
+
+    // A women-only room, and a profile without the room section, or no profile at all: the gate.
+    for (const reply of [json(profile({ gender: null })), noProfile()]) {
+      renderSeeker([json([])], { [LISTING]: room('women'), [PROFILE]: [reply] });
+      const s = await settled();
+      expect(await s.findByText(GATE)).toBeVisible();
+      expect(s.getByRole('link', { name: he.rooms.apply.fillRoomSection })).toHaveAttribute(
+        'href',
+        `/me/profile?section=room&next=${NEXT}`,
+      );
+      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+      expect(s.queryByRole('link', { name: he.applications.fillProfile })).toBeNull();
+      cleanup();
+    }
+
+    // The same room and a woman's room section: the apply button.
+    renderSeeker([json([])], {
+      [LISTING]: room('women'),
+      [PROFILE]: [json(profile({ gender: 'woman' }))],
+    });
+    let s = await settled();
+    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(s.queryByText(GATE)).toBeNull();
+    cleanup();
+
+    // An `any` room never asks for the room section; with no profile, today's gate.
+    renderSeeker([json([])], {
+      [LISTING]: room('any'),
+      [PROFILE]: [json(profile({ gender: null }))],
+    });
+    s = await settled();
+    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
+    cleanup();
+    renderSeeker([json([])], { [LISTING]: room('any'), [PROFILE]: [noProfile()] });
+    s = await settled();
+    expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
+    expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
+  });
+
+  it('ac10_room_409s', async () => {
+    const MISFIT = 'החדר לא מתאים לפרטים שבפרופיל שלך, ולכן אי אפשר להגיש אליו מועמדות.';
+    const GATE =
+      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.';
+    const room = (gender_preference: 'any' | 'women') => () =>
+      json(listingDetail({ id: 'A', listing_type: 'room', gender_preference, room_fit: null }));
+    const noBanners = (s: ReturnType<typeof within>) => {
+      expect(s.queryByRole('alert')).toBeNull();
+      expect(s.queryByText(he.applications.errors.rateLimited)).toBeNull();
+      expect(s.queryByRole('button', { name: he.common.retry })).toBeNull();
+    };
+
+    // 409 room_gender_mismatch: the misfit line at once, from the cache (no new listing request).
+    const client = testQueryClient();
+    let api = renderSeeker(
+      [json([])],
+      {
+        [LISTING]: [room('any')],
+        [PROFILE]: [json(profile({ gender: 'man', flatmate_gender: 'women' }))],
+        [APPLY]: [json({ detail: 'room_gender_mismatch' }, 409)],
+      },
+      0,
+      client,
+    );
+    type(await openForm(), MESSAGE);
+    send();
+    let s = await section();
+    expect(await s.findByText(MISFIT)).toBeVisible();
+    expect(s.queryByRole('textbox')).toBeNull();
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    noBanners(s);
+    expect(client.getQueryData<{ room_fit: boolean | null }>(['listing', 'A'])?.room_fit).toBe(
+      false,
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.calls(LISTING)).toHaveLength(1);
+    cleanup();
+
+    // 409 seeker_gender_required: the cached room said `any`, the owner has made it women-only
+    // since. The profile and the listing are both refetched, and the room-section gate shows.
+    api = renderSeeker([json([])], {
+      [LISTING]: [room('any'), room('women')],
+      [PROFILE]: [json(profile({ gender: null }))],
+      [APPLY]: [json({ detail: 'seeker_gender_required' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    s = await section();
+    expect(await s.findByText(GATE)).toBeVisible();
+    expect(s.queryByRole('textbox')).toBeNull();
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    noBanners(s);
+    expect(api.calls(PROFILE)).toHaveLength(2);
+    expect(api.calls(LISTING)).toHaveLength(2);
+    expect(api.calls(MINE)).toHaveLength(1);
+  });
 });

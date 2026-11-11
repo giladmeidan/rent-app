@@ -122,8 +122,9 @@ export async function postListing(
 
 /** Saves a housing profile (spec 0006a `P`: budget 7500, a couple, no pets, non-smoker, 24 months,
  * one parking spot, the first area) through the API with the page's (seeker) session, so the
- * seeker can apply. `overrides` replace or add fields of the body (e.g. 0007a's room section:
- * `gender`, `birth_year`, `lifestyle`). The PUT replaces the whole profile. */
+ * seeker can apply. `overrides` replace or add fields of the body (e.g. `{ gender: 'man' }`, or
+ * 0007a's room section: `gender`, `birth_year`, `lifestyle`). PUT replaces the whole profile:
+ * without `overrides` the room section is cleared. */
 export async function putProfile(
   page: Page,
   overrides: Record<string, unknown> = {},

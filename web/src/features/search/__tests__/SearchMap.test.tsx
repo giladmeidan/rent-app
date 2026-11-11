@@ -377,4 +377,77 @@ describe('SearchMap', () => {
     expect(within(plain).queryByText(/התאמה/)).toBeNull();
     expect(within(plain).queryByTestId('match-chips')).toBeNull();
   });
+
+  it('ac3_map_sends_type', async () => {
+    const api = mockApi({ [SEARCH]: [json(page([located({ listing_type: 'room' })]))] });
+    render('/search?listing_type=room&view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(1);
+    });
+    expect(query(sent(api, 0))).toEqual(
+      expected({
+        listing_type: 'room',
+        west: '34.7712',
+        south: '32.0412',
+        east: '34.8299',
+        north: '32.1099',
+        limit: '50',
+        offset: '0',
+      }),
+    );
+  });
+
+  it('ac4_room_pin_label', async () => {
+    const room = located({
+      listing_type: 'room',
+      rooms: 3,
+      street: 'הרצל',
+      city: 'תל אביב',
+      price_ils: 7200,
+    });
+    const flat = located({ price_ils: 5000 });
+    mockApi({ [SEARCH]: [json(page([room, flat]))] });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(2);
+    });
+    const [first, second] = pins();
+    // The room's pin is named by the room title; its text is the plain price.
+    expect(first?.label).toBe(
+      i18n.t('search.map.pin', {
+        title: 'חדר ב\u05be3 חדרים, רחוב הרצל, תל אביב',
+        price: formatIls(room.price_ils),
+      }),
+    );
+    expect(first?.text).toMatch(PRICE);
+    expect(second?.label).toBe(pinLabel(flat));
+  });
+
+  it('ac5_similar_age_chip_on_the_pin_card', async () => {
+    const year = new Date().getUTCFullYear();
+    const room = located({ listing_type: 'room', flatmates_count: 2, flatmate_ages: [27, 30] });
+    const api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/profile': [json(profile({ gender: 'woman', birth_year: year - 28 }))],
+      [SEARCH]: [json(page([room]))],
+    });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/profile')).toHaveLength(1);
+    });
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: /^חדר ב/ }));
+    const card = screen.getByRole('article');
+    expect(
+      within(within(card).getByTestId('listing-chips'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)[0],
+    ).toBe(he.rooms.card.similarAge);
+  });
 });
