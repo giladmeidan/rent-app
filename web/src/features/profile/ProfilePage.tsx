@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -12,9 +12,17 @@ import { Switch } from '../../components/Switch';
 import { hasStatus } from '../applications/api';
 import { fetchAreas } from '../areas/api';
 import { safeNext } from '../auth/next';
+import { LifestyleFields } from '../lifestyle/LifestyleFields';
 import { ApiError } from '../listings/api';
 import { addDays, todayInIsrael } from '../listings/format';
-import type { ContractMonths, Household, SeekerProfileIn, SeekerProfileOut } from './api';
+import type {
+  ContractMonths,
+  FlatmateGender,
+  Gender,
+  Household,
+  SeekerProfileIn,
+  SeekerProfileOut,
+} from './api';
 import { useProfile } from './useProfile';
 import { useSaveProfile } from './useSaveProfile';
 import {
@@ -64,16 +72,25 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
   const save = useSaveProfile();
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const roomHeading = useRef<HTMLHeadingElement>(null);
+  // `?section=room` (0007f's apply gate, `roomSectionHref`) opens the room section and lands on it.
+  const roomEntry = params.get('section') === 'room';
 
-  const [form, setForm] = useState<ProfileForm>(() =>
-    initial === null ? emptyProfileForm : formFromProfile(initial),
-  );
+  const [form, setForm] = useState<ProfileForm>(() => {
+    const start = initial === null ? emptyProfileForm : formFromProfile(initial);
+    return roomEntry ? { ...start, room: true } : start;
+  });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [failed, setFailed] = useState(false);
   const [saved, setSaved] = useState(false);
   // Same-tick guard: a double click sends one request.
   const inFlight = useRef(false);
   const lastBody = useRef<SeekerProfileIn | null>(null);
+
+  useEffect(() => {
+    // Focusing the heading also scrolls it into view.
+    if (roomEntry) roomHeading.current?.focus();
+  }, [roomEntry]);
 
   const today = todayInIsrael();
   const fieldId = (name: FieldName) => `${id}-${name}`;
@@ -181,6 +198,16 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     { value: 12, label: t('profile.contract.12') },
     { value: 24, label: t('profile.contract.24') },
     { value: 36, label: t('profile.contract.36') },
+  ];
+  const genders: ChoiceOption<Gender>[] = [
+    { value: 'woman', label: t('profile.room.gender.woman') },
+    { value: 'man', label: t('profile.room.gender.man') },
+    { value: 'other', label: t('profile.room.gender.other') },
+  ];
+  const flatmates: ChoiceOption<FlatmateGender>[] = [
+    { value: 'women', label: t('rooms.genderPreference.women') },
+    { value: 'men', label: t('rooms.genderPreference.men') },
+    { value: 'any', label: t('rooms.genderPreference.any') },
   ];
   const parking: ChoiceOption<number>[] = [
     { value: 0, label: t('profile.parking.0') },
@@ -314,6 +341,88 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
         error={groupError('parking_needed')}
       />
 
+      <section aria-labelledby={`${id}-room`} className="mt-6 flex flex-col gap-[22px]">
+        <div className="flex flex-col gap-1">
+          <h2
+            ref={roomHeading}
+            id={`${id}-room`}
+            tabIndex={-1}
+            className="text-start text-xl font-extrabold focus:outline-none"
+          >
+            {t('profile.room.title')}
+          </h2>
+          <p className="text-start text-sm text-muted">{t('profile.room.hint')}</p>
+        </div>
+        <div className={card}>
+          <Switch
+            label={t('profile.room.switch')}
+            checked={form.room}
+            onChange={(room) => {
+              change({ room });
+              // Errors are only for a section that is on: none comes back stale on switching on.
+              setErrors((shown) => ({ ...shown, gender: undefined, birth_year: undefined }));
+            }}
+          />
+        </div>
+        {form.room && (
+          <div className="flex flex-col gap-[22px]">
+            <p className="text-start text-sm text-muted">{t('profile.room.privacy')}</p>
+
+            <div className="flex flex-col gap-[6px]">
+              <ChoiceGroup
+                legend={t('profile.room.fields.gender')}
+                name="gender"
+                options={genders}
+                value={form.gender}
+                onChange={(value) => change({ gender: value }, 'gender')}
+                error={groupError('gender')}
+              />
+              <p className="text-start text-sm text-muted">{t('profile.room.genderNote')}</p>
+            </div>
+
+            <div className="flex flex-col gap-[6px]">
+              <label htmlFor={fieldId('birth_year')} className={label}>
+                {t('profile.room.fields.birthYear')}
+              </label>
+              <div className={box}>
+                <input
+                  {...a11y('birth_year')}
+                  aria-describedby={
+                    errors.birth_year !== undefined
+                      ? `${fieldId('birth_year')}-hint ${errorId('birth_year')}`
+                      : `${fieldId('birth_year')}-hint`
+                  }
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={form.birth_year}
+                  onChange={(e) => change({ birth_year: e.target.value }, 'birth_year')}
+                  className={bare}
+                />
+              </div>
+              <p id={`${fieldId('birth_year')}-hint`} className="text-start text-sm text-muted">
+                {t('profile.room.birthYearHint')}
+              </p>
+              {errorText('birth_year')}
+            </div>
+
+            <ChoiceGroup
+              legend={t('profile.room.fields.flatmates')}
+              name="flatmate_gender"
+              options={flatmates}
+              value={form.flatmate_gender}
+              onChange={(value) => change({ flatmate_gender: value })}
+            />
+
+            <LifestyleFields
+              perspective="seeker"
+              value={form.lifestyle}
+              onChange={(lifestyle) => change({ lifestyle })}
+            />
+          </div>
+        )}
+      </section>
+
       {areas.length > 0 && (
         <div className="flex flex-col gap-3 pt-2">
           {failed && (
@@ -343,8 +452,9 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
 }
 
 /**
- * `/me/profile`, seekers only (`RequireSeeker`): the housing profile, empty or prefilled. Saved
- * with a safe `?next=` it returns there (the listing page's gate); otherwise it stays.
+ * `/me/profile`, seekers only (`RequireSeeker`): the housing profile, empty or prefilled, and the
+ * optional room section. Saved with a safe `?next=` it returns there (the listing page's gate);
+ * otherwise it stays. `?section=room` opens the room section and focuses its heading.
  */
 export function ProfilePage() {
   const { t } = useTranslation();
