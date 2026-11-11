@@ -8,7 +8,15 @@ import type { ListingPublic } from '../../listings/api';
 import type { SeekerProfileOut } from '../../profile/api';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { publicListing } from '../../search/__tests__/fixtures';
-import { ownerReason, ownerShort, seekerReason, seekerShort } from '../reasons';
+import he from '../../../locales/he.json';
+import {
+  ownerReason,
+  ownerShort,
+  personReason,
+  personShort,
+  seekerReason,
+  seekerShort,
+} from '../reasons';
 import type { Criterion, ReasonKind } from '../types';
 
 type Row = {
@@ -633,5 +641,42 @@ describe('reasons', () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+describe('people reasons', () => {
+  it('ac1_person_reasons_fact_free', () => {
+    const criteria: Criterion[] = [
+      'budget',
+      'move_in',
+      'area',
+      'household',
+      'contract',
+      'parking',
+      'smoking',
+      'pets',
+      'lifestyle',
+    ];
+    const person = { move_in_date: inDays(30) };
+    const short = he.match.owner.short;
+    // The owner chips that state a fact the card hides.
+    const forbidden = [short.smoking.agreeSmoker, short.pets.agreePet, short.contract.agreeLong];
+    for (const criterion of criteria) {
+      for (const kind of ['agree', 'differ'] as const) {
+        const line = personReason(criterion, kind, person, i18n.t);
+        expect(personShort(criterion, kind, person, i18n.t)).toBe(line);
+        expect(line).not.toBe('');
+        expect(line).not.toContain('match.');
+        for (const text of forbidden) expect(line).not.toBe(text);
+        if (criterion !== 'move_in') expect(line).toBe(short[criterion][kind]);
+      }
+    }
+    // A stored move-in that has passed means today, as everywhere.
+    expect(personReason('move_in', 'agree', { move_in_date: inDays(-5) }, i18n.t)).toBe(
+      i18n.t('match.owner.move_in.agree', { date: formatDate(todayInIsrael()) }),
+    );
+    expect(personReason('move_in', 'differ', person, i18n.t)).toBe(
+      i18n.t('match.owner.move_in.differ', { date: formatDate(inDays(30)) }),
+    );
   });
 });

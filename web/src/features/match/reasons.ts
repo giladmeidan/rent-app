@@ -367,3 +367,62 @@ export function ownerShort(
 ): string {
   return OWNER_SHORT[criterion][kind](profile, t);
 }
+
+// The people page's voice (0008b): about a seeker who has not applied. Fact-free: it reuses the
+// owner-short `agree` / `differ` base keys, never `agreeSmoker` / `agreePet` / `agreeLong` or a
+// line that states household, pets, smoking, contract or parking. Only `move_in` has a date,
+// which the card shows anyway.
+
+/** The person's fields the lines read. */
+export type PersonFacts = { move_in_date: string };
+
+const PERSON_BASE: Record<Criterion, Record<ReasonKind, string>> = {
+  budget: { agree: 'match.owner.short.budget.agree', differ: 'match.owner.short.budget.differ' },
+  move_in: { agree: 'match.owner.move_in.agree', differ: 'match.owner.move_in.differ' },
+  area: { agree: 'match.owner.short.area.agree', differ: 'match.owner.short.area.differ' },
+  household: {
+    agree: 'match.owner.short.household.agree',
+    differ: 'match.owner.short.household.differ',
+  },
+  contract: {
+    agree: 'match.owner.short.contract.agree',
+    differ: 'match.owner.short.contract.differ',
+  },
+  parking: {
+    agree: 'match.owner.short.parking.agree',
+    differ: 'match.owner.short.parking.differ',
+  },
+  smoking: {
+    agree: 'match.owner.short.smoking.agree',
+    differ: 'match.owner.short.smoking.differ',
+  },
+  pets: { agree: 'match.owner.short.pets.agree', differ: 'match.owner.short.pets.differ' },
+  lifestyle: {
+    agree: 'match.owner.short.lifestyle.agree',
+    differ: 'match.owner.short.lifestyle.differ',
+  },
+};
+
+/** A people card's line for `criterion` / `kind`; the chip and the "למה ההתאמה?" line are the same
+ * text. */
+export function personReason(
+  criterion: Criterion,
+  kind: ReasonKind,
+  person: PersonFacts,
+  t: TFunction,
+): string {
+  const key = PERSON_BASE[criterion][kind];
+  return criterion === 'move_in'
+    ? t(key, { date: formatDate(later(person.move_in_date, todayInIsrael())) })
+    : t(key);
+}
+
+/** A people card's chip: the same text as `personReason`. */
+export function personShort(
+  criterion: Criterion,
+  kind: ReasonKind,
+  person: PersonFacts,
+  t: TFunction,
+): string {
+  return personReason(criterion, kind, person, t);
+}
