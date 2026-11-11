@@ -435,3 +435,33 @@ verifier round, Gilad). The verifier confirmed `0007g` is on main (c80a78c).
              readable through the score - accepted, security reviewer confirms.
     Reviewers: code, qa, security, perf   Estimated: 1 coder run (Opus/high), cut line named if it overflows
     Links: specs/0008a-people-likes-api.md - PRODUCT.md "People & likes" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008a - People & likes API   PR OPEN (not merged), code head 1384a51
+    Shipped: a room lister pages through opted-in seekers (and anyone who liked the room) with a match score at the
+             pair's frozen price and likes them; a seeker likes rooms and sees who liked them back; the second like
+             becomes a shortlisted application (source "like", no message) with its chat open. An apply consumes the
+             pair's likes, so after a withdraw both sides start over. Web: type-only fixture edits.
+    Demo: make dev -> seeker A fills the room section, turns people_visible on -> owner O GETs /listings/{room}/people
+          and PUTs A's like -> A sees the room in GET /me/likes "liked_me", PUTs /listings/{room}/like ->
+          application_id returned; both inboxes show it shortlisted, source "like", chat open.
+    Tests: +2 unit (AboutMe), +17 integration (AC1-AC14 + apply-consumes-likes, withdrawn-like-not-revived,
+           apply racing a lister like); api 457, web 263; make lint, make test, make i18n-check green locally on
+           4a9c2ef. CI: api + web on the PR head (see the PR). No e2e (API spec).
+    Perf (10k profiles, 10k listings, 4k opted in): browse p95 76 ms (134 ms at 7k opted in), 4 statements per
+           page (5 for an empty page past the first); first visit inserts ~4k pairs in ~250 ms; /me/likes p95 31 ms
+           at 202 rows; no N+1, every new statement on an index.
+    Findings: 1 blocker fixed (a like given before an apply came back after a withdraw and let one click reopen a
+              shortlisted chat - code, security, qa); 2 majors to Gilad (Speed rule 9, below); 3 minors fixed
+              (AC3's SQL check now bites, AC9 pins the hidden-seeker 404, empty-page wording); 11 follow-ups logged;
+              12 nits dropped.
+    Decisions I need from you: 1. The person card's score reads the room's live household/contract/parking/
+             smoking/pets, so an owner editing a room learns those hidden answers for every opted-in candidate
+             (pets/smoking show even without an edit). (a) accept (b) freeze every room-side input per pair like
+             the price (c) score only what the card shows plus the frozen budget (recommend: a; security: b).
+             2. People browse has no rate limit (one room can read every opted-in card in at most 51 requests).
+             (a) a per-owner limiter as a follow-up (b) rely on the pre-launch listings cap (recommend: a).
+             Built as recommended meanwhile: no change in this PR.
+    Changed in PRODUCT.md: nothing.
+    Next: 0008b (people browse web), 0008c (likes web) and 0008d (flatmates API) branch from this PR.
