@@ -5,13 +5,16 @@ import { latestCode, postListing, signUp, uniqueEmail } from './helpers';
 
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 
-/** Every request URL the context sends, without the fragment (which no browser sends). */
+/** Every request URL the context sends, without the fragment (which no browser sends), and every
+ * `Referer` it sends. */
 function recordRequests(context: BrowserContext): string[] {
-  const urls: string[] = [];
+  const sent: string[] = [];
   context.on('request', (request) => {
-    urls.push(request.url().split('#')[0] ?? '');
+    sent.push(request.url().split('#')[0] ?? '');
+    const referer = request.headers()['referer'];
+    if (referer !== undefined) sent.push(referer);
   });
-  return urls;
+  return sent;
 }
 
 // A room's lister creates the invite link; a logged-out person opens it, signs up from the login
@@ -88,9 +91,11 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   await page.reload();
   await expect(page.getByText(FLATMATE)).toBeVisible();
 
-  // After F's first load the page URL never held the token, and no request URL did.
-  const firstLoad = flatmateUrls.findIndex((url) => url.includes(token));
-  for (const url of flatmateUrls.slice(firstLoad + 1)) expect(url).not.toContain(token);
+  // After F's first load the page URL never held the token, and no request URL or Referer did.
+  // The first load may report `#T` more than once: check from the first URL without it.
+  const clean = flatmateUrls.findIndex((url) => !url.includes(token));
+  expect(clean).not.toBe(-1);
+  for (const url of flatmateUrls.slice(clean)) expect(url).not.toContain(token);
   expect(flatmatePage.url()).not.toContain(token);
   for (const url of [...ownerRequests, ...flatmateRequests]) expect(url).not.toContain(token);
   expect(flatmateRequests.length).toBeGreaterThan(0);
