@@ -1,7 +1,7 @@
 ---
 id: 0005b
 title: Owners and shortlisted seekers open their chats from the header, the owner inbox or "my applications", read a thread that updates the moment a message arrives, and send messages under a deposit warning
-status: in-progress
+status: in-review
 depends_on: [0005a, 0005c, 0004b, 0004d]   # 0005a: the API; 0005c: the event stream; 0004b: RequireSeeker (copied), clearSession, MyApplicationsPage, the e2e signUp / postListing helpers and the `rl:*` clear; 0004d: ApplicantCard, the e2e inbox flow this spec extends
 reviewers: [code, qa, ux, security]   # ux: two new screens with no artboard of their own and a changed header; security (scoped): another user's free text rendered (NF3), the clearSession paths, the event stream closed on logout
 estimate: 1 coder run
