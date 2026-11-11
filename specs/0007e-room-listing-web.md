@@ -444,17 +444,17 @@ collide with this spec. Every `:line` below for a 0006e file refers to the workt
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0007e-room-listing-web.md - PRODUCT.md "Rooms", "Listing edit" - design/screens-v1/CreateListing.dc.html
 
-    Spec 0007e - Room fields in the listing wizard (web)   PR OPEN #33 (not merged), code head 53b5a3c
+    Spec 0007e - Room fields in the listing wizard (web)   PR OPEN #33 (not merged), code head c7e64ea
     Shipped: an owner posting or editing a room says, in step 3 "העדפות", who it is for (נשים / גברים / לא משנה),
              how many flatmates live there (1-7), optionally their ages and the flat's 7 lifestyle answers. A line
              says ages and answers are shown only to signed-in seekers (decision (b)). The preview shows room chips.
              An edit sends only what changed; room -> apartment sends only the type.
     Demo: make dev -> owner /listings/new, "חדר בדירת שותפים" -> step 3: נשים, count 2, ages 27 and 30, one answer
           -> the preview shows the chips -> publish -> edit it, switch to "דירה שלמה", save.
-    Tests: +9 web unit (1 new file), +0 integration, +1 e2e step in ac12 (no new signup)   (api 427, web 233)
-    CI: api + web on 53b5a3c: CI_RESULT. e2e is local while CI e2e is off: 10/10 serial (--workers=1, 37 s);
-        plain make e2e 9/10, 8/10, 8/10 at load avg 21-23, each failure a map ac8 / applications ac9 load flake
-        (no 0007e code, logged in FOLLOWUPS); the room step passed in every run
+    Tests: +9 web unit (1 new file), +0 integration, +1 e2e step in ac12 (no new signup)   (api 432, web 241)
+    CI: api + web green on 53b5a3c; rerun on the final push (merge of #32, c7e64ea). e2e is local while CI e2e is
+        off: make e2e 10/10 (25.4 s) on c7e64ea; earlier, at load avg 21-23, plain runs had map ac8 / applications
+        ac9 load flakes (no 0007e code, logged in FOLLOWUPS; serial 10/10); the room step passed in every run
     Findings: 0 blockers, 0 majors; 8 minors: 6 fixed (stale "required" after a type switch, a server error kept
               after a count change, the preview privacy note, heading separation, slot hint link, legacy-room
               test), 2 to FOLLOWUPS (partial-ages chip copy, unknown lifestyle keys); 12 nits dropped
