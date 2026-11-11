@@ -17,7 +17,7 @@ import { RequireOwner } from '../../auth/RequireOwner';
 import { formatDate } from '../../listings/format';
 import { listing, owner, seeker } from '../../listings/__tests__/fixtures';
 import { inDays } from '../../profile/__tests__/fixtures';
-import type { ApplicantOut } from '../api';
+import type { ApplicantOut, ApplicantRoom } from '../api';
 import { ApplicantsPage } from '../ApplicantsPage';
 import { applicant, applicantProfile, match } from './fixtures';
 
@@ -877,5 +877,294 @@ describe('ApplicantsPage', () => {
     for (const card of cards()) {
       expect(card.textContent).not.toContain('₪');
     }
+  });
+});
+
+// --- 0007c: room applicants -----------------------------------------------------------------
+
+/** A room applicant (0007c): a profile and a match, plus `room`. */
+function roomApplicant(room: Partial<ApplicantRoom>, overrides: Partial<ApplicantOut> = {}) {
+  return applicant({
+    match: match(88),
+    profile: applicantProfile(),
+    room: { gender: 'woman', age: 27, lifestyle: {}, ...room },
+    ...overrides,
+  });
+}
+
+/** Listing A as a room now, with the flat's answers. */
+const roomListing = (lifestyle: (typeof A)['lifestyle'] = {}) => ({
+  ...A,
+  listing_type: 'room' as const,
+  flatmates_count: 2,
+  lifestyle,
+});
+
+const moreOf = (name: string) =>
+  within(cardOf(name)).getByRole('button', { name: he.applicants.more });
+/** The "עוד פרטים" panel, found through the button's `aria-controls`. */
+const morePanelOf = (name: string) => {
+  const id = moreOf(name).getAttribute('aria-controls') ?? '';
+  const panel = document.getElementById(id);
+  if (panel === null) throw new Error(`no panel #${id}`);
+  return panel;
+};
+/** The line right after the "applied at" line. */
+const lineAfterApplied = (p: ApplicantOut) =>
+  within(cardOf(p.applicant_name)).getByText(appliedText(p)).nextElementSibling;
+const genderWords = Object.values(he.profile.room.gender);
+const answer = (key: string, n: number) => i18n.t(`lifestyle.${key}.answer.${String(n)}`);
+
+/** A key press on a native button as a browser handles it: jsdom has no activation behaviour, so
+ * an Enter keydown or a Space keyup that no handler prevented clicks the button (as user-event
+ * does). Focus is left where it is. */
+function press(button: HTMLElement, key: 'Enter' | ' ') {
+  expect(button.tagName).toBe('BUTTON');
+  const down = fireEvent.keyDown(button, { key });
+  if (key === 'Enter' && down) fireEvent.click(button);
+  const up = fireEvent.keyUp(button, { key });
+  if (key === ' ' && down && up) fireEvent.click(button);
+}
+
+describe('ApplicantsPage, room applicants (0007c)', () => {
+  it('ac6_room_gender_age', async () => {
+    const w = roomApplicant(
+      { gender: 'woman', age: 27, lifestyle: {} },
+      { applicant_name: 'W', match: match(88) },
+    );
+    const l = roomApplicant(
+      { gender: 'man', age: 31, lifestyle: { night: 1 } },
+      { applicant_name: 'L', match: match(80, ['budget', 'move_in', 'area'], 'lifestyle') },
+    );
+    renderPage([json([w, l])], { mine: [json([roomListing({ night: 3 })])] });
+    await screen.findAllByRole('article');
+
+    expect(within(cardOf('W')).getByTestId('match-badge')).toHaveTextContent('התאמה 88%');
+    const line = lineAfterApplied(w);
+    expect(line?.textContent).toBe('אישה · גיל 27');
+    expect(line?.tagName).toBe('P');
+
+    // The owner-voice lifestyle reason (0007g's copy) reaches a room applicant's card.
+    const chips = within(within(cardOf('L')).getByTestId('match-chips')).getAllByRole('listitem');
+    const amber = chips.filter((chip) => chip.className.includes('bg-warn'));
+    expect(amber.map((chip) => chip.textContent)).toEqual([he.match.owner.short.lifestyle.differ]);
+    fireEvent.click(whyOf('L'));
+    expect(within(panelOf('L')).getByText(he.match.owner.lifestyle.differ)).toBeVisible();
+  });
+
+  it('ac7_age_omitted', async () => {
+    const o = roomApplicant({ gender: 'other', age: null }, { applicant_name: 'O' });
+    renderPage([json([o])], { mine: [json([roomListing()])] });
+    await screen.findByRole('article');
+
+    const line = lineAfterApplied(o);
+    expect(line?.textContent).toBe(he.profile.room.gender.other);
+    expect(line?.textContent).not.toContain('גיל');
+    expect(line?.textContent).not.toContain('·');
+  });
+
+  it('ac8_non_room_cards_unchanged', async () => {
+    const cases = [
+      { mine: A, label: 'an apartment applicant' },
+      { mine: roomListing({ night: 2 }), label: 'a room listing, room: null' },
+    ];
+    for (const { mine } of cases) {
+      const p = applicant({ applicant_name: 'P', match: match(94), profile: applicantProfile() });
+      const { view } = renderPage([json([p])], { mine: [json([mine])] });
+      await screen.findByRole('article');
+
+      expect(buttonsOf('P')).toEqual([
+        he.applicants.why,
+        he.applicants.actions.shortlist,
+        he.applicants.actions.decline,
+      ]);
+      expect(within(cardOf('P')).queryByRole('button', { name: he.applicants.more })).toBeNull();
+      // The summary line follows "applied at", as in 0006g; no gender word anywhere.
+      expect(lineAfterApplied(p)?.textContent).toContain(he.profile.household.couple);
+      for (const word of genderWords) {
+        expect(within(cardOf('P')).queryByText(word, { exact: false })).toBeNull();
+      }
+      reset(view);
+    }
+  });
+
+  it('ac9_more_disclosure_keyboard', async () => {
+    const w = roomApplicant({ lifestyle: { cleanliness: 3 } }, { applicant_name: 'W' });
+    renderPage([json([w])], { mine: [json([roomListing({ cleanliness: 3 })])] });
+    await screen.findByRole('article');
+
+    const more = moreOf('W');
+    const heading = within(cardOf('W')).getByRole('heading', { level: 2 });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(more).toHaveAttribute('aria-controls', `${heading.id}-more`);
+    expect(more).toHaveAttribute('aria-describedby', heading.id);
+    expect(morePanelOf('W')).toHaveAttribute('hidden');
+    expect(morePanelOf('W')).not.toBeVisible();
+
+    more.focus();
+    press(more, 'Enter');
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    const panel = document.getElementById(more.getAttribute('aria-controls') ?? '');
+    expect(panel).not.toBeNull();
+    expect(panel).toBeVisible();
+    expect(
+      within(panel as HTMLElement).getByText(i18n.t('lifestyle.cleanliness.topic')),
+    ).toBeVisible();
+    expect(more).toHaveFocus();
+
+    press(more, ' ');
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(morePanelOf('W')).not.toBeVisible();
+    expect(more).toHaveFocus();
+  });
+
+  it('ac10_answers_compared_with_flat', async () => {
+    const w = roomApplicant(
+      { lifestyle: { night: 1, guests: 2, cleanliness: 3 } },
+      { applicant_name: 'W' },
+    );
+    renderPage([json([w])], { mine: [json([roomListing({ cleanliness: 1, guests: 2 })])] });
+    await screen.findByRole('article');
+    fireEvent.click(moreOf('W'));
+    const panel = morePanelOf('W');
+
+    const rows = within(within(panel).getByRole('list')).getAllByRole('listitem');
+    expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
+      he.lifestyle.cleanliness.topic,
+      he.lifestyle.guests.topic,
+      he.lifestyle.night.topic,
+    ]);
+    const [cleanliness, guests, night] = rows as [HTMLElement, HTMLElement, HTMLElement];
+    const theirs = (key: string, n: number) =>
+      i18n.t('applicants.room.theirs', { answer: answer(key, n) });
+    const flat = (key: string, n: number) =>
+      i18n.t('applicants.room.flat', { answer: answer(key, n) });
+
+    expect(within(cleanliness).getByText(theirs('cleanliness', 3))).toBeVisible();
+    expect(within(cleanliness).getByText(flat('cleanliness', 1))).toBeVisible();
+    expect(within(cleanliness).getByText(he.applicants.room.differs)).toBeVisible();
+    expect(cleanliness.querySelector('.bg-warn[aria-hidden="true"]')).not.toBeNull();
+
+    expect(within(guests).getByText(theirs('guests', 2))).toBeVisible();
+    expect(within(guests).getByText(flat('guests', 2))).toBeVisible();
+    expect(within(guests).queryByText(he.applicants.room.differs)).toBeNull();
+    expect(guests.querySelector('.bg-warn')).toBeNull();
+
+    expect(within(night).getByText(theirs('night', 1))).toBeVisible();
+    expect(night.textContent).not.toContain('בדירה');
+    expect(within(night).queryByText(he.applicants.room.differs)).toBeNull();
+
+    expect(within(panel).getByText('1 מתוך 2 תשובות זהות לדירה')).toBeVisible();
+    expect(within(panel).queryByText(he.applicants.room.noFlatAnswers)).toBeNull();
+  });
+
+  it('ac11_empty_answers', async () => {
+    // The applicant answered nothing: the button is there, the panel says so, no list.
+    const none = roomApplicant({ lifestyle: {} }, { applicant_name: 'W' });
+    let { view } = renderPage([json([none])], {
+      mine: [json([roomListing({ cleanliness: 2 })])],
+    });
+    await screen.findByRole('article');
+    fireEvent.click(moreOf('W'));
+    let panel = morePanelOf('W');
+    expect(within(panel).getByText(he.applicants.room.noAnswers)).toBeVisible();
+    expect(within(panel).queryByRole('list')).toBeNull();
+    expect(within(panel).queryByText(/מתוך/)).toBeNull();
+    reset(view);
+
+    // The flat answered nothing, on a room: rows without "בדירה" or markers, the hint once.
+    const answered = roomApplicant(
+      { lifestyle: { cleanliness: 3, night: 1 } },
+      { applicant_name: 'W' },
+    );
+    ({ view } = renderPage([json([answered])], { mine: [json([roomListing({})])] }));
+    await screen.findByRole('article');
+    fireEvent.click(moreOf('W'));
+    panel = morePanelOf('W');
+    expect(within(within(panel).getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
+    expect(panel.textContent).not.toContain('בדירה:');
+    expect(within(panel).queryByText(he.applicants.room.differs)).toBeNull();
+    expect(panel.querySelector('.bg-warn')).toBeNull();
+    expect(within(panel).getAllByText(he.applicants.room.noFlatAnswers)).toHaveLength(1);
+    expect(within(panel).queryByText(/מתוך/)).toBeNull();
+    reset(view);
+
+    // The listing is an apartment now: the rows, no hint.
+    ({ view } = renderPage([json([answered])], { mine: [json([{ ...A, lifestyle: {} }])] }));
+    await screen.findByRole('article');
+    fireEvent.click(moreOf('W'));
+    panel = morePanelOf('W');
+    expect(within(within(panel).getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(panel).queryByText(he.applicants.room.noFlatAnswers)).toBeNull();
+  });
+
+  it('ac12_patch_and_independent_disclosures', async () => {
+    const w = roomApplicant(
+      { lifestyle: { cleanliness: 3 } },
+      { applicant_name: 'W', status: 'submitted' },
+    );
+    renderPage([json([w])], {
+      mine: [json([roomListing({ cleanliness: 1 })]), json([roomListing({ cleanliness: 1 })])],
+      extra: { [patchRoute(w)]: [json({ ...w, status: 'shortlisted' })] },
+    });
+    await screen.findByRole('article');
+    fireEvent.click(moreOf('W'));
+    expect(morePanelOf('W')).toBeVisible();
+
+    fireEvent.click(
+      within(cardOf('W')).getByRole('button', { name: he.applicants.actions.shortlist }),
+    );
+    await vi.waitFor(() => {
+      expect(chipOf('W')).toHaveTextContent(he.applicants.status.shortlisted);
+    });
+    await vi.waitFor(() => {
+      expect(within(cardOf('W')).getByRole('heading', { level: 2 })).toHaveFocus();
+    });
+    expect(lineAfterApplied(w)?.textContent).toBe('אישה · גיל 27');
+    expect(moreOf('W')).toHaveAttribute('aria-expanded', 'true');
+    expect(morePanelOf('W')).toBeVisible();
+    expect(within(morePanelOf('W')).getByText(he.applicants.room.differs)).toBeVisible();
+
+    // Independent: "why" opens beside it, and closing "more" leaves "why" open.
+    expect(whyOf('W')).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(whyOf('W'));
+    expect(whyOf('W')).toHaveAttribute('aria-expanded', 'true');
+    expect(panelOf('W')).toBeVisible();
+    expect(morePanelOf('W')).toBeVisible();
+    fireEvent.click(moreOf('W'));
+    expect(moreOf('W')).toHaveAttribute('aria-expanded', 'false');
+    expect(morePanelOf('W')).not.toBeVisible();
+    expect(whyOf('W')).toHaveAttribute('aria-expanded', 'true');
+    expect(panelOf('W')).toBeVisible();
+    fireEvent.click(whyOf('W'));
+    fireEvent.click(moreOf('W'));
+    expect(whyOf('W')).toHaveAttribute('aria-expanded', 'false');
+    expect(moreOf('W')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('ac13_declined_room_card', async () => {
+    const d = roomApplicant(
+      { gender: 'man', age: 40, lifestyle: { cleanliness: 3, guests: 1, kosher: 2 } },
+      { applicant_name: 'D', status: 'declined' },
+    );
+    renderPage([json([d])], {
+      mine: [json([roomListing({ cleanliness: 3, guests: 3, kosher: 2 })])],
+    });
+    await screen.findByRole('article');
+
+    const line = lineAfterApplied(d);
+    expect(line?.textContent).toBe(
+      i18n.t('applicants.room.line', { gender: he.profile.room.gender.man, age: 40 }),
+    );
+    expect(buttonsOf('D')).toEqual([he.applicants.why, he.applicants.more]);
+    fireEvent.click(moreOf('D'));
+    const panel = morePanelOf('D');
+    expect(panel).toBeVisible();
+    for (const part of [panel, line as HTMLElement]) {
+      expect(part.textContent).not.toContain('₪');
+      expect(part.textContent).not.toContain('@');
+      expect(part.querySelector('a, [href]')).toBeNull();
+    }
+    expect(within(panel).getByText('2 מתוך 3 תשובות זהות לדירה')).toBeVisible();
   });
 });

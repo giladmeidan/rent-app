@@ -8,8 +8,8 @@ The room section (spec 0007a): `gender` (NULL = not looking for a room), an opti
 `flatmate_gender` (the flatmates preference) and `lifestyle` (the seeker's questionnaire answers,
 key -> 1-3). Without a `gender` the other three hold their defaults
 (`ck_seeker_profiles_room_section`). Also personal data: in 0007a only its seeker reads it; from
-0007b the room fit rule and the match score read it, and from 0007c the owner inbox shows it on room
-applications only.
+0007b the room fit rule and the match score read it; from 0007c, the owner's inbox reads `gender`,
+`birth_year` (as an age) and `lifestyle` on room applications only (never `flatmate_gender`).
 
 `area_ids` has no FK (an array cannot carry one): the API
 checks each id is an active area when the profile is written; a later-deactivated area simply never

@@ -11,6 +11,10 @@ const OWNER_NAME = '\u05d3\u05e0\u05d4';
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 const withName = (text: string, name: string) => text.replace('{{name}}', name);
 const withScore = (text: string, score: number) => text.replace('{{score}}', String(score));
+// The room line (0007c) for a woman of 27: the age is this UTC year's, as the API computes it.
+const ROOM_LINE = he.applicants.room.line
+  .replace('{{gender}}', he.profile.room.gender.woman)
+  .replace('{{age}}', '27');
 
 // Extends 0004d's inbox flow with the chat (0005b AC12): no new signup (the e2e OTP budget).
 test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
@@ -128,5 +132,42 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   expect(items).toHaveLength(1);
   expect(items[0]?.listing.id).toBe(id);
   expect(items[0]?.status).toBe('declined');
+
+  // Rooms in the inbox (0007c AC14). The owner posts a room; the same seeker adds a room section
+  // to the profile and applies to it.
+  const roomId = await postListing(page, `${street} room`, {
+    listing_type: 'room',
+    flatmates_count: 2,
+    lifestyle: { cleanliness: 1 },
+  });
+  await putProfile(seekerPage, {
+    gender: 'woman',
+    birth_year: new Date().getUTCFullYear() - 27,
+    lifestyle: { cleanliness: 3 },
+  });
+  const roomApplied = await seekerPage.request.post(`${API}/listings/${roomId}/applications`, {
+    data: { message: MESSAGE },
+  });
+  expect(roomApplied.status()).toBe(201);
+
+  // The room's inbox: the gender / age line, and the answers behind "עוד פרטים" (3 against 1).
+  await page.goto(`/me/listings/${roomId}/applicants`);
+  await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
+  await expect(applicant.getByText(ROOM_LINE, { exact: true })).toBeVisible();
+  const more = applicant.getByRole('button', { name: he.applicants.more });
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  const morePanel = page.locator(`[id="${(await more.getAttribute('aria-controls')) ?? ''}"]`);
+  await expect(morePanel.getByText(he.applicants.room.differs, { exact: true })).toBeVisible();
+
+  // The apartment's inbox: the declined card, applied to an apartment, shows none of it, though
+  // the seeker now has a room section (the snapshot gate).
+  await page.goto(`/me/listings/${id}/applicants`);
+  await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
+  await expect(applicant.getByText(he.applicants.status.declined, { exact: true })).toBeVisible();
+  await expect(applicant.getByRole('button', { name: he.applicants.why })).toBeVisible();
+  await expect(applicant.getByRole('button', { name: he.applicants.more })).toHaveCount(0);
+  await expect(applicant.getByText(ROOM_LINE, { exact: true })).toHaveCount(0);
   await seekerContext.close();
 });

@@ -1,7 +1,7 @@
 ---
 id: 0007c
 title: On a room application the owner's inbox shows the applicant's gender and age beside the match score and reasons, with the questionnaire answers, compared with the flat's, behind "עוד פרטים"; never on an apartment application
-status: in-progress
+status: in-review
 depends_on: [0007g, 0007d, 0006g]   # 0007g (specs/0007g-lifestyle-match-api.md, on 0007b): the lifestyle criterion, the inbox's match_columns(listing_type=Application.listing_type_at_apply), the owner-voice lifestyle reason copy; 0007b via 0007g: applications.listing_type_at_apply (migration 0010); 0007a via 0007b: the seeker's room section, MyListingOut.lifestyle; 0007d: features/lifestyle (keys, labels, topic, compareLifestyle); 0006g: the card this extends
 reviewers: [code, qa, security, ux]   # security: gender, age and lifestyle answers (sensitive PII) shown to an owner, keyed on a snapshot so a type switch cannot expose apartment applicants, explicit field lists; qa: nulls, type switches both ways, live edits and clearing, answer comparison cases; ux: a new line and disclosure on the inbox card; no perf: three CASE columns in the same statement, no new join or statement (0006c AC4 / AC5 counts unchanged)
 estimate: 1 coder run   # coder Opus/high (PII gate, Speed rule 6); see Risks
@@ -593,3 +593,27 @@ Checked against the code and found correct (no change needed):
              type switches tested both ways.
     Reviewers: code, qa, security, ux   Estimated: 1 coder run (Opus/high, PII gate), 1 review round
     Links: specs/0007c-room-inbox.md - PRODUCT.md "Rooms", "Applications" - design/screens-v1/Inbox.dc.html, InboxDesktop.dc.html
+
+    Spec 0007c - Room applicants in the owner inbox (API + web)   PR OPEN (not merged), code head 58c580c
+    Shipped: on a room application the owner's applicant card shows the applicant's gender and age
+             ("אישה · גיל 27", the gender alone without an age) under the applied-at line, and a "עוד פרטים"
+             panel compares their questionnaire answers with the flat's: rows in a fixed order, "שונה מהדירה"
+             on the ones that differ, an "X מתוך Y" summary and two empty states. Apartment applications show
+             none of it, even after the listing becomes a room. API: room {gender, age, lifestyle} | null on
+             the inbox list and the status PATCH, gated in SQL on the type at apply time.
+    Demo: make dev -> an owner posts a room (2 flatmates, cleanliness answered); a seeker with a room section
+          (woman, 27, cleanliness 3) applies -> the owner opens /me/listings/<id>/applicants: "אישה · גיל 27",
+          then "עוד פרטים" shows ניקיון with both answers and "שונה מהדירה".
+    Tests: +5 integration (AC1-AC5), +8 web component (AC6-AC13), +0 new e2e (AC14 extends
+           ac12_shortlist_chat_decline; no new signup) (api 432, web 232)
+    CI: api + web run on the single push (result in the PR); e2e local while CI e2e is off: 10 of 10,
+        37.2 s on 58c580c
+    Findings: 0 blockers, 0 majors (code, qa, security, ux). Security attacked the live API (cross-owner,
+              seeker/anon, apartment->room with 9 flat-answer and 3 gender-preference edits, both sorts,
+              withdraw/re-apply): nothing leaked. 3 minors to FOLLOWUPS (a regression test that the room's
+              gender preference stays out of the owner score; tighter spacing between the two disclosure
+              buttons; a Hebrew plural for "1 מתוך 1 תשובות"); 10 nits dropped
+    Decisions I need from you: none.
+    Changed in PRODUCT.md: nothing
+    Next: nothing branches from this. Take the FOLLOWUPS security line into any spec that adds the room fit
+          to the owner's score or sort.

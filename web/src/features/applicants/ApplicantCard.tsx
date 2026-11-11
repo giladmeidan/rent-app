@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { hasStatus } from '../applications/api';
 import { ApplicationStatusChip } from '../applications/ApplicationStatusChip';
 import { appliedOn } from '../applications/format';
+import type { LifestyleAnswers } from '../lifestyle/keys';
 import { AgreeIcon, DifferIcon } from '../match/icons';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
@@ -15,7 +16,8 @@ import {
   ownerReason,
   parkingName,
 } from '../match/reasons';
-import type { ApplicantOut, ApplicantProfileOut, ApplicantStatus } from './api';
+import type { ApplicantOut, ApplicantProfileOut, ApplicantRoom, ApplicantStatus } from './api';
+import { RoomDetails } from './RoomDetails';
 import { useSetApplicantStatus } from './useSetApplicantStatus';
 
 const focusRing =
@@ -42,17 +44,32 @@ type Props = {
   headingId: string;
   /** The listing's `parking_spots`, for the owner-voice parking line. */
   spots: number;
+  /** The listing's own questionnaire answers, compared with a room applicant's (0007c). */
+  flatLifestyle: LifestyleAnswers;
+  /** Whether the listing is a room now (0007c: the "fill the flat's questionnaire" hint). */
+  flatIsRoom: boolean;
   onSettled: (outcome: CardOutcome, button: HTMLButtonElement | null) => void;
 };
 
 /** One applicant in the owner's inbox (Inbox.dc.html): the score, a household / move-in line, two
  * chips and a "למה ההתאמה?" disclosure (InboxDesktop.dc.html's reasons and details). An applicant
- * from before Slice 6 has no profile and no match: a "no score" pill only. */
-export function ApplicantCard({ listingId, applicant, headingId, spots, onSettled }: Props) {
+ * from before Slice 6 has no profile and no match: a "no score" pill only. A room applicant (0007c)
+ * also has a gender / age line and a "עוד פרטים" disclosure with their questionnaire answers. */
+export function ApplicantCard({
+  listingId,
+  applicant,
+  headingId,
+  spots,
+  flatLifestyle,
+  flatIsRoom,
+  onSettled,
+}: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const panelId = `${headingId}-why`;
-  const { match, profile } = applicant;
+  const morePanelId = `${headingId}-more`;
+  const { match, profile, room } = applicant;
   const change = useSetApplicantStatus(listingId, applicant.id);
   // Same-tick guard: a double click sends one request.
   const inFlight = useRef(false);
@@ -137,6 +154,7 @@ export function ApplicantCard({ listingId, applicant, headingId, spots, onSettle
             <p className="text-start text-[13px] text-muted">
               {t('applicants.appliedAt', { date: appliedOn(applicant.created_at) })}
             </p>
+            {room !== null && <RoomLine room={room} />}
             {profile !== null && (
               <p className="text-start text-[13px] text-[#44403C]">
                 {t('applicants.summary', {
@@ -171,20 +189,7 @@ export function ApplicantCard({ listingId, applicant, headingId, spots, onSettle
               className={disclosure}
             >
               {t('applicants.why')}
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={`transition-transform motion-reduce:transition-none${open ? ' rotate-180' : ''}`}
-              >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
+              <Chevron open={open} />
             </button>
             {/* Always in the DOM, so `aria-controls` names it; a display class would override
                 `hidden`, so it is set only when open. */}
@@ -206,6 +211,29 @@ export function ApplicantCard({ listingId, applicant, headingId, spots, onSettle
                 </ul>
               )}
               <ProfileFacts profile={profile} />
+            </div>
+          </div>
+        )}
+        {room !== null && (
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              aria-controls={morePanelId}
+              aria-describedby={headingId}
+              onClick={() => setMoreOpen((o) => !o)}
+              className={disclosure}
+            >
+              {t('applicants.more')}
+              <Chevron open={moreOpen} />
+            </button>
+            {/* Always in the DOM, as the "why" panel is. */}
+            <div
+              id={morePanelId}
+              hidden={!moreOpen}
+              className={moreOpen ? 'flex flex-col gap-3' : undefined}
+            >
+              <RoomDetails room={room} flat={flatLifestyle} flatIsRoom={flatIsRoom} />
             </div>
           </div>
         )}
@@ -260,6 +288,37 @@ export function ApplicantCard({ listingId, applicant, headingId, spots, onSettle
         )}
       </article>
     </li>
+  );
+}
+
+/** The disclosure buttons' chevron, turned while open. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`transition-transform motion-reduce:transition-none${open ? ' rotate-180' : ''}`}
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+/** A room applicant's gender and, when given, age (0007c): plain text in the page's direction. */
+function RoomLine({ room }: { room: ApplicantRoom }) {
+  const { t } = useTranslation();
+  const gender = t(`profile.room.gender.${room.gender}`);
+  return (
+    <p className="text-start text-[13px] text-[#44403C]">
+      {room.age === null ? gender : t('applicants.room.line', { gender, age: room.age })}
+    </p>
   );
 }
 

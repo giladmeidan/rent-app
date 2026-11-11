@@ -12,11 +12,13 @@ Owner side (spec 0004c): the two inbox endpoints require an **owner** session (`
 different listing and a withdrawn application are a 404 `not_found`, identical to an unknown id.
 
 Each applicant carries their current `match` and housing `profile` (spec 0006c); the list is sorted
-by match by default (`?sort=newest` for the 0004c order), applicants without a profile last.
+by match by default (`?sort=newest` for the 0004c order), applicants without a profile last. A room
+application also carries the seeker's room section as `room` (spec 0007c: gender, age, answers).
 
 Every successful owner status change and seeker withdraw publishes a `status` chat event to the
 owner and the seeker after the commit (spec 0005c): it may open or close the application's chat."""
 
+import datetime as dt
 import uuid
 from typing import Annotated, Any
 
@@ -32,6 +34,7 @@ from app.redis_client import RedisClient, get_redis
 from app.schemas.application import (
     ApplicantOut,
     ApplicantProfileOut,
+    ApplicantRoomOut,
     ApplicantSort,
     ApplicantStatusIn,
     ApplicationIn,
@@ -159,9 +162,19 @@ def withdraw(
 def _applicant_out(row: Row[Any]) -> ApplicantOut:
     """One `services.applications._applicants` row as the owner sees it. `match` and `profile`
     only when the applicant has a profile (`household` is NOT NULL in `seeker_profiles`): without
-    one the match columns are meaningless (spec 0006c)."""
+    one the match columns are meaningless (spec 0006c). `room` only when the service's room CASE
+    returned a `room_gender` (a room application whose seeker has a room section now, spec 0007c),
+    independent of `profile`; the birth year becomes an age (the `BirthYear` validator's year)."""
     application: Application = row.Application
     has_profile = row.household is not None
+    room = None
+    if row.room_gender is not None:
+        age = (
+            dt.datetime.now(dt.UTC).year - row.room_birth_year
+            if row.room_birth_year is not None
+            else None
+        )
+        room = ApplicantRoomOut(gender=row.room_gender, age=age, lifestyle=row.room_lifestyle)
     return ApplicantOut(
         id=application.id,
         status=application.status,  # never `withdrawn`: filtered out by the service
@@ -183,6 +196,7 @@ def _applicant_out(row: Row[Any]) -> ApplicantOut:
             if has_profile
             else None
         ),
+        room=room,
     )
 
 
