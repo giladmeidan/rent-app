@@ -101,7 +101,9 @@ jobs:
         run: make build-web
 
   e2e:
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')
+    # Repo variable E2E_IN_CI=off switches this job off while GitHub runners can't install Playwright deps
+    # (Gilad, 2026-11-11); specs run `make e2e` locally meanwhile. Re-enable: `gh variable delete E2E_IN_CI`.
+    if: vars.E2E_IN_CI != 'off' && (github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
