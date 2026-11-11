@@ -125,3 +125,4 @@ Minor findings deferred by the coder. Format: `- [ ] NNNN · file:line · what �
 - [ ] 0006f · web/src/features/search/SearchPage.tsx · the sort select briefly shows "newest" while the seeker's profile loads (disable/hold it while the profile `isLoading`); in map view the select ignores the map query's real `sort` · review round 1 qa minor
 - [ ] 0006f · web/src/features/search/__tests__ · no tests for the map-view SortSelect or for the nudge shown in `?view=map` · review round 1 qa minor
 - [ ] 0006f · web/src/features/match/MatchBadge.tsx, MatchCard.tsx · one-off neutral hex colours (#44403C, #F5F5F4, #D6D3D1); add neutral Tailwind tokens · review round 1 ux minor
+- [ ] 0006e · web/src/features/listings/PreferencesStep.tsx:15, web/src/components/ChoiceGroup.tsx:50 · a checked segment is shown only by tint, border and weight; add a small check mark for the multi-select households (and ChoiceGroup for consistency) · review round 1 ux minor
