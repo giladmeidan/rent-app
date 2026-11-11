@@ -1,7 +1,7 @@
 ---
 id: 0006e
 title: An owner says who the listing suits — households, no smokers, minimum contract — in a new wizard step "העדפות" (create and edit), and the listing page shows "מה בעל הדירה מחפש"
-status: in-review
+status: done
 depends_on: [0006a]      # the three listing fields on POST / PATCH / GET, and 0006a's type-only web edits (ListingInBody Omit, fixture defaults)
 reviewers: [code, qa, ux]   # ux: a new wizard step and a new listing-page section; qa: the edit diff for an array field
 estimate: 1 coder run
