@@ -6,6 +6,8 @@ import { ErrorState } from '../../components/ErrorState';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
 import { ApplySection } from '../applications/ApplySection';
+import { MatchBadge } from '../match/MatchBadge';
+import { MatchCard } from '../match/MatchCard';
 import { ApiError } from './api';
 import { formatDate, formatIls, formatRooms, todayInIsrael } from './format';
 import { ListingFacts } from './ListingFacts';
@@ -76,14 +78,17 @@ export function ListingPage() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <p className="text-[30px] font-extrabold tracking-[-0.3px]">
-            <span>
-              {formatIls(l.price_ils)} {t('listings.units.ils')}
-            </span>{' '}
-            <span className="text-sm font-medium tracking-normal text-muted">
-              {t('listings.units.perMonth')}
-            </span>
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[30px] font-extrabold tracking-[-0.3px]">
+              <span>
+                {formatIls(l.price_ils)} {t('listings.units.ils')}
+              </span>{' '}
+              <span className="text-sm font-medium tracking-normal text-muted">
+                {t('listings.units.perMonth')}
+              </span>
+            </p>
+            {l.match !== null && <MatchBadge score={l.match.score} />}
+          </div>
           <h1 className="break-words text-xl font-bold leading-snug">
             {t('listings.card.title', {
               rooms: formatRooms(l.rooms),
@@ -133,6 +138,10 @@ export function ListingPage() {
           </p>
           <p className="text-sm text-muted">{t('listing.locationHint')}</p>
         </section>
+
+        {/* Nothing for `match: null`: the apply section already invites a seeker without a
+            profile to fill one. */}
+        {l.match !== null && <MatchCard match={l.match} listing={l} />}
 
         <ApplySection listing={l} />
       </article>
