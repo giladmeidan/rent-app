@@ -1,7 +1,7 @@
 // Fixtures for the listings tests; the fetch mock and render helpers are the auth harness's.
 import type { AreaOut, UserOut } from '../../../api/client';
 import { noa } from '../../auth/__tests__/harness';
-import type { ListingOut } from '../api';
+import type { ListingOut, MyListingOut } from '../api';
 
 export const owner: UserOut = { ...noa, role: 'owner', display_name: 'דנה' };
 export const seeker: UserOut = { ...noa, role: 'seeker' };
@@ -13,8 +13,9 @@ export const gushDan: AreaOut = {
 };
 
 let n = 0;
-/** A live listing (expires far in the future) unless overridden. */
-export function listing(overrides: Partial<ListingOut> = {}): ListingOut {
+/** A live listing (expires far in the future) with no applicants, as `GET /me/listings` returns
+ * it, unless overridden. */
+export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
   n += 1;
   return {
     id: `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`,
@@ -41,6 +42,18 @@ export function listing(overrides: Partial<ListingOut> = {}): ListingOut {
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',
+    applicant_count: 0,
+    new_applicant_count: 0,
     ...overrides,
   };
+}
+
+/** `l` as `POST` / `PATCH /listings` answer it: a `ListingOut`, without the applicant counts. */
+export function withoutCounts(l: MyListingOut): ListingOut {
+  const out: ListingOut & Partial<Pick<MyListingOut, 'applicant_count' | 'new_applicant_count'>> = {
+    ...l,
+  };
+  delete out.applicant_count;
+  delete out.new_applicant_count;
+  return out;
 }

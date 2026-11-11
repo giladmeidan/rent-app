@@ -6,7 +6,7 @@ import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import { deferred, json, mockApi, renderAt, renderRoutes } from '../../auth/__tests__/harness';
 import { MyListingsPage } from '../MyListingsPage';
-import { listing } from './fixtures';
+import { listing, withoutCounts } from './fixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -191,5 +191,57 @@ describe('MyListingsPage', () => {
     );
     expect(await screen.findByText(he.listings.edit.saved)).toHaveAttribute('role', 'status');
     view.unmount();
+  });
+  it('ac7_applicants_link', async () => {
+    const first = listing({ applicant_count: 12, new_applicant_count: 5 });
+    const second = listing({ status: 'paused', applicant_count: 3, new_applicant_count: 0 });
+    const third = listing({ expires_at: '2020-01-01T00:00:00Z' });
+    // PATCH /listings/{id} answers a `ListingOut`: no counts.
+    const paused = { ...withoutCounts(first), status: 'paused' as const };
+    expect(paused).not.toHaveProperty('applicant_count');
+    mockApi({
+      'GET /me/listings': [json([first, second, third])],
+      [`PATCH /listings/${first.id}`]: [json(paused)],
+    });
+    render();
+    const cards = await screen.findAllByRole('article');
+    const linkOf = (card: HTMLElement, l: { id: string }) => {
+      const link = within(card)
+        .getAllByRole('link')
+        .find((a) => a.getAttribute('href') === `/me/listings/${l.id}/applicants`);
+      expect(link).toBeDefined();
+      return link as HTMLElement;
+    };
+    const badgeText = i18n.t('applicants.newBadge', { count: 5 });
+
+    [first, second, third].forEach((l, i) => {
+      const card = cards[i] as HTMLElement;
+      const link = linkOf(card, l);
+      const name = link.textContent ?? '';
+      expect(name).toContain(i18n.t('applicants.link', { count: l.applicant_count }));
+      if (i === 0) {
+        expect(within(link).getByText(badgeText)).toHaveClass('bg-warn', 'text-warn-text');
+        expect(link).toHaveAccessibleName(
+          `${i18n.t('applicants.link', { count: 12 })} ${badgeText}`,
+        );
+      } else {
+        expect(link.querySelector('span')).toBeNull();
+        expect(link).toHaveAccessibleName(i18n.t('applicants.link', { count: l.applicant_count }));
+      }
+      expect(link).toHaveClass('min-h-[44px]');
+      const title = i18n.t('listings.card.title', { rooms: '3', street: l.street, city: l.city });
+      const describedBy = document.getElementById(link.getAttribute('aria-describedby') ?? '');
+      expect(describedBy).toHaveTextContent(title);
+    });
+
+    // Pausing merges the PATCH's `ListingOut` into the row: the counts stay.
+    const firstCard = cards[0] as HTMLElement;
+    fireEvent.click(within(firstCard).getByRole('button', { name: he.listings.actions.pause }));
+    expect(
+      await within(firstCard).findByRole('button', { name: he.listings.actions.resume }),
+    ).toBeVisible();
+    const link = linkOf(firstCard, first);
+    expect(link.textContent).toContain(i18n.t('applicants.link', { count: 12 }));
+    expect(within(link).getByText(badgeText)).toBeVisible();
   });
 });

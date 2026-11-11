@@ -13,7 +13,7 @@ import {
 } from '../../auth/__tests__/harness';
 import type { ListingOut } from '../api';
 import { MY_LISTINGS_KEY } from '../useMyListings';
-import { gushDan, listing, owner } from './fixtures';
+import { gushDan, listing, owner, withoutCounts } from './fixtures';
 import {
   areasLoaded,
   chooseApartmentAndContinue,
@@ -99,7 +99,10 @@ describe('ListingWizard', () => {
 
   it('ac4_preview_then_publish_navigates', async () => {
     const older = listing({ street: 'הרצל', created_at: '2026-11-01T10:00:00Z' });
-    const created = listing({ ...expectedBody, listing_type: 'apartment', furnished: 'partial' });
+    // The POST answers a `ListingOut`: no applicant counts.
+    const created = withoutCounts(
+      listing({ ...expectedBody, listing_type: 'apartment', furnished: 'partial' }),
+    );
     const post = deferred();
     const refetch = deferred();
     const api = mockApi({
@@ -153,9 +156,16 @@ describe('ListingWizard', () => {
     expect(cards).toHaveLength(2);
     expect(cards[0]).toHaveTextContent('כצנלסון');
     expect(cards[1]).toHaveTextContent('הרצל');
+    // The new card has no applicants yet (the cache adds zero counts).
+    const applicantsLink = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .find((a) => a.getAttribute('href') === `/me/listings/${created.id}/applicants`);
+    expect(applicantsLink).toHaveAccessibleName(i18n.t('applicants.link', { count: 0 }));
+    expect(applicantsLink?.textContent).not.toContain(i18n.t('applicants.newBadge', { count: 0 }));
+    expect(applicantsLink?.querySelector('span')).toBeNull();
     expect(api.calls('GET /me/listings')).toHaveLength(1);
 
-    refetch.resolve(json([created, older]));
+    refetch.resolve(json([{ ...created, applicant_count: 0, new_applicant_count: 0 }, older]));
     await vi.waitFor(() => {
       expect(screen.getAllByRole('article')).toHaveLength(2);
     });

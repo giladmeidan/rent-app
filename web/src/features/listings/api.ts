@@ -4,6 +4,8 @@ import type { components } from '../../api/schema';
 export type ListingIn = components['schemas']['ListingIn'];
 export type ListingOut = components['schemas']['ListingOut'];
 export type ListingPatch = components['schemas']['ListingPatch'];
+/** An own listing on `GET /me/listings`: `ListingOut` plus its applicant counts (0004c). */
+export type MyListingOut = components['schemas']['MyListingOut'];
 export type ListingType = ListingOut['listing_type'];
 export type ListingStatus = ListingOut['status'];
 export type Furnished = ListingOut['furnished'];
@@ -32,7 +34,7 @@ export async function createListing(body: ListingInBody): Promise<ListingOut> {
   return data;
 }
 
-export async function fetchMyListings(): Promise<ListingOut[]> {
+export async function fetchMyListings(): Promise<MyListingOut[]> {
   const { data, error, response } = await api.GET('/me/listings');
   if (data === undefined) throw new ApiError('GET', '/me/listings', response.status, error);
   return data;

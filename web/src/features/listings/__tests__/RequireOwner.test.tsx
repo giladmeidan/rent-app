@@ -11,6 +11,7 @@ import {
   networkError,
   renderRoutes,
 } from '../../auth/__tests__/harness';
+import { ApplicantsPage } from '../../applicants/ApplicantsPage';
 import { RequireOwner } from '../../auth/RequireOwner';
 import { EditListingPage } from '../EditListingPage';
 import { MyListingsPage } from '../MyListingsPage';
@@ -23,11 +24,13 @@ afterEach(() => {
 
 const A = listing();
 const EDIT = `/me/listings/${A.id}/edit` as const;
-const PATHS = ['/listings/new', '/me/listings', EDIT] as const;
+const APPLICANTS = `/me/listings/${A.id}/applicants` as const;
+const PATHS = ['/listings/new', '/me/listings', EDIT, APPLICANTS] as const;
 const TITLES = {
   '/listings/new': he.listings.new.title,
   '/me/listings': he.listings.mine.title,
   [EDIT]: he.listings.edit.title,
+  [APPLICANTS]: he.applicants.title,
 };
 
 const routes = (
@@ -38,6 +41,7 @@ const routes = (
       <Route path="/listings/new" element={<NewListingPage />} />
       <Route path="/me/listings" element={<MyListingsPage />} />
       <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
+      <Route path="/me/listings/:id/applicants" element={<ApplicantsPage />} />
     </Route>
   </Routes>
 );
@@ -50,6 +54,7 @@ describe('RequireOwner', () => {
         'GET /me': [json(owner)],
         'GET /areas': [json([gushDan])],
         'GET /me/listings': [json([A])],
+        [`GET /listings/${A.id}/applications`]: [json([])],
       });
       const view = renderRoutes(path, routes);
       expect(await screen.findByRole('heading', { level: 1, name: TITLES[path] })).toBeVisible();
@@ -68,6 +73,7 @@ describe('RequireOwner', () => {
           'GET /me': [me.clone()],
           'GET /areas': [json([gushDan])],
           'GET /me/listings': [json([A])],
+          [`GET /listings/${A.id}/applications`]: [json([])],
         });
         const view = renderRoutes(path, routes);
         await vi.waitFor(() => {
@@ -97,6 +103,7 @@ describe('RequireOwner', () => {
         'GET /me': [networkError, json(owner)],
         'GET /areas': [json([gushDan])],
         'GET /me/listings': [json([A])],
+        [`GET /listings/${A.id}/applications`]: [json([])],
       });
       const view = renderRoutes(path, routes);
       const retry = await screen.findByRole('button', { name: he.common.retry });
