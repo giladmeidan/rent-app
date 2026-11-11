@@ -167,6 +167,7 @@ Minor findings deferred by the coder. Format: `- [ ] NNNN · file:line · what �
 - [ ] 0008a · api/app/routers/people.py `GET /listings/{id}/people` · pending decision (Gilad, Speed rule 9, asked): people browse has no rate limit · review round 1 security
 
 ## 0008d
+- [ ] 0008d · api/app/services/applications.py (apply) + flatmates join · product (Gilad 2026-11-11): allow a declined seeker one more chance at the same room — re-apply, and so a later join once shortlisted — with a limit to design (e.g. once, after a month, or once ever) · its own spec in a later slice; until then a decline is final and blocks joining (409 `declined`)
 - [ ] 0008d · api/app/routers/flatmates.py (join, leave, remove) · a join, leave or removal publishes no chat event, so an open thread keeps a stale member list until it refetches · 0008e can refetch the thread on focus; publishing to every chat of the room is a new event fan-out; review round 1 qa minor
 - [ ] 0008d · api/app/schemas/flatmates.py `InvitePreviewOut` · the preview has no `full` / `applied` flags, so the invitee learns only on join that the flat is full or that they must withdraw · a shape change 0008e reads; the join's 409s cover it; review round 1 qa minor
 - [ ] 0008d · api/app/services/chat.py `send_message` · a send racing a leave can land after the membership is gone, and its CTE leaves an orphan `conversation_reads` row (harmless: a re-join's `visible_from` bounds it) · needs the send to lock the membership; review round 1 qa minor
