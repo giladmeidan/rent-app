@@ -173,4 +173,79 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     (l) => l.id === id,
   );
   expect(stored?.arnona_ils).toBeNull();
+
+  // Spec 0007e AC10, on the same owner (no new signup: the suite's OTP budget is nearly spent). The
+  // owner holds one live listing, so the cap of 3 has room.
+  await test.step('ac13 owner creates a room listing', async () => {
+    const room = he.listings.room;
+    const roomStreet = `${street}r`;
+    await page.goto('/listings/new');
+    await expect(
+      page.getByRole('heading', { level: 1, name: he.listings.new.title }),
+    ).toBeVisible();
+    await page.getByText(he.listings.type.room, { exact: true }).click();
+    await page.getByRole('button', { name: he.listings.next }).click();
+
+    await expect(page.getByLabel(f.area)).toBeEnabled();
+    await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
+    await page.getByLabel(f.street, { exact: true }).fill(roomStreet);
+    await page.getByLabel(f.rooms).selectOption('4');
+    await page.getByLabel(f.floor, { exact: true }).fill('2');
+    await page.getByLabel(f.size, { exact: true }).fill('90');
+    await page.getByLabel(f.price).fill('3200');
+    await page.getByLabel(f.availableFrom).fill(israelDay(30));
+    await page.getByRole('button', { name: he.listings.next }).click();
+
+    // Step 3: the room block.
+    await expect(
+      page.getByRole('heading', { level: 2, name: he.listings.prefs.titleRoom }),
+    ).toBeVisible();
+    const block = page.getByRole('region', { name: room.title });
+    await block
+      .getByRole('group', { name: room.genderPreference })
+      .getByText(he.rooms.genderPreference.women, { exact: true })
+      .click();
+    await block.getByLabel(room.flatmatesCount).selectOption('2');
+    await block.getByLabel(room.ageOf.replace('{{n}}', '1'), { exact: true }).fill('27');
+    await block.getByLabel(room.ageOf.replace('{{n}}', '2'), { exact: true }).fill('30');
+    const cleanliness = he.lifestyle.cleanliness;
+    await block
+      .getByRole('group', { name: cleanliness.question.flat })
+      .getByText(cleanliness.answer['3'], { exact: true })
+      .click();
+    await page.getByRole('button', { name: he.listings.next }).click();
+
+    // The preview, then publish.
+    await expect(page.getByText(he.listings.preview.hint)).toBeVisible();
+    await expect(page.getByRole('list', { name: room.title })).toContainText(
+      he.listings.roomPreview.for.replace('{{who}}', he.rooms.genderPreference.women),
+    );
+    const published = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/listings' &&
+        response.status() === 201,
+    );
+    await page.getByRole('button', { name: he.listings.publish }).click();
+    const { id: roomId } = (await (await published).json()) as { id: string };
+    await expect(page).toHaveURL('/me/listings');
+
+    const after = await page.request.get(API + '/me/listings');
+    expect(after.ok()).toBe(true);
+    const saved = (
+      (await after.json()) as {
+        id: string;
+        gender_preference: string;
+        flatmates_count: number | null;
+        flatmate_ages: number[];
+        lifestyle: Record<string, number>;
+      }[]
+    ).find((l) => l.id === roomId);
+    expect(saved).toMatchObject({
+      gender_preference: 'women',
+      flatmates_count: 2,
+      flatmate_ages: [27, 30],
+    });
+    expect(saved?.lifestyle).toEqual({ cleanliness: 3 });
+  });
 });

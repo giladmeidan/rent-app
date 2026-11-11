@@ -13,12 +13,11 @@ export type Furnished = ListingOut['furnished'];
 export type Household = ListingOut['accepted_households'][number];
 /** A minimum contract length in months (0006a). */
 export type ContractMonths = NonNullable<ListingOut['min_contract_months']>;
+/** Who a room is for (0007a); an apartment is always `any`. The schema inlines the `Literal`. */
+export type GenderPreference = ListingOut['gender_preference'];
 
-/** The create body as the wizard sends it: every key present, `rooms` a JSON number. The room
- * fields (0007a) are left out and stay at their server defaults until 0007e. */
-export type ListingInBody = Required<
-  Omit<ListingIn, 'rooms' | 'gender_preference' | 'flatmates_count' | 'flatmate_ages' | 'lifestyle'>
-> & { rooms: number };
+/** The create body as the wizard sends it: every key present, `rooms` a JSON number. */
+export type ListingInBody = Required<Omit<ListingIn, 'rooms'>> & { rooms: number };
 
 /** A non-2xx answer. A network failure is the `TypeError` fetch throws, never this. */
 export class ApiError extends Error {

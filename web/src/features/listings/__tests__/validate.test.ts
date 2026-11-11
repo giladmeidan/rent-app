@@ -167,6 +167,10 @@ describe('validate', () => {
       accepted_households: ['single', 'couple', 'family', 'roommates'],
       smoking_allowed: true,
       min_contract_months: null,
+      gender_preference: 'any',
+      flatmates_count: null,
+      flatmate_ages: [],
+      lifestyle: {},
     });
   });
 
@@ -360,6 +364,13 @@ describe('validate', () => {
       toListingIn({ ...valid, smoking_allowed: false, min_contract_months: 24 }),
     ).toMatchObject({ smoking_allowed: false, min_contract_months: 24 });
 
+    // ac9_legacy_room_to_apartment_sends_type_only: a legacy room (no count) switched to
+    // apartment diffs to the type alone.
+    const legacy = listing({ listing_type: 'room', flatmates_count: null });
+    expect(
+      changedFields(legacy, toListingIn({ ...formFromListing(legacy), listing_type: 'apartment' })),
+    ).toStrictEqual({ listing_type: 'apartment' });
+
     // formFromListing → toListingIn round-trips the three fields.
     const l = listing({
       accepted_households: ['couple', 'single'],
@@ -406,5 +417,158 @@ describe('validate', () => {
     });
     // validate() is the details step's only.
     expect(validate({ ...valid, accepted_households: [] }, today)).toEqual({});
+  });
+
+  it('ac9_room_helpers', () => {
+    const room: ListingForm = { ...valid, listing_type: 'room', flatmates_count: 2 };
+    const roomKeys = (form: ListingForm) => {
+      const { gender_preference, flatmates_count, flatmate_ages, lifestyle } = toListingIn(form);
+      return { gender_preference, flatmates_count, flatmate_ages, lifestyle };
+    };
+
+    // toListingIn: ages sorted numerically, never lexicographically.
+    expect(toListingIn({ ...room, flatmate_ages: ['30', '27'] }).flatmate_ages).toEqual([27, 30]);
+    expect(toListingIn({ ...room, flatmate_ages: ['100', '27'] }).flatmate_ages).toEqual([27, 100]);
+    // Empty slots and slots beyond the count dropped, the rest trimmed.
+    expect(
+      toListingIn({ ...room, flatmates_count: 3, flatmate_ages: [' 40 ', '', '22', '50'] })
+        .flatmate_ages,
+    ).toEqual([22, 40]);
+    expect(toListingIn({ ...room, flatmate_ages: ['', '  '] }).flatmate_ages).toEqual([]);
+    // Only the answered keys, in LIFESTYLE_KEYS order.
+    const answered = toListingIn({
+      ...room,
+      lifestyle: { work_from_home: 1, night: 2, guests: undefined, cleanliness: 3 },
+    }).lifestyle;
+    expect(answered).toStrictEqual({ cleanliness: 3, night: 2, work_from_home: 1 });
+    expect(Object.keys(answered)).toEqual(['cleanliness', 'night', 'work_from_home']);
+    expect(roomKeys({ ...room, gender_preference: 'men', flatmate_ages: ['33'] })).toStrictEqual({
+      gender_preference: 'men',
+      flatmates_count: 2,
+      flatmate_ages: [33],
+      lifestyle: {},
+    });
+    // An apartment sends the defaults, whatever the form still holds from a room.
+    const stale: ListingForm = {
+      ...room,
+      gender_preference: 'women',
+      flatmate_ages: ['30'],
+      lifestyle: { guests: 1 },
+    };
+    expect(roomKeys({ ...stale, listing_type: 'apartment' })).toStrictEqual({
+      gender_preference: 'any',
+      flatmates_count: null,
+      flatmate_ages: [],
+      lifestyle: {},
+    });
+
+    // formFromListing → toListingIn round-trips the four fields, from copies.
+    const l = listing({
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 3,
+      flatmate_ages: [30, 27],
+      lifestyle: { night: 1, guests: 2 },
+    });
+    const form = formFromListing(l);
+    expect(form).toMatchObject({
+      gender_preference: 'women',
+      flatmates_count: 3,
+      flatmate_ages: ['27', '30'],
+    });
+    expect(form.lifestyle).toStrictEqual({ night: 1, guests: 2 });
+    expect(form.lifestyle).not.toBe(l.lifestyle);
+    expect(l.flatmate_ages).toEqual([30, 27]);
+    expect(roomKeys(form)).toStrictEqual({
+      gender_preference: 'women',
+      flatmates_count: 3,
+      flatmate_ages: [27, 30],
+      lifestyle: { guests: 2, night: 1 },
+    });
+
+    // changedFields: the ages as a set, the questionnaire by its entries; nothing sorted in place.
+    expect(changedFields(l, toListingIn(form))).toEqual({});
+    expect(l.flatmate_ages).toEqual([30, 27]);
+    const body = toListingIn(form);
+    expect(changedFields({ ...l, flatmate_ages: [27, 30] }, body)).toEqual({});
+    expect(body.flatmate_ages).toEqual([27, 30]);
+    const diff = (patch: Partial<ListingForm>) =>
+      changedFields(l, toListingIn({ ...form, ...patch }));
+    expect(diff({ flatmate_ages: ['30', '27'] })).toEqual({});
+    expect(diff({ flatmate_ages: ['27', '31'] })).toEqual({ flatmate_ages: [27, 31] });
+    expect(diff({ flatmate_ages: ['27'] })).toEqual({ flatmate_ages: [27] });
+    expect(diff({ flatmate_ages: ['27', '30', '30'] })).toEqual({ flatmate_ages: [27, 30, 30] });
+    expect(diff({ lifestyle: { guests: 2, night: 1 } })).toEqual({});
+    expect(diff({ lifestyle: { guests: 3, night: 1 } })).toEqual({
+      lifestyle: { guests: 3, night: 1 },
+    });
+    expect(diff({ lifestyle: { guests: 2 } })).toEqual({ lifestyle: { guests: 2 } });
+    expect(diff({ lifestyle: { guests: 2, social: 1 } })).toEqual({
+      lifestyle: { guests: 2, social: 1 },
+    });
+    expect(diff({ lifestyle: { guests: 2, night: 1, social: 3 } })).toEqual({
+      lifestyle: { guests: 2, night: 1, social: 3 },
+    });
+    expect(diff({ lifestyle: {} })).toEqual({ lifestyle: {} });
+    expect(diff({ gender_preference: 'any' })).toEqual({ gender_preference: 'any' });
+    // Fewer flatmates: the ages that still fit go along only when the list changes.
+    expect(diff({ flatmates_count: 2 })).toEqual({ flatmates_count: 2 });
+    expect(diff({ flatmates_count: 1 })).toEqual({ flatmates_count: 1, flatmate_ages: [27] });
+    // Switched to an apartment: the type alone, no room key (the API resets them).
+    expect(diff({ listing_type: 'apartment' })).toStrictEqual({ listing_type: 'apartment' });
+    expect(diff({ listing_type: 'apartment', gender_preference: 'men' })).toStrictEqual({
+      listing_type: 'apartment',
+    });
+    // An apartment edited into a room sends the type and the chosen room fields.
+    const flat = listing();
+    expect(
+      changedFields(
+        flat,
+        toListingIn({
+          ...formFromListing(flat),
+          listing_type: 'room',
+          flatmates_count: 2,
+          flatmate_ages: ['', '29'],
+        }),
+      ),
+    ).toStrictEqual({ listing_type: 'room', flatmates_count: 2, flatmate_ages: [29] });
+
+    // validatePreferences: the count and the age range, for rooms only.
+    const required = { key: 'listings.errors.required' };
+    expect(validatePreferences({ ...valid, listing_type: 'room' })).toEqual({
+      flatmates_count: required,
+    });
+    expect(validatePreferences(room)).toEqual({});
+    for (const ok of ['', '  ', '18', '99', ' 30 ']) {
+      expect(validatePreferences({ ...room, flatmate_ages: [ok, ok] }), ok).toEqual({});
+    }
+    for (const bad of ['17', '100', '2x', '-20', '30.5']) {
+      expect(validatePreferences({ ...room, flatmate_ages: ['30', bad] }), bad).toEqual({
+        flatmate_ages: range(18, 99),
+      });
+    }
+    // A slot beyond the count is ignored.
+    expect(validatePreferences({ ...room, flatmate_ages: ['30', '27', '17'] })).toEqual({});
+    expect(validatePreferences({ ...room, flatmates_count: null, flatmate_ages: ['17'] })).toEqual({
+      flatmates_count: required,
+    });
+    expect(
+      validatePreferences({ ...stale, flatmates_count: null, listing_type: 'apartment' }),
+    ).toEqual({});
+    expect(
+      validatePreferences({ ...room, flatmate_ages: ['17'], accepted_households: [] }),
+    ).toEqual({
+      accepted_households: { key: 'listings.errors.households' },
+      flatmate_ages: range(18, 99),
+    });
+    // validate() is the details step's only.
+    expect(validate({ ...room, flatmates_count: null, flatmate_ages: ['17'] }, today)).toEqual({});
+    // emptyForm: a room's defaults.
+    expect(emptyForm).toMatchObject({
+      gender_preference: 'any',
+      flatmates_count: null,
+      flatmate_ages: [],
+    });
+    expect(emptyForm.lifestyle).toStrictEqual({});
   });
 });

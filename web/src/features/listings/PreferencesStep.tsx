@@ -4,6 +4,7 @@ import { Switch } from '../../components/Switch';
 import type { ContractMonths, Household } from './api';
 import { HOUSEHOLDS } from './constants';
 import { usePreferenceLabels } from './OwnerPreferences';
+import { RoomFields } from './RoomFields';
 import type { FieldError, FieldErrors, FieldName, ListingForm } from './validate';
 
 const label = 'text-sm font-bold';
@@ -25,7 +26,8 @@ type Props = {
   fieldId: (name: FieldName) => string;
 };
 
-/** Step 3: who the listing suits (CreateListing.dc.html's "העדפות"). */
+/** Step 3: who the listing suits (CreateListing.dc.html's "העדפות"); for a room also the room block
+ * (0007e). */
 export function PreferencesStep({ form, onChange, errors, fieldId }: Props) {
   const { t } = useTranslation();
   const labels = usePreferenceLabels();
@@ -56,11 +58,14 @@ export function PreferencesStep({ form, onChange, errors, fieldId }: Props) {
   }
 
   const householdsInvalid = errors.accepted_households !== undefined;
+  const room = form.listing_type === 'room';
 
   return (
     <div className="flex flex-col gap-[22px]">
       <div className="flex flex-col gap-1">
-        <h2 className="text-start text-xl font-extrabold">{t('listings.prefs.title')}</h2>
+        <h2 className="text-start text-xl font-extrabold">
+          {room ? t('listings.prefs.titleRoom') : t('listings.prefs.title')}
+        </h2>
         <p className="text-sm text-muted">{t('listings.prefs.hint')}</p>
       </div>
 
@@ -124,6 +129,8 @@ export function PreferencesStep({ form, onChange, errors, fieldId }: Props) {
         </select>
         {errorText('min_contract_months')}
       </div>
+
+      {room && <RoomFields form={form} onChange={onChange} errors={errors} fieldId={fieldId} />}
     </div>
   );
 }

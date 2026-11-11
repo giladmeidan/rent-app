@@ -2,11 +2,13 @@
 // `cleanText`, the API's visible-characters rule (`api/app/schemas/_text.py`), so the body
 // `toListingIn` builds from a form that passes here is not a 422 (except `unknown_area`, which only
 // the API can know).
+import { LIFESTYLE_KEYS, type LifestyleAnswers } from '../lifestyle/keys';
 import { HOUSEHOLDS } from './constants';
 import { addDays } from './format';
 import type {
   ContractMonths,
   Furnished,
+  GenderPreference,
   Household,
   ListingInBody,
   ListingOut,
@@ -15,7 +17,9 @@ import type {
 } from './api';
 
 /** Every input is kept as the string the person typed; `toListingIn` converts. The preferences
- * (0006e) hold the API values. */
+ * (0006e) and the room fields (0007e) hold the API values, except the ages. The room fields are
+ * kept when the type switches to an apartment (switching back restores them) but never sent for
+ * one. */
 export type ListingForm = {
   listing_type: ListingType | null;
   area_id: string;
@@ -40,6 +44,14 @@ export type ListingForm = {
   accepted_households: Household[];
   smoking_allowed: boolean;
   min_contract_months: ContractMonths | null;
+  gender_preference: GenderPreference;
+  /** The flatmates already living there; `null` until one is chosen (required for a room). */
+  flatmates_count: number | null;
+  /** The ages as typed: slot `i` is flatmate `i + 1`. Slots beyond the count are kept (lowering and
+   * raising the count loses nothing) but ignored; read a slot as `ages[i] ?? ''`. */
+  flatmate_ages: string[];
+  /** The flat's questionnaire: answered keys only. */
+  lifestyle: LifestyleAnswers;
 };
 
 export const emptyForm: ListingForm = {
@@ -64,11 +76,15 @@ export const emptyForm: ListingForm = {
   accepted_households: [...HOUSEHOLDS],
   smoking_allowed: true,
   min_contract_months: null,
+  gender_preference: 'any',
+  flatmates_count: null,
+  flatmate_ages: [],
+  lifestyle: {},
 };
 
 /** The validated fields, in the order they appear on the form (focus goes to the first invalid):
- * the details step's, then the preferences step's (`smoking_allowed` is always a boolean, never
- * an error). */
+ * the details step's, then the preferences step's (`smoking_allowed`, `gender_preference` and
+ * `lifestyle` always hold valid values, never an error). */
 export const FIELD_ORDER = [
   'area_id',
   'city',
@@ -85,6 +101,8 @@ export const FIELD_ORDER = [
   'description',
   'accepted_households',
   'min_contract_months',
+  'flatmates_count',
+  'flatmate_ages',
 ] as const;
 export type FieldName = (typeof FIELD_ORDER)[number];
 
@@ -115,6 +133,8 @@ export const LIMITS = {
   parking_spots: { min: 0, max: 5 },
   arnona_ils: { min: 0, max: 20_000 },
   vaad_ils: { min: 0, max: 5_000 },
+  flatmates_count: { min: 1, max: 7 },
+  flatmate_age: { min: 18, max: 99 },
 } as const;
 
 // Control, format (bidi marks, zero-width), line- and paragraph-separator, private-use characters,
@@ -221,6 +241,8 @@ export function validate(form: ListingForm, today: string): FieldErrors {
     // The preferences step's (`validatePreferences`).
     accepted_households: undefined,
     min_contract_months: undefined,
+    flatmates_count: undefined,
+    flatmate_ages: undefined,
   };
   if (
     found.floor === undefined &&
@@ -238,11 +260,32 @@ export function validate(form: ListingForm, today: string): FieldErrors {
   return errors;
 }
 
-/** The preferences step's errors: at least one household. */
+/** One age slot: empty, or a whole number in the API's range (trimmed). */
+export function flatmateAgeError(slot: string): FieldError | undefined {
+  return integer(slot, LIMITS.flatmate_age, true);
+}
+
+/** The index of the first of the room's `count` age slots that `flatmateAgeError` rejects. */
+export function firstInvalidAge(form: ListingForm): number | undefined {
+  for (let i = 0; i < (form.flatmates_count ?? 0); i += 1) {
+    if (flatmateAgeError(form.flatmate_ages[i] ?? '') !== undefined) return i;
+  }
+  return undefined;
+}
+
+/** The preferences step's errors: at least one household; for a room, the flatmates count and
+ * an age range error for the ages as a group (the slot is `firstInvalidAge`). */
 export function validatePreferences(form: ListingForm): FieldErrors {
-  return form.accepted_households.length === 0
-    ? { accepted_households: { key: 'listings.errors.households' } }
-    : {};
+  const errors: FieldErrors = {};
+  if (form.accepted_households.length === 0) {
+    errors.accepted_households = { key: 'listings.errors.households' };
+  }
+  if (form.listing_type === 'room') {
+    if (form.flatmates_count === null) errors.flatmates_count = required;
+    const slot = firstInvalidAge(form);
+    if (slot !== undefined) errors.flatmate_ages = flatmateAgeError(form.flatmate_ages[slot] ?? '');
+  }
+  return errors;
 }
 
 export function firstInvalid(errors: FieldErrors): FieldName | undefined {
@@ -251,10 +294,35 @@ export function firstInvalid(errors: FieldErrors): FieldName | undefined {
 
 const optionalInt = (value: string) => (value.trim() === '' ? null : Number(value));
 
-/** The `POST /listings` body for a form that `validate` accepts. */
+const byNumber = (a: number, b: number) => a - b;
+
+/** The ages of the first `count` slots that are not empty, ascending (never the default
+ * lexicographic sort: 100 after 27). */
+function agesOf(form: ListingForm): number[] {
+  const ages: number[] = [];
+  for (let i = 0; i < (form.flatmates_count ?? 0); i += 1) {
+    const slot = (form.flatmate_ages[i] ?? '').trim();
+    if (slot !== '') ages.push(Number(slot));
+  }
+  return ages.sort(byNumber);
+}
+
+/** The answered keys only, in `LIFESTYLE_KEYS` order. */
+function answeredLifestyle(answers: LifestyleAnswers): LifestyleAnswers {
+  const answered: LifestyleAnswers = {};
+  for (const key of LIFESTYLE_KEYS) {
+    const answer = answers[key];
+    if (answer !== undefined) answered[key] = answer;
+  }
+  return answered;
+}
+
+/** The `POST /listings` body for a form that `validate` and `validatePreferences` accept. Always
+ * every key: an apartment sends the room fields' defaults (the only values the API takes for one). */
 export function toListingIn(form: ListingForm): ListingInBody {
   if (form.listing_type === null) throw new Error('toListingIn: no listing type');
   const description = cleanText(form.description, { multiline: true });
+  const room = form.listing_type === 'room';
   return {
     listing_type: form.listing_type,
     rooms: Number(form.rooms),
@@ -278,6 +346,10 @@ export function toListingIn(form: ListingForm): ListingInBody {
     accepted_households: HOUSEHOLDS.filter((h) => form.accepted_households.includes(h)),
     smoking_allowed: form.smoking_allowed,
     min_contract_months: form.min_contract_months,
+    gender_preference: room ? form.gender_preference : 'any',
+    flatmates_count: room ? form.flatmates_count : null,
+    flatmate_ages: room ? agesOf(form) : [],
+    lifestyle: room ? answeredLifestyle(form.lifestyle) : {},
   };
 }
 
@@ -307,6 +379,11 @@ export function formFromListing(listing: ListingOut): ListingForm {
     accepted_households: [...listing.accepted_households],
     smoking_allowed: listing.smoking_allowed,
     min_contract_months: listing.min_contract_months,
+    gender_preference: listing.gender_preference,
+    flatmates_count: listing.flatmates_count,
+    // Copies: `listing` is the query cache's object.
+    flatmate_ages: [...listing.flatmate_ages].sort(byNumber).map(String),
+    lifestyle: { ...listing.lifestyle },
   };
 }
 
@@ -315,20 +392,46 @@ function sameSet(a: readonly Household[], b: readonly Household[]): boolean {
   return a.length === b.length && a.every((h) => b.includes(h));
 }
 
+/** Same numbers, in any order. Sorts copies: neither input is changed. */
+function sameNumbers(a: readonly number[], b: readonly number[]): boolean {
+  const left = [...a].sort(byNumber);
+  const right = [...b].sort(byNumber);
+  return left.length === right.length && left.every((n, i) => n === right[i]);
+}
+
+/** Same keys with the same values, in any key order. */
+function sameEntries(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>) {
+  const entries = Object.entries(a);
+  return entries.length === Object.keys(b).length && entries.every(([key, n]) => b[key] === n);
+}
+
+/** The room-only keys of the body (0007a). */
+const ROOM_FIELDS: ReadonlySet<string> = new Set([
+  'gender_preference',
+  'flatmates_count',
+  'flatmate_ages',
+  'lifestyle',
+]);
+
 /**
  * The `PATCH /listings/{id}` body: every key of `body` (as `toListingIn` builds it) whose value
  * differs from the stored listing's. A cleared nullable field is already `null` in `body`; the
- * households are compared as a set (the API may store them in any order). Never `status` (pausing
- * stays on "my listings").
+ * households and the ages are compared as sets (the API may store them in any order), the
+ * questionnaire by its entries. Never `status` (pausing stays on "my listings"). An apartment
+ * never sends room fields: the API resets them on the switch (and a `null` count is a 422).
  */
 export function changedFields(listing: ListingOut, body: ListingInBody): ListingPatch {
   const patch: Record<string, unknown> = {};
   for (const key of Object.keys(body) as (keyof ListingInBody)[]) {
+    if (body.listing_type === 'apartment' && ROOM_FIELDS.has(key)) continue;
     let same: boolean;
     if (key === 'rooms') same = Number(listing.rooms) === body.rooms;
     else if (key === 'accepted_households') {
       same = sameSet(listing.accepted_households, body.accepted_households);
-    } else same = listing[key] === body[key];
+    } else if (key === 'flatmate_ages') {
+      same = sameNumbers(listing.flatmate_ages, body.flatmate_ages);
+    } else if (key === 'lifestyle') same = sameEntries(listing.lifestyle, body.lifestyle);
+    else same = listing[key] === body[key];
     if (!same) patch[key] = body[key];
   }
   return patch as ListingPatch;

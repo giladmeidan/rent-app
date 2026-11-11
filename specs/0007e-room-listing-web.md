@@ -1,7 +1,7 @@
 ---
 id: 0007e
 title: An owner posting or editing a room says who it is for, how many flatmates live there, their ages and the flat's lifestyle, in the wizard's "העדפות" step
-status: in-progress
+status: in-review
 depends_on: [0007a, 0007d, 0006e]   # 0007a: the four listing fields on POST / PATCH / GET; 0007d: features/lifestyle; 0006e: the four-step wizard and its PreferencesStep
 reviewers: [code, qa, ux]           # ux: a new block in the wizard; qa: the edit diff for an array and an object field
 estimate: 1 coder run
@@ -110,7 +110,10 @@ isolation).
 
 **Room block** (`RoomFields`), one `<section aria-labelledby={h3 id}>` with `<h3>` `listings.room.title` ("על החדר
 והשותפים") holding items 1–4; the lifestyle fields sit inside it, so they take `headingLevel={4}` (0007d's optional
-prop, default 3) and the headings do not clash:
+prop, default 3) and the headings do not clash. Directly under the `<h3>`, a `<p className="text-sm text-muted">`
+`listings.room.privacyNote` ("גילאי השותפים ותשובות השאלון יוצגו רק למחפשים שמחוברים לחשבון"): PRODUCT.md "Rooms" →
+**Room privacy** (Gilad 2026-11-11, option (b)) shows a room's ages and answers on the public listing responses only
+to a signed-in seeker, so no copy may say they appear on the public listing:
 1. `gender_preference` — `ChoiceGroup` (`name="gender_preference"`), legend `listings.room.genderPreference` ("מי
    יכול/ה לגור בחדר?"), options in `GENDER_PREFERENCES` order labelled `rooms.genderPreference.women|men|any`
    ("נשים", "גברים", "לא משנה"); the segmented buttons are 44 px; no error state (always valid). Below it a `<p
@@ -154,6 +157,7 @@ errors above, and a publish / save 422 on a room field returns to step 3 (AC5). 
 
 **i18n keys added** (`he.json`, gender-neutral):
 `listings.prefs.titleRoom` "למי החדר מתאים?"; `listings.room.title` "על החדר והשותפים";
+`listings.room.privacyNote` "גילאי השותפים ותשובות השאלון יוצגו רק למחפשים שמחוברים לחשבון";
 `listings.room.genderPreference` "מי יכול/ה לגור בחדר?"; `listings.room.genderHint` "חדר לנשים בלבד או לגברים בלבד
 לא יוצג למחפשים שלא מתאימים לו"; `listings.room.flatmatesCount` "כמה שותפים כבר גרים בדירה?";
 `listings.room.flatmatesHint` "לא כולל מי שייכנס לחדר"; `listings.room.ages` "גילאי השותפים (לא חובה)";
@@ -168,7 +172,7 @@ Labels go through static maps / literal keys (`i18n-check` only verifies string-
 Vitest + Testing Library with the existing wizard harness (`features/listings/__tests__/wizard.tsx`, `fixtures.ts`);
 AC1–AC5 in the new `web/src/features/listings/__tests__/RoomFields.test.tsx`, AC6–AC8 in `EditListingPage.test.tsx`
 (as `0006e` put its edit test there), AC9 in `validate.test.ts`.
-- [ ] AC1 Given the wizard with type "דירה שלמה", Then step 3 has no `listings.room.title` region and the published body carries `gender_preference: "any"`, `flatmates_count: null`, `flatmate_ages: []`, `lifestyle: {}`; Given type "חדר בדירת שותפים", Then step 3 shows the `<h2>` `listings.prefs.titleRoom` and, after the minimum-contract select, the region `listings.room.title` with the gender radios in the order נשים, גברים, לא משנה ("לא משנה" checked) and the count select, and, inside it, the region `lifestyle.title.flat` as an `<h4>` (`perspective="flat"`) — `RoomFields.test.tsx::ac1_room_block_only_for_rooms`
+- [ ] AC1 Given the wizard with type "דירה שלמה", Then step 3 has no `listings.room.title` region and the published body carries `gender_preference: "any"`, `flatmates_count: null`, `flatmate_ages: []`, `lifestyle: {}`; Given type "חדר בדירת שותפים", Then step 3 shows the `<h2>` `listings.prefs.titleRoom` and, after the minimum-contract select, the region `listings.room.title` with the `listings.room.privacyNote` line, the gender radios in the order נשים, גברים, לא משנה ("לא משנה" checked) and the count select, and, inside it, the region `lifestyle.title.flat` as an `<h4>` (`perspective="flat"`) — `RoomFields.test.tsx::ac1_room_block_only_for_rooms`
 - [ ] AC2 Given a room, step 3, When "next" with no count chosen, Then no step change, `listings.errors.required` in a `role="alert"` on the count select (`aria-invalid`, `aria-describedby` naming hint and error), focus on it; choosing a count removes it; the age slots appear, exactly as many as the count (3 → 3 slots); typing into slot 3 first leaves no sparse array; lowering the count to 2 hides the third slot, raising it again shows the third slot with its typed age — `RoomFields.test.tsx::ac2_count_required_and_age_slots`
 - [ ] AC3 Given a room with count 3, When an age slot holds "17" (or "100", or "2x") and "next" is pressed, Then `listings.errors.range` (18, 99) in a `role="alert"` on the ages fieldset (`aria-invalid`), that slot `aria-invalid`, focus on the first invalid slot; empty slots are valid; correcting it removes the error — `RoomFields.test.tsx::ac3_ages_validated`
 - [ ] AC4 Given a complete room (details filled), When the owner picks "נשים", count 2, ages "30" then "27", answers the first lifestyle question "3", and publishes, Then within `screen.getByRole('list', { name: he.listings.room.title })` the preview shows the chips "מתאים ל: נשים", "2 שותפים בדירה (27, 30)", "שאלון הדירה: נענו 1 מתוך 7", and exactly one `POST /listings` has `gender_preference: "women"`, `flatmates_count: 2`, `flatmate_ages: [27, 30]`, `lifestyle: {cleanliness: 3}` (the key of the first question); with ages left empty the chip is "2 שותפים בדירה" and `flatmate_ages: []`; with "לא משנה" there is no `מתאים ל` chip — `RoomFields.test.tsx::ac4_room_fields_previewed_and_sent`
@@ -204,6 +208,9 @@ Existing, amended (all certain: `0007a` omits the fields, it does not touch `toL
   per-question clear, and takes `headingLevel={4}` inside the room `<h3>` section (0007d's prop); (3) the households and no-smokers controls stay as
   `0006e` has them, for rooms too (revisit with real owner feedback).
 - Which step: step 3 (this spec) versus the end of details; decided: step 3, reasons in Scope.
+- Room privacy (Gilad 2026-11-11, 0007b rule 9, option (b), PRODUCT.md "Rooms"): flatmate ages and questionnaire
+  answers reach only signed-in seekers on the public listing responses. The wizard says so in
+  `listings.room.privacyNote` under the room heading and nowhere says they are public (added on the build branch).
 - No open product questions.
 
 ## Verifier findings — one round, 17 findings, all applied
@@ -436,3 +443,23 @@ collide with this spec. Every `:line` below for a 0006e file refers to the workt
              count before an edit saves; pause/resume still works.
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0007e-room-listing-web.md - PRODUCT.md "Rooms", "Listing edit" - design/screens-v1/CreateListing.dc.html
+
+    Spec 0007e - Room fields in the listing wizard (web)   PR OPEN #33 (not merged), code head 6eeb5f3
+    Shipped: an owner posting or editing a room says, in step 3 "העדפות", who it is for (נשים / גברים / לא משנה),
+             how many flatmates live there (1-7), optionally their ages and the flat's 7 lifestyle answers. A line
+             says ages and answers are shown only to signed-in seekers (decision (b)). The preview shows room chips.
+             An edit sends only what changed; room -> apartment sends only the type.
+    Demo: make dev -> owner /listings/new, "חדר בדירת שותפים" -> step 3: נשים, count 2, ages 27 and 30, one answer
+          -> the preview shows the chips -> publish -> edit it, switch to "דירה שלמה", save.
+    Tests: +9 web unit (1 new file), +0 integration, +1 e2e step in ac12 (no new signup)   (api 432, web 263)
+    CI: api + web green on 53b5a3c; rerun on the final push (merges of #32 and #34, 6eeb5f3). e2e is local while
+        CI e2e is off: make e2e 10/10 (29.3 s) on 6eeb5f3 and 10/10 on c7e64ea; earlier, at load avg 21-23, plain runs had map ac8 / applications
+        ac9 load flakes (no 0007e code, logged in FOLLOWUPS; serial 10/10); the room step passed in every run
+    Findings: 0 blockers, 0 majors; 8 minors: 6 fixed (stale "required" after a type switch, a server error kept
+              after a count change, the preview privacy note, heading separation, slot hint link, legacy-room
+              test), 2 to FOLLOWUPS (partial-ages chip copy, unknown lifestyle keys); 12 nits dropped
+    Deviation: ListingWizard gains a preferencesAttempted flag (spec: "nothing else changes"), so a new room owner
+               does not land on step 3 with "שדה חובה" already shown; the code reviewer found it correct and minimal
+    Changed in PRODUCT.md: nothing (Room privacy (b) was written by the orchestrator)
+    Decisions I need from you: none. The privacy line's copy is mine:
+             "גילאי השותפים ותשובות השאלון יוצגו רק למחפשים שמחוברים לחשבון"

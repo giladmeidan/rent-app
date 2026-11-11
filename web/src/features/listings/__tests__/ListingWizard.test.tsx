@@ -12,7 +12,7 @@ import {
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
-import type { Household, ListingOut } from '../api';
+import type { GenderPreference, Household, ListingOut } from '../api';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner, withoutCounts } from './fixtures';
 import {
@@ -25,6 +25,7 @@ import {
   progress,
   renderWizard,
   routes,
+  toPreferences,
 } from './wizard';
 
 afterEach(() => {
@@ -33,17 +34,6 @@ afterEach(() => {
 
 const stepItem = (name: string) => screen.getByText(name).closest('li') as HTMLElement;
 const publishButton = () => screen.getByRole('button', { name: he.listings.publish });
-
-/** Renders the wizard, chooses apartment, fills the AC4 values and goes to the preferences. */
-async function toPreferences(client = testQueryClient()) {
-  const view = renderWizard(client);
-  chooseApartmentAndContinue();
-  await areasLoaded();
-  fillValidDetails();
-  fireEvent.click(nextButton());
-  expect(progress()).toHaveAttribute('aria-valuenow', '3');
-  return view;
-}
 
 /** As `toPreferences`, then on to the preview with the preferences untouched. */
 async function toPreview(client = testQueryClient()) {
@@ -87,6 +77,11 @@ const expectedBody = {
   accepted_households: ['single', 'couple', 'family', 'roommates'] as Household[],
   smoking_allowed: true,
   min_contract_months: null,
+  // An apartment always sends the room fields' defaults (0007e).
+  gender_preference: 'any' as GenderPreference,
+  flatmates_count: null,
+  flatmate_ages: [] as number[],
+  lifestyle: {},
 };
 
 describe('ListingWizard', () => {
