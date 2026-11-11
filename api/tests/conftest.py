@@ -272,8 +272,9 @@ def make_application(
     engine: Engine, listing_id: uuid.UUID, seeker_id: uuid.UUID, **overrides: Any
 ) -> uuid.UUID:
     """Insert an application directly and return its id. Defaults: `message='Hello'`,
-    `status='submitted'`; `overrides` may set any column (including `created_at`). Bypasses the
-    service and its rate limit."""
+    `status='submitted'`, and the listing's current `price_ils` / `area_id` as
+    `price_ils_at_apply` / `area_id_at_apply` (what applying snapshots, 0006c); `overrides` may set
+    any column (including `created_at`). Bypasses the service and its rate limit."""
     unknown = set(overrides) - _APPLICATION_COLUMNS
     if unknown:
         raise ValueError(f"not applications columns: {sorted(unknown)}")
@@ -284,8 +285,13 @@ def make_application(
         "status": "submitted",
         **overrides,
     }
-    columns = ", ".join(values)
-    params = ", ".join(f":{name}" for name in values)
+    snapshot = {
+        column: f"(SELECT {source} FROM listings WHERE id = :listing_id)"
+        for column, source in (("price_ils_at_apply", "price_ils"), ("area_id_at_apply", "area_id"))
+        if column not in values
+    }
+    columns = ", ".join([*values, *snapshot])
+    params = ", ".join([*(f":{name}" for name in values), *snapshot.values()])
     with engine.begin() as conn:
         application_id: uuid.UUID = conn.execute(
             text(f"INSERT INTO applications ({columns}) VALUES ({params}) RETURNING id"), values

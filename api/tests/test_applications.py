@@ -14,7 +14,7 @@ from sqlalchemy import Engine, event, text
 from sqlalchemy.orm import Session
 
 from app.db import get_sessionmaker
-from app.models import Application, User
+from app.models import Application, Listing, User
 from app.redis_client import get_redis
 from app.services import applications as applications_service
 from scripts.seed import GUSH_DAN_WKT
@@ -290,9 +290,9 @@ def test_ac4_one_application_per_seeker_and_listing(
     real_upsert = applications_service._upsert
 
     def slow_upsert(
-        db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID, message: str
+        db: Session, listing: Listing, seeker_id: uuid.UUID, message: str
     ) -> Application | None:
-        application = real_upsert(db, listing_id, seeker_id, message)
+        application = real_upsert(db, listing, seeker_id, message)
         time.sleep(0.3)  # hold the uncommitted row so the other INSERT waits on it
         return application
 

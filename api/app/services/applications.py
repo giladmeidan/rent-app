@@ -23,7 +23,9 @@ Rules (PRODUCT.md "Applications"):
   (PRODUCT.md, Q6). The listing's own state (live, paused, expired) never matters. The owner learns
   of an applicant only `users.display_name` and the message (NF2): no query loads the `User`.
 - Owner side, matching (0006c): each applicant also carries their **current** match against the
-  listing (`matching.score.match_columns`, the number the seeker sees on that listing) and seven
+  listing (`matching.score.match_columns`, the number the seeker sees on that listing unless the
+  owner has since edited its price or area: the budget and area criteria use the listing's
+  `price_ils_at_apply` / `area_id_at_apply` snapshot, security B1) and seven
   housing-profile columns selected by name, never `budget_max_ils` or `area_ids` (PRODUCT.md
   "Matching": an owner never sees a seeker's budget or areas). A pre-Slice-6 applicant with no
   profile row has NULL profile columns; its match columns are meaningless and never read. The
@@ -86,16 +88,25 @@ class NotWithdrawableError(Exception):
 
 
 def _upsert(
-    db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID, message: str
+    db: Session, listing: Listing, seeker_id: uuid.UUID, message: str
 ) -> Application | None:
     """Insert the application, or reopen a withdrawn one; None when one exists in any other
-    status (including the row a concurrent apply just inserted)."""
-    stmt = insert(Application).values(listing_id=listing_id, seeker_id=seeker_id, message=message)
+    status (including the row a concurrent apply just inserted). Both snapshot the listing's
+    price and area as the seeker applied to them (0006c, security B1)."""
+    stmt = insert(Application).values(
+        listing_id=listing.id,
+        seeker_id=seeker_id,
+        message=message,
+        price_ils_at_apply=listing.price_ils,
+        area_id_at_apply=listing.area_id,
+    )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_applications_listing_seeker",
         set_={
             "status": "submitted",
             "message": stmt.excluded.message,
+            "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
+            "area_id_at_apply": stmt.excluded.area_id_at_apply,
             "created_at": func.now(),
             "updated_at": func.now(),
         },
@@ -124,7 +135,7 @@ def apply(
         # A user whose role changes later must never apply to their own listing.
         if listing.owner_id == seeker.id:
             raise ListingNotFoundError
-        application = _upsert(db, listing.id, seeker.id, message)
+        application = _upsert(db, listing, seeker.id, message)
         if application is None:
             raise AlreadyAppliedError
         db.commit()
@@ -225,7 +236,15 @@ def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
 
     It has **no ownership condition** of its own: both callers establish ownership first (the
     ownership SELECT in `list_applicants`, the UPDATE's WHERE in `set_applicant_status`)."""
-    columns = match_columns(Listing, SeekerProfile)
+    # Budget and area against the listing as applied to (security B1): an owner editing the
+    # listing's price or area must not learn where the seeker's budget or areas lie. Every other
+    # criterion is live.
+    columns = match_columns(
+        Listing,
+        SeekerProfile,
+        price=Application.price_ils_at_apply,
+        area_id=Application.area_id_at_apply,
+    )
     score = next(column for column in columns if column.name == "m_score")
     query = (
         select(Application, User.display_name, *_PROFILE_COLUMNS, *columns)

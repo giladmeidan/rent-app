@@ -27,6 +27,7 @@ from tests.conftest import (
     signup,
 )
 from tests.test_listings import _body
+from tests.test_matching import _area
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -898,3 +899,118 @@ def test_ac8_score_follows_profile_edits(
     item = _by_id(_ok(_applicants(owner, listing_b)))[s1]
     assert item["match"] == _match(59, TOP3, "pets")
     assert item["profile"] == {**_p0_out(), "has_pets": True}
+
+
+# --- 0006c, security B1: the owner's budget / area criteria use the listing as applied to
+
+
+def _edit_listing(owner: TestClient, listing_id: Any, body: dict[str, Any]) -> None:
+    response = owner.patch(f"/listings/{listing_id}", json=body)
+    assert response.status_code == 200, response.text
+
+
+def _owner_match(owner: TestClient, listing_id: Any, application_id: str) -> Any:
+    return _by_id(_ok(_applicants(owner, listing_id)))[application_id]["match"]
+
+
+def _patched_match(owner: TestClient, listing_id: Any, application_id: str, status: str) -> Any:
+    return _ok(_set_status(owner, listing_id, application_id, {"status": status}))["match"]
+
+
+def test_ac9_owner_match_ignores_price_and_area_edits_after_apply(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    north = _area(db_engine, "north", active=True)
+    listing = _l0(db_engine, _user_id(owner), gush_dan)
+    seeker = signup(client, outbox, "s1@example.com", "seeker")
+    make_profile(db_engine, _user_id(seeker), gush_dan)  # P0: budget 7500, areas [gush_dan]
+    applied = seeker.post(f"/listings/{listing}/applications", json={"message": "Hello there"})
+    assert applied.status_code == 201, applied.text
+    s1 = applied.json()["id"]
+    assert set(applied.json()) == {"id", "status", "message", "created_at", "updated_at", "listing"}
+    snapshot = "SELECT price_ils_at_apply, area_id_at_apply FROM applications WHERE id = :a"
+    with db_engine.connect() as conn:
+        assert tuple(conn.execute(text(snapshot), {"a": s1}).one()) == (7000, gush_dan)
+    full = _match(100, TOP3, None)
+    assert _owner_match(owner, listing, s1) == full
+
+    # Price above the budget: the seeker's own view is live, the owner's is not.
+    _edit_listing(owner, listing, {"price_ils": 8000})
+    assert _ok(seeker.get(f"/listings/{listing}"))["match"] == _match(
+        59, ["move_in", "area", "household"], "budget"
+    )
+    assert _owner_match(owner, listing, s1) == full
+    assert _patched_match(owner, listing, s1, "shortlisted") == full
+    assert _owner_match(owner, listing, s1) == full
+
+    # Area outside the seeker's areas (price back in budget): the same.
+    _edit_listing(owner, listing, {"price_ils": 7000, "area_id": str(north)})
+    assert _ok(seeker.get(f"/listings/{listing}"))["match"] == _match(
+        59, ["budget", "move_in", "household"], "area"
+    )
+    assert _owner_match(owner, listing, s1) == full
+    assert _patched_match(owner, listing, s1, "submitted") == full
+
+    # Every other criterion stays live against the listing: a pets ban shows at once.
+    _execute(
+        db_engine,
+        "UPDATE seeker_profiles SET has_pets = true WHERE user_id = :u",
+        u=str(_user_id(seeker)),
+    )
+    _edit_listing(owner, listing, {"pets_allowed": False})
+    assert _owner_match(owner, listing, s1) == _match(59, TOP3, "pets")
+    _edit_listing(owner, listing, {"pets_allowed": True, "area_id": str(gush_dan)})
+
+    # A re-apply after a withdrawal snapshots the listing again, at its new price.
+    _edit_listing(owner, listing, {"price_ils": 8000})
+    withdrawn = seeker.post(f"/me/applications/{s1}/withdraw")
+    assert withdrawn.status_code == 200, withdrawn.text
+    reapplied = seeker.post(f"/listings/{listing}/applications", json={"message": "Again"})
+    assert reapplied.status_code == 201, reapplied.text
+    assert reapplied.json()["id"] == s1
+    with db_engine.connect() as conn:
+        assert tuple(conn.execute(text(snapshot), {"a": s1}).one()) == (8000, gush_dan)
+    reapplied_match = _owner_match(owner, listing, s1)
+    assert reapplied_match == _ok(seeker.get(f"/listings/{listing}"))["match"]
+    assert reapplied_match == _match(59, ["move_in", "area", "household"], "budget")
+
+
+def test_ac9_budget_cannot_be_bisected_by_price_edits(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    # The reviewer's attack: pause, set a price, re-read the inbox, halve the interval, repeat.
+    listing = _l0(db_engine, _user_id(owner), gush_dan)
+    seeker = signup(client, outbox, "s1@example.com", "seeker")
+    make_profile(db_engine, _user_id(seeker), gush_dan, budget_max_ils=8437)
+    applied = seeker.post(f"/listings/{listing}/applications", json={"message": "Hello there"})
+    assert applied.status_code == 201, applied.text
+    s1 = applied.json()["id"]
+    baseline = _owner_match(owner, listing, s1)
+    assert baseline == _match(100, TOP3, None)
+    _edit_listing(owner, listing, {"status": "paused"})
+
+    seen = []
+    low, high = 500, 100_000
+    statuses = iter(["shortlisted", "submitted"] * 10)
+    for _ in range(16):
+        price = (low + high) // 2
+        _edit_listing(owner, listing, {"price_ils": price})
+        listed = _owner_match(owner, listing, s1)
+        patched = _patched_match(owner, listing, s1, next(statuses))
+        seen.extend([listed, patched])
+        if listed["differs"] == "budget":
+            high = price
+        else:
+            low = price
+
+    assert all(match == baseline for match in seen), seen
+    # Read as "always fits", the bisection walks to the ceiling, never to the budget.
+    assert low > 8437 * 10

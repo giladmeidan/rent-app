@@ -736,3 +736,117 @@ def test_ac9_matching_inputs_upgrade_downgrade(migration_db_url: str) -> None:
             assert _listing_columns(conn) >= _PREFERENCE_COLUMNS
     finally:
         engine.dispose()
+
+
+_SNAPSHOT_COLUMNS = {"price_ils_at_apply", "area_id_at_apply"}
+
+
+def _application_columns(conn: Any) -> dict[str, bool]:
+    """`applications` column name -> nullable."""
+    return {
+        name: nullable == "YES"
+        for name, nullable in conn.execute(
+            text(
+                "SELECT column_name, is_nullable FROM information_schema.columns"
+                " WHERE table_name = 'applications'"
+            )
+        ).tuples()
+    }
+
+
+def test_ac9_application_snapshot_backfill_and_downgrade(migration_db_url: str) -> None:
+    # Spec 0006c, security B1: 0008 snapshots the listing's price and area on each application.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0007")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at)"
+                    " VALUES (:owner, :area, 'apartment', 'city', 'street', 3, 1, 80, 6100,"
+                    " current_date, false, 'none', false, now() + interval '90 days')"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, status)"
+                    " VALUES (:listing, :seeker, 'Hello', 'withdrawn') RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"]},
+            ).scalar_one()
+
+        command.upgrade(cfg, "0008")
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT price_ils_at_apply, area_id_at_apply FROM applications WHERE id = :id"
+                ),
+                {"id": application_id},
+            ).one()
+            assert tuple(row) == (6100, area_id)  # backfilled from the listing, any status
+            columns = _application_columns(conn)
+            foreign_keys = {
+                (column, target, action)
+                for column, target, action in conn.execute(
+                    text(
+                        "SELECT a.attname, c.confrelid::regclass::text, c.confdeltype"
+                        " FROM pg_constraint c"
+                        " JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]"
+                        " WHERE c.conrelid = 'applications'::regclass AND c.contype = 'f'"
+                    )
+                ).tuples()
+            }
+        assert {name: columns[name] for name in _SNAPSHOT_COLUMNS} == {
+            "price_ils_at_apply": False,
+            "area_id_at_apply": False,
+        }
+        assert ("area_id_at_apply", "areas", "r") in foreign_keys  # ON DELETE RESTRICT, as listings
+
+        with pytest.raises(IntegrityError, match="price_ils_at_apply"), engine.begin() as conn:
+            conn.execute(
+                text("UPDATE applications SET price_ils_at_apply = NULL WHERE id = :id"),
+                {"id": application_id},
+            )
+        with pytest.raises(IntegrityError, match="area_id_at_apply"), engine.begin() as conn:
+            conn.execute(
+                text("UPDATE applications SET area_id_at_apply = gen_random_uuid() WHERE id = :id"),
+                {"id": application_id},
+            )
+
+        command.downgrade(cfg, "0007")
+        with engine.connect() as conn:
+            assert not _SNAPSHOT_COLUMNS & set(_application_columns(conn))
+            assert (
+                conn.execute(
+                    text("SELECT status FROM applications WHERE id = :id"), {"id": application_id}
+                ).scalar_one()
+                == "withdrawn"
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert set(_application_columns(conn)) >= _SNAPSHOT_COLUMNS
+    finally:
+        engine.dispose()
