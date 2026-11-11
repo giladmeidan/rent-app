@@ -12,6 +12,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Base
+from app.models._checks import LIFESTYLE_CHECK
 from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import TEST_DATABASE_URL, alembic_config, drop_database, ensure_database
 
@@ -1023,5 +1024,190 @@ def test_ac9_room_inputs_upgrade_downgrade(migration_db_url: str) -> None:
         with engine.connect() as conn:
             assert _listing_columns(conn) >= _ROOM_LISTING_COLUMNS
             assert _profile_columns(conn) >= _ROOM_PROFILE_COLUMNS
+    finally:
+        engine.dispose()
+
+
+def _check_definition(conn: Any, name: str) -> str | None:
+    """`pg_get_constraintdef` of the CHECK `name`, or None when there is none."""
+    definition: str | None = conn.execute(
+        text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = :name"),
+        {"name": name},
+    ).scalar()
+    return definition
+
+
+def _definition_of(conn: Any, condition: str) -> str:
+    """`pg_get_constraintdef` of `condition` as a CHECK on a scratch `lifestyle jsonb` column, so a
+    model's CHECK text can be compared with a migrated one in Postgres' normal form."""
+    conn.execute(
+        text(
+            "CREATE TEMP TABLE lifestyle_probe (lifestyle jsonb,"
+            f" CONSTRAINT ck_lifestyle_probe CHECK ({condition})) ON COMMIT DROP"
+        )
+    )
+    definition = _check_definition(conn, "ck_lifestyle_probe")
+    assert definition is not None
+    return definition
+
+
+# 0010's lifestyle CHECK text, frozen (the migration's `_LIFESTYLE_CHECK`).
+_LIFESTYLE_CHECK_0010 = (
+    "jsonb_typeof(lifestyle) = 'object'"
+    " AND (lifestyle - ARRAY['cleanliness', 'guests', 'night', 'social', 'kosher', 'shabbat',"
+    " 'work_from_home']) = '{}'::jsonb"
+    " AND NOT jsonb_path_exists(lifestyle,"
+    " 'strict $.* ? (@.type() != \"number\" || (@ != 1 && @ != 2 && @ != 3))')"
+)
+
+# Spec 0007b (the 0007a security follow-up): 0010 lets `lifestyle` hold only known keys and the
+# JSON numbers 1-3. Each value is refused by both tables' CHECK.
+_BAD_LIFESTYLES = (
+    '{"pets": 2}',  # an unknown key
+    '{"night": 4}',
+    '{"night": 0}',
+    '{"night": "1"}',  # a string, not a number
+    '{"night": 1.5}',
+    '{"night": null}',
+    '{"night": [1]}',  # strict jsonpath: an array is not unwrapped
+    '"often"',  # not an object
+)
+_LIFESTYLE_CHECK_NAMES = ("ck_listings_lifestyle", "ck_seeker_profiles_lifestyle")
+
+
+def test_ac6_application_listing_type_backfill_and_downgrade(migration_db_url: str) -> None:
+    # Spec 0007b: 0010 snapshots the listing type on each application, backfilled 'apartment'.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0009")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at)"
+                    " VALUES (:owner, :area, 'apartment', 'city', 'street', 3, 1, 80, 6100,"
+                    " current_date, false, 'none', false, now() + interval '90 days')"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, price_ils_at_apply,"
+                    " area_id_at_apply) VALUES (:listing, :seeker, 'Hello', 6100, :area)"
+                    " RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"], "area": area_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date, area_ids,"
+                    " household, has_pets, smoker, contract_months, gender)"
+                    " VALUES (:user, 7500, current_date, ARRAY[:area]::uuid[], 'couple', false,"
+                    " false, 24, 'woman')"
+                ),
+                {"user": users["seeker"], "area": area_id},
+            )
+            # Switched to a room after the seeker applied: the backfill must not copy 'room'.
+            conn.execute(
+                text("UPDATE listings SET listing_type = 'room' WHERE id = :id"),
+                {"id": listing_id},
+            )
+        with engine.connect() as conn:
+            loose = {name: _check_definition(conn, name) for name in _LIFESTYLE_CHECK_NAMES}
+        assert all(loose.values()), loose
+
+        command.upgrade(cfg, "0010")
+        with engine.connect() as conn:
+            value = conn.execute(
+                text("SELECT listing_type_at_apply FROM applications WHERE id = :id"),
+                {"id": application_id},
+            ).scalar_one()
+            assert value == "apartment"
+            assert _application_columns(conn)["listing_type_at_apply"] is False  # NOT NULL
+            # What 0010 created: its own frozen text, not the live model's (a later migration
+            # may change the keys).
+            frozen_definition = _definition_of(conn, _LIFESTYLE_CHECK_0010)
+            for name in _LIFESTYLE_CHECK_NAMES:
+                assert _check_definition(conn, name) == frozen_definition, name
+
+        with (
+            pytest.raises(IntegrityError, match="ck_applications_listing_type_at_apply"),
+            engine.begin() as conn,
+        ):
+            conn.execute(
+                text("UPDATE applications SET listing_type_at_apply = 'house' WHERE id = :id"),
+                {"id": application_id},
+            )
+
+        rows = (("listings", "id", listing_id), ("seeker_profiles", "user_id", users["seeker"]))
+        for table, key, row_id in rows:
+            for bad in _BAD_LIFESTYLES:
+                with (
+                    pytest.raises(IntegrityError, match=f"ck_{table}_lifestyle"),
+                    engine.begin() as conn,
+                ):
+                    conn.execute(
+                        text(f"UPDATE {table} SET lifestyle = CAST(:v AS jsonb) WHERE {key} = :id"),
+                        {"v": bad, "id": row_id},
+                    )
+            with engine.begin() as conn:  # every key, every answer
+                conn.execute(
+                    text(f"UPDATE {table} SET lifestyle = CAST(:v AS jsonb) WHERE {key} = :id"),
+                    {
+                        "v": '{"cleanliness": 1, "guests": 2, "night": 3, "social": 1,'
+                        ' "kosher": 2, "shabbat": 3, "work_from_home": 1}',
+                        "id": row_id,
+                    },
+                )
+
+        command.downgrade(cfg, "0009")
+        with engine.connect() as conn:
+            assert "listing_type_at_apply" not in _application_columns(conn)
+            assert _check_definition(conn, "ck_applications_listing_type_at_apply") is None
+            assert (
+                conn.execute(
+                    text("SELECT message FROM applications WHERE id = :id"), {"id": application_id}
+                ).scalar_one()
+                == "Hello"
+            )
+            restored = {name: _check_definition(conn, name) for name in _LIFESTYLE_CHECK_NAMES}
+        assert restored == loose
+        with engine.begin() as conn:  # the 0009 rule again: any object
+            for loose_value in ('{"pets": 9}', "{}"):
+                conn.execute(
+                    text(
+                        "UPDATE seeker_profiles SET lifestyle = CAST(:v AS jsonb)"
+                        " WHERE user_id = :id"
+                    ),
+                    {"v": loose_value, "id": users["seeker"]},
+                )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert "listing_type_at_apply" in _application_columns(conn)
+            # At head the models' CHECK text (`app/models/_checks.py`) is what the database holds.
+            model_definition = _definition_of(conn, LIFESTYLE_CHECK)
+            for name in _LIFESTYLE_CHECK_NAMES:
+                assert _check_definition(conn, name) == model_definition, name
     finally:
         engine.dispose()

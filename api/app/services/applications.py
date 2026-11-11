@@ -9,13 +9,23 @@ Rules (PRODUCT.md "Applications"):
   now); after `submitted`, `shortlisted` or `declined` it is `AlreadyAppliedError`. Both are one
   `INSERT ... ON CONFLICT DO UPDATE ... WHERE status = 'withdrawn'`, so two concurrent applies
   yield one application and one `AlreadyAppliedError`.
-- Only a public listing (`search.get_public_listing`, the one visibility rule) can be applied to,
-  and never the caller's own: both are `ListingNotFoundError` (a 404, the same as an unknown id).
+- Only a public listing (`search.get_public_listing_with_match`, the one visibility rule) can be
+  applied to, apartments and rooms alike (spec 0007b), and never the caller's own: both are
+  `ListingNotFoundError` (a 404, the same as an unknown id).
 - Applying needs a housing profile (spec 0006a, PRODUCT.md "Matching"): checked **first**, so a
   seeker without one gets `ProfileRequiredError` and the call costs no rate-limit budget. Only
   applying is gated: existing applications are listed and withdrawn as before.
+- The room gate (spec 0007b, PRODUCT.md "Rooms"), on a public listing that is not the caller's
+  own: a room whose `matching.fit.room_fit` is false is `RoomGenderMismatchError`; a women- or
+  men-only room for a seeker without a room section is `SeekerGenderRequiredError`. It runs
+  **before** the rate limiter and costs no budget, so every apply reads the listing before the
+  limiter and a 429 costs 3 statements (session, profile check, listing), not 2. It is skipped for
+  a missing or own listing, so it reveals neither existence nor ownership. A seeker who already
+  applied to a room that no longer fits them gets `RoomGenderMismatchError` on a re-POST, not
+  `AlreadyAppliedError`; the existing application stays (Q2).
 - Applying is rate limited per seeker (`APPLY_RATE_LIMIT_HOUR`, `APPLY_RATE_LIMIT_DAY`); every
-  authenticated, body-valid attempt counts, a refused one does not.
+  authenticated, body-valid attempt that passes the profile check and the room gate counts, a
+  refused one does not.
 - The applicant count is every application of the listing except withdrawn ones (declined ones
   applied); `view_count` is approximate by design (bots, refetches and the owner all count).
 - Owner side (0004c): a withdrawn application is invisible to the owner (a 404, like an unknown
@@ -73,6 +83,15 @@ class ProfileRequiredError(Exception):
     """The seeker has no housing profile yet (spec 0006a); they must `PUT /me/profile` first."""
 
 
+class SeekerGenderRequiredError(Exception):
+    """The room is for women or men only and the seeker has no room section (spec 0007a); they
+    must fill it first."""
+
+
+class RoomGenderMismatchError(Exception):
+    """The room's gender preference does not fit the seeker (PRODUCT.md "Rooms")."""
+
+
 class ApplicationNotFoundError(Exception):
     """Unknown application id, or another seeker's (deliberately one case). Owner side (0004c):
     unknown id, another owner's listing, an application of a different listing, or a withdrawn
@@ -92,13 +111,14 @@ def _upsert(
 ) -> Application | None:
     """Insert the application, or reopen a withdrawn one; None when one exists in any other
     status (including the row a concurrent apply just inserted). Both snapshot the listing's
-    price and area as the seeker applied to them (0006c, security B1)."""
+    price and area (0006c, security B1) and its type (0007b) as the seeker applied to them."""
     stmt = insert(Application).values(
         listing_id=listing.id,
         seeker_id=seeker_id,
         message=message,
         price_ils_at_apply=listing.price_ils,
         area_id_at_apply=listing.area_id,
+        listing_type_at_apply=listing.listing_type,
     )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_applications_listing_seeker",
@@ -107,6 +127,7 @@ def _upsert(
             "message": stmt.excluded.message,
             "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
             "area_id_at_apply": stmt.excluded.area_id_at_apply,
+            "listing_type_at_apply": stmt.excluded.listing_type_at_apply,
             "created_at": func.now(),
             "updated_at": func.now(),
         },
@@ -119,21 +140,40 @@ def apply(
     db: Session, r: RedisClient, seeker: User, listing_id: uuid.UUID, message: str
 ) -> tuple[Application, Listing]:
     """Apply `seeker` to a public listing with `message` (already validated by `ApplicationIn`).
-    Raises `ProfileRequiredError` (checked first: nothing counted), `RateLimitedError`,
-    `ListingNotFoundError` or `AlreadyAppliedError`. Commits."""
+    Raises, in this order, `ProfileRequiredError` (nothing counted), `RoomGenderMismatchError` /
+    `SeekerGenderRequiredError` (the room gate, nothing counted), `RateLimitedError`,
+    `ListingNotFoundError` (unknown, not public or the caller's own) or `AlreadyAppliedError`.
+    One SELECT for the listing (with the match and room fit), before the limiter. Commits."""
     if not profiles_service.has_profile(db, seeker.id):
         raise ProfileRequiredError
-    count_or_raise(
-        r,
-        (
-            (f"rl:apply:user:{seeker.id}", APPLY_RATE_LIMIT_HOUR, APPLY_RATE_WINDOW_S),
-            (f"rl:apply:user:day:{seeker.id}", APPLY_RATE_LIMIT_DAY, APPLY_RATE_DAY_S),
-        ),
-    )
+    listing: Listing | None
+    fit: bool | None
     try:
-        listing = search_service.get_public_listing(db, listing_id)
-        # A user whose role changes later must never apply to their own listing.
-        if listing.owner_id == seeker.id:
+        try:
+            listing, _, fit = search_service.get_public_listing_with_match(
+                db, listing_id, seeker.id
+            )
+        except ListingNotFoundError:
+            listing, fit = None, None
+        # A user whose role changes later must never apply to their own listing. A missing or own
+        # listing skips the gate (it must not reveal either) and is a counted 404.
+        if listing is not None and listing.owner_id == seeker.id:
+            listing = None
+        if listing is not None:
+            if fit is False:
+                raise RoomGenderMismatchError
+            # A women- or men-only room needs the room section; an apartment is always 'any'
+            # (`ck_listings_room_fields`).
+            if fit is None and listing.gender_preference != "any":
+                raise SeekerGenderRequiredError
+        count_or_raise(
+            r,
+            (
+                (f"rl:apply:user:{seeker.id}", APPLY_RATE_LIMIT_HOUR, APPLY_RATE_WINDOW_S),
+                (f"rl:apply:user:day:{seeker.id}", APPLY_RATE_LIMIT_DAY, APPLY_RATE_DAY_S),
+            ),
+        )
+        if listing is None:
             raise ListingNotFoundError
         application = _upsert(db, listing, seeker.id, message)
         if application is None:
@@ -193,8 +233,8 @@ def withdraw(db: Session, seeker: User, application_id: uuid.UUID) -> tuple[Appl
 
 def record_view(db: Session, listing_id: uuid.UUID) -> int:
     """Count one view of a public listing and return its applicant count (every application
-    except withdrawn ones). Call only after `get_public_listing` succeeded. The count runs
-    first and the UPDATE last, so the listing row lock is held only for the UPDATE and the
+    except withdrawn ones). Call only after `get_public_listing_with_match` succeeded. The count
+    runs first and the UPDATE last, so the listing row lock is held only for the UPDATE and the
     commit, not across the count."""
     try:
         count = db.scalar(

@@ -3,7 +3,9 @@
 Seeker side (spec 0004a): the three seeker endpoints require a **seeker** session
 (`current_seeker`): 401 `unauthenticated` without one, 403 `seeker_only` for an owner. A listing
 that is not public, or is the caller's own, is a 404 `not_found` (the same body as an unknown id);
-so is another seeker's application.
+so is another seeker's application. Rooms are open to applications (spec 0007b); a room that does
+not fit the seeker is a 409 `room_gender_mismatch`, a women- or men-only room for a seeker without a
+room section a 409 `seeker_gender_required`.
 
 Owner side (spec 0004c): the two inbox endpoints require an **owner** session (`current_owner`):
 401 `unauthenticated`, 403 `owner_only` for a seeker. Another owner's listing, an application of a
@@ -81,13 +83,16 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
         **_SEEKER_ONLY,
         404: {
             "model": ErrorOut,
-            "description": "not_found: unknown id, a paused, expired, room or inactive-area "
-            "listing, or the caller's own",
+            "description": "not_found: unknown id, a paused, expired or inactive-area listing, "
+            "or the caller's own",
         },
         409: {
             "model": ErrorOut,
-            "description": "already_applied, or seeker_profile_required: the seeker has no "
-            "housing profile (0006a)",
+            "description": "already_applied; seeker_profile_required: the seeker has no housing "
+            "profile (0006a); seeker_gender_required: the room is for women or men only and the "
+            "seeker's profile has no room section (0007b); room_gender_mismatch: the room's "
+            "gender preference does not fit the seeker (0007b). Only already_applied costs "
+            "rate-limit budget",
         },
         429: {"model": ErrorOut, "description": "rate_limited; see Retry-After"},
     },
@@ -103,6 +108,10 @@ def apply(
         application, listing = applications_service.apply(db, r, seeker, listing_id, body.message)
     except applications_service.ProfileRequiredError:
         raise HTTPException(status_code=409, detail="seeker_profile_required") from None
+    except applications_service.SeekerGenderRequiredError:
+        raise HTTPException(status_code=409, detail="seeker_gender_required") from None
+    except applications_service.RoomGenderMismatchError:
+        raise HTTPException(status_code=409, detail="room_gender_mismatch") from None
     except RateLimitedError as exc:
         raise HTTPException(
             status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}

@@ -1,6 +1,6 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
-Every CHECK, FK and index here matches migrations 0003, 0004, 0005, 0007 and 0009 exactly
+Every CHECK, FK and index here matches migrations 0003, 0004, 0005, 0007, 0009 and 0010 exactly
 (autogenerate must see no diff). A listing is **live** while `status = 'active' AND expires_at >
 now()`.
 
@@ -41,6 +41,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.models import Base
+from app.models._checks import LIFESTYLE_CHECK
 
 # Plain `::geometry` (no typmod): the cast `ix_listings_location` is built on. A typmod'd cast such
 # as `geometry(POINT,4326)` is a different expression, and the planner would not use the index.
@@ -101,7 +102,8 @@ class Listing(Base):
             " AND array_position(flatmate_ages, NULL) IS NULL",
             name="ck_listings_flatmate_ages",
         ),
-        CheckConstraint("jsonb_typeof(lifestyle) = 'object'", name="ck_listings_lifestyle"),
+        # Known keys, values 1-3 only (migration 0010).
+        CheckConstraint(LIFESTYLE_CHECK, name="ck_listings_lifestyle"),
         CheckConstraint(
             "listing_type = 'room' OR (gender_preference = 'any' AND flatmates_count IS NULL"
             " AND flatmate_ages = '{}' AND lifestyle = '{}'::jsonb)",
@@ -164,7 +166,8 @@ class Listing(Base):
     flatmate_ages: Mapped[list[int]] = mapped_column(
         ARRAY(SmallInteger), nullable=False, server_default=text("'{}'")
     )
-    # Only answered keys; the API checks keys and values (`schemas/profile.py` `Lifestyle`).
+    # Only answered keys; the API checks keys and values (`schemas/profile.py` `Lifestyle`), and so
+    # does `ck_listings_lifestyle` (0010).
     lifestyle: Mapped[dict[str, int]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'")
     )
