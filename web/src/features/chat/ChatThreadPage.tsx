@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router';
 
+import { hasStatus } from '../applications/api';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
-import { useMe } from '../auth/useMe';
+import { formatDay } from '../flatmates/format';
 import { formatIls, formatRooms } from '../listings/format';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
@@ -42,13 +43,13 @@ function BackToChats() {
   );
 }
 
-function Bubble({ message, otherName }: { message: MessageOut; otherName: string }) {
+function Bubble({ message }: { message: MessageOut }) {
   const { t } = useTranslation();
   const mine = message.mine;
   return (
     <>
       <span className="sr-only">
-        {mine ? t('chat.thread.mine') : t('chat.thread.theirs', { name: otherName })}{' '}
+        {mine ? t('chat.thread.mine') : t('chat.thread.theirs', { name: message.sender_name })}{' '}
       </span>
       <span className="flex flex-wrap items-end gap-x-2 gap-y-1">
         {/* Another person's free text: a text node only, never HTML and never linkified. */}
@@ -70,10 +71,31 @@ function Bubble({ message, otherName }: { message: MessageOut; otherName: string
   );
 }
 
+/** The member line of a group thread: the owner and flatmates with their role, the seeker by name,
+ * the caller as "you". */
+function MemberLine({ members }: { members: ThreadOut['members'] }) {
+  const { t } = useTranslation();
+  const parts = members.map((m) => {
+    if (m.is_me) return t('chat.you');
+    if (m.role === 'seeker') return m.name;
+    return t('chat.memberWithRole', { name: m.name, role: t(`chat.roles.${m.role}`) });
+  });
+  const full = parts.join(' · ');
+  return (
+    <p
+      role="group"
+      aria-label={t('chat.members')}
+      title={full}
+      className="line-clamp-2 text-start text-sm text-muted [overflow-wrap:anywhere]"
+    >
+      {full}
+    </p>
+  );
+}
+
 /** `id` is the route's: the thread's cache key, which the composer's send updates. */
 function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   const { t } = useTranslation();
-  const me = useMe();
   const { listing, messages } = thread;
   const lastRef = useRef<HTMLLIElement>(null);
   const scrolledFirst = useRef(false);
@@ -91,13 +113,15 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
     }
   }, [lastId, sentId]);
 
-  const owner = me.data?.role === 'owner';
+  const owner = thread.my_role === 'owner';
+  const group = thread.members.length > 2;
   return (
     <>
       <h1 className="text-start text-2xl font-extrabold [overflow-wrap:anywhere]">
         {/* Its own direction: a Latin name in an RTL page stays in order. */}
         <span dir="auto">{thread.other_name}</span>
       </h1>
+      {group && <MemberLine members={thread.members} />}
       <p className="flex flex-wrap items-center gap-x-2 text-start text-sm text-muted">
         <span>
           {t('listings.card.title', {
@@ -120,6 +144,11 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
       >
         {t('chat.thread.warning')}
       </p>
+      {thread.visible_from !== null && (
+        <p className="text-start text-sm text-muted">
+          {t('chat.joinedNote', { date: formatDay(thread.visible_from) })}
+        </p>
+      )}
       {thread.truncated && (
         <p className="text-start text-sm text-muted">{t('chat.thread.truncated')}</p>
       )}
@@ -129,19 +158,41 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
         // A polite live region: messages pushed in are announced (keyed by id: only new ones).
         <div role="log" aria-label={t('chat.thread.log')}>
           <ol className="flex flex-col gap-2">
-            {messages.map((message) => (
-              <li
-                key={message.id}
-                ref={message.id === lastId ? lastRef : undefined}
-                className={`max-w-[85%] rounded-2xl px-3 py-2 ${
-                  message.mine
-                    ? 'self-end bg-accent text-white'
-                    : 'self-start border border-line bg-white'
-                }`}
-              >
-                <Bubble message={message} otherName={thread.other_name} />
-              </li>
-            ))}
+            {messages.map((message, i) => {
+              const previous = messages[i - 1];
+              const showName =
+                group &&
+                !message.mine &&
+                (previous === undefined ||
+                  previous.mine ||
+                  previous.sender_name !== message.sender_name);
+              return (
+                <li
+                  key={message.id}
+                  ref={message.id === lastId ? lastRef : undefined}
+                  className={`flex max-w-[85%] flex-col gap-1 ${
+                    message.mine ? 'self-end' : 'self-start'
+                  }`}
+                >
+                  {showName && (
+                    <span
+                      data-testid="sender-name"
+                      dir="auto"
+                      className="text-start text-sm text-muted"
+                    >
+                      {message.sender_name}
+                    </span>
+                  )}
+                  <div
+                    className={`rounded-2xl px-3 py-2 ${
+                      message.mine ? 'bg-accent text-white' : 'border border-line bg-white'
+                    }`}
+                  >
+                    <Bubble message={message} />
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         </div>
       )}
@@ -159,6 +210,21 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   );
 }
 
+/** The thread was on screen and is now refused: the person left the flat or was removed. The
+ * composer that had focus is gone, so the heading takes it. */
+function Removed() {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return (
+    <h1 ref={ref} tabIndex={-1} className="text-start text-2xl font-extrabold">
+      {t('chat.removed')}
+    </h1>
+  );
+}
+
 /** `/chat/:id`, for an owner or a seeker in that chat (`RequireUser`). */
 export function ChatThreadPage() {
   const { t } = useTranslation();
@@ -172,8 +238,11 @@ export function ChatThreadPage() {
   if (valid && raw !== id) return <Navigate to={`/chat/${id}`} replace />;
 
   let body;
-  // Not found first: a send's 404 then a 404 refetch leaves the old thread cached.
-  if (!valid || isThreadNotFound(thread.error)) {
+  // Removed first: a send's 404 then a 404 refetch leaves the old thread cached, and that cached
+  // thread then means "no longer in this chat"; with nothing cached a 404 is plain not found.
+  if (valid && thread.data !== undefined && hasStatus(thread.error, 404)) {
+    body = <Removed />;
+  } else if (!valid || isThreadNotFound(thread.error)) {
     body = <h1 className="text-start text-2xl font-extrabold">{t('chat.thread.notFound')}</h1>;
   } else if (thread.data === undefined) {
     body = thread.isError ? (

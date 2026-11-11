@@ -1,7 +1,15 @@
 import { expect, test, type BrowserContext } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { latestCode, postListing, signUp, uniqueEmail } from './helpers';
+import {
+  API,
+  createInvite,
+  latestCode,
+  postListing,
+  putProfile,
+  signUp,
+  uniqueEmail,
+} from './helpers';
 
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 
@@ -101,4 +109,93 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   expect(flatmateRequests.length).toBeGreaterThan(0);
 
   await flatmateContext.close();
+});
+
+// A room's chat with a flatmate in it: the group header and the joined note, the sender's name for
+// the others, then the owner removes the flatmate and the open thread says so on the next send.
+test('ac5_group_chat_flow', async ({ page, browser }) => {
+  const run = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const street = `e2e ${run}`;
+  const OWNER = '\u05e8\u05d5\u05e0\u05d9'; // רוני
+  const FLATMATE = '\u05d3\u05e0\u05d4'; // דנה
+  const SEEKER = '\u05e0\u05d5\u05e2\u05d4'; // נועה
+  const HELLO = `\u05d4\u05d9\u05d9, \u05d0\u05e0\u05d9 ${FLATMATE}`; // היי, אני דנה
+  const AFTER = 'still here?';
+  const today = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+
+  // 1. O posts a room and creates the link.
+  await signUp(page, 'owner', { name: OWNER });
+  const roomId = await postListing(page, street, {
+    listing_type: 'room',
+    gender_preference: 'any',
+    flatmates_count: 2,
+    flatmate_ages: [27, 30],
+    lifestyle: { cleanliness: 3 },
+  });
+  const token = await createInvite(page, roomId);
+
+  // 2. F signs up and joins through the UI.
+  const flatmateContext = await browser.newContext();
+  const flatmatePage = await flatmateContext.newPage();
+  await signUp(flatmatePage, 'seeker', { name: FLATMATE });
+  await flatmatePage.goto(`/flatmates/join#${token}`);
+  await flatmatePage.getByRole('button', { name: he.flatmates.join.cta }).click();
+  await expect(flatmatePage).toHaveURL('/chat');
+  await expect(flatmatePage.getByText(he.flatmates.join.done)).toBeVisible();
+
+  // 3. S applies through the API; O shortlists in the inbox.
+  const seekerContext = await browser.newContext();
+  const seekerPage = await seekerContext.newPage();
+  await signUp(seekerPage, 'seeker', { name: SEEKER });
+  await putProfile(seekerPage);
+  const applied = await seekerPage.request.post(`${API}/listings/${roomId}/applications`, {
+    data: { message: 'Hi, we are a quiet couple' },
+  });
+  expect(applied.status()).toBe(201);
+  const { id: applicationId } = (await applied.json()) as { id: string };
+  await page.goto(`/me/listings/${roomId}/applicants`);
+  const applicant = page.getByRole('article', { name: SEEKER });
+  await applicant.getByRole('button', { name: he.applicants.actions.shortlist }).click();
+  await expect(
+    applicant.getByText(he.applicants.status.shortlisted, { exact: true }),
+  ).toBeVisible();
+
+  // 4. F opens the chat: the three members and the joined note.
+  await flatmatePage.goto('/chat');
+  await expect(flatmatePage.getByRole('link', { name: he.chat.myFlats })).toBeVisible();
+  await flatmatePage.getByRole('link', { name: new RegExp(SEEKER) }).click();
+  await expect(flatmatePage).toHaveURL(`/chat/${applicationId}`);
+  await expect(flatmatePage.getByRole('group', { name: he.chat.members })).toHaveText(
+    `${OWNER} (${he.chat.roles.owner}) \u00b7 ${he.chat.you} \u00b7 ${SEEKER}`,
+  );
+  await expect(flatmatePage.getByText(he.chat.joinedNote.replace('{{date}}', today))).toBeVisible();
+
+  // 5. F sends a message.
+  await flatmatePage.getByLabel(he.chat.composer.label).fill(HELLO);
+  await flatmatePage.getByRole('button', { name: he.chat.composer.send }).click();
+  const flatmateLog = flatmatePage.getByRole('log', { name: he.chat.thread.log });
+  await expect(flatmateLog.getByText(HELLO, { exact: true })).toBeVisible();
+
+  // 6. S's thread shows the message with F's name above it.
+  await seekerPage.goto(`/chat/${applicationId}`);
+  const seekerLog = seekerPage.getByRole('log', { name: he.chat.thread.log });
+  await expect(seekerLog.getByText(HELLO, { exact: true })).toBeVisible();
+  await expect(seekerLog.getByText(FLATMATE, { exact: true })).toBeVisible();
+
+  // 7. O removes F. F's open thread is told on the next send (not on a focus event: focus across
+  // contexts is not reliable), and the chat list no longer has the conversation.
+  await page.goto(`/me/listings/${roomId}/flatmates`);
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: he.flatmates.list.remove }).click();
+  await expect(page.getByText(he.flatmates.list.empty)).toBeVisible();
+  await flatmatePage.getByLabel(he.chat.composer.label).fill(AFTER);
+  await flatmatePage.getByRole('button', { name: he.chat.composer.send }).click();
+  await expect(flatmatePage.getByText(he.chat.removed)).toBeVisible();
+  await expect(flatmatePage.getByLabel(he.chat.composer.label)).toHaveCount(0);
+  await flatmatePage.getByRole('link', { name: he.chat.thread.back }).click();
+  await expect(flatmatePage).toHaveURL('/chat');
+  await expect(flatmatePage.getByRole('link', { name: new RegExp(SEEKER) })).toHaveCount(0);
+
+  await flatmateContext.close();
+  await seekerContext.close();
 });

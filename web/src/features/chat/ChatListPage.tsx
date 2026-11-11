@@ -6,6 +6,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
+import { useMyFlats } from '../flatmates/api';
 import { formatRooms } from '../listings/format';
 import type { ConversationOut } from './api';
 import { formatMessageTime } from './format';
@@ -51,6 +52,16 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
             <span dir="auto" className="min-w-0 truncate text-[17px] font-extrabold">
               {conversation.other_name}
             </span>
+            {conversation.my_role === 'flatmate' && (
+              <span className="flex-none rounded-full bg-accent-tint px-2 py-[2px] text-[12px] font-semibold text-accent-text">
+                {t('chat.flatmateChip')}
+              </span>
+            )}
+            {conversation.member_count > 2 && (
+              <span className="flex-none rounded-full bg-[#F5F5F4] px-2 py-[2px] text-[12px] font-semibold text-muted">
+                {t('chat.group', { count: conversation.member_count })}
+              </span>
+            )}
             {mark}
             {!conversation.can_send && (
               <span className="flex-none rounded-full bg-[#F5F5F4] px-2 py-[2px] text-[12px] font-semibold text-muted">
@@ -100,6 +111,7 @@ export function ChatListPage() {
   const { t } = useTranslation();
   const me = useMe();
   const conversations = useConversations();
+  const flats = useMyFlats();
   const location = useLocation();
   const navigate = useNavigate();
   const [joined] = useState(() => isJoined(location.state));
@@ -144,7 +156,17 @@ export function ChatListPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-start text-2xl font-extrabold">{t('chat.list.title')}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-start text-2xl font-extrabold">{t('chat.list.title')}</h1>
+        {flats.data !== undefined && flats.data.length > 0 && (
+          <Link
+            to="/me/flats"
+            className={`inline-flex min-h-[44px] items-center rounded font-semibold text-accent-text underline underline-offset-4 ${focusRing}`}
+          >
+            {t('chat.myFlats')}
+          </Link>
+        )}
+      </div>
       {joined && (
         <p role="status" className="text-start text-sm font-semibold text-accent-text">
           {t('flatmates.join.done')}

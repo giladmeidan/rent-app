@@ -32,6 +32,19 @@ Plan slice 8, part f. The thread keeps `0005b`'s layout, after `InboxDesktop.dc.
       `message.sender_name`, not `other_name`.
   - When `visible_from` is set: a muted note at the top, `chat.joinedNote` with `formatDay(visible_from)`
     (`features/flatmates/format.ts`, `0008e`).
+  - **Members refresh (amendment 2026-11-11).** Join, leave and remove publish no chat event (`0008d`; the
+    event is logged in `specs/FOLLOWUPS.md` for later). The open thread therefore picks up a changed `members`
+    list when the window gets focus, through TanStack Query's `refetchOnWindowFocus`. It is on today:
+    `App.tsx`'s `QueryClient` sets only `retry`, the auth test harness's client likewise, `useThread` does
+    not override it, and `staleTime` is 0. Keep it on for the thread and the chat list (no
+    `refetchOnWindowFocus: false`, no `staleTime` on either), and prove it with a unit test (AC6).
+  - **No longer in this chat (amendment 2026-11-11).** A 404 on the thread fetch or on a send means the
+    user left the flat or was removed. When a thread was on screen (`thread.data` is cached) and a refetch or
+    a send returns 404, the page shows `chat.removed` in place of the thread and the composer. The page's
+    existing back link to `/chat` (`chat.thread.back`) stays above it. `useSendMessage` already turns a 404
+    into a thread refetch, and that refetch's 404 leads here. A 404 on a first load (no thread cached: a stale
+    link, a reload) or a malformed id still shows `chat.thread.notFound`, as in `0005b`, because the API
+    answers a wrong id and a former member the same way.
   - One-to-one threads render exactly as today.
 - `web/src/features/chat/ChatListPage.tsx`: an item with `my_role === 'flatmate'` carries the chip
   `chat.flatmateChip`. Any item with `member_count > 2` shows `chat.group` ("קבוצה · {{count}}"). A link
@@ -60,6 +73,7 @@ Plan slice 8, part f. The thread keeps `0005b`'s layout, after `InboxDesktop.dc.
   | `chat.group` | "קבוצה · {{count}}" |
   | `chat.flatmateChip` | "שותף/ה" |
   | `chat.myFlats` | "הדירות שלי" |
+  | `chat.removed` | "כבר אינך משתתף/ת בשיחה הזו. ייתכן שיצאת מהדירה או שהוסרת ממנה." (amendment 2026-11-11) |
   | `flatmates.mine.title` | "הדירות שאני שותף/ה בהן" |
   | `flatmates.mine.empty` | "לא הצטרפת לאף דירה." |
   | `flatmates.mine.back` | "חזרה לשיחות" |
@@ -74,6 +88,8 @@ Plan slice 8, part f. The thread keeps `0005b`'s layout, after `InboxDesktop.dc.
 **Out:**
 - Any flatmate view of the inbox, people page or applicant profile (PRODUCT.md: chat only).
 - Avatars or colours per sender. The name is enough.
+- A live update of `members` or of the chat list on join, leave or remove. There is no event for it yet
+  (`specs/FOLLOWUPS.md`); window focus and the 404 state stand in for it.
 
 **New dependencies:** none.
 
@@ -84,10 +100,17 @@ None (web only).
 Consumes `0008d`: `ThreadOut` (`my_role`, `members[{name, role, is_me}]`, `visible_from`), `MessageOut.sender_name`,
 `ConversationOut` (`my_role`, `member_count`), `GET /me/flats`, `DELETE /me/flats/{listing_id}`.
 
+As built in `0008d`: join, leave and remove publish no chat event. A flatmate's status events arrive only
+once the application has a conversation, so an application still only in the inbox never shows in a
+flatmate's chats. The web adds no filter for it. `GET /conversations/{id}` and the send return 404 for a
+former member, the same answer as for a wrong id.
+
 ## UI
 RTL: logical classes only. The member line separates names with " · " and wraps. At 360 px it wraps to at
-most two lines (`line-clamp-2`), with the full list in `title` and an sr-only copy. Sender names sit above the
-bubble on the start side, `text-sm text-muted`. MyFlatsPage is one column, `max-w-[480px]`.
+most two lines (`line-clamp-2`), with the full list in `title`. Review round 1 changed this: there is no
+sr-only copy. The clamp only clips visually, so a screen reader reads the whole line once, and a copy would be
+read twice. Touch users cannot open `title`, so a "show all" control is in `specs/FOLLOWUPS.md`. Sender names
+sit above the bubble on the start side, `text-sm text-muted`. MyFlatsPage is one column, `max-w-[480px]`.
 
 ## Acceptance criteria
 - [ ] AC1 Given a thread with `members` [owner רוני, flatmate דנה `is_me`, seeker נועה] and `visible_from`
@@ -114,9 +137,21 @@ bubble on the start side, `text-sm text-muted`. MyFlatsPage is one column, `max-
   4. `F` opens the chat: the header lists the three members and the joined note.
   5. `F` sends "היי, אני דנה".
   6. `S`'s thread shows the message with `F`'s name above it.
-  7. `O` removes `F` on the flatmates page: `F`'s chat list no longer has the conversation.
+  7. `O` removes `F` on the flatmates page. `F` is still on the thread and sends a message: the page shows
+     `chat.removed` and the back link (amendment 2026-11-11). `F` follows the back link: the chat list no
+     longer has the conversation. Use the send, not a focus event: focus across Playwright contexts is not
+     reliable.
 
   — `web/e2e/flatmates.spec.ts::ac5_group_chat_flow`
+- [ ] AC6 (amendment 2026-11-11) Given a group thread on screen:
+  - When the window gets focus (`focusManager.setFocused` or a `visibilitychange` event), Then the thread is
+    fetched again and the member line shows the new `members` (one member gone);
+  - When that refetch returns 404, Then `chat.removed` and the back link to `/chat` show, with no composer
+    and no messages;
+  - When a send returns 404, Then the same state shows.
+
+  A 404 on a first load, with nothing cached, still shows `chat.thread.notFound` (the `0005b` test passes
+  unchanged). — `ChatThreadPage.test.tsx::ac6_focus_refetch_and_removed`
 - [ ] NF1 `make lint`, `make test`, `make i18n-check`, `make build-web` and local `make e2e` are green (Speed
   rule 7). The e2e result goes in the digest.
 
@@ -128,6 +163,11 @@ Component tests: the cases above, using the chat harness (`features/chat/__tests
 - Group rendering must leave one-to-one threads unchanged. AC2 runs the existing assertions on the default
   fixtures.
 - `/chat` makes one more request (`/me/flats`) per visit. It is cheap and cached.
+- No membership event yet (amendment 2026-11-11). A member who joins or leaves shows up for the others only
+  on their next focus or visit. A removed flatmate learns of it on their next focus, send or visit, not at
+  once. The event is in `specs/FOLLOWUPS.md`.
+- A removed flatmate who reloads sees `chat.thread.notFound`, not `chat.removed`. With nothing cached, a
+  former member's 404 and a wrong id's 404 cannot be told apart.
 
 This file was split from the draft `0008e` by spec-verifier round 1 (finding 3). The findings that apply here
 (6a/6b, the `is_me` member flag, the keys, the dates and the states) are written in. The second round is waived.
@@ -140,5 +180,32 @@ This file was split from the draft `0008e` by spec-verifier round 1 (finding 3).
     KPIs this slice moves: messages sent by flatmates per room chat.
     Acceptance targets: lint/test/i18n/build clean + make e2e green locally; one-to-one threads unchanged.
     Risks: group rendering leaking into one-to-one threads - mitigation: the existing thread tests run unchanged.
+    Amended 2026-11-11 (from 0008d's QA review): join/leave/remove send no chat event yet (FOLLOWUPS), so
+             the open thread refetches its members on window focus (TanStack default, kept on, unit-tested,
+             AC6); a 404 on a cached thread's refetch or on a send shows "no longer in this chat"
+             (chat.removed) with the back link to /chat. A first-load 404 keeps "השיחה לא נמצאה".
+             Flatmates see an application only once it has a conversation (as built in 0008d).
     Reviewers: code, qa, security, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008f-group-chat-web.md - PRODUCT.md "Flatmates" - design/screens-v1/InboxDesktop.dc.html
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008f - Group chat web   PR OPEN (not merged), code head 5344bb3
+    Shipped: room chats with flatmates list every member ("רוני (בעל/ת הדירה) · את/ה · נועה") and name each
+             sender once per run; a flatmate sees "הצטרפת לשיחה ב־…"; the chat list marks "שותף/ה" and
+             "קבוצה · N"; "הדירות שלי" (/me/flats) lists the flats and leaves one. One-to-one threads unchanged.
+    Demo: make dev -> owner posts a room and creates the invite link -> a second user joins from it -> a seeker
+          applies, owner shortlists -> the flatmate's /chat shows the chips, the member line and the joined
+          note -> owner removes the flatmate -> the flatmate sends: "כבר אינך משתתף/ת בשיחה הזו".
+    Tests: +6 unit (AC1-AC4, AC6 thread + list focus refetch), +1 e2e (AC5, three contexts). Local on edce333:
+           make lint, make i18n-check, make build-web green; make test-web 298/298 (api untouched; CI runs it);
+           make e2e 14/14 in 3 shards, twice (before and after the review fixes). CI: api + web on the PR head.
+    Findings: 0 blockers, 0 majors; 6 minors fixed (401 forgets the session on /me/flats and leave; leave and
+              join refetch cached threads; the removed state is a focused heading; sturdier AC1-AC3 tests; a
+              list focus test); 3 follow-ups logged (touch "show all" for a clamped member line, same-name
+              sender runs need a sender id, flatmate copy for the empty /chat); 4 nits fixed, 7 dropped.
+              Amendment 2026-11-11 built: focus refetch kept on and tested (AC6); a 404 on a thread already
+              on screen shows "no longer in this chat", a first-load 404 keeps "השיחה לא נמצאה".
+              Spec wording changed: no sr-only copy of the member line (the clamp is visual only).
+    Changed in PRODUCT.md: nothing.
+    Decisions I need from you: none. Follow-up with a copy choice: the empty /chat text for a new flatmate.

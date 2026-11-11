@@ -1,4 +1,5 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { focusManager } from '@tanstack/react-query';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,9 +11,11 @@ import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut } from '../api';
 import { ChatListPage } from '../ChatListPage';
 import { conversation } from './fixtures';
+import { settle } from './harness';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  focusManager.setFocused(undefined);
 });
 
 const LIST = 'GET /me/conversations';
@@ -26,8 +29,8 @@ const routes = (
   </Routes>
 );
 
-function renderPage(list: Reply[], me = seeker) {
-  const api = mockApi({ 'GET /me': [json(me)], [LIST]: list });
+function renderPage(list: Reply[], me = seeker, flats: Reply[] = [() => json([])]) {
+  const api = mockApi({ 'GET /me': [json(me)], [LIST]: list, 'GET /me/flats': flats });
   const view = renderRoutes('/chat', routes);
   return { api, view };
 }
@@ -136,5 +139,55 @@ describe('ChatListPage', () => {
     for (const link of [first, second, fourth]) {
       expect(within(link).queryByText(/^\d+$/)).toBeNull();
     }
+  });
+
+  it('ac3_flatmate_items', async () => {
+    const flatmateItem = conversation({ my_role: 'flatmate', member_count: 3 });
+    const plain = conversation();
+    const flat = { listing: plain.listing, owner_name: 'רוני', joined_at: '2026-11-01T08:00:00Z' };
+    const link = (c: ConversationOut) =>
+      screen.getByRole('link', { name: new RegExp(c.other_name) });
+
+    let { view } = renderPage([() => json([flatmateItem, plain])], undefined, [() => json([flat])]);
+    await heading();
+    expect(await screen.findByRole('link', { name: he.chat.myFlats })).toHaveAttribute(
+      'href',
+      '/me/flats',
+    );
+    const first = link(flatmateItem);
+    const second = link(plain);
+    expect(within(first).getByText(he.chat.flatmateChip)).toBeVisible();
+    expect(within(first).getByText(i18n.t('chat.group', { count: 3 }))).toBeVisible();
+    expect(within(second).queryByText(he.chat.flatmateChip)).toBeNull();
+    expect(within(second).queryByText(/קבוצה/)).toBeNull();
+    reset(view);
+
+    // No flats: no link.
+    const api = renderPage([() => json([plain])], undefined, [() => json([])]);
+    view = api.view;
+    await heading();
+    await screen.findByText(titleOf(plain));
+    await waitFor(() => expect(api.api.calls('GET /me/flats')).toHaveLength(1));
+    await settle();
+    expect(screen.queryByRole('link', { name: he.chat.myFlats })).toBeNull();
+    reset(view);
+  });
+
+  it('ac6_list_refetches_on_focus', async () => {
+    const stays = conversation();
+    const goes = conversation();
+    const { api, view } = renderPage([() => json([stays, goes]), () => json([stays])]);
+    await heading();
+    expect(await screen.findByRole('link', { name: new RegExp(goes.other_name) })).toBeVisible();
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: new RegExp(goes.other_name) })).toBeNull(),
+    );
+    expect(screen.getByRole('link', { name: new RegExp(stays.other_name) })).toBeVisible();
+    expect(api.calls(LIST)).toHaveLength(2);
+    reset(view);
   });
 });
