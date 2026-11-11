@@ -9,6 +9,7 @@ import { ME_KEY } from '../auth/useMe';
 import { ApiError, type ListingOut, type MyListingOut } from './api';
 import { DetailsStep } from './DetailsStep';
 import { todayInIsrael } from './format';
+import { PreferencesStep } from './PreferencesStep';
 import { PreviewStep, type PublishError } from './PreviewStep';
 import { TypeStep } from './TypeStep';
 import { useCreateListing } from './useCreateListing';
@@ -22,12 +23,13 @@ import {
   formFromListing,
   toListingIn,
   validate,
+  validatePreferences,
   type FieldErrors,
   type FieldName,
   type ListingForm,
 } from './validate';
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 type Outcome = PublishError | 'unauthenticated' | 'forbidden' | 'notFound';
 
 function outcome(error: Error): Outcome {
@@ -118,8 +120,9 @@ type Props = {
 };
 
 /**
- * Type → details → preview → publish (or, with `listing`, → save). Everything entered lives in this
- * component's state only (no storage, no URL), so "back" keeps it and a reload starts over.
+ * Type → details → preferences → preview → publish (or, with `listing`, → save). Everything
+ * entered lives in this component's state only (no storage, no URL), so "back" keeps it and a
+ * reload starts over.
  */
 export function ListingWizard({ listing }: Props) {
   const { t } = useTranslation();
@@ -210,7 +213,7 @@ export function ListingWizard({ listing }: Props) {
     // nothing below it moves on the blur that a click on the next control causes. New errors still
     // wait for blur or "next".
     if (attempted) {
-      const found = validate(withArea(next), today);
+      const found = { ...validate(withArea(next), today), ...validatePreferences(next) };
       setErrors((shown) => {
         const kept: FieldErrors = {};
         for (const name of FIELD_ORDER) {
@@ -251,7 +254,8 @@ export function ListingWizard({ listing }: Props) {
       if (first !== undefined) {
         setServerErrors(found);
         focusAfterStep.current = fieldId(first);
-        goTo(2);
+        // Details fields come first in FIELD_ORDER: a 422 naming both kinds lands on details.
+        goTo(first === 'accepted_households' || first === 'min_contract_months' ? 3 : 2);
       }
     }
   }
@@ -295,13 +299,14 @@ export function ListingWizard({ listing }: Props) {
     event.preventDefault();
     if (step === 1) {
       if (form.listing_type !== null) goTo(2);
-    } else if (step === 2) {
-      const found = validate(current, today);
-      setErrors(found);
+    } else if (step === 2 || step === 3) {
+      const found = step === 2 ? validate(current, today) : validatePreferences(current);
+      // A shown households error survives a round trip to details (`found` alone decides the step).
+      setErrors(step === 2 ? { ...found, ...validatePreferences(current) } : found);
       setAttempted(true);
       const first = firstInvalid(found);
       if (first === undefined) {
-        goTo(3);
+        goTo(step === 2 ? 3 : 4);
         return;
       }
       // The area may have no input (no areas, or a load error): focus the next field that has one.
@@ -325,6 +330,7 @@ export function ListingWizard({ listing }: Props) {
   const steps = [
     t('listings.steps.type'),
     t('listings.steps.details'),
+    t('listings.steps.preferences'),
     t('listings.steps.preview'),
   ];
 
@@ -390,13 +396,13 @@ export function ListingWizard({ listing }: Props) {
           role="progressbar"
           aria-valuenow={step}
           aria-valuemin={1}
-          aria-valuemax={3}
+          aria-valuemax={4}
           aria-labelledby={`${id}-title`}
           className="flex h-1 overflow-hidden rounded-full bg-line"
         >
           <div
             className="rounded-full bg-accent transition-[width]"
-            style={{ width: `${String((step / 3) * 100)}%` }}
+            style={{ width: `${String((step / 4) * 100)}%` }}
           />
         </div>
       </div>
@@ -423,6 +429,14 @@ export function ListingWizard({ listing }: Props) {
           />
         )}
         {step === 3 && (
+          <PreferencesStep
+            form={current}
+            onChange={update}
+            errors={{ ...serverErrors, ...errors }}
+            fieldId={fieldId}
+          />
+        )}
+        {step === 4 && (
           <PreviewStep
             body={toListingIn(current)}
             today={today}
@@ -442,7 +456,7 @@ export function ListingWizard({ listing }: Props) {
         {step > 1 && (
           <button
             type="button"
-            onClick={() => goTo(step === 3 ? 2 : 1)}
+            onClick={() => goTo((step - 1) as Step)}
             className={`flex min-h-[52px] flex-1 items-center justify-center gap-[6px] rounded-[14px] border-[1.5px] border-[#D6D3D1] bg-white text-[15px] font-bold ${focusRing}`}
           >
             <svg
@@ -467,8 +481,8 @@ export function ListingWizard({ listing }: Props) {
           aria-busy={active.isPending}
           className={`flex min-h-[52px] flex-[1.6] items-center justify-center gap-[6px] rounded-[14px] bg-accent text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
         >
-          {step < 3 ? t('listings.next') : editing ? t('listings.save') : t('listings.publish')}
-          {step < 3 && (
+          {step < 4 ? t('listings.next') : editing ? t('listings.save') : t('listings.publish')}
+          {step < 4 && (
             <svg
               aria-hidden="true"
               width="18"

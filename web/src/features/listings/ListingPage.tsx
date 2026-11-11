@@ -11,6 +11,7 @@ import { MatchCard } from '../match/MatchCard';
 import { ApiError } from './api';
 import { formatDate, formatIls, formatRooms, todayInIsrael } from './format';
 import { ListingFacts } from './ListingFacts';
+import { OwnerPreferences } from './OwnerPreferences';
 import { usePublicListing } from './usePublicListing';
 
 const focusRing =
@@ -138,6 +139,8 @@ export function ListingPage() {
           </p>
           <p className="text-sm text-muted">{t('listing.locationHint')}</p>
         </section>
+
+        <OwnerPreferences listing={l} />
 
         {/* Nothing for `match: null`: the apply section already invites a seeker without a
             profile to fill one. */}
