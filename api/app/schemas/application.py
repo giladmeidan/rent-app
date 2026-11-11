@@ -11,7 +11,10 @@ HTML.
 From 0006c the owner's view also carries the applicant's current `match` and `ApplicantProfileOut`,
 seven housing-profile fields listed explicitly: never the seeker's `budget_max_ils` or `area_ids`
 (PRODUCT.md "Matching"; only the criterion codes `budget` / `area` in `match` say whether they
-fit)."""
+fit).
+
+From 0007c a room application also carries `ApplicantRoomOut` (`gender`, `age`, `lifestyle`, listed
+explicitly): never the seeker's `birth_year` or `flatmate_gender`."""
 
 import datetime as dt
 import uuid
@@ -30,7 +33,7 @@ from pydantic import (
 from app.schemas._text import visible_characters_only
 from app.schemas.listing import ListingType, _lf_newlines
 from app.schemas.match import MatchOut
-from app.schemas.profile import ContractMonths, Household
+from app.schemas.profile import ContractMonths, Household, Lifestyle, SeekerGender
 
 ApplicationStatus = Literal["submitted", "shortlisted", "declined", "withdrawn"]
 # What an owner sees and may set: a withdrawn application is invisible to the owner (0004c).
@@ -99,11 +102,22 @@ class ApplicantProfileOut(BaseModel):
     parking_needed: int
 
 
+class ApplicantRoomOut(BaseModel):
+    """The applicant's room section, as the owner of a room they applied to sees it (0007c). Fields
+    listed explicitly: no `birth_year` (only the `age` this year, current UTC year - birth year,
+    or None without one) and no `flatmate_gender`. `lifestyle` holds only the answered keys."""
+
+    gender: SeekerGender
+    age: int | None
+    lifestyle: Lifestyle
+
+
 class ApplicantOut(BaseModel):
     """One applicant to the caller's listing, as the owner sees it (0004c). Fields listed
     explicitly (NF2): the seeker is known only by `applicant_name` (their `display_name`). `match`
     and `profile` (0006c) are both null for an applicant without a housing profile (before
-    Slice 6)."""
+    Slice 6). `room` (0007c) is null unless the seeker applied to a room (`listing_type_at_apply`,
+    whatever the listing is now) and has a room section now."""
 
     id: uuid.UUID
     status: ApplicantStatus
@@ -113,6 +127,7 @@ class ApplicantOut(BaseModel):
     updated_at: dt.datetime
     match: MatchOut | None
     profile: ApplicantProfileOut | None
+    room: ApplicantRoomOut | None
 
 
 class ApplicantStatusIn(BaseModel):

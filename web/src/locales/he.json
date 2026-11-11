@@ -412,6 +412,16 @@
     "summary": "{{household}} · כניסה {{date}}",
     "flexible": "(גמיש)",
     "why": "למה ההתאמה?",
+    "more": "עוד פרטים",
+    "room": {
+      "line": "{{gender}} · גיל {{age}}",
+      "summary": "{{same}} מתוך {{shared}} תשובות זהות לדירה",
+      "theirs": "תשובה שלהם: {{answer}}",
+      "flat": "בדירה: {{answer}}",
+      "differs": "שונה מהדירה",
+      "noAnswers": "לא מילאו את השאלון",
+      "noFlatAnswers": "שאלון הדירה עוד לא מולא. אפשר להוסיף אותו בעריכת המודעה"
+    },
     "profile": {
       "household": "משק בית",
       "moveIn": "תאריך כניסה",

@@ -6,7 +6,7 @@ import type { ApplicantOut, ApplicantProfileOut } from '../api';
 
 let n = 0;
 /** A submitted applicant as `GET /listings/{id}/applications` returns it, unless overridden. No
- * match and no profile (an applicant from before Slice 6) unless given. */
+ * match, no profile (an applicant from before Slice 6) and no room section (0007c) unless given. */
 export function applicant(overrides: Partial<ApplicantOut> = {}): ApplicantOut {
   n += 1;
   return {
@@ -18,6 +18,7 @@ export function applicant(overrides: Partial<ApplicantOut> = {}): ApplicantOut {
     updated_at: '2026-11-10T10:00:00Z',
     match: null,
     profile: null,
+    room: null,
     ...overrides,
   };
 }
