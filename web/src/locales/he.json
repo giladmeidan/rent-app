@@ -265,5 +265,41 @@
       "rateLimited": "הגשת הרבה מועמדויות בזמן קצר. אפשר לנסות שוב מאוחר יותר",
       "unavailable": "המודעה כבר לא מקבלת מועמדויות"
     }
+  },
+  "applicants": {
+    "title": "מועמדויות",
+    "stats": {
+      "total": "מועמדויות",
+      "shortlisted": "ברשימה הקצרה",
+      "new": "חדשות"
+    },
+    "filter": {
+      "label": "סינון מועמדויות",
+      "all": "הכל ({{count}})",
+      "new": "חדשות ({{count}})",
+      "shortlisted": "רשימה קצרה ({{count}})",
+      "declined": "נדחו ({{count}})"
+    },
+    "status": {
+      "submitted": "חדש",
+      "shortlisted": "ברשימה הקצרה",
+      "declined": "נדחה"
+    },
+    "actions": {
+      "shortlist": "לרשימה הקצרה",
+      "unshortlist": "הסרה מהרשימה",
+      "decline": "דחייה"
+    },
+    "declineConfirm": "לדחות את המועמדות של {{name}}? אי אפשר לבטל דחייה.",
+    "appliedAt": "הגיש/ה ב־{{date}}",
+    "empty": "עוד אין מועמדויות למודעה הזו",
+    "emptyFilter": "אין מועמדויות בסינון הזה",
+    "notFound": "המודעה לא נמצאה",
+    "errors": {
+      "gone": "המועמדות הזו בוטלה על ידי המועמד/ת"
+    },
+    "statusChanged": "{{name}}: {{status}}",
+    "link": "מועמדויות ({{count}})",
+    "newBadge": "{{count}} חדשות"
   }
 }

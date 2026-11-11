@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router';
 
+import { ApplicantsPage } from '../features/applicants/ApplicantsPage';
 import { MyApplicationsPage } from '../features/applications/MyApplicationsPage';
 import { AreasList } from '../features/areas/AreasList';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -27,6 +28,7 @@ export function AppRoutes() {
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings" element={<MyListingsPage />} />
           <Route path="me/listings/:id/edit" element={<EditListingPage />} />
+          <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
         </Route>
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />
