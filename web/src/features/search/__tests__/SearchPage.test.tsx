@@ -4,7 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
-import { currentPath, deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
+import {
+  currentPath,
+  deferred,
+  json,
+  mockApi,
+  noa,
+  renderRoutes,
+} from '../../auth/__tests__/harness';
+import { owner } from '../../listings/__tests__/fixtures';
+import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
 
@@ -13,6 +22,10 @@ afterEach(() => {
 });
 
 const SEARCH = 'GET /listings';
+const ME = 'GET /me';
+const PROFILE = 'GET /me/profile';
+const unauthenticated = () => json({ detail: 'unauthenticated' }, 401);
+const noProfile = () => json({ detail: 'seeker_profile_not_found' }, 404);
 
 /** The `i`th `GET /listings` request. */
 const sent = (api: ReturnType<typeof mockApi>, i: number) => at(api.calls(SEARCH), i).request;
@@ -57,7 +70,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 describe('SearchPage', () => {
   it('ac2_url_is_the_filter_state', async () => {
     // Valid filters: sent as they are, counted (sort is not a filter), shown in the form.
-    let api = mockApi({ [SEARCH]: [json(page([]))] });
+    let api = mockApi({ [SEARCH]: [json(page([], 0, 'price_asc'))] });
     let view = render('/search?price_max=8000&rooms_min=3&pets=true&sort=price_asc');
     expect(await screen.findByText(he.search.empty)).toBeVisible();
     await settle();
@@ -95,7 +108,7 @@ describe('SearchPage', () => {
     // Invalid values: dropped, so only paging is sent and nothing counts.
     api = mockApi({ [SEARCH]: [json(page([]))] });
     view = render(
-      '/search?price_max=abc&rooms_min=2.3&pets=maybe&sort=match&available_by=2027-02-30&colour=red',
+      '/search?price_max=abc&rooms_min=2.3&pets=maybe&sort=foo&available_by=2027-02-30&colour=red',
     );
     expect(await screen.findByText(he.search.empty)).toBeVisible();
     await settle();
@@ -360,7 +373,8 @@ describe('SearchPage', () => {
   });
 
   it('ac6_sort_applies_at_once', async () => {
-    const api = mockApi({ [SEARCH]: [json(page([]))] });
+    // The API answers with the order it applied (0006b).
+    const api = mockApi({ [SEARCH]: [json(page([])), json(page([], 0, 'price_desc'))] });
     render('/search?pets=true');
     await screen.findByText(he.search.empty);
     const select = screen.getByLabelText(he.search.sort.label);
@@ -378,5 +392,210 @@ describe('SearchPage', () => {
       expected({ pets: 'true', sort: 'price_desc', limit: '20', offset: '0' }),
     );
     expect(select).toHaveValue('price_desc');
+    await settle();
+    expect(select).toHaveValue('price_desc');
+  });
+
+  it('ac3_cards_show_match', async () => {
+    // The seeker (`profile()`: budget 7500, move-in in 30 days) and two scored cards.
+    const fits = publicListing({
+      street: 'מתאימה',
+      price_ils: 7200,
+      available_from: inDays(30),
+      match: { score: 100, agrees: ['budget', 'move_in', 'area'], differs: null },
+    });
+    const late = publicListing({
+      street: 'מאוחרת',
+      price_ils: 7000,
+      available_from: inDays(90),
+      match: { score: 59, agrees: ['budget', 'area', 'household'], differs: 'move_in' },
+    });
+    const answer = json(page([fits, late], 2, 'match'));
+    let api = mockApi({ [ME]: [json(noa)], [PROFILE]: [json(profile())], [SEARCH]: [answer] });
+    let view = render('/search');
+    const chips = (card: HTMLElement) =>
+      within(within(card).getByTestId('match-chips'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
+    // Once the profile has resolved, the move-in chip has its direction.
+    expect(await screen.findByText('כניסה מאוחרת מדי')).toBeVisible();
+    expect(api.calls(PROFILE)).toHaveLength(1);
+    expect(liveRegion()?.textContent).toBe('2 דירות · ממוינות לפי התאמה');
+    let [first, second] = screen.getAllByRole('article');
+    if (first === undefined || second === undefined) throw new Error('two cards expected');
+    expect(within(first).getByText('התאמה 100%')).toBeVisible();
+    expect(chips(first)).toEqual(['בתקציב']);
+    expect(within(second).getByText('התאמה 59%')).toBeVisible();
+    expect(chips(second)).toEqual(['בתקציב', 'כניסה מאוחרת מדי']);
+    // The differing chip is amber, the agreeing one the accent tint.
+    expect(within(second).getByText('כניסה מאוחרת מדי')).toHaveClass('bg-warn', 'text-warn-text');
+    expect(within(second).getByText('בתקציב')).toHaveClass('bg-accent-tint');
+    // The listing's own chips are a separate list.
+    expect(within(first).getByTestId('listing-chips')).not.toHaveTextContent('בתקציב');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The profile cannot be read: the badges and the agreeing chip stay, no move-in chip.
+    api = mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [json({ detail: 'boom' }, 500)],
+      [SEARCH]: [json(page([fits, late], 2, 'match'))],
+    });
+    view = render('/search');
+    expect(await screen.findByText('התאמה 59%')).toBeVisible();
+    await vi.waitFor(() => {
+      expect(api.calls(PROFILE)).toHaveLength(1);
+    });
+    await settle();
+    [first, second] = screen.getAllByRole('article');
+    if (first === undefined || second === undefined) throw new Error('two cards expected');
+    expect(within(first).getByText('התאמה 100%')).toBeVisible();
+    expect(chips(first)).toEqual(['בתקציב']);
+    expect(chips(second)).toEqual(['בתקציב']);
+    expect(screen.queryByText('כניסה מאוחרת מדי')).toBeNull();
+    expect(screen.queryByText('כניסה מוקדמת מדי')).toBeNull();
+  });
+
+  it('ac4_sort_select_and_url', async () => {
+    const select = () => screen.getByLabelText(he.search.sort.label);
+    const options = () =>
+      within(select())
+        .getAllByRole('option')
+        .map((o) => o.textContent);
+    const all = [
+      he.search.sort.match,
+      he.search.sort.newest,
+      he.search.sort.price_asc,
+      he.search.sort.price_desc,
+    ];
+    const withoutMatch = all.slice(1);
+
+    // A seeker with a profile, no sort in the URL: "by match" is first and selected, and the
+    // request leaves the order to the API.
+    let api = mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [json(profile())],
+      [SEARCH]: [json(page([], 0, 'match')), json(page([], 0, 'newest'))],
+    });
+    let view = render('/search');
+    await screen.findByText(he.search.empty);
+    await vi.waitFor(() => {
+      expect(options()).toEqual(all);
+    });
+    expect(select()).toHaveValue('match');
+    expect(query(sent(api, 0))).toEqual(expected({ limit: '20', offset: '0' }));
+    // Choosing newest: in the URL and the request.
+    fireEvent.change(select(), { target: { value: 'newest' } });
+    expect(currentPath()).toBe('/search?sort=newest');
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    expect(query(sent(api, 1))).toEqual(expected({ sort: 'newest', limit: '20', offset: '0' }));
+    await settle();
+    expect(select()).toHaveValue('newest');
+    // Still offered: the seeker has a profile.
+    expect(options()).toEqual(all);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A seeker without a profile: no match option, newest.
+    api = mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [noProfile()],
+      [SEARCH]: [json(page([], 0, 'newest'))],
+    });
+    view = render('/search');
+    await screen.findByText(he.search.empty);
+    await vi.waitFor(() => {
+      expect(api.calls(PROFILE)).toHaveLength(1);
+    });
+    await settle();
+    expect(options()).toEqual(withoutMatch);
+    expect(select()).toHaveValue('newest');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The profile still loading, or failed, while the API answered in match order: the answer
+    // decides, so the select shows match.
+    const pendingProfile = deferred();
+    for (const reply of [pendingProfile.promise, json({ detail: 'boom' }, 500)]) {
+      api = mockApi({
+        [ME]: [json(noa)],
+        [PROFILE]: [reply],
+        [SEARCH]: [json(page([publicListing()], 1, 'match'))],
+      });
+      view = render('/search');
+      await screen.findByText(he.search.countOne);
+      await vi.waitFor(() => {
+        expect(api.calls(PROFILE)).toHaveLength(1);
+      });
+      await settle();
+      expect(select()).toHaveValue('match');
+      expect(options()).toEqual(all);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // A visitor at `?sort=match`: the API answers newest, and so do the select and the count line.
+    api = mockApi({
+      [ME]: [unauthenticated()],
+      [SEARCH]: [json(page([publicListing()], 1, 'newest'))],
+    });
+    render('/search?sort=match');
+    await screen.findByText(he.search.countOne);
+    expect(query(sent(api, 0))).toEqual(expected({ sort: 'match', limit: '20', offset: '0' }));
+    expect(select()).toHaveValue('newest');
+    expect(options()).toEqual(withoutMatch);
+    expect(liveRegion()?.textContent).toBe(he.search.countOne);
+    expect(liveRegion()).not.toHaveTextContent('ממוינות לפי התאמה');
+  });
+
+  it('ac7_profile_nudge', async () => {
+    // A seeker without a profile: the nudge, linking back to this exact search.
+    let api = mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [noProfile()],
+      [SEARCH]: [json(page([publicListing()]))],
+    });
+    let view = render('/search?price_max=8000&pets=true');
+    expect(await screen.findByText(he.match.nudge)).toBeVisible();
+    const link = screen.getByRole('link', { name: he.match.fillProfile });
+    expect(link).toHaveAttribute(
+      'href',
+      `/me/profile?next=${encodeURIComponent('/search?price_max=8000&pets=true')}`,
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A seeker with a profile: no nudge.
+    api = mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [json(profile())],
+      [SEARCH]: [json(page([publicListing()]))],
+    });
+    view = render('/search');
+    await screen.findByText(he.search.countOne);
+    await vi.waitFor(() => {
+      expect(api.calls(PROFILE)).toHaveLength(1);
+    });
+    await settle();
+    expect(screen.queryByText(he.match.nudge)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A visitor and an owner: no nudge, and the profile is never requested.
+    for (const me of [unauthenticated(), json(owner)]) {
+      api = mockApi({ [ME]: [me], [PROFILE]: [noProfile()], [SEARCH]: [json(page([]))] });
+      view = render('/search');
+      await screen.findByText(he.search.empty);
+      await vi.waitFor(() => {
+        expect(api.calls(ME)).toHaveLength(1);
+      });
+      await settle();
+      expect(screen.queryByText(he.match.nudge)).toBeNull();
+      expect(api.calls(PROFILE)).toHaveLength(0);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 });

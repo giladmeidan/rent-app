@@ -10,8 +10,16 @@ import {
   resetFakeMap,
 } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
-import { currentPath, deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
+import {
+  currentPath,
+  deferred,
+  json,
+  mockApi,
+  noa,
+  renderRoutes,
+} from '../../auth/__tests__/harness';
 import { formatIls, formatRooms } from '../../listings/format';
+import { inDays, profile } from '../../profile/__tests__/fixtures';
 import type { ListingPublic } from '../api';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
@@ -317,5 +325,56 @@ describe('SearchMap', () => {
     await screen.findByRole('button', { name: pinLabel(c) });
     expect(screen.queryByRole('article')).toBeNull();
     expect(lastProps().selectedId).toBeUndefined();
+  });
+
+  it('ac6_pins_show_match', async () => {
+    const scored = located({
+      price_ils: 7200,
+      available_from: inDays(90),
+      match: { score: 87, agrees: ['budget', 'area', 'household'], differs: 'move_in' },
+    });
+    const unscored = located({ price_ils: 5000, match: null });
+    const api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/profile': [json(profile())],
+      [SEARCH]: [json(page([scored, unscored], 2, 'match'))],
+    });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(2);
+    });
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/profile')).toHaveLength(1);
+    });
+    await settle();
+
+    // The scored pin: price and score; its name ends with the score.
+    const [first, second] = pins();
+    expect(first?.text).toBe('7,200 ₪ · 87%');
+    expect(first?.label).toBe(`${pinLabel(scored)}, התאמה 87%`);
+    expect(first?.label.endsWith(', התאמה 87%')).toBe(true);
+    // `match: null` keeps today's pin.
+    expect(second?.text).toBe(`${formatIls(5000)} ${he.listings.units.ils}`);
+    expect(second?.label).toBe(pinLabel(unscored));
+    // The map's count line never says how it is sorted.
+    expect(liveRegion()?.textContent).toBe('2 דירות');
+    expect(liveRegion()).not.toHaveTextContent('ממוינות לפי התאמה');
+
+    // The selected pin's card has the badge and the chips.
+    fireEvent.click(screen.getByRole('button', { name: `${pinLabel(scored)}, התאמה 87%` }));
+    const card = screen.getByRole('article');
+    expect(within(card).getByText('התאמה 87%')).toBeVisible();
+    expect(
+      within(within(card).getByTestId('match-chips'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['בתקציב', 'כניסה מאוחרת מדי']);
+
+    // The unscored one's card has neither.
+    fireEvent.click(screen.getByRole('button', { name: pinLabel(unscored) }));
+    const plain = screen.getByRole('article');
+    expect(within(plain).queryByText(/התאמה/)).toBeNull();
+    expect(within(plain).queryByTestId('match-chips')).toBeNull();
   });
 });

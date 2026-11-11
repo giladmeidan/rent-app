@@ -16,6 +16,7 @@ export function useSaveProfile() {
     mutationFn: (body: SeekerProfileIn) => putProfile(body),
     onSuccess: (saved) => {
       queryClient.setQueryData<SeekerProfileOut | null>(PROFILE_KEY, saved);
+      for (const queryKey of [['search'], ['search-map']]) queryClient.resetQueries({ queryKey });
     },
     onError: (error) => {
       if (hasStatus(error, 401)) clearSession(queryClient);

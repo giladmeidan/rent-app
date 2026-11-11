@@ -1,7 +1,7 @@
 ---
 id: 0006f
 title: A seeker with a profile sees "התאמה 87%" on search cards and map pins, results sorted by match, and a "ההתאמה שלך" card on the listing page saying what fits and what does not
-status: in-progress
+status: in-review
 depends_on: [0006b, 0006d]   # 0006b: match on GET /listings(/{id}) and sort=match; 0006d: useProfile / PROFILE_KEY, the profile page the nudge links to, and the e2e flow AC10 extends
 reviewers: [code, qa, ux]    # ux: new badge, card and nudge on two existing screens vs the artboards; qa: sort / URL rules, cache reset on logout
 estimate: 1 coder run        # at the top of the range; coder on Opus/high (copy logic across eight criteria, a cache-privacy fix)
@@ -333,3 +333,15 @@ Run the coder on Opus/high: copy logic across eight criteria and a cache-privacy
              Top of one coder run - mitigation: Opus/high coder; split listing-page half to 0006h if it overruns.
     Reviewers: code, qa, ux   Estimated: 1 coder run (Opus/high), 1 review round
     Links: specs/0006f-match-web.md - PRODUCT.md "Matching", "Search" - design/screens-v1/Search.dc.html, SearchDesktop.dc.html, Listing.dc.html
+
+    Spec 0006f - Match web: badges, sort by match, pins, the listing-page match card   PR OPEN (not merged)
+    Shipped: a seeker with a profile sees "התאמה N%" + up to two chips on search cards, "7,200 ₪ · 87%" pins,
+             match as the default sort with "· ממוינות לפי התאמה", and a "ההתאמה שלך" card on the listing page;
+             a seeker without a profile gets a nudge to /me/profile; logout/login reset every scored cache.
+    Demo: make dev -> sign up as seeker, fill /me/profile -> /search shows badges sorted by match -> open a
+          listing: badge by the price + the card -> log out: scores gone.
+    Tests: +9 unit (AC1-AC9, AC11; AC2 covers 43 copy cases), +0 integration, +1 e2e step (AC10, no new signup)
+    Findings: 0 blockers, 0 majors; 4 minors fixed (chip key, AC5 test name, skeleton role=status,
+              useSaveProfile resets search caches), 4 minors to FOLLOWUPS, 8 nits dropped
+    Changed in PRODUCT.md: nothing
+    Next: 0006e (owner preferences web) on port 5173, then 0006g (reuses features/match).

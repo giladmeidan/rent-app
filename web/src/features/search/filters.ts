@@ -2,9 +2,10 @@
 // value only when `0003a`'s `GET /listings` would accept it, so no URL can produce a 422, and an
 // unset filter is absent (an empty value such as `pets=` is a 422 there, not "no filter").
 
-export const SORTS = ['newest', 'price_asc', 'price_desc'] as const;
+// `match` (spec 0006b) orders by the caller's match score. With no `sort` the API decides: `match`
+// for a seeker with a profile, else `newest`; an explicit one, `newest` included, stays in the URL.
+export const SORTS = ['match', 'newest', 'price_asc', 'price_desc'] as const;
 export type Sort = (typeof SORTS)[number];
-export const DEFAULT_SORT: Sort = 'newest';
 
 export const PRICE_MAX = 100_000;
 export const ROOMS_MIN = 1;
@@ -100,13 +101,13 @@ export function parseFilters(params: URLSearchParams): Filters {
   return filters;
 }
 
-/** The canonical URL for `filters`: fixed key order, no empty values, no default sort. */
+/** The canonical URL for `filters`: fixed key order, no empty values. An explicit sort is kept:
+ * `newest` is the only way to ask for that order when the API's default would be `match`. */
 export function toSearchParams(filters: Filters): URLSearchParams {
   const params = new URLSearchParams();
   for (const key of KEYS) {
     const value = filters[key];
     if (value === undefined) continue;
-    if (key === 'sort' && value === DEFAULT_SORT) continue;
     params.set(key, String(value));
   }
   return params;

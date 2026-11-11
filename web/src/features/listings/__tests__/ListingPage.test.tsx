@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../app/i18n';
 import { failMap, lastProps, resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
-import { deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
+import { deferred, json, mockApi, noa, renderRoutes } from '../../auth/__tests__/harness';
+import { formatDate } from '../format';
+import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import { ListingPage } from '../ListingPage';
 
@@ -221,5 +223,115 @@ describe('ListingPage', () => {
       ),
     ).toBeVisible();
     expect(screen.getByText(he.listing.locationHint)).toBeVisible();
+  });
+
+  it('ac8_match_card', async () => {
+    // The seeker: budget 7500, two parking spots wanted, move-in in 30 days; the listing has one.
+    const scored = listingDetail({
+      price_ils: 7200,
+      parking_spots: 1,
+      available_from: inDays(30),
+      min_contract_months: 12,
+      match: { score: 87, agrees: ['budget', 'move_in', 'contract'], differs: 'parking' },
+    });
+    const seeker = (l: typeof scored) => ({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [json(profile({ budget_max_ils: 7500, parking_needed: 2 }))],
+      [`GET /listings/${l.id}`]: [json(l)],
+    });
+    mockApi(seeker(scored));
+    let view = render(scored.id);
+    const section = await screen.findByRole('region', { name: he.match.card.title });
+    expect(within(section).getByText('87%')).toBeVisible();
+    expect(within(section).getByText('התאמה גבוהה')).toBeVisible();
+    expect(within(section).getByText(he.match.card.basis)).toBeVisible();
+    const items = await within(section).findAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual([
+      'התקציב שלך (עד 7,500 ₪) מתאים למחיר',
+      `תאריך הכניסה שלך (${formatDate(inDays(30))}) תואם`,
+      'משך החוזה שביקשת מתאים',
+      'ביקשת 2 חניות — בדירה יש מקום אחד',
+    ]);
+    // The ✓ / ! icons are decorative.
+    for (const li of items) {
+      expect(li.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(within(section).getByRole('link', { name: he.match.card.edit })).toHaveAttribute(
+      'href',
+      `/me/profile?next=%2Flistings%2F${scored.id}`,
+    );
+    // The badge sits by the price.
+    const badge = screen.getByText('התאמה 87%');
+    expect(badge.parentElement).toHaveTextContent(/7,200[\s‎‏]*₪/);
+    expect(section).not.toContainElement(badge);
+    // The card comes directly before the apply section, after the location.
+    const apply = screen.getByRole('region', { name: he.applications.heading });
+    const location = screen
+      .getByRole('heading', { level: 2, name: he.listing.location })
+      .closest('section');
+    expect(section.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.nextElementSibling).toBe(apply);
+    expect(location?.nextElementSibling).toBe(section);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // `match: null`: no badge, no card.
+    const unscored = listingDetail({ match: null });
+    mockApi(seeker(unscored));
+    view = render(unscored.id);
+    expect(await screen.findByRole('region', { name: he.applications.heading })).toBeVisible();
+    expect(screen.queryByText(/^התאמה/)).toBeNull();
+    expect(screen.queryByRole('region', { name: he.match.card.title })).toBeNull();
+  });
+
+  it('ac9_match_card_without_profile_numbers', async () => {
+    const scored = listingDetail({
+      match: { score: 64, agrees: ['budget', 'area'], differs: 'pets' },
+    });
+    const section = () => screen.getByRole('region', { name: he.match.card.title });
+
+    // The profile request in flight: score and label, skeleton lines instead of the reasons.
+    const pending = deferred();
+    let api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [pending.promise],
+      [`GET /listings/${scored.id}`]: [json(scored)],
+    });
+    let view = render(scored.id);
+    await screen.findByRole('region', { name: he.match.card.title });
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/profile')).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(within(section()).getAllByTestId('skeleton').length).toBeGreaterThan(0);
+    });
+    expect(within(section()).getByText('64%')).toBeVisible();
+    expect(within(section()).getByText('התאמה טובה')).toBeVisible();
+    expect(screen.getByText('התאמה 64%')).toBeVisible();
+    expect(within(section()).queryAllByRole('listitem')).toHaveLength(0);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The profile request failed: score and label only, no reasons and no skeleton.
+    api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [json({ detail: 'boom' }, 500)],
+      [`GET /listings/${scored.id}`]: [json(scored)],
+    });
+    view = render(scored.id);
+    await screen.findByRole('region', { name: he.match.card.title });
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/profile')).toHaveLength(1);
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(within(section()).getByText('64%')).toBeVisible();
+    expect(within(section()).getByText('התאמה טובה')).toBeVisible();
+    expect(within(section()).queryAllByRole('listitem')).toHaveLength(0);
+    expect(within(section()).queryAllByTestId('skeleton')).toHaveLength(0);
+    expect(within(section()).getByRole('link', { name: he.match.card.edit })).toBeVisible();
+    view.unmount();
   });
 });
