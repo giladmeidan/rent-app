@@ -66,8 +66,9 @@ message of 1–500 characters (one application per listing; again only after wit
 parking 0–2) and `GET /me/profile` reads it back; without one, applying is a 409 `seeker_profile_required`:
 
 ```sh
+MOVE_IN=$(python3 -c 'import datetime as d; print(d.date.today() + d.timedelta(30))')
 curl -b seeker.txt -X PUT localhost:8000/me/profile -H 'Content-Type: application/json' -d '{"budget_max_ils":7500,
-  "move_in_date":"2026-12-15","move_in_flexible":false,"area_ids":["'"$AREA"'"],"household":"couple",
+  "move_in_date":"'"$MOVE_IN"'","move_in_flexible":false,"area_ids":["'"$AREA"'"],"household":"couple",
   "has_pets":false,"smoker":false,"contract_months":24,"parking_needed":1}'
 curl -b seeker.txt -X POST localhost:8000/listings/$LISTING_ID/applications -H 'Content-Type: application/json' \
   -d '{"message":"שלום, אנחנו זוג שקט ומחפשים דירה לטווח ארוך"}'
