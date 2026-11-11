@@ -1,5 +1,7 @@
 import { cleanup as unmount, fireEvent, screen, within } from '@testing-library/react';
-import { Route, Routes } from 'react-router';
+import type { QueryClient } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { Route, Routes, useNavigationType } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AreaOut } from '../../../api/client';
@@ -15,7 +17,10 @@ import {
 } from '../../auth/__tests__/harness';
 import { RequireSeeker } from '../../auth/RequireSeeker';
 import { gushDan, seeker } from '../../listings/__tests__/fixtures';
+import { LIFESTYLE_KEYS } from '../../lifestyle/keys';
 import { ProfilePage } from '../ProfilePage';
+import { PROFILE_KEY } from '../useProfile';
+import { birthYearRange } from '../validate';
 import { inDays, profile } from './fixtures';
 
 afterEach(() => {
@@ -47,8 +52,13 @@ const routes = (
   </Routes>
 );
 
-/** A seeker on `path` with these replies (defaults: no profile, two areas, a 200 save). */
-function renderPage(replies: Record<string, Reply[]> = {}, path = '/me/profile') {
+/** A seeker on `path` with these replies (defaults: no profile, two areas, a 200 save); `options`
+ * swaps in a query client or a routes tree. */
+function renderPage(
+  replies: Record<string, Reply[]> = {},
+  path = '/me/profile',
+  options: { client?: QueryClient; tree?: ReactNode } = {},
+) {
   const api = mockApi({
     'GET /me': [json(seeker)],
     [PROFILE]: [notFound()],
@@ -56,7 +66,7 @@ function renderPage(replies: Record<string, Reply[]> = {}, path = '/me/profile')
     [PUT]: [savedReply],
     ...replies,
   });
-  renderRoutes(path, routes, testQueryClient());
+  renderRoutes(path, options.tree ?? routes, options.client ?? testQueryClient());
   return api;
 }
 
@@ -466,6 +476,299 @@ describe('ProfilePage', () => {
       await expectSaved();
       expect(currentPath()).toBe(path);
       expect(api.calls(PUT)).toHaveLength(1);
+      cleanup();
+    }
+  });
+  // The room section (0007d).
+  const room = he.profile.room;
+  const roomSwitch = () => toggle(room.switch);
+  const birthYear = () => screen.getByLabelText<HTMLInputElement>(room.fields.birthYear);
+  const questionnaire = () => screen.getByRole('region', { name: he.lifestyle.title.seeker });
+  const answer = (key: (typeof LIFESTYLE_KEYS)[number], n: '1' | '2' | '3') =>
+    radio(he.lifestyle[key].question.seeker, he.lifestyle[key].answer[n]);
+  const checkedAnswers = () =>
+    LIFESTYLE_KEYS.flatMap((key) =>
+      within(group(he.lifestyle[key].question.seeker))
+        .getAllByRole<HTMLInputElement>('radio')
+        .filter((r) => r.checked)
+        .map((r) => `${key}=${r.value}`),
+    );
+
+  /** Nothing of the revealed room content is in the DOM. */
+  function expectRoomClosed() {
+    expect(screen.queryByText(room.privacy)).toBeNull();
+    expect(screen.queryByRole('group', { name: room.fields.gender })).toBeNull();
+    expect(screen.queryByLabelText(room.fields.birthYear)).toBeNull();
+    expect(screen.queryByRole('group', { name: room.fields.flatmates })).toBeNull();
+    expect(screen.queryByRole('region', { name: he.lifestyle.title.seeker })).toBeNull();
+    expect(screen.queryByText(he.lifestyle.nudge)).toBeNull();
+  }
+
+  /** Each element comes after the previous one in document order. */
+  function expectInOrder(elements: HTMLElement[]) {
+    for (let i = 1; i < elements.length; i++) {
+      const before = elements[i - 1] as HTMLElement;
+      const after = elements[i] as HTMLElement;
+      expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  }
+
+  it('ac4_room_switch_reveals_and_off_omits', async () => {
+    const api = renderPage();
+    await fillValid();
+    expect(screen.getByRole('heading', { level: 2, name: room.title })).toBeVisible();
+    expect(screen.getByText(room.hint)).toBeVisible();
+    expect(screen.getByRole('region', { name: room.title })).toContainElement(roomSwitch());
+    expect(roomSwitch()).not.toBeChecked();
+    expectRoomClosed();
+
+    fireEvent.click(roomSwitch());
+    expect(roomSwitch()).toBeChecked();
+    const privacy = screen.getByText(room.privacy);
+    const gender = group(room.fields.gender);
+    const flatmates = group(room.fields.flatmates);
+    expectInOrder([roomSwitch(), privacy, gender, birthYear(), flatmates, questionnaire()]);
+    expect(
+      within(gender)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('name')),
+    ).toEqual(['gender', 'gender', 'gender']);
+    for (const r of within(gender).getAllByRole('radio')) expect(r).not.toBeChecked();
+    expect(screen.getByText(room.genderNote)).toBeVisible();
+    expect(birthYear()).toHaveValue('');
+    expect(birthYear()).toHaveAttribute('inputmode', 'numeric');
+    expect(birthYear()).toHaveAttribute('maxlength', '4');
+    expect(birthYear()).toHaveAccessibleDescription(room.birthYearHint);
+    expect(
+      within(flatmates)
+        .getAllByRole('radio')
+        .map((r) => (r as HTMLInputElement).labels?.[0]?.textContent),
+    ).toEqual([
+      he.rooms.genderPreference.women,
+      he.rooms.genderPreference.men,
+      he.rooms.genderPreference.any,
+    ]);
+    expect(radio(room.fields.flatmates, he.rooms.genderPreference.any)).toBeChecked();
+    expect(checkedAnswers()).toEqual([]);
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // Something typed, then off again: the save sends the housing profile only.
+    fireEvent.click(radio(room.fields.gender, room.gender.woman));
+    fireEvent.click(answer('night', '1'));
+    fireEvent.click(roomSwitch());
+    expect(roomSwitch()).not.toBeChecked();
+    expectRoomClosed();
+    save();
+    await expectSaved();
+    expect(api.calls(PUT).map((c) => c.body)).toStrictEqual([AC2_BODY]);
+  });
+
+  it('ac5_room_gender_required_and_body', async () => {
+    const api = renderPage();
+    await fillValid();
+    fireEvent.click(roomSwitch());
+    save();
+    const woman = () => radio(room.fields.gender, room.gender.woman);
+    expectError(woman(), required);
+    for (const r of within(group(room.fields.gender)).getAllByRole('radio')) {
+      expect(r).toHaveAttribute('aria-invalid', 'true');
+    }
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(api.calls(PUT)).toHaveLength(0);
+
+    // Off with the error showing and on again: no stale alert.
+    fireEvent.click(roomSwitch());
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(roomSwitch());
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(woman()).not.toHaveAttribute('aria-invalid');
+
+    fireEvent.click(woman());
+    fireEvent.click(radio(room.fields.flatmates, he.rooms.genderPreference.men));
+    fireEvent.click(answer('cleanliness', '3'));
+    fireEvent.click(answer('kosher', '1'));
+    save();
+    await expectSaved();
+    expect(api.calls(PUT).map((c) => c.body)).toStrictEqual([
+      {
+        ...AC2_BODY,
+        gender: 'woman',
+        flatmate_gender: 'men',
+        lifestyle: { cleanliness: 3, kosher: 1 },
+      },
+    ]);
+  });
+
+  it('ac6_birth_year_rules', async () => {
+    const { min, max } = birthYearRange();
+    const message = i18n.t('listings.errors.range', { min, max });
+    const year = new Date().getUTCFullYear();
+    const api = renderPage({ [PROFILE]: [json(profile({ gender: 'woman' }))] });
+    await form();
+    expect(roomSwitch()).toBeChecked();
+
+    for (const value of ['abcd', '19x5', String(year - 17), String(year - 100)]) {
+      set(birthYear(), value);
+      expect(birthYear()).toHaveAttribute('aria-invalid', 'false');
+      save();
+      const field = birthYear();
+      expect(field, value).toHaveAttribute('aria-invalid', 'true');
+      expect(field).toHaveFocus();
+      expect(field).toHaveAccessibleDescription(expect.stringContaining(message));
+      expect(field).toHaveAccessibleDescription(expect.stringContaining(room.birthYearHint));
+      const errorId = (field.getAttribute('aria-describedby') ?? '').split(' ')[1] ?? '';
+      expect(document.getElementById(errorId)).toHaveAttribute('role', 'alert');
+      expect(document.getElementById(errorId)).toHaveTextContent(message);
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+    }
+    expect(api.calls(PUT)).toHaveLength(0);
+
+    // The oldest and youngest valid years save as numbers; an empty one is left out.
+    for (const value of [String(min), ` ${String(max)} `, '']) {
+      set(birthYear(), value);
+      save();
+      await expectSaved();
+    }
+    const sent = api.calls(PUT).map((c) => c.body as Record<string, unknown>);
+    expect(sent.map((b) => b.birth_year)).toEqual([min, max, undefined]);
+    expect(sent[2]).not.toHaveProperty('birth_year');
+    expect(sent[2]).toStrictEqual({
+      ...AC2_BODY,
+      gender: 'woman',
+      flatmate_gender: 'any',
+      lifestyle: {},
+    });
+
+    // Room off: a junk year is neither checked nor sent.
+    set(birthYear(), 'abcd');
+    fireEvent.click(roomSwitch());
+    save();
+    await vi.waitFor(() => {
+      expect(api.calls(PUT)).toHaveLength(4);
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.calls(PUT)[3]?.body).toStrictEqual(AC2_BODY);
+  });
+
+  it('ac7_prefilled_and_off_clears', async () => {
+    const stored = profile({
+      gender: 'man',
+      birth_year: 1995,
+      flatmate_gender: 'women',
+      lifestyle: { night: 3, shabbat: 2 },
+    });
+    const response = profile({ updated_at: '2026-11-11T09:00:00Z' });
+    const client = testQueryClient();
+    let api = renderPage({ [PROFILE]: [json(stored)], [PUT]: [json(response)] }, '/me/profile', {
+      client,
+    });
+    await form();
+    expect(roomSwitch()).toBeChecked();
+    expect(radio(room.fields.gender, room.gender.man)).toBeChecked();
+    expect(radio(room.fields.gender, room.gender.woman)).not.toBeChecked();
+    expect(radio(room.fields.flatmates, he.rooms.genderPreference.women)).toBeChecked();
+    expect(radio(room.fields.flatmates, he.rooms.genderPreference.men)).not.toBeChecked();
+    expect(birthYear()).toHaveValue('1995');
+    expect(checkedAnswers()).toEqual(['night=3', 'shabbat=2']);
+
+    // Off and on again before saving: what was typed comes back.
+    set(birthYear(), '1990');
+    fireEvent.click(answer('cleanliness', '2'));
+    fireEvent.click(roomSwitch());
+    expectRoomClosed();
+    fireEvent.click(roomSwitch());
+    expect(birthYear()).toHaveValue('1990');
+    expect(radio(room.fields.gender, room.gender.man)).toBeChecked();
+    expect(radio(room.fields.flatmates, he.rooms.genderPreference.women)).toBeChecked();
+    expect(checkedAnswers()).toEqual(['cleanliness=2', 'night=3', 'shabbat=2']);
+
+    // Off and save: the four keys are left out, so the server clears the section.
+    fireEvent.click(roomSwitch());
+    save();
+    await expectSaved();
+    expect(api.calls(PUT).map((c) => c.body)).toStrictEqual([AC2_BODY]);
+    expect(client.getQueryData(PROFILE_KEY)).toStrictEqual(response);
+    cleanup();
+
+    // The page reopens from the cached answer: the switch off.
+    api = renderPage({ [PROFILE]: [json(response)] }, '/me/profile', { client });
+    await form();
+    expect(roomSwitch()).not.toBeChecked();
+    expectRoomClosed();
+    cleanup();
+
+    // A stored profile with no gender opens with the switch off.
+    renderPage({ [PROFILE]: [json(profile())] });
+    await form();
+    expect(roomSwitch()).not.toBeChecked();
+    expectRoomClosed();
+    expect(api.calls(PUT)).toHaveLength(0);
+  });
+
+  it('ac8_section_room_entry_point', async () => {
+    function Listing() {
+      return <output data-testid="navigation">{useNavigationType()}</output>;
+    }
+    const tree = (
+      <Routes>
+        <Route element={<RequireSeeker />}>
+          <Route path="/me/profile" element={<ProfilePage />} />
+        </Route>
+        <Route path="/listings/:id" element={<Listing />} />
+      </Routes>
+    );
+    const heading = () => screen.getByRole('heading', { level: 2, name: room.title });
+
+    // The gate's link: the switch on for a profile with no gender, the room heading focused, and
+    // back to the listing (replace) after the save.
+    let api = renderPage(
+      { [PROFILE]: [json(profile())] },
+      '/me/profile?section=room&next=%2Flistings%2Fabc',
+      { tree },
+    );
+    await form();
+    expect(roomSwitch()).toBeChecked();
+    expect(screen.getByText(room.privacy)).toBeVisible();
+    await vi.waitFor(() => {
+      expect(heading()).toHaveFocus();
+    });
+    expect(heading()).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(radio(room.fields.gender, room.gender.woman));
+    save();
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/listings/abc');
+    });
+    expect(screen.getByTestId('navigation')).toHaveTextContent('REPLACE');
+    expect(api.calls(PUT).map((c) => (c.body as { gender?: string }).gender)).toEqual(['woman']);
+    cleanup();
+
+    // No `next`, or an unsafe one: the page stays after saving.
+    for (const path of [
+      '/me/profile?section=room',
+      '/me/profile?section=room&next=%2F%2Fevil.example',
+    ]) {
+      api = renderPage({ [PROFILE]: [json(profile())] }, path);
+      await form();
+      expect(roomSwitch()).toBeChecked();
+      await vi.waitFor(() => {
+        expect(heading()).toHaveFocus();
+      });
+      fireEvent.click(radio(room.fields.gender, room.gender.other));
+      save();
+      await expectSaved();
+      expect(currentPath()).toBe(path);
+      expect(api.calls(PUT)).toHaveLength(1);
+      cleanup();
+    }
+
+    // Without `section=room` (or with another value): the switch follows the profile, no focus.
+    for (const path of ['/me/profile', '/me/profile?section=other']) {
+      renderPage({ [PROFILE]: [json(profile())] }, path);
+      await form();
+      expect(roomSwitch()).not.toBeChecked();
+      expectRoomClosed();
+      expect(heading()).not.toHaveFocus();
+      expect(document.activeElement).toBe(document.body);
       cleanup();
     }
   });

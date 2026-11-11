@@ -6,6 +6,10 @@ export type SeekerProfileIn = components['schemas']['SeekerProfileIn'];
 export type SeekerProfileOut = components['schemas']['SeekerProfileOut'];
 export type Household = SeekerProfileOut['household'];
 export type ContractMonths = SeekerProfileOut['contract_months'];
+/** The seeker's own gender (the profile's room section); `null` on the profile means no section. */
+export type Gender = NonNullable<SeekerProfileOut['gender']>;
+/** Who the seeker prefers to live with; also a room listing's "who it is for" (0007e). */
+export type FlatmateGender = SeekerProfileOut['flatmate_gender'];
 
 /** The caller's housing profile, or `null` when there is none yet (404 `seeker_profile_not_found`).
  * Every other failure throws: an `ApiError`, or the `TypeError` of a network failure. */
