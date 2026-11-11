@@ -1,7 +1,14 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
-Every CHECK, FK and index here matches migrations 0003, 0004, 0005 and 0007 exactly (autogenerate
-must see no diff). A listing is **live** while `status = 'active' AND expires_at > now()`.
+Every CHECK, FK and index here matches migrations 0003, 0004, 0005, 0007 and 0009 exactly
+(autogenerate must see no diff). A listing is **live** while `status = 'active' AND expires_at >
+now()`.
+
+Room fields (spec 0007a): `gender_preference` (who the room is for), `flatmates_count` (people
+already living there), `flatmate_ages` (optional: none, some or all of them) and `lifestyle` (the
+flat's questionnaire answers, key -> 1-3). An apartment always holds the defaults
+(`ck_listings_room_fields`); a room migrated before 0009 is a "legacy room" (NULL count) until its
+next edit.
 
 Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
 `approximate_point`), never the geocoder's raw point; the worker fills it while `geocode_status` is
@@ -30,7 +37,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.models import Base
@@ -78,6 +85,27 @@ class Listing(Base):
         CheckConstraint(
             "min_contract_months IS NULL OR min_contract_months IN (6, 12, 24, 36)",
             name="ck_listings_min_contract_months",
+        ),
+        # The room fields (spec 0007a), read by the room fit rule and the match score (0007b).
+        CheckConstraint(
+            "gender_preference IN ('any', 'women', 'men')", name="ck_listings_gender_preference"
+        ),
+        CheckConstraint(
+            "flatmates_count IS NULL OR flatmates_count BETWEEN 1 AND 7",
+            name="ck_listings_flatmates_count",
+        ),
+        # The last clause rejects a NULL element, which `ALL` would let through.
+        CheckConstraint(
+            "cardinality(flatmate_ages) <= coalesce(flatmates_count, 0)"
+            " AND 18 <= ALL (flatmate_ages) AND 99 >= ALL (flatmate_ages)"
+            " AND array_position(flatmate_ages, NULL) IS NULL",
+            name="ck_listings_flatmate_ages",
+        ),
+        CheckConstraint("jsonb_typeof(lifestyle) = 'object'", name="ck_listings_lifestyle"),
+        CheckConstraint(
+            "listing_type = 'room' OR (gender_preference = 'any' AND flatmates_count IS NULL"
+            " AND flatmate_ages = '{}' AND lifestyle = '{}'::jsonb)",
+            name="ck_listings_room_fields",
         ),
         Index("ix_listings_owner_id", "owner_id"),
         Index("ix_listings_area_id", "area_id"),
@@ -127,6 +155,19 @@ class Listing(Base):
         Boolean, nullable=False, server_default=text("true")
     )
     min_contract_months: Mapped[int | None] = mapped_column(SmallInteger)  # NULL = no minimum
+    # Room fields (spec 0007a); an apartment keeps the defaults.
+    gender_preference: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'any'")
+    )
+    # NULL on apartments, and on legacy rooms until their next edit.
+    flatmates_count: Mapped[int | None] = mapped_column(SmallInteger)
+    flatmate_ages: Mapped[list[int]] = mapped_column(
+        ARRAY(SmallInteger), nullable=False, server_default=text("'{}'")
+    )
+    # Only answered keys; the API checks keys and values (`schemas/profile.py` `Lifestyle`).
+    lifestyle: Mapped[dict[str, int]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

@@ -167,6 +167,11 @@ _LISTINGS_CHECKS = {
     "ck_listings_location_status",
     "ck_listings_accepted_households",
     "ck_listings_min_contract_months",
+    "ck_listings_gender_preference",
+    "ck_listings_flatmates_count",
+    "ck_listings_flatmate_ages",
+    "ck_listings_lifestyle",
+    "ck_listings_room_fields",
 }
 
 
@@ -848,5 +853,175 @@ def test_ac9_application_snapshot_backfill_and_downgrade(migration_db_url: str) 
         command.upgrade(cfg, "head")
         with engine.connect() as conn:
             assert set(_application_columns(conn)) >= _SNAPSHOT_COLUMNS
+    finally:
+        engine.dispose()
+
+
+_ROOM_LISTING_COLUMNS = {"gender_preference", "flatmates_count", "flatmate_ages", "lifestyle"}
+_ROOM_PROFILE_COLUMNS = {"gender", "birth_year", "flatmate_gender", "lifestyle"}
+
+
+def _profile_columns(conn: Any) -> set[str]:
+    return set(
+        conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns"
+                " WHERE table_schema = 'public' AND table_name = 'seeker_profiles'"
+            )
+        ).scalars()
+    )
+
+
+def test_ac9_room_inputs_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0007a: 0009 adds the room listing fields and the seeker profile's room section.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0008")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"))
+            }
+            listings = {
+                listing_type: conn.execute(
+                    text(
+                        "INSERT INTO listings (owner_id, area_id, listing_type, city, street,"
+                        " rooms, floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                        " pets_allowed, expires_at)"
+                        " VALUES (:owner, :area, :type, 'city', 'street', 3, 1, 80, 6000,"
+                        " current_date, false, 'none', false, now() + interval '90 days')"
+                        " RETURNING id"
+                    ),
+                    {"owner": users["owner"], "area": area_id, "type": listing_type},
+                ).scalar_one()
+                for listing_type in ("apartment", "room")
+            }
+            conn.execute(
+                text(
+                    "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date, area_ids,"
+                    " household, has_pets, smoker, contract_months)"
+                    " VALUES (:user, 7500, current_date, ARRAY[:area]::uuid[], 'couple', false,"
+                    " false, 24)"
+                ),
+                {"user": users["seeker"], "area": area_id},
+            )
+        seeker_id = users["seeker"]
+
+        command.upgrade(cfg, "0009")
+        with engine.connect() as conn:
+            for listing_id in listings.values():
+                row = conn.execute(
+                    text(
+                        "SELECT gender_preference, flatmates_count, flatmate_ages, lifestyle"
+                        " FROM listings WHERE id = :id"
+                    ),
+                    {"id": listing_id},
+                ).one()
+                assert tuple(row) == ("any", None, [], {})
+            row = conn.execute(
+                text(
+                    "SELECT gender, birth_year, flatmate_gender, lifestyle FROM seeker_profiles"
+                    " WHERE user_id = :id"
+                ),
+                {"id": seeker_id},
+            ).one()
+            assert tuple(row) == (None, None, "any", {})
+            checks = set(
+                conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint"
+                        " WHERE conrelid = 'seeker_profiles'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+        assert checks == {
+            "ck_seeker_profiles_budget",
+            "ck_seeker_profiles_area_ids",
+            "ck_seeker_profiles_household",
+            "ck_seeker_profiles_contract_months",
+            "ck_seeker_profiles_parking_needed",
+            "ck_seeker_profiles_gender",
+            "ck_seeker_profiles_birth_year",
+            "ck_seeker_profiles_flatmate_gender",
+            "ck_seeker_profiles_lifestyle",
+            "ck_seeker_profiles_room_section",
+        }
+
+        refused: list[tuple[str, str, Any, str]] = [
+            ("listings", "gender_preference = 'mixed'", listings["room"], "gender_preference"),
+            ("listings", "flatmates_count = 8", listings["room"], "flatmates_count"),
+            (
+                "listings",
+                "flatmates_count = 2, flatmate_ages = '{17}'",
+                listings["room"],
+                "flatmate_ages",
+            ),
+            (
+                "listings",
+                "flatmates_count = 2, flatmate_ages = '{27,30,31}'",
+                listings["room"],
+                "flatmate_ages",
+            ),
+            (
+                "listings",
+                "flatmates_count = 2, flatmate_ages = '{27,NULL}'",
+                listings["room"],
+                "flatmate_ages",
+            ),
+            ("listings", "lifestyle = '[]'", listings["room"], "lifestyle"),
+            ("listings", "gender_preference = 'women'", listings["apartment"], "room_fields"),
+            ("listings", "flatmates_count = 2", listings["apartment"], "room_fields"),
+            ("listings", """lifestyle = '{"night": 2}'""", listings["apartment"], "room_fields"),
+            ("seeker_profiles", "gender = 'woman', birth_year = 1800", seeker_id, "birth_year"),
+            ("seeker_profiles", "gender = 'female'", seeker_id, "gender"),
+            (
+                "seeker_profiles",
+                "gender = 'woman', flatmate_gender = 'mixed'",
+                seeker_id,
+                "flatmate_gender",
+            ),
+            ("seeker_profiles", "gender = 'woman', lifestyle = '[]'", seeker_id, "lifestyle"),
+            ("seeker_profiles", "birth_year = 1990", seeker_id, "room_section"),
+        ]
+        for table, assignment, row_id, check in refused:
+            key = "id" if table == "listings" else "user_id"
+            with pytest.raises(IntegrityError, match=f"ck_{table}_{check}"), engine.begin() as conn:
+                conn.execute(
+                    text(f"UPDATE {table} SET {assignment} WHERE {key} = :id"), {"id": row_id}
+                )
+
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE listings SET flatmates_count = 2, flatmate_ages = '{27}' WHERE id = :id"
+                ),
+                {"id": listings["room"]},
+            )
+
+        command.downgrade(cfg, "0008")
+        with engine.connect() as conn:
+            assert not _ROOM_LISTING_COLUMNS & _listing_columns(conn)
+            assert not _ROOM_PROFILE_COLUMNS & _profile_columns(conn)
+            assert conn.execute(text("SELECT count(*) FROM listings")).scalar_one() == 2
+            assert conn.execute(text("SELECT count(*) FROM seeker_profiles")).scalar_one() == 1
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert _listing_columns(conn) >= _ROOM_LISTING_COLUMNS
+            assert _profile_columns(conn) >= _ROOM_PROFILE_COLUMNS
     finally:
         engine.dispose()
