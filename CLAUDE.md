@@ -35,8 +35,10 @@ and delegates. It never writes application code itself. Delegation chain:
    spec-verifier, the coder on auth, money, data or migrations, and the security reviewer; Sonnet/medium for
    ux, qa and perf reviews of small specs, review fixes that are mechanical, and docs. When in doubt, the
    stronger one.
-7. **One push per spec (Gilad, 2026-11-10).** Agents commit locally and run `make lint` / `make test` (and
-   `make e2e` where the spec touches the web) there; the review round runs on the local branch. The spec is
+7. **One push per spec (Gilad, 2026-11-10).** Agents commit locally and run `make lint` / `make test` there; the
+   review round runs on the local branch. **No local `make e2e` (Gilad, 2026-11-11)**: the e2e suite runs in CI
+   on the spec's single push (`ready-to-merge` label), so a session writes and type-checks its e2e tests but does
+   not run them locally; an e2e failure in CI is fixed with the one allowed CI-fix push. The spec is
    pushed **once**, when it is finished (build + review fixes), with the PR opened and the `ready-to-merge`
    label added at that push so the full CI runs once. A further push is allowed only to fix a CI failure.
 8. **Light CI on push, full CI before merge.** A push runs only the fast jobs (`api`, `web`: lint, types, unit
