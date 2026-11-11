@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.db import get_sessionmaker
 from app.models import User
 from app.schemas.listing import ListingIn
+from app.schemas.profile import LIFESTYLE_KEYS
 from app.services import listings as listings_service
 from tests.conftest import Outbox, make_listing, signup
 
@@ -752,14 +753,26 @@ _ROOM_CASES: list[tuple[str, Any]] = [
 ]
 
 
+# Rules (1)-(3) of `_room_fields` are model-level, at `["body"]` (0007e relies on it).
+_BODY_LEVEL = {"count-missing", "ages-three-for-two"} | {
+    i for i, _ in _ROOM_CASES if i.startswith("apartment-")
+}
+
+
 @pytest.mark.parametrize("make_body", [m for _, m in _ROOM_CASES], ids=[i for i, _ in _ROOM_CASES])
 def test_ac2_room_fields_validation(
-    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine, make_body: Any
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    make_body: Any,
+    request: pytest.FixtureRequest,
 ) -> None:
     response = owner.post("/listings", json=make_body(gush_dan))
 
     assert response.status_code == 422, response.text
     assert isinstance(response.json()["detail"], list)
+    if request.node.callspec.id in _BODY_LEVEL:
+        assert response.json()["detail"][0]["loc"] == ["body"]
     assert _count(db_engine) == 0
 
 
@@ -900,3 +913,24 @@ def test_ac5_legacy_room_fills_count_on_next_edit(
     switched = _patched(owner, legacy_2, {"listing_type": "apartment"})
     assert switched["listing_type"] == "apartment"
     assert _room_fields(switched) == ROOM_DEFAULTS
+
+
+def _many_unknown_keys() -> dict[str, int]:
+    """20,000 unknown questionnaire keys, one of them a sensitive sentence."""
+    keys = {f"k{n}": 2 for n in range(19_999)}
+    return {**keys, "I am pregnant": 2}
+
+
+def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    # Review round 1 (security): one error at the field, never one per key, never naming a key.
+    eight: dict[str, int] = {**dict.fromkeys(LIFESTYLE_KEYS, 1), "I am pregnant": 1}
+    for lifestyle in (_many_unknown_keys(), eight):
+        response = owner.post("/listings", json=_room(gush_dan, lifestyle=lifestyle))
+
+        assert response.status_code == 422, response.text[:500]
+        detail = response.json()["detail"]
+        assert [entry["loc"] for entry in detail] == [["body", "lifestyle"]]
+        assert "I am pregnant" not in response.text
+    assert _count(db_engine) == 0

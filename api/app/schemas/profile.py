@@ -13,7 +13,7 @@ import datetime as dt
 import uuid
 from typing import Annotated, Literal, Self, get_args
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
 Household = Literal["single", "couple", "family", "roommates"]
 # The canonical order: `accepted_households` is stored and returned in it.
@@ -32,8 +32,23 @@ LifestyleKey = Literal[
 ]
 LIFESTYLE_KEYS: tuple[LifestyleKey, ...] = get_args(LifestyleKey)
 LifestyleAnswer = Literal[1, 2, 3]  # the 3-point scale; its wording lives in the web copy
+
+
+def _known_lifestyle_keys(value: object) -> object:
+    """At most 7 answers, every key a `LIFESTYLE_KEYS` one, as a single error at the field: a
+    dict validates every key, so a huge body of unknown keys would otherwise return one error
+    per key, each naming it. The message never names a sent key. Anything else (a non-dict
+    included) passes through unchanged, for Pydantic to report as before."""
+    if isinstance(value, dict):
+        if len(value) > len(LIFESTYLE_KEYS):
+            raise ValueError(f"lifestyle has at most {len(LIFESTYLE_KEYS)} answers")
+        if any(key not in LIFESTYLE_KEYS for key in value):
+            raise ValueError(f"lifestyle keys must be among: {', '.join(LIFESTYLE_KEYS)}")
+    return value
+
+
 # Only answered keys; an unknown key or a value outside 1-3 is a 422.
-Lifestyle = dict[LifestyleKey, LifestyleAnswer]
+Lifestyle = Annotated[dict[LifestyleKey, LifestyleAnswer], BeforeValidator(_known_lifestyle_keys)]
 
 AGE_MIN = 18
 AGE_MAX = 99
