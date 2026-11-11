@@ -277,10 +277,11 @@ together with the `OWNER` entries, by whichever of the two specs merges second.
 - **The two sides diverge after a type switch.** After apartment → room, the owner's score for apartment
   applicants leaves lifestyle out, while the seeker's own live view includes it (AC4). This is the same
   divergence as after a price or area edit (B1).
-- **One bad stored value breaks scoring.** A non-numeric value under a known key makes `m_lifestyle`'s
-  `::numeric` cast fail. It fails for every seeker whose results include that row. `ck_listings_lifestyle` only
-  checks `jsonb_typeof`. Only the API writes rows today, so this is accepted. SQL and seed writers must use
-  `0007a`'s keys and the values 1–3. The untracked `api/scripts/seed_demo.py` is one of those writers.
+- **One bad stored value breaks scoring — closed by `0007b`.** A non-numeric value under a known key would make
+  `m_lifestyle`'s `::numeric` cast fail for every seeker whose results include that row. Migration 0010
+  (`0007b`) tightened `ck_listings_lifestyle` and `ck_seeker_profiles_lifestyle` to the 7 known keys and the
+  numbers 1–3, so no stored row can break the cast (security review round 1 checked this). SQL-written `1.0` /
+  `1e0` still pass the CHECK, so the cast stays `::numeric`, never `::int` (FOLLOWUPS `0007b`).
 - **Overlaps.**
   - `0006f`'s `reasons.ts` is on `main`, so its stub is part of this diff.
   - `0006g` is in review (`spec/0006g-inbox-match-web`). Whichever of `0006g` and this spec merges second adds
