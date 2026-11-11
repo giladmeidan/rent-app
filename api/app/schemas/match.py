@@ -1,0 +1,22 @@
+"""API schema for a listing's match against the caller's housing profile (spec 0006b).
+
+Only the score and criterion codes: no profile value is ever returned (NF3). The web turns the codes
+into copy from the listing and the seeker's own profile."""
+
+from typing import Literal
+
+from pydantic import BaseModel
+
+# The match criteria, in tie-break order (`app/matching/score.py` `CRITERIA` is this tuple).
+Criterion = Literal[
+    "budget", "move_in", "area", "household", "contract", "parking", "smoking", "pets"
+]
+
+
+class MatchOut(BaseModel):
+    """`score` 0-100 (59 at most when a hard filter fails), up to 3 agreeing criteria and the one
+    that differs most (a failing one first), or `None` when every criterion fully matches."""
+
+    score: int
+    agrees: list[Criterion]
+    differs: Criterion | None

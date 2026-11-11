@@ -41,6 +41,7 @@ PUBLIC_KEYS = {
     "created_at",
     "lat",
     "lng",
+    "match",  # spec 0006b: null unless the caller is a seeker with a profile
 }
 
 TODAY = dt.date.today()
@@ -160,6 +161,7 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "min_contract_months": None,
         "lat": None,  # not located yet (spec 0003c)
         "lng": None,
+        "match": None,  # a visitor (spec 0006b)
     }
 
     response = client.get(f"/listings/{world.a}")
@@ -260,7 +262,7 @@ def test_ac6_sort_and_paging_are_deterministic(
     assert not set(_ids(first)) & set(_ids(second))
     assert set(_ids(first)) | set(_ids(second)) == set(newest)
     past_end = _search(client, "offset=25")
-    assert past_end == {"items": [], "total": 25}
+    assert past_end == {"items": [], "total": 25, "sort": "newest"}
 
     ascending = _search(client, "sort=price_asc&limit=50")
     prices = [item["price_ils"] for item in ascending["items"]]
@@ -292,7 +294,6 @@ _BAD_QUERIES = (
     "limit=51",
     "offset=-1",
     "offset=10001",
-    "sort=match",
     "available_by=2027-02-30",
     "pets=maybe",
 )
