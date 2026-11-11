@@ -27,7 +27,7 @@ from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.models import Application, Listing, User
+from app.models import Application, Conversation, Listing, User
 from app.redis_client import RedisClient
 from app.schemas.application import ApplicantStatus
 from app.services import search as search_service
@@ -223,7 +223,9 @@ def set_applicant_status(
     application of a different listing, a withdrawn one) or `InvalidTransitionError`. The fallback
     status SELECT runs in a fresh READ COMMITTED snapshot, so a seeker withdrawing or re-applying
     between the UPDATE and the SELECT can turn a 404 into a 409 or the reverse; no data changes in
-    either case and the client re-fetches. Commits."""
+    either case and the client re-fetches. To `shortlisted`, also opens the application's chat in
+    the same transaction (spec 0005a: one conversation per application, insert on conflict do
+    nothing). Commits."""
     applicant_name = (
         select(User.display_name)
         .where(User.id == Application.seeker_id)
@@ -267,6 +269,19 @@ def set_applicant_status(
             raise InvalidTransitionError
         application: Application = row[0]
         name: str = row[1]
+        if status == "shortlisted":
+            # Opens the chat (spec 0005a), once per application ever: a re-shortlist finds the
+            # row and inserts nothing; an un-shortlist or a decline never touches it.
+            db.execute(
+                insert(Conversation)
+                .values(
+                    application_id=application.id,
+                    owner_id=owner.id,
+                    seeker_id=application.seeker_id,
+                    owner_read_at=func.now(),
+                )
+                .on_conflict_do_nothing(index_elements=["application_id"])
+            )
         db.commit()
     except Exception:
         db.rollback()

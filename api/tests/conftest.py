@@ -104,10 +104,15 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `applications`, `listings`, `sessions`, `users` and `areas`
-    tables."""
+    """Per-test engine on clean `messages`, `conversations`, `applications`, `listings`,
+    `sessions`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE applications, listings, sessions, users, areas"))
+        conn.execute(
+            text(
+                "TRUNCATE TABLE messages, conversations, applications, listings, sessions, users,"
+                " areas"
+            )
+        )
     yield migrated_db
 
 
@@ -180,15 +185,18 @@ def gush_dan(db_engine: Engine) -> uuid.UUID:
 _CODE_LINE = re.compile(r"^[0-9]{6}$", re.M)
 
 
-def signup(client: TestClient, outbox: Outbox, email: str, role: str) -> TestClient:
-    """Sign `email` up as `role` through the OTP endpoints and return a new `TestClient` holding
-    only that session cookie. `client.cookies` is cleared, so two users signed up in one test never
-    share a cookie jar. Needs the `redis_clean` fixture (rate limits)."""
+def signup(
+    client: TestClient, outbox: Outbox, email: str, role: str, display_name: str = "נועה"
+) -> TestClient:
+    """Sign `email` up as `role` (and `display_name`) through the OTP endpoints and return a new
+    `TestClient` holding only that session cookie. `client.cookies` is cleared, so two users
+    signed up in one test never share a cookie jar. Needs the `redis_clean` fixture (rate
+    limits)."""
     response = client.post("/auth/otp/request", json={"email": email})
     assert response.status_code == 204
     match = _CODE_LINE.search(outbox.messages[-1][2])
     assert match is not None
-    profile = {"display_name": "נועה", "role": role}
+    profile = {"display_name": display_name, "role": role}
     response = client.post(
         "/auth/otp/verify", json={"email": email, "code": match.group(), "profile": profile}
     )

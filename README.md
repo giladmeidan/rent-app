@@ -77,6 +77,16 @@ newest first), `PATCH /listings/{id}/applications/{application_id}` with `{"stat
 curl -s -b cookies.txt localhost:8000/listings/$LISTING_ID/applications
 ```
 
+Shortlisting opens a chat between the owner and that seeker (its id is the application's id). Either of them
+lists their chats with `GET /me/conversations`, reads one with `GET /conversations/{id}` (it marks it read)
+and, while the applicant stays shortlisted, sends a plain-text message of 1–2000 characters (20 a minute, 300
+a day):
+
+```sh
+curl -b seeker.txt -X POST localhost:8000/conversations/$APPLICATION_ID/messages -H 'Content-Type: application/json' \
+  -d '{"body":"שלום! מתי אפשר לבוא לראות את הדירה?"}'
+```
+
 ## Make targets
 
 | target | what it does |
