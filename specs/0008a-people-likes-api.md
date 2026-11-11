@@ -205,7 +205,7 @@ shared module is allowed, but not required.
      `count(*) OVER ()` as the total, and both like columns. The order is `seeker_liked_at IS NULL`,
      `m_score DESC`, `RoomPair.created_at`, `RoomPair.id`, with `LIMIT 20 OFFSET :offset`. An offset past the
      end returns `items: []` and the true `total`. That needs one extra `count` only when the page is empty, so
-     a request runs **4** statements counting the session lookup, or **5** for an empty page (verifier
+     a request runs **4** statements counting the session lookup, or **5** for an empty page past the first (verifier
      finding 3).
 - **Lister like `like_person(db, r, owner, listing_id, person_id)`** runs in this order:
   1. One ownership-and-live SELECT, as above.
@@ -255,6 +255,10 @@ shared module is allowed, but not required.
 - **Unlike**: `UPDATE room_pairs SET lister_liked_at = NULL` (respectively `seeker_liked_at`) on the caller's
   side. The lister DELETE returns 404 for a pair outside the caller's listing. The seeker DELETE always
   returns 204. No limiter.
+- **Apply consumes the pair's likes** (review B1): in its transaction, under the pair's row lock and before the
+  application row, `apply` runs `UPDATE room_pairs SET lister_liked_at = NULL, seeker_liked_at = NULL WHERE
+  listing_id = :l AND seeker_id = :s` (`people.consume_likes`), so no one-sided like outlives an application and
+  a like racing an apply rolls back with `already_applied`.
 - **`liked_rooms(db, seeker_id)`** (`services/search.py`) is one statement: `_public_listings()` joined to
   `RoomPair` (`seeker_id = :me`) and to the seeker's profile (`_with_profile` / `_with_match`), where
   `Listing.listing_type = 'room'` (a room switched to an apartment keeps its pairs, and `room_fit` is NULL for
@@ -291,7 +295,7 @@ shared module is allowed, but not required.
   unknown id gives 404 `not_found`. `R` paused gives 409 `listing_not_live`. `?offset=1001` gives 422.
   `?offset=40` gives `items: []` with `total` 1. — `test_people.py::test_ac4_people_errors`
 - [ ] AC5 (perf) Given 30 visible candidates, When `O` GETs page 1 and then page 2, Then each request runs
-  exactly 4 statements counting the session lookup, plus 1 for an empty page. Page 1 has 20 items and page 2 has 10, with no overlap, and
+  exactly 4 statements counting the session lookup, plus 1 for an empty page past the first. Page 1 has 20 items and page 2 has 10, with no overlap, and
   `total` is 30 on both. The second GET inserts no new `room_pairs` rows. — `test_people.py::test_ac5_statements_and_paging`
 - [ ] AC6 Given `A` on `R`'s page, When `O` PUTs the like, Then it returns `{liked: true, application_id: null}`,
   `A`'s card shows `liked_by_me: true`, and `A`'s `GET /me/likes` has `R` in `liked_me` (not in `mine`). Then,
@@ -424,7 +428,7 @@ verifier round, Gilad). The verifier confirmed `0007g` is on main (c80a78c).
              Assumptions you can overrule: 30 likes/hour and 100/day; no "hide" for a received like (follow-up);
              liking needs the profile's room section even on a "לא משנה" room; likes are used up by the match.
     KPIs this slice moves: mutual matches per room listing; time from room publish to first chat.
-    Acceptance targets: browse 4 statements (5 for an empty page); exactly one match under concurrent likes; the
+    Acceptance targets: browse 4 statements (5 for an empty page past the first); exactly one match under concurrent likes; the
              card carries no budget, household, pets, smoker, contract, parking or user id.
     Risks: budget probing by editing the price - mitigation: price frozen per pair; one bit leaks per newly
              created listing until the pre-launch per-owner listings cap. Smoking/pets/flatmates-preference fit
