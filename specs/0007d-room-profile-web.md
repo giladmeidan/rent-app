@@ -1,7 +1,7 @@
 ---
 id: 0007d
 title: A seeker looking for a room switches on "חיפוש חדר" in /me/profile and fills gender, birth year, flatmates preference and the lifestyle questionnaire
-status: in-progress
+status: done
 depends_on: [0007a]      # GET/PUT /me/profile carry gender, birth_year, flatmate_gender, lifestyle; `make client` before building
 reviewers: [code, qa, ux, security]   # security: collects gender and birth year, writes the privacy copy, adds the ?section=room entry point (a Sonnet pass over the copy, links.ts and the entry point is enough); ux: a new revealed form section and the shared questionnaire UI that 0007e/f/c reuse; qa: the switch-off-clears and the entry point
 estimate: 1 coder run
@@ -393,3 +393,26 @@ deviation: `lifestyle.clear`/`clearAria` are additions and the kosher "אין ה
              gender, age and answers live) - mitigation: copy fixed in the verifier round, security reviewer added.
     Reviewers: code, qa, ux, security   Estimated: 1 coder run, 1 review round
     Links: specs/0007d-room-profile-web.md - PRODUCT.md "Rooms" - no artboard (follows /me/profile from 0006d)
+
+    Spec 0007d - Room section of the seeker profile (web)   PR OPEN #30 (not merged), head 543ea80
+    Shipped: /me/profile has a "מחפש/ת חדר בדירת שותפים" switch; on, it shows a privacy line, own gender (required),
+             optional birth year, flatmates preference (default לא משנה) and the 7-question lifestyle questionnaire
+             (each answer clearable); off + save clears all four on the server. /me/profile?section=room&next=...
+             opens the section and returns to next. Adds the shared features/lifestyle module (keys, labels,
+             LifestyleFields, compareLifestyle) and roomSectionHref that 0007e/0007f/0007c reuse.
+    Demo: make dev -> sign in as a seeker, /me/profile, switch on, pick אישה + a birth year + נשים, answer two
+          questions, save, reload (values back) -> switch off, save, reload (section empty) ->
+          /me/profile?section=room&next=%2Fsearch: heading focused, save returns to /search.
+    Tests: +10 web (AC1-AC8), +0 integration, e2e ac9 extended (api 384, web 224)
+    CI: api + web on the PR head (PR #30 checks); e2e local on code head 543ea80 while CI e2e is off: 10 of 10,
+        22.3 s
+    Findings: 0 blockers, 0 majors; 5 minors: 1 fixed (room section spacing), 2 to FOLLOWUPS ("ניקוי" button
+              shifts the questionnaire ~48 px - take it in 0007e, which reuses it; birth-year maxLength vs the
+              trim), 2 noted (non-Latin digits get the range message, as specified; ux copy suggestions below);
+              10 nits dropped
+    Decisions I need from you: none. Optional copy from the ux review: kosher seeker stem "המטבח שלי..." (flat
+              "המטבח בדירה..."), social seeker stem "בבית אני מעדיפ/ה להיות...", shorter genderNote "חדרים לנשים
+              או לגברים בלבד שלא מתאימים לך לא יוצגו בחיפוש." - say which to apply.
+    Changed in PRODUCT.md: nothing
+    Next: 0007e (room listing web) branches from #30's head and should take the "ניקוי" layout-shift follow-up;
+          0007f/0007c cite roomSectionHref, compareLifestyle and lifestyle.<key>.topic from here.
