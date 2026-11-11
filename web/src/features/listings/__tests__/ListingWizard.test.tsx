@@ -12,7 +12,7 @@ import {
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
-import type { Household, ListingOut } from '../api';
+import type { GenderPreference, Household, ListingOut } from '../api';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner, withoutCounts } from './fixtures';
 import {
@@ -87,6 +87,11 @@ const expectedBody = {
   accepted_households: ['single', 'couple', 'family', 'roommates'] as Household[],
   smoking_allowed: true,
   min_contract_months: null,
+  // An apartment always sends the room fields' defaults (0007e).
+  gender_preference: 'any' as GenderPreference,
+  flatmates_count: null,
+  flatmate_ages: [] as number[],
+  lifestyle: {},
 };
 
 describe('ListingWizard', () => {
