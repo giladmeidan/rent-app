@@ -19,7 +19,8 @@ Rules (PRODUCT.md "Applications"):
   lock sees the committed application and rolls back with `AlreadyAppliedError`, and an apply
   waiting on a mutual finds the shortlisted row and gets `AlreadyAppliedError`.
 - Only a public listing (`search.get_public_listing_with_match`, the one visibility rule) can be
-  applied to, apartments and rooms alike (spec 0007b), and never the caller's own: both are
+  applied to, apartments and rooms alike (spec 0007b), and never the caller's own nor one whose
+  flat the caller is a flatmate of (spec 0008d, treated like the owner): all are
   `ListingNotFoundError` (a 404, the same as an unknown id).
 - Applying needs a housing profile (spec 0006a, PRODUCT.md "Matching"): checked **first**, so a
   seeker without one gets `ProfileRequiredError` and the call costs no rate-limit budget. Only
@@ -60,7 +61,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Label, Row, Select, case, func, select, update
+from sqlalchemy import Label, Row, Select, case, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -68,7 +69,6 @@ from app.matching.score import match_columns
 from app.models import Application, Conversation, Listing, SeekerProfile, User
 from app.redis_client import RedisClient
 from app.schemas.application import ApplicantSort, ApplicantStatus
-from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
@@ -166,9 +166,19 @@ def apply(
     Raises, in this order, `ProfileRequiredError` (nothing counted), `RoomGenderMismatchError` /
     `SeekerGenderRequiredError` (the room gate, nothing counted), `RateLimitedError`,
     `ListingNotFoundError` (unknown, not public or the caller's own) or `AlreadyAppliedError`.
-    One SELECT for the listing (with the match and room fit), before the limiter; after it, the
+    One SELECT for the profile check (with whether the seeker is a flatmate of the listing, 0008d),
+    one for the listing (with the match and room fit), both before the limiter; after it, the
     pair's likes are consumed and the application written (`_upsert`). Commits."""
-    if not profiles_service.has_profile(db, seeker.id):
+    # Imported here: `services/people.py` imports this module.
+    from app.services.people import flatmate_of
+
+    gate = db.execute(
+        select(
+            exists().where(SeekerProfile.user_id == seeker.id).label("has_profile"),
+            flatmate_of(listing_id, seeker.id).label("flatmate"),
+        )
+    ).one()
+    if not gate.has_profile:
         raise ProfileRequiredError
     listing: Listing | None
     fit: bool | None
@@ -179,9 +189,10 @@ def apply(
             )
         except ListingNotFoundError:
             listing, fit = None, None
-        # A user whose role changes later must never apply to their own listing. A missing or own
-        # listing skips the gate (it must not reveal either) and is a counted 404.
-        if listing is not None and listing.owner_id == seeker.id:
+        # A user whose role changes later must never apply to their own listing, nor a flatmate to
+        # their flat (0008d). A missing or own listing skips the gate (it must not reveal either)
+        # and is a counted 404.
+        if listing is not None and (listing.owner_id == seeker.id or gate.flatmate):
             listing = None
         if listing is not None:
             if fit is False:

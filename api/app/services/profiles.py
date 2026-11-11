@@ -1,8 +1,9 @@
 """Seeker housing profiles (spec 0006a): one per seeker, read and replaced by that seeker only.
 
 Privacy (NF2): a profile is personal data. This module returns it only to its own seeker
-(`get_profile`, `put_profile`); `has_profile` answers existence only (the apply gate in
-`services/applications.py`). From 0006b / 0006c the matching queries read it too.
+(`get_profile`, `put_profile`); `has_profile` answers existence only (the listing page in
+`routers/search.py`; the apply gate in `services/applications.py` asks the same inline, 0008d).
+From 0006b / 0006c the matching queries read it too.
 
 The room section (spec 0007a: `gender`, `birth_year`, `flatmate_gender`, `lifestyle`) is personal
 data too. `put_profile` writes it on every `PUT` (omitting it clears it); in 0007a only its seeker

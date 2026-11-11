@@ -19,6 +19,7 @@ from app.routers import (
     auth,
     chat,
     events,
+    flatmates,
     health,
     listings,
     people,
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(events.router)
     app.include_router(profiles.router)
     app.include_router(people.router)
+    app.include_router(flatmates.router)
     return app
 
 
