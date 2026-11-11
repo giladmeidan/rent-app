@@ -37,9 +37,11 @@ Rules (PRODUCT.md "Applications"):
   owner has since edited its price or area: the budget and area criteria use the listing's
   `price_ils_at_apply` / `area_id_at_apply` snapshot, security B1) and seven
   housing-profile columns selected by name, never `budget_max_ils` or `area_ids` (PRODUCT.md
-  "Matching": an owner never sees a seeker's budget or areas). A pre-Slice-6 applicant with no
-  profile row has NULL profile columns; its match columns are meaningless and never read. The
-  default order is by match, applicants with a profile first."""
+  "Matching": an owner never sees a seeker's budget or areas). Lifestyle (0007g) is scored only
+  when the seeker applied to a room (`listing_type_at_apply`, security): an apartment applicant's
+  match never reflects their questionnaire answers, whatever the listing later becomes. A
+  pre-Slice-6 applicant with no profile row has NULL profile columns; its match columns are
+  meaningless and never read. The default order is by match, applicants with a profile first."""
 
 import uuid
 from collections.abc import Sequence
@@ -277,13 +279,16 @@ def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
     It has **no ownership condition** of its own: both callers establish ownership first (the
     ownership SELECT in `list_applicants`, the UPDATE's WHERE in `set_applicant_status`)."""
     # Budget and area against the listing as applied to (security B1): an owner editing the
-    # listing's price or area must not learn where the seeker's budget or areas lie. Every other
-    # criterion is live.
+    # listing's price or area must not learn where the seeker's budget or areas lie. Likewise
+    # lifestyle is scored only on an application made to a room (0007g): an owner turning an
+    # apartment into a room must not read an apartment applicant's answers off the score. Every
+    # other criterion is live.
     columns = match_columns(
         Listing,
         SeekerProfile,
         price=Application.price_ils_at_apply,
         area_id=Application.area_id_at_apply,
+        listing_type=Application.listing_type_at_apply,
     )
     score = next(column for column in columns if column.name == "m_score")
     query = (
