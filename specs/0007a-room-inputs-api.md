@@ -1,7 +1,7 @@
 ---
 id: 0007a
 title: An owner's room listing stores who the room is for, how many flatmates live there (and, optionally, their ages) and the flat's questionnaire; a seeker saves a profile "room section" (gender, birth year, flatmates preference, questionnaire). Stored and validated only; rooms stay hidden from search
-status: in-progress
+status: in-review
 depends_on: []           # migration chain 0008 -> 0009 (0008 is main's head); 0007b adds 0010 on top
 reviewers: [code, qa, security]   # security: gender and birth year are new personal data on seeker_profiles; qa: validation table, PATCH merge and type-switch rules
 estimate: 1 coder run
