@@ -6,7 +6,7 @@ import { Link, Navigate, useNavigate, type LinkProps } from 'react-router';
 import type { UserOut } from '../../api/client';
 import { fetchAreas } from '../areas/api';
 import { ME_KEY } from '../auth/useMe';
-import { ApiError, type ListingOut } from './api';
+import { ApiError, type ListingOut, type MyListingOut } from './api';
 import { DetailsStep } from './DetailsStep';
 import { todayInIsrael } from './format';
 import { PreviewStep, type PublishError } from './PreviewStep';
@@ -240,7 +240,7 @@ export function ListingWizard({ listing }: Props) {
     // Not this owner's listing (any more): drop it from the list now, so the edit page shows
     // "not found" without waiting for the refetch.
     if (kind === 'notFound' && base !== undefined) {
-      queryClient.setQueryData<ListingOut[]>(MY_LISTINGS_KEY, (old) =>
+      queryClient.setQueryData<MyListingOut[]>(MY_LISTINGS_KEY, (old) =>
         old?.filter((l) => l.id !== base.id),
       );
       void queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY });

@@ -4,7 +4,7 @@ import he from '../src/locales/he.json' with { type: 'json' };
 import { API, postListing, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
-const SEEKER_NAME = 'מיכל';
+const SEEKER_NAME = '\u05de\u05d9\u05db\u05dc';
 // i18next's `{{count}}` interpolation, for the copy the page renders.
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 

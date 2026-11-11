@@ -111,6 +111,7 @@ export function ApplicantsPage() {
     }
     return (
       <section className={section}>
+        <BackToMine />
         <ErrorState onRetry={() => void listings.refetch()} />
       </section>
     );
@@ -179,7 +180,7 @@ export function ApplicantsPage() {
               key={stat.key}
               className={`flex min-w-[96px] flex-1 flex-col gap-[2px] rounded-[14px] px-[14px] py-3 ${stat.tone}`}
             >
-              <span className="text-2xl font-extrabold">{stat.value}</span>
+              <span className="text-2xl font-extrabold">{stat.value}</span>{' '}
               <span className="text-[13px]">{stat.label}</span>
             </li>
           ))}
@@ -198,7 +199,10 @@ export function ApplicantsPage() {
               }}
               type="button"
               aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
+              onClick={() => {
+                setGone(false);
+                setFilter(f);
+              }}
               className={`min-h-[44px] border-b-[2.5px] px-[14px] text-sm ${
                 filter === f
                   ? 'border-accent font-bold text-accent-text'

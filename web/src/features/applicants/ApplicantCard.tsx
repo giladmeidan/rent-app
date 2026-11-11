@@ -101,7 +101,7 @@ export function ApplicantCard({ listingId, applicant, headingId, onSettled }: Pr
               <h2
                 id={headingId}
                 tabIndex={-1}
-                className="break-words text-[17px] font-extrabold focus:outline-none"
+                className="min-w-0 max-w-full [overflow-wrap:anywhere] text-[17px] font-extrabold focus:outline-none"
               >
                 {name}
               </h2>

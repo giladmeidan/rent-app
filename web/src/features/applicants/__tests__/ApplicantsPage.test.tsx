@@ -32,7 +32,7 @@ const PATH = `/me/listings/${A.id}/applicants`;
 const MINE = 'GET /me/listings';
 const APPS = `GET /listings/${A.id}/applications`;
 const patchRoute = (p: ApplicantOut) => `PATCH /listings/${A.id}/applications/${p.id}`;
-const MICHAL = 'מיכל';
+const MICHAL = '\u05de\u05d9\u05db\u05dc';
 
 const routes = (
   <Routes>
@@ -187,13 +187,13 @@ describe('ApplicantsPage', () => {
       ),
     ).toBeVisible();
     expect(screen.getByText(/7,200[\s‎‏]*₪/)).toBeVisible();
-    expect(document.body.textContent).not.toContain('צפיות');
+    expect(document.body.textContent).not.toContain('\u05e6\u05e4\u05d9\u05d5\u05ea');
 
     // Totals: applicants, shortlisted, new.
     expect(totals()).toEqual([
-      `5${he.applicants.stats.total}`,
-      `2${he.applicants.stats.shortlisted}`,
-      `2${he.applicants.stats.new}`,
+      `5 ${he.applicants.stats.total}`,
+      `2 ${he.applicants.stats.shortlisted}`,
+      `2 ${he.applicants.stats.new}`,
     ]);
 
     // Four filters with counts; "all" pressed; every card in API order.
@@ -247,7 +247,7 @@ describe('ApplicantsPage', () => {
 
     const card = cardOf(MICHAL);
     const inCard = within(card);
-    const avatar = inCard.getByText('מ', { exact: true });
+    const avatar = inCard.getByText('\u05de', { exact: true });
     expect(avatar).toHaveAttribute('aria-hidden', 'true');
     const heading = inCard.getByRole('heading', { level: 2, name: MICHAL });
     expect(card).toHaveAttribute('aria-labelledby', heading.id);
@@ -288,9 +288,9 @@ describe('ApplicantsPage', () => {
     });
     await screen.findAllByRole('article');
     expect(totals()).toEqual([
-      `2${he.applicants.stats.total}`,
-      `1${he.applicants.stats.shortlisted}`,
-      `1${he.applicants.stats.new}`,
+      `2 ${he.applicants.stats.total}`,
+      `1 ${he.applicants.stats.shortlisted}`,
+      `1 ${he.applicants.stats.new}`,
     ]);
     const shortlist = within(cardOf(MICHAL)).getByRole('button', {
       name: he.applicants.actions.shortlist,
@@ -322,9 +322,9 @@ describe('ApplicantsPage', () => {
       he.applicants.actions.decline,
     ]);
     expect(totals()).toEqual([
-      `2${he.applicants.stats.total}`,
-      `2${he.applicants.stats.shortlisted}`,
-      `0${he.applicants.stats.new}`,
+      `2 ${he.applicants.stats.total}`,
+      `2 ${he.applicants.stats.shortlisted}`,
+      `0 ${he.applicants.stats.new}`,
     ]);
     await vi.waitFor(() => {
       expect(within(cardOf(MICHAL)).getByRole('heading', { level: 2 })).toHaveFocus();
