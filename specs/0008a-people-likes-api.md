@@ -1,7 +1,7 @@
 ---
 id: 0008a
 title: A room lister browses the seekers who want a flatmate and likes them; a seeker likes rooms; when both have liked, it becomes a shortlisted application with its chat open
-status: in-progress
+status: done
 depends_on: [0007c, 0007g]   # 0007g: match_columns(listing_type=...) and the lifestyle criterion people cards score with; 0007c: the inbox row (ApplicantOut.room) this spec adds `source` next to. 0007a/0007b/0007d (done): the room section, room_fit, listing_type_at_apply
 reviewers: [code, qa, security, perf]   # security: a seeker's profile (gender, age, areas, answers) shown to owners, the budget-probe snapshot, a new write path into applications/conversations; perf: browse inserts snapshot rows and scores every candidate; qa: like/unlike/mutual state machine against apply, withdraw, decline
 estimate: 1 coder run   # coder Opus/high (data, migration, PII; Speed rule 6)
