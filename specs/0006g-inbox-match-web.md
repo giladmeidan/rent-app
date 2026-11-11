@@ -1,7 +1,7 @@
 ---
 id: 0006g
 title: An owner's applicant inbox is sorted by match, each card shows the score, a household / move-in line, two chips and a "למה ההתאמה?" disclosure with the reasons and the applicant's housing details
-status: in-review
+status: done
 depends_on: [0006c, 0006f, 0005b]   # 0006c: match + profile per applicant; 0006f: features/match (badge, chips, reasons); 0005b: also edits ApplicantCard (chat link) and renames the e2e inbox test
 reviewers: [code, qa, ux]   # ux: the inbox card vs Inbox.dc.html / InboxDesktop.dc.html; qa: sort toggle with filters and in-place updates
 estimate: 1 coder run

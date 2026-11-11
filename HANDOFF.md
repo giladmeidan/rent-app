@@ -22,25 +22,28 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–5 merged (Slice 5 Chat: `0005a` PR #18, `0005c` PR #19, `0005b` PR #22). Slice 6 (Match score):
-`0006a`–`0006d` merged (PRs #20, #21, #23, #24); `0006f` is building (`in-progress`); `0006e` and `0006g` are
-`verified`, not started. Alembic head on `main` is `0008`. Slice 7 (Rooms + questionnaire) is not specced; Gilad
-will plan it in his own session. Spec status on `main` is the source of truth; `git log` beats this file.
+Slices 1–6 merged. **Slice 6 (Match score) complete**: `0006a`–`0006g` (PRs #20, #21, #23, #24, #25, #26, #27;
+last merge 1c8fcb8). Slice 7 (Rooms + questionnaire) is specced and verified (`0007a`–`0007g`, 1cd0253) and
+is run by Gilad's own session "Slice 7 next steps": `0007a` is `in-progress` there (worktree
+`../rent-app-0007a`, stack 5452/…). Alembic head on `main` is `0008`; 0007a chains `0009`. Spec status on `main`
+is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-11 (Slice 6 orchestrator session)
+2026-11-11 (Slice 6 orchestrator session, after Slice 6 merged)
 
 ## Current Work
-- **0006f match web**: built by session "Build 0006f match web" in `../rent-app-0006f` on
-  `spec/0006f-match-web` (cut from 0006d's branch at 453348b; stack 5448/6394/8015; holds web port 5173). It was
-  told 0006d is merged and to merge `origin/main` (db13c20) before review and its one push. No PR yet.
-- **CI e2e outage (2026-11-11 ~14:00)**: GitHub runners could not resolve Ubuntu apt mirrors, so `e2e` timed out
-  in Playwright's browser-deps install. Gilad merged PR #22 (0005b), #23 (0006c) and #24 (0006d) with e2e skipped
-  (local `make e2e` green for 0005b/0006d). `main` e2e: green on 0cc352c (0005b), cancelled on 70e937f (0006c),
-  running on 3139ba9 (0006d) when this was written — check it before the next merge or any deploy.
+- Slice 6: nothing in flight. All 0006 worktrees, local and remote branches and stacks are removed.
+- Slice 7: owned by Gilad's session "Slice 7 next steps" (not the Slice 6 orchestrator). Check with it before
+  starting any 0007 spec elsewhere.
+- **CI e2e is switched off** (Gilad, 2026-11-11): GitHub runners could not install Playwright's browser deps
+  (apt/DNS), so `.github/workflows/ci.yml`'s `e2e` job is gated on repo variable `E2E_IN_CI` (set to `off`,
+  2a4590f). Every web spec runs `make e2e` locally and reports it in its digest; a merge needs `api` + `web`
+  green in CI plus local e2e green (Speed rules 7–8, d917d05). PRs #22–#27 merged without a CI e2e run; the last
+  green CI e2e on `main` is 0cc352c (0005b). When Gilad says CI is fixed: `gh variable delete E2E_IN_CI`, drop
+  the temporary sentences from rules 7–8, and run e2e on `main` before any deploy.
 - Uncommitted in the main checkout, not from the orchestrator: `Makefile`, `infra/docker-compose.yml`,
-  `api/scripts/seed_demo.py` (someone's demo-seed work). The shared `rent-app` stack runs with web published on
-  **127.0.0.1:5180** (not 5173) — apparently from those edits. Leave them to their owner.
+  `api/scripts/seed_demo.py` (someone's demo-seed work). The shared `rent-app` stack publishes web on
+  **127.0.0.1:5180** (not 5173), apparently from those edits. Leave them to their owner.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -93,6 +96,14 @@ Last updated:
   (a): apply-time snapshot, migration `0008_application_listing_snapshot`. e2e skipped (outage).
 - [x] 0006d Profile web — PR #24 (3139ba9): `/me/profile` form, listing page sends a seeker without a profile there
   and back before applying. e2e skipped on CI (outage), green locally. The deploy gate after 0006a is cleared.
+- [x] 0006f Match web — PR #25 (1308156): "התאמה N%" on search cards and map pins, sort by match, "ההתאמה שלך"
+  card on the listing page; shared `features/match` (badge, chips, reasons). CI e2e cancelled (outage), green
+  locally.
+- [x] 0006e Owner preferences web — PR #26 (172968c): wizard step "העדפות" (create + edit), "מה בעל הדירה מחפש"
+  on the listing page (before the match card, per the artboard). e2e local 10/10.
+- [x] 0006g Inbox match web — PR #27 (1c8fcb8): applicant inbox sorted by match, score, household / move-in
+  line, chips and "למה ההתאמה?" disclosure. e2e local 10/10. **Slice 6 complete.**
+- [x] Slice 7 specced and verified: 0007a–0007g (1cd0253), by Gilad's Slice 7 planning session.
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -103,33 +114,26 @@ Last updated:
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **Check `main` e2e** on 3139ba9 (0006d) — it also covers 0006c, whose own main run was cancelled. If it fails,
-   fix before the next merge. If the apt outage recurs, a small CI spec could cache Playwright's deps or raise
-   that step's limit.
-2. **0006f**: wait for its PR → merge on Gilad's word after `api`/`web`/`e2e` are green on the head
-   (`gh pr merge N --merge --match-head-commit <sha>`) → set `done` on `main` → remove `../rent-app-0006f`, the
-   local and remote branch (rule 10).
-3. **0006e owner preferences web** (all deps merged): start when 5173 is free (after 0006f's stack is down). Branch
-   from `origin/main`. Before the worktree, set it `in-progress` on `main` (commit that file by path, push) — the
-   lock that stops two sessions building one spec. Model per rule 6; reviewers per the spec's `reviewers:`.
-4. **0006g inbox match web** — ready once 0006f's PR is open (0006c and 0005b merged); branch from 0006f's branch
-   if 0006f is not merged yet. Web: never alongside 0006e (port 5173). It reuses 0006f's `features/match`.
-5. Ports: worktree stacks so far go up to 5448/6394/8015; pick above that. Check every other worktree's `.env`
-   before choosing (a clash with 0005b's 5444 happened once).
-6. **Slice 7 (Rooms + questionnaire)** — Gilad plans it in his own session (`/spec`). The next slice is specced
-   while this one builds (rule 3).
-7. If another session commits in the main checkout, `git fetch` + `git merge --ff-only origin/main` before
+1. **Slice 7** is built from Gilad's session "Slice 7 next steps". Dependency order: `0007a` (in progress) →
+   `0007b` and `0007d` → `0007g` (on 0007b) and `0007e` (0007a + 0007d) → `0007c` (0007g + 0007d) and `0007f`
+   (0007g + 0007d). Lock a spec `in-progress` on `main` before its worktree; one web spec on 5173 at a time.
+2. **When CI e2e is fixed** (Gilad says so): see Current Work — delete `E2E_IN_CI`, revert the temporary rule
+   text, run `main`'s e2e and fix anything it finds before a deploy.
+3. Merge each PR on Gilad's word with `gh pr merge N --merge --match-head-commit <sha>` after the rule-8 checks;
+   mark `done`; remove worktree + local and remote branch (rule 10).
+4. Ports: worktree stacks so far go up to 5452 (0007a); check every other worktree's `.env` before choosing.
+5. If another session commits in the main checkout, `git fetch` + `git merge --ff-only origin/main` before
    branching a worktree.
-8. **Pre-launch follow-ups** (FOLLOWUPS, ~120 lines): the public `GET /listings/{id}` view counter is unthrottled;
-   owner `PATCH /listings` rate limit; 0004d re-fetch on 404/409.
-9. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0008`).
-10. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3; `0003d` Q1–Q2; `0003b`
+6. **Pre-launch follow-ups** (FOLLOWUPS): the public `GET /listings/{id}` view counter is unthrottled; owner
+   `PATCH /listings` rate limit; 0004d re-fetch on 404/409; Slice 6 minors logged by each build.
+7. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0008`).
+8. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3; `0003d` Q1–Q2; `0003b`
    1–3; `0002c` photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-11. **Shared main checkout**: several sessions work in `/Users/giladmeidan/rent_app/rent-app`. Commit only your
+9. **Shared main checkout**: several sessions work in `/Users/giladmeidan/rent_app/rent-app`. Commit only your
    own files by path (`git commit -m … -- <path>`), never `git add -A`, never stash. Chain shell steps with
-   `set -e`. Starting a session from an automated turn (another session's note) or with a `cwd` is refused by
-   the app: ask Gilad with a button, then start it on his reply with `cwd` set to the prepared worktree.
-12. Housekeeping: archive finished build sessions (0001b … 0006d) if Gilad wants; decide on
+   `set -e`. Starting a session from an automated turn (another session's note) with a `cwd` is refused by the
+   app: ask Gilad with a button, then start it on his reply with `cwd` set to the prepared worktree.
+10. Housekeeping: archive finished build sessions (0001b … 0006g) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
 
 ## Architecture
@@ -155,7 +159,7 @@ Last updated:
 - `CLAUDE.md` — process, Speed rules 1–10, hard rules. Read first.
 - `specs/PRODUCT.md` — standing decisions incl. "Listings", "Search" and "Trust (MVP)" rows.
 - `specs/FOLLOWUPS.md` — open deferred minors (append-only; conflicts keep both sides).
-- `specs/0006e-owner-preferences-web.md`, `specs/0006f-match-web.md`, `specs/0006g-inbox-match-web.md` — the queue.
+- `specs/0007a-room-inputs-api.md` … `specs/0007g-lifestyle-match-api.md` — the Slice 7 queue.
 - `design/README.md` + `design/screens-v1/*.dc.html` — artboards (reference a missing `support.js`).
 
 ## Important Decisions
@@ -184,7 +188,8 @@ Last updated:
   deal-breakers); a seeker needs a profile to apply. 0006c (Gilad chose (a)): the owner's inbox match scores
   budget and area against the listing's price and area **at apply time** (snapshot on `applications`), so an owner
   cannot recover a seeker's budget by editing the listing; the seeker's own view stays live.
-- Gilad may merge with CI e2e skipped during a runner outage; record it in the `done` commit message.
+- CI e2e is off while GitHub runners are broken (repo variable `E2E_IN_CI=off`); e2e runs locally (Speed rule 7).
+  Revert only on Gilad's word.
 - Gilad merges PRs or tells the orchestrator to; the orchestrator merges with `gh pr merge N --merge
   --match-head-commit <full sha>` only after `api`, `web`, `e2e` are green on that head.
 
@@ -230,9 +235,10 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
-- 2026-11-11 — Slice 6 orchestrator session: started builds 0006a, 0006b, 0006c, 0006d, 0006f each in its own
-  session; merged #20, #21, #24 on Gilad's word (#23 Gilad merged); Gilad chose the apply-time snapshot for the
-  0006c budget leak (PRODUCT.md dab5e5f); marked 0006a–0006d done; removed merged worktrees and remote branches.
+- 2026-11-11 — Slice 6 orchestrator session: built all of Slice 6, one session per spec (0006e and 0006g in
+  parallel); merged #20, #21, #24, #25, #26, #27 on Gilad's word (#23 Gilad merged); Gilad chose the apply-time
+  snapshot for the 0006c budget leak (PRODUCT.md dab5e5f); CI e2e switched off and e2e moved to local (2a4590f,
+  d917d05); all 0006 worktrees and branches removed. Slice 7 handed to Gilad's own session.
 - 2026-11-11 — Slice 5 build session: 0005a (PR #18), 0005c (PR #19) and 0005b (PR #22, e2e skipped on Gilad's
   word during a runner apt/DNS outage) built and merged — Slice 5 done; all 0005 worktrees and branches removed.
   In parallel the Slice 6 orchestrator session merged 0006a–0006d.
