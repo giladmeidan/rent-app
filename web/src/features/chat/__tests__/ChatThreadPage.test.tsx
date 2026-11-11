@@ -1,5 +1,5 @@
-import { onlineManager } from '@tanstack/react-query';
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { focusManager, onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -24,6 +24,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
 });
 
 type Reply = Parameters<typeof mockApi>[0][string][number];
@@ -114,8 +115,9 @@ describe('ChatThreadPage', () => {
     expect(screen.queryByText(he.chat.thread.truncated)).toBeNull();
     reset(view);
 
-    // An owner: the link goes to the listing's applicants.
-    ({ view } = renderThread(T, [json(T)], { me: owner }));
+    // An owner: the link goes to the listing's applicants (chosen by the thread's `my_role`).
+    const asOwner = { ...T, my_role: 'owner' as const };
+    ({ view } = renderThread(asOwner, [json(asOwner)], { me: owner }));
     expect(await h1(NAME)).toBeVisible();
     expect(screen.getByRole('link', { name: he.chat.thread.toApplicants })).toHaveAttribute(
       'href',
@@ -490,10 +492,140 @@ describe('ChatThreadPage', () => {
     expect(await h1(loaded.other_name)).toBeVisible();
     fireEvent.change(textarea(), { target: { value: 'hi' } });
     fireEvent.click(sendButton());
-    expect(await h1(he.chat.thread.notFound)).toBeVisible();
+    // (0008f amendment: a thread that was on screen shows `chat.removed`, not `notFound`.)
+    expect(await screen.findByText(he.chat.removed)).toBeVisible();
     expect(screen.queryByRole('log')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(api.calls(threadRoute(loaded))).toHaveLength(2);
+  });
+
+  const GROUP_MEMBERS: ThreadOut['members'] = [
+    { name: 'רוני', role: 'owner', is_me: false },
+    { name: 'דנה', role: 'flatmate', is_me: true },
+    { name: 'נועה', role: 'seeker', is_me: false },
+  ];
+  const group = (overrides: Partial<ThreadOut> = {}) =>
+    thread({
+      my_role: 'flatmate',
+      other_name: 'נועה',
+      members: GROUP_MEMBERS,
+      visible_from: '2026-11-10T23:30:00Z',
+      ...overrides,
+    });
+  const memberLine = () => screen.getByRole('group', { name: he.chat.members });
+  const NOT_FOUND = () => json({ detail: 'not_found' }, 404);
+
+  it('ac1_group_header_and_senders', async () => {
+    const T = group({
+      messages: [
+        message({ body: 'one', sender_name: 'רוני' }),
+        message({ body: 'two', sender_name: 'רוני' }),
+        message({ body: 'mine', mine: true, sender_name: 'דנה' }),
+        message({ body: 'three', sender_name: 'רוני' }),
+        message({ body: 'four', sender_name: 'נועה' }),
+      ],
+    });
+    // Owner-role account: the link must follow `my_role`, not the account's role.
+    const { view } = renderThread(T, [() => json(T)], { me: owner });
+    expect(await h1('נועה')).toBeVisible();
+    expect(memberLine()).toHaveTextContent('רוני (בעל/ת הדירה) · את/ה · נועה');
+    // Asia/Jerusalem: 23:30Z on the 10th is the 11th.
+    expect(screen.getByText(i18n.t('chat.joinedNote', { date: '11.11.2026' }))).toBeVisible();
+
+    const items = bubbles();
+    // A name once per run of consecutive messages from one sender; never above my own.
+    const named = items.map((li) => li.querySelector('span.text-muted')?.textContent ?? null);
+    expect(named).toEqual(['רוני', null, null, 'רוני', 'נועה']);
+    // The sr-only label names the sender.
+    expect(items[1]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: 'רוני' }));
+    expect(items[4]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: 'נועה' }));
+    expect(screen.queryByRole('link', { name: he.chat.thread.toApplicants })).toBeNull();
+    reset(view);
+  });
+
+  it('ac2_one_to_one_unchanged_and_owner_link', async () => {
+    const T = thread({ messages: [message({ body: 'a' }), message({ body: 'b' })] });
+    let { view } = renderThread(T, [() => json(T)]);
+    expect(await h1(T.other_name)).toBeVisible();
+    expect(screen.queryByRole('group', { name: he.chat.members })).toBeNull();
+    expect(screen.queryByText(/הצטרפת לשיחה/)).toBeNull();
+    expect(bubbles().some((li) => li.querySelector('span.text-muted') !== null)).toBe(false);
+    reset(view);
+
+    // An owner-role account that is a flatmate elsewhere: no applicants link.
+    const asFlatmate = thread({ my_role: 'flatmate' });
+    ({ view } = renderThread(asFlatmate, [() => json(asFlatmate)], { me: owner }));
+    expect(await h1(asFlatmate.other_name)).toBeVisible();
+    expect(screen.queryByRole('link', { name: he.chat.thread.toApplicants })).toBeNull();
+    reset(view);
+
+    // my_role owner: the applicants link, as today.
+    const asOwner = thread({ my_role: 'owner' });
+    ({ view } = renderThread(asOwner, [() => json(asOwner)], { me: owner }));
+    expect(await h1(asOwner.other_name)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.chat.thread.toApplicants })).toHaveAttribute(
+      'href',
+      `/me/listings/${asOwner.listing.id}/applicants`,
+    );
+    reset(view);
+  });
+
+  it('ac6_focus_refetch_and_removed', async () => {
+    const focus = async () => {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+    };
+    const yael: ThreadOut['members'][number] = { name: 'יעל', role: 'flatmate', is_me: false };
+    const T = group({
+      members: [...GROUP_MEMBERS.slice(0, 2), yael, ...GROUP_MEMBERS.slice(2)],
+      messages: [message({ body: 'hello', sender_name: 'רוני' })],
+    });
+    const fewer = { ...T, members: GROUP_MEMBERS };
+
+    // Focus: the thread is fetched again and the member line shows the new members.
+    let { api, view } = renderThread(T, [() => json(T), () => json(fewer)]);
+    expect(await h1('נועה')).toBeVisible();
+    expect(memberLine().textContent).toBe('רוני (בעל/ת הדירה) · את/ה · יעל (שותף/ה) · נועה');
+    await focus();
+    await waitFor(() => expect(memberLine().textContent).toBe('רוני (בעל/ת הדירה) · את/ה · נועה'));
+    expect(api.calls(threadRoute(T))).toHaveLength(2);
+    reset(view);
+
+    // The refetch answers 404: removed, with the back link and no composer or messages.
+    ({ view } = renderThread(T, [() => json(T), NOT_FOUND]));
+    expect(await h1('נועה')).toBeVisible();
+    await focus();
+    expect(await screen.findByText(he.chat.removed)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.chat.thread.back })).toHaveAttribute(
+      'href',
+      '/chat',
+    );
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('log')).toBeNull();
+    expect(screen.queryByText(he.chat.thread.notFound)).toBeNull();
+    reset(view);
+
+    // A send answers 404 (and the thread refetch too): the same state.
+    ({ api, view } = renderThread(T, [() => json(T), NOT_FOUND], {
+      extra: { [postRoute(T)]: [NOT_FOUND] },
+    }));
+    expect(await h1('נועה')).toBeVisible();
+    fireEvent.change(textarea(), { target: { value: 'hi' } });
+    fireEvent.click(sendButton());
+    expect(await screen.findByText(he.chat.removed)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.chat.thread.back })).toBeVisible();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('log')).toBeNull();
+    expect(api.calls(postRoute(T))).toHaveLength(1);
+    reset(view);
+
+    // A first load that answers 404 (nothing cached) keeps notFound.
+    ({ view } = renderThread(T, [NOT_FOUND]));
+    expect(await h1(he.chat.thread.notFound)).toBeVisible();
+    expect(screen.queryByText(he.chat.removed)).toBeNull();
+    reset(view);
   });
 });

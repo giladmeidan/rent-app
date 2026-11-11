@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,8 +26,8 @@ const routes = (
   </Routes>
 );
 
-function renderPage(list: Reply[], me = seeker) {
-  const api = mockApi({ 'GET /me': [json(me)], [LIST]: list });
+function renderPage(list: Reply[], me = seeker, flats: Reply[] = [() => json([])]) {
+  const api = mockApi({ 'GET /me': [json(me)], [LIST]: list, 'GET /me/flats': flats });
   const view = renderRoutes('/chat', routes);
   return { api, view };
 }
@@ -136,5 +136,37 @@ describe('ChatListPage', () => {
     for (const link of [first, second, fourth]) {
       expect(within(link).queryByText(/^\d+$/)).toBeNull();
     }
+  });
+
+  it('ac3_flatmate_items', async () => {
+    const flatmateItem = conversation({ my_role: 'flatmate', member_count: 3 });
+    const plain = conversation();
+    const flat = { listing: plain.listing, owner_name: 'רוני', joined_at: '2026-11-01T08:00:00Z' };
+    const link = (c: ConversationOut) =>
+      screen.getByRole('link', { name: new RegExp(c.other_name) });
+
+    let { view } = renderPage([() => json([flatmateItem, plain])], undefined, [() => json([flat])]);
+    await heading();
+    expect(await screen.findByRole('link', { name: he.chat.myFlats })).toHaveAttribute(
+      'href',
+      '/me/flats',
+    );
+    const first = link(flatmateItem);
+    const second = link(plain);
+    expect(within(first).getByText(he.chat.flatmateChip)).toBeVisible();
+    expect(within(first).getByText(i18n.t('chat.group', { count: 3 }))).toBeVisible();
+    expect(within(second).queryByText(he.chat.flatmateChip)).toBeNull();
+    expect(within(second).queryByText(/קבוצה/)).toBeNull();
+    reset(view);
+
+    // No flats: no link.
+    const api = renderPage([() => json([plain])], undefined, [() => json([])]);
+    view = api.view;
+    await heading();
+    await screen.findByText(titleOf(plain));
+    await waitFor(() => expect(api.api.calls('GET /me/flats')).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole('link', { name: he.chat.myFlats })).toBeNull();
+    reset(view);
   });
 });
