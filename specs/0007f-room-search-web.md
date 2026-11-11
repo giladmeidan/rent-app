@@ -1,7 +1,7 @@
 ---
 id: 0007f
 title: A seeker (or a visitor) finds rooms next to apartments in /search with a type filter, reads a room's flatmates and lifestyle on its page, and is told plainly when a room cannot take their application
-status: in-review
+status: done
 depends_on: [0007g, 0007d, 0006f]   # 0007g (implies 0007b): the `lifestyle` criterion, its `Criterion` value and the `reasons.ts` stub; 0007b: rooms public, `listing_type` filter, `room_fit`, the 409s, the room fields; 0007d: `features/lifestyle`, `roomSectionHref`, `rooms.genderPreference.*`, `lifestyle.<key>.topic`; `SeekerProfileOut.birth_year` comes from 0007a; 0006f: the match module this extends (`reasons.ts`, `MatchChips`, `MatchCard`)
 reviewers: [code, qa, ux]           # ux: new filter, new card variant and new page sections vs the artboards; qa: URL rules, apply-gate branches
 estimate: 1 coder run               # top of the range, same size as 0006f; if it overruns, split the listing page + apply gate (AC7-AC10, AC13) into 0007h
