@@ -8,7 +8,15 @@ import type { ListingPublic } from '../../listings/api';
 import type { SeekerProfileOut } from '../../profile/api';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { publicListing } from '../../search/__tests__/fixtures';
-import { ownerReason, ownerShort, seekerReason, seekerShort } from '../reasons';
+import he from '../../../locales/he.json';
+import {
+  ownerReason,
+  ownerShort,
+  personReason,
+  personShort,
+  seekerReason,
+  seekerShort,
+} from '../reasons';
 import type { Criterion, ReasonKind } from '../types';
 
 type Row = {
@@ -633,5 +641,54 @@ describe('reasons', () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+describe('people reasons', () => {
+  it('ac1_person_reasons_fact_free', () => {
+    const criteria: Criterion[] = [
+      'budget',
+      'move_in',
+      'area',
+      'household',
+      'contract',
+      'parking',
+      'smoking',
+      'pets',
+      'lifestyle',
+    ];
+    const person = { move_in_date: inDays(30) };
+    // Words that state a fact about the person: none may appear on any line.
+    const forbidden = [
+      'לא מעשנים',
+      'מעשנים',
+      'בלי חיות',
+      'עם חיית מחמד',
+      'חוזה קצר',
+      'חסרה חניה',
+      'חוזה ארוך',
+      he.match.owner.short.smoking.agreeSmoker,
+      he.match.owner.short.pets.agreePet,
+      he.match.owner.short.contract.agreeLong,
+    ];
+    for (const criterion of criteria) {
+      for (const kind of ['agree', 'differ'] as const) {
+        const line = personReason(criterion, kind, person, i18n.t);
+        expect(personShort(criterion, kind, person, i18n.t)).toBe(line);
+        expect(line).not.toBe('');
+        expect(line).not.toContain('people.');
+        expect(line).not.toContain('match.');
+        for (const text of forbidden) expect(line, `${criterion} ${kind}`).not.toContain(text);
+      }
+    }
+    expect(personReason('smoking', 'differ', person, i18n.t)).toBe('עישון: לא מתאים');
+    expect(personReason('pets', 'agree', person, i18n.t)).toBe('חיות מחמד: מתאים');
+    // A stored move-in that has passed means today, as everywhere.
+    expect(personReason('move_in', 'agree', { move_in_date: inDays(-5) }, i18n.t)).toBe(
+      i18n.t('match.owner.move_in.agree', { date: formatDate(todayInIsrael()) }),
+    );
+    expect(personReason('move_in', 'differ', person, i18n.t)).toBe(
+      i18n.t('match.owner.move_in.differ', { date: formatDate(inDays(30)) }),
+    );
   });
 });

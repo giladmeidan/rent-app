@@ -1167,4 +1167,17 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     }
     expect(within(panel).getByText('2 מתוך 3 תשובות זהות לדירה')).toBeVisible();
   });
+
+  it('ac8_mutual_tag', async () => {
+    const mutual = applicant({ applicant_name: 'L', source: 'like', message: null });
+    const applied = applicant({ applicant_name: 'M', message: 'Hello there' });
+    renderPage([json([mutual, applied])]);
+    await screen.findAllByRole('article');
+    const inMutual = within(cardOf('L'));
+    expect(inMutual.getByTestId('applicant-mutual')).toHaveTextContent(he.applicants.mutual);
+    expect(inMutual.queryByTestId('applicant-message')).toBeNull();
+    const inApplied = within(cardOf('M'));
+    expect(inApplied.getByTestId('applicant-message')).toHaveTextContent('Hello there');
+    expect(inApplied.queryByTestId('applicant-mutual')).toBeNull();
+  });
 });
