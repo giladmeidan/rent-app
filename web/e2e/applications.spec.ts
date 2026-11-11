@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { API, postListing, signUp } from './helpers';
+import { API, postListing, putProfile, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
 const ROOM = he.profile.room;
@@ -17,11 +17,21 @@ function israelDay(days: number): string {
 test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const overBudgetStreet = `${street} over`;
+  // Minted on its own, never from `street`: `fitting` below finds cards by substring (0007f AC13).
+  const roomStreet = `חדר ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // An owner posts a listing, and one above the seeker's budget (0006f AC10).
   await signUp(page, 'owner');
   const id = await postListing(page, street);
   const overBudgetId = await postListing(page, overBudgetStreet, { price_ils: 7600 });
+  // And a women-only room (0007f AC13).
+  const roomId = await postListing(page, roomStreet, {
+    listing_type: 'room',
+    gender_preference: 'women',
+    flatmates_count: 2,
+    flatmate_ages: [27, 30],
+    lifestyle: { cleanliness: 3, kosher: 1 },
+  });
 
   // A visitor sees the count and the log-in prompt inside the apply section (the logged-out
   // header has its own log-in and signup links).
@@ -165,5 +175,47 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     await page.goto(`/listings/${id}`);
     await expect(page.getByRole('region', { name: he.match.card.title })).toBeVisible();
     await expect(page.getByText(he.match.badge.replace('{{score}}', '100'))).toBeVisible();
+  });
+
+  await test.step('ac13 a women-only room: the room-section gate, the misfit line, the button', async () => {
+    // A plain housing profile: PUT replaces, so the room section is cleared.
+    await putProfile(page);
+    await page.goto(`/listings/${roomId}`);
+    const gate = section.getByRole('link', { name: he.rooms.apply.fillRoomSection });
+    await expect(gate).toBeVisible();
+    expect(await gate.getAttribute('href')).toContain('section=room');
+    await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
+    // A signed-in seeker gets the ages and the answers (room privacy, the counterpart of AC12).
+    const facts = page.getByRole('region', { name: he.rooms.facts.title });
+    await expect(facts).toContainText(
+      he.rooms.flatmates.withAges
+        .replace('{{flatmates}}', he.rooms.flatmates.many.replace('{{count}}', '2'))
+        .replace('{{ages}}', '27, 30'),
+    );
+    await expect(
+      facts.getByRole('heading', { level: 3, name: he.lifestyle.title.flat }),
+    ).toBeVisible();
+    const lifestyle = facts.getByTestId('room-lifestyle');
+    await expect(lifestyle.locator('dt')).toHaveCount(2);
+    await expect(lifestyle).toContainText(he.lifestyle.cleanliness.topic);
+    await expect(lifestyle).toContainText(he.lifestyle.cleanliness.answer['3']);
+    await expect(lifestyle).toContainText(he.lifestyle.kosher.topic);
+    await expect(lifestyle).toContainText(he.lifestyle.kosher.answer['1']);
+
+    // A man: the room cannot take him; it is gone from his room search.
+    await putProfile(page, { gender: 'man' });
+    await page.reload();
+    await expect(section.getByText(he.rooms.apply.misfit, { exact: true })).toBeVisible();
+    await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
+    await page.goto('/search?listing_type=room');
+    await expect(page.getByRole('list', { name: he.common.loading })).toHaveCount(0);
+    await expect(page.locator('p[aria-live="polite"]')).not.toBeEmpty();
+    await expect(page.getByRole('article').filter({ hasText: roomStreet })).toHaveCount(0);
+
+    // A woman: the apply button.
+    await putProfile(page, { gender: 'woman' });
+    await page.goto(`/listings/${roomId}`);
+    await expect(section.getByRole('button', { name: he.applications.apply })).toBeVisible();
+    await expect(section.getByText(he.rooms.apply.misfit, { exact: true })).toHaveCount(0);
   });
 });
