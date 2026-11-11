@@ -1,7 +1,8 @@
 """API schemas for listings (spec 0002a). Never the ORM model.
 
-Every bound of the `listings` CHECKs (migration 0003) is repeated here, so a bad value is a 422 with
-a list `detail`, never a database `IntegrityError` (a 500)."""
+Every bound of the `listings` CHECKs (migrations 0003, 0007 and 0009, the room fields of spec 0007a
+included) is repeated here, so a bad value is a 422 with a list `detail`, never a database
+`IntegrityError` (a 500)."""
 
 import datetime as dt
 import uuid
@@ -15,12 +16,22 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 
 from app.schemas._text import visible_characters_only
-from app.schemas.profile import HOUSEHOLDS, AcceptedHouseholds, ContractMonths, HouseholdsOut
+from app.schemas.profile import (
+    AGE_MAX,
+    AGE_MIN,
+    HOUSEHOLDS,
+    AcceptedHouseholds,
+    ContractMonths,
+    GenderPreference,
+    HouseholdsOut,
+    Lifestyle,
+)
 
 ListingType = Literal["apartment", "room"]
 ListingStatus = Literal["active", "paused"]
@@ -81,6 +92,17 @@ AvailableFrom = Annotated[dt.date, AfterValidator(_not_too_far)]
 ParkingSpots = Annotated[int, Field(ge=0, le=5)]
 ArnonaIls = Annotated[int, Field(ge=0, le=20_000)]  # the bi-monthly bill
 VaadIls = Annotated[int, Field(ge=0, le=5_000)]  # monthly
+# Room fields (spec 0007a): the people already living there, and none, some or all of their ages.
+FlatmatesCount = Annotated[int, Field(ge=1, le=7)]
+FlatmateAges = Annotated[list[Annotated[int, Field(ge=AGE_MIN, le=AGE_MAX)]], Field(max_length=7)]
+
+# The room fields as an apartment must hold them (`ck_listings_room_fields`). Never mutated.
+ROOM_FIELD_DEFAULTS: dict[str, Any] = {
+    "gender_preference": "any",
+    "flatmates_count": None,
+    "flatmate_ages": [],
+    "lifestyle": {},
+}
 
 # Columns an explicit `null` in a PATCH clears; `null` on any other field is a 422.
 NULLABLE_FIELDS = frozenset(
@@ -117,6 +139,12 @@ class ListingIn(BaseModel):
     accepted_households: AcceptedHouseholds = Field(default_factory=lambda: list(HOUSEHOLDS))
     smoking_allowed: bool = Field(default_factory=lambda: True)
     min_contract_months: ContractMonths | None = None  # None = no minimum
+    # Room fields (spec 0007a); an apartment keeps exactly these defaults (`ROOM_FIELD_DEFAULTS`).
+    # Factories for the same reason as above: the wizard sends none of them until 0007e.
+    gender_preference: GenderPreference = Field(default_factory=lambda: "any")
+    flatmates_count: FlatmatesCount | None = None
+    flatmate_ages: FlatmateAges = Field(default_factory=list)
+    lifestyle: Lifestyle = Field(default_factory=dict)
 
     @field_validator("description")
     @classmethod
@@ -127,6 +155,25 @@ class ListingIn(BaseModel):
     def _total_floors_at_least_floor(self) -> Self:
         if self.total_floors is not None and self.total_floors < self.floor:
             raise ValueError("total_floors must be at least floor")
+        return self
+
+    @model_validator(mode="after")
+    def _room_fields(self, info: ValidationInfo) -> Self:
+        """An apartment holds the room defaults; a room needs `flatmates_count` (except on a pause
+        or resume of a legacy room: the `status_only` context, `services/listings.py`); ages never
+        outnumber the flatmates."""
+        if self.listing_type == "apartment" and any(
+            getattr(self, name) != default for name, default in ROOM_FIELD_DEFAULTS.items()
+        ):
+            raise ValueError(
+                "gender_preference, flatmates_count, flatmate_ages and lifestyle"
+                " are for a room only"
+            )
+        status_only = bool((info.context or {}).get("status_only"))
+        if self.listing_type == "room" and self.flatmates_count is None and not status_only:
+            raise ValueError("a room needs flatmates_count")
+        if len(self.flatmate_ages) > (self.flatmates_count or 0):
+            raise ValueError("flatmate_ages lists more people than flatmates_count")
         return self
 
 
@@ -159,6 +206,11 @@ class ListingPatch(BaseModel):
     accepted_households: AcceptedHouseholds | None = None
     smoking_allowed: bool | None = None
     min_contract_months: ContractMonths | None = None
+    # Room fields (spec 0007a): never in `NULLABLE_FIELDS`, so an explicit `null` is a 422.
+    gender_preference: GenderPreference | None = None
+    flatmates_count: FlatmatesCount | None = None
+    flatmate_ages: FlatmateAges | None = None
+    lifestyle: Lifestyle | None = None
     status: ListingStatus | None = None
 
     @field_validator("description")
@@ -205,6 +257,10 @@ class ListingOut(BaseModel):
     accepted_households: HouseholdsOut
     smoking_allowed: bool
     min_contract_months: ContractMonths | None
+    gender_preference: GenderPreference
+    flatmates_count: int | None
+    flatmate_ages: list[int]
+    lifestyle: Lifestyle
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime
