@@ -82,8 +82,12 @@ function israelDay(days: number): string {
 }
 
 /** Posts a live apartment on `street` through the API with the page's (owner) session, as
- * search.spec.ts does; returns its id. */
-export async function postListing(page: Page, street: string): Promise<string> {
+ * search.spec.ts does; returns its id. `overrides` replace fields of the body (e.g. `price_ils`). */
+export async function postListing(
+  page: Page,
+  street: string,
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
   const areas = await page.request.get(API + '/areas');
   expect(areas.ok()).toBe(true);
   const [area] = (await areas.json()) as { id: string }[];
@@ -108,6 +112,7 @@ export async function postListing(page: Page, street: string): Promise<string> {
       arnona_ils: null,
       vaad_ils: null,
       description: null,
+      ...overrides,
     },
   });
   expect(created.status()).toBe(201);
