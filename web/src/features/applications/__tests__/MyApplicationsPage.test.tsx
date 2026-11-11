@@ -229,7 +229,7 @@ describe('MyApplicationsPage', () => {
     }));
     fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent(PATH)}`);
     });
     view.unmount();
     vi.unstubAllGlobals();

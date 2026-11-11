@@ -68,10 +68,13 @@ describe('RequireOwner', () => {
       vi.unstubAllGlobals();
     }
 
-    // Logged out → /login; a seeker → /.
+    // Logged out → /login?next=<the page>; a seeker → /.
     for (const [me, target] of [
-      [json({ detail: 'unauthenticated' }, 401), '/login'],
-      [json(seeker), '/'],
+      [
+        json({ detail: 'unauthenticated' }, 401),
+        (path: string) => `/login?next=${encodeURIComponent(path)}`,
+      ],
+      [json(seeker), () => '/'],
     ] as const) {
       for (const path of PATHS) {
         mockApi({
@@ -83,7 +86,7 @@ describe('RequireOwner', () => {
         });
         const view = renderRoutes(path, routes);
         await vi.waitFor(() => {
-          expect(currentPath()).toBe(target);
+          expect(currentPath()).toBe(target(path));
         });
         expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
         view.unmount();
