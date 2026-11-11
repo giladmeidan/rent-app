@@ -1,11 +1,11 @@
-"""Chat endpoints (spec 0005a). Thin: all logic is in `services/chat.py`.
+"""Chat endpoints (spec 0005a; members from 0008d). Thin: all logic is in `services/chat.py`.
 
-Every endpoint requires a session (`current_user`, either role): 401 `unauthenticated` without
-one. A conversation the caller is not in is a 404 `not_found`, identical to an unknown id or an
-application that was never shortlisted. Sending to a conversation whose application is not
-`shortlisted` is a 409 `chat_closed`; sending is rate limited (429 `rate_limited` with
-`Retry-After`). A sent message is published to both participants' event streams after the
-commit (spec 0005c)."""
+Every endpoint requires a session (`current_user`, any role): 401 `unauthenticated` without one.
+A conversation the caller is not a **member** of (its owner, its seeker or, on a room application,
+a flatmate of its listing) is a 404 `not_found`, identical to an unknown id or an application that
+was never shortlisted. Sending to a conversation whose application is not `shortlisted` is a 409
+`chat_closed`; sending is rate limited (429 `rate_limited` with `Retry-After`). A sent message is
+published to every member's event streams after the commit (spec 0005c)."""
 
 import uuid
 from typing import Annotated, Any
@@ -19,7 +19,14 @@ from app.db import get_session
 from app.models import User
 from app.redis_client import RedisClient, get_redis
 from app.schemas.application import ApplicationListingOut
-from app.schemas.chat import ConversationOut, LastMessageOut, MessageIn, MessageOut, ThreadOut
+from app.schemas.chat import (
+    ConversationOut,
+    LastMessageOut,
+    MemberOut,
+    MessageIn,
+    MessageOut,
+    ThreadOut,
+)
 from app.schemas.error import ErrorOut
 from app.services import chat as chat_service
 from app.services import chat_events
@@ -38,7 +45,7 @@ _NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {
         "model": ErrorOut,
         "description": "not_found: unknown id, an application never shortlisted, or a "
-        "conversation the caller is not in",
+        "conversation the caller is not a member of",
     },
 }
 
@@ -64,6 +71,8 @@ def _conversation_out(row: Row[Any]) -> ConversationOut:
         id=row.id,
         listing=_listing(row),
         other_name=row.other_name,
+        my_role=row.my_role,
+        member_count=row.member_count,
         can_send=row.can_send,
         is_new=row.is_new,
         unread_count=row.unread_count,
@@ -92,9 +101,18 @@ def get_thread(conversation_id: uuid.UUID, me: UserDep, db: DbDep) -> ThreadOut:
         id=conversation_id,
         listing=_listing(header),
         other_name=header.other_name,
+        my_role=header.my_role,
+        members=[MemberOut(name=m.name, role=m.role, is_me=m.is_me) for m in thread.members],
+        visible_from=header.visible_from,
         can_send=header.status == "shortlisted",
         messages=[
-            MessageOut(id=m.id, body=m.body, mine=m.mine, created_at=m.created_at)
+            MessageOut(
+                id=m.id,
+                body=m.body,
+                mine=m.mine,
+                sender_name=m.sender_name,
+                created_at=m.created_at,
+            )
             for m in thread.messages
         ],
         truncated=thread.truncated,
@@ -124,9 +142,7 @@ def send_message(
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> MessageOut:
     try:
-        message, owner_id, seeker_id = chat_service.send_message(
-            db, r, me, conversation_id, body.body
-        )
+        message, member_ids = chat_service.send_message(db, r, me, conversation_id, body.body)
     except RateLimitedError as exc:
         raise HTTPException(
             status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
@@ -135,5 +151,11 @@ def send_message(
         raise HTTPException(status_code=404, detail="not_found") from None
     except chat_service.ChatClosedError:
         raise HTTPException(status_code=409, detail="chat_closed") from None
-    chat_events.publish(r, [owner_id, seeker_id], conversation_id, "message")
-    return MessageOut(id=message.id, body=message.body, mine=True, created_at=message.created_at)
+    chat_events.publish(r, member_ids, conversation_id, "message")
+    return MessageOut(
+        id=message.id,
+        body=message.body,
+        mine=True,
+        sender_name=me.display_name,
+        created_at=message.created_at,
+    )

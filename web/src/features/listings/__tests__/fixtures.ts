@@ -52,19 +52,32 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     applicant_count: 0,
     new_applicant_count: 0,
     liked_me_count: 0,
+    flatmate_count: 0,
+    flatmate_invite_active: false,
     ...overrides,
   };
 }
 
-/** `l` as `POST` / `PATCH /listings` answer it: a `ListingOut`, without the applicant and like
- * counts. */
+/** `l` as `POST` / `PATCH /listings` answer it: a `ListingOut`, without the applicant, like and
+ * flatmate counts and the invite-link state. */
 export function withoutCounts(l: MyListingOut): ListingOut {
   const out: ListingOut &
-    Partial<Pick<MyListingOut, 'applicant_count' | 'new_applicant_count' | 'liked_me_count'>> = {
+    Partial<
+      Pick<
+        MyListingOut,
+        | 'applicant_count'
+        | 'new_applicant_count'
+        | 'liked_me_count'
+        | 'flatmate_count'
+        | 'flatmate_invite_active'
+      >
+    > = {
     ...l,
   };
   delete out.applicant_count;
   delete out.new_applicant_count;
   delete out.liked_me_count;
+  delete out.flatmate_count;
+  delete out.flatmate_invite_active;
   return out;
 }
