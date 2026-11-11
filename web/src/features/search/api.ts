@@ -36,6 +36,7 @@ export async function searchListings(
   if (filters.rooms_min !== undefined) query.rooms_min = filters.rooms_min;
   if (filters.rooms_max !== undefined) query.rooms_max = filters.rooms_max;
   if (filters.available_by !== undefined) query.available_by = filters.available_by;
+  if (filters.listing_type !== undefined) query.listing_type = filters.listing_type;
   for (const feature of FEATURES) {
     if (filters[feature] === true) query[feature] = true;
   }

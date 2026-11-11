@@ -2,14 +2,18 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { flatmatesNearAge } from '../rooms/age';
+import { flatmatesText, genderPreferenceLabel } from '../rooms/flatmates';
 import type { ListingOut } from './api';
-import { formatDate, formatIls, formatRooms } from './format';
+import { cardTitle } from './cardTitle';
+import { formatDate, formatIls } from './format';
 
 // The focus ring of the title link, drawn around the whole card.
 const linkedCard =
   'relative has-[a:focus-visible]:outline has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-accent';
 
-/** The facts a card shows: a created listing, or the wizard's body before it is published. */
+/** The facts a card shows: a created listing, or the wizard's body before it is published (which
+ * has no room fields until 0007e, so they are optional). */
 export type CardFacts = Pick<
   ListingOut,
   | 'listing_type'
@@ -25,7 +29,17 @@ export type CardFacts = Pick<
   | 'parking_spots'
   | 'furnished'
   | 'pets_allowed'
->;
+> &
+  Partial<Pick<ListingOut, 'gender_preference' | 'flatmates_count' | 'flatmate_ages'>>;
+
+type Chip = { text: string; tone: 'accent' | 'plain' };
+
+const chipClass = {
+  // The artboard's teal chip ("שותפים בגילך").
+  accent:
+    'rounded-full border border-accent-tint bg-accent-tint px-3 py-[6px] text-[13px] font-semibold text-accent-text',
+  plain: 'rounded-full border border-line bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold',
+} as const;
 
 type Props = {
   listing: CardFacts;
@@ -39,32 +53,56 @@ type Props = {
   to?: string;
   /** Id of the title, so the row's actions can name the listing (`aria-describedby`). */
   titleId?: string;
+  /** The seeker's birth year (their profile's room section): a room whose every listed flatmate is
+   * near that age gets "שותפים בגילך". `undefined` / `null`: no such chip. */
+  seekerBirthYear?: number | null | undefined;
 };
 
 /**
  * The wizard's preview, the "my listings" row and a search result: Listing.dc.html's title block
- * and chips.
+ * and chips. A room (SearchDesktop.dc.html's room card) adds the photo pill, its flatmates first on
+ * the facts line, and the "your age" and "who it is for" chips; an owner sees the same anatomy.
  */
-export function ListingCard({ listing, today, badge, children, to, titleId }: Props) {
+export function ListingCard({
+  listing,
+  today,
+  badge,
+  children,
+  to,
+  titleId,
+  seekerBirthYear,
+}: Props) {
   const { t } = useTranslation();
+  const isRoom = listing.listing_type === 'room';
 
-  const chips: string[] = [];
-  if (listing.listing_type === 'room') chips.push(t('listings.card.room'));
-  chips.push(listing.elevator ? t('listings.card.elevator') : t('listings.card.noElevator'));
-  if (listing.parking_spots === 1) chips.push(t('listings.card.parkingOne'));
-  else if (listing.parking_spots > 1) {
-    chips.push(t('listings.card.parkingMany', { count: listing.parking_spots }));
+  const chips: Chip[] = [];
+  const plain = (text: string) => chips.push({ text, tone: 'plain' });
+  if (isRoom) {
+    if (flatmatesNearAge(seekerBirthYear, listing.flatmate_ages ?? [])) {
+      chips.push({ text: t('rooms.card.similarAge'), tone: 'accent' });
+    }
+    const who = listing.gender_preference;
+    if (who === 'women' || who === 'men') {
+      plain(t('rooms.card.forGender', { who: genderPreferenceLabel(t, who) }));
+    }
   }
-  chips.push(
+  plain(listing.elevator ? t('listings.card.elevator') : t('listings.card.noElevator'));
+  if (listing.parking_spots === 1) plain(t('listings.card.parkingOne'));
+  else if (listing.parking_spots > 1) {
+    plain(t('listings.card.parkingMany', { count: listing.parking_spots }));
+  }
+  plain(
     {
       none: t('listings.furnished.none'),
       partial: t('listings.furnished.partial'),
       full: t('listings.furnished.full'),
     }[listing.furnished],
   );
-  if (listing.pets_allowed) chips.push(t('listings.card.pets'));
+  if (listing.pets_allowed) plain(t('listings.card.pets'));
 
+  const flatmates = isRoom ? flatmatesText(t, listing) : null;
   const facts = [
+    ...(flatmates === null ? [] : [flatmates]),
     listing.total_floors === null
       ? t('listings.card.floor', { floor: listing.floor })
       : t('listings.card.floorOf', { floor: listing.floor, total: listing.total_floors }),
@@ -74,17 +112,13 @@ export function ListingCard({ listing, today, badge, children, to, titleId }: Pr
       : t('listings.card.availableFrom', { date: formatDate(listing.available_from) }),
   ];
 
-  const title = t('listings.card.title', {
-    rooms: formatRooms(listing.rooms),
-    street: listing.street,
-    city: listing.city,
-  });
+  const title = cardTitle(t, listing);
 
   return (
     <article
       className={`overflow-hidden rounded-2xl border border-line bg-white ${to === undefined ? '' : linkedCard}`}
     >
-      <div className="flex h-[120px] items-center justify-center bg-[#DDD6CE]">
+      <div className="relative flex h-[120px] items-center justify-center bg-[#DDD6CE]">
         <svg
           aria-hidden="true"
           width="40"
@@ -100,6 +134,12 @@ export function ListingCard({ listing, today, badge, children, to, titleId }: Pr
           <circle cx="9" cy="10" r="1.6" />
           <path d="M21 16l-5-5-8 8" />
         </svg>
+        {isRoom && (
+          // The artboard's `right: 8px`: inline-start in RTL.
+          <span className="absolute bottom-2 start-2 rounded-full bg-[rgba(28,25,23,0.78)] px-2 py-[3px] text-[11px] font-semibold text-white">
+            {t('listings.card.room')}
+          </span>
+        )}
       </div>
       <div className="flex flex-col gap-2 px-4 pb-4 pt-[14px]">
         <div className="flex items-center justify-between gap-3">
@@ -137,11 +177,8 @@ export function ListingCard({ listing, today, badge, children, to, titleId }: Pr
         </p>
         <ul data-testid="listing-chips" className="flex flex-wrap gap-2">
           {chips.map((chip) => (
-            <li
-              key={chip}
-              className="rounded-full border border-line bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold"
-            >
-              {chip}
+            <li key={chip.text} className={chipClass[chip.tone]}>
+              {chip.text}
             </li>
           ))}
         </ul>

@@ -150,4 +150,31 @@ describe('filters', () => {
       }),
     );
   });
+
+  it('ac1_listing_type_in_url', async () => {
+    // Only the exact `apartment` and `room` are kept, so no URL can 422.
+    expect(parse('listing_type=room')).toEqual({ listing_type: 'room' });
+    expect(parse('listing_type=apartment')).toEqual({ listing_type: 'apartment' });
+    for (const query of ['listing_type=both', 'listing_type=', 'listing_type=Room']) {
+      expect(parse(query), query).toEqual({});
+    }
+    // Written right after `available_by`, before the features.
+    expect(
+      toSearchParams(parse('pets=true&listing_type=room&available_by=2027-01-05')).toString(),
+    ).toBe('available_by=2027-01-05&listing_type=room&pets=true');
+    // One type is one active filter; none is none.
+    expect(countActive(parse('listing_type=room'))).toBe(1);
+    expect(countActive(parse(''))).toBe(0);
+
+    // Sent when set, absent otherwise.
+    const api = mockApi({ 'GET /listings': [json(page([])), json(page([]))] });
+    await searchListings({ listing_type: 'room' }, 0);
+    await searchListings({}, 0);
+    expect(query(at(api.calls('GET /listings'), 0).request)).toEqual(
+      expected({ listing_type: 'room', limit: '20', offset: '0' }),
+    );
+    expect(query(at(api.calls('GET /listings'), 1).request)).toEqual(
+      expected({ limit: '20', offset: '0' }),
+    );
+  });
 });

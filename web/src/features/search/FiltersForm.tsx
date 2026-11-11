@@ -29,6 +29,9 @@ type Values = {
   rooms_min: string;
   rooms_max: string;
   available_by: string;
+  /** The "סוג" boxes; at least one stays on (both on = no `listing_type`). */
+  apartment: boolean;
+  room: boolean;
 } & Record<Feature, boolean>;
 
 type ErrorField = 'price_min' | 'price_max' | 'rooms_max';
@@ -53,6 +56,8 @@ function initialValues(filters: Filters): Values {
     rooms_min: toText(filters.rooms_min),
     rooms_max: toText(filters.rooms_max),
     available_by: filters.available_by ?? '',
+    apartment: filters.listing_type !== 'room',
+    room: filters.listing_type !== 'apartment',
     pets: filters.pets === true,
     furnished: filters.furnished === true,
     elevator: filters.elevator === true,
@@ -98,6 +103,10 @@ function toFilters(values: Values): FormFilters {
   for (const key of ['rooms_min', 'rooms_max', 'available_by'] as const) {
     if (values[key] !== '') params.set(key, values[key]);
   }
+  // Exactly one box on is a filter; both on is none (the form never lets both go off).
+  if (values.apartment !== values.room) {
+    params.set('listing_type', values.apartment ? 'apartment' : 'room');
+  }
   for (const feature of FEATURES) {
     if (values[feature]) params.set(feature, 'true');
   }
@@ -108,6 +117,7 @@ function toFilters(values: Values): FormFilters {
     rooms_min: parsed.rooms_min,
     rooms_max: parsed.rooms_max,
     available_by: parsed.available_by,
+    listing_type: parsed.listing_type,
     pets: parsed.pets,
     furnished: parsed.furnished,
     elevator: parsed.elevator,
@@ -222,6 +232,24 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
     </div>
   );
 
+  // The only box still on cannot be turned off; the hint says why.
+  const oneType = values.apartment !== values.room;
+  const typeHintId = `${fieldId('room')}-type-hint`;
+  const typeBox = (name: 'apartment' | 'room', text: string) => (
+    <label className="flex min-h-[44px] cursor-pointer items-center gap-[10px] text-[14px] has-[:disabled]:cursor-default">
+      <input
+        id={fieldId(name)}
+        type="checkbox"
+        checked={values[name]}
+        disabled={oneType && values[name]}
+        aria-describedby={oneType ? typeHintId : undefined}
+        onChange={(e) => set({ [name]: e.target.checked })}
+        className={`h-[18px] w-[18px] shrink-0 accent-accent ${focusRing}`}
+      />
+      {text}
+    </label>
+  );
+
   const featureLabels: Record<Feature, string> = {
     pets: t('search.feature.pets'),
     furnished: t('search.feature.furnished'),
@@ -235,6 +263,19 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
       onSubmit={submit}
       className="flex flex-col gap-[22px] rounded-2xl border border-line bg-white p-4"
     >
+      <fieldset className="min-w-0">
+        <legend className={legend}>{t('search.type.legend')}</legend>
+        <div className="flex flex-col">
+          {typeBox('apartment', t('search.type.apartment'))}
+          {typeBox('room', t('search.type.room'))}
+        </div>
+        {oneType && (
+          <p id={typeHintId} className="text-xs text-muted">
+            {t('search.type.hint')}
+          </p>
+        )}
+      </fieldset>
+
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.price')}</legend>
         <div className="flex gap-2">
