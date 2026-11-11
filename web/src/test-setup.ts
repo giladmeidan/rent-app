@@ -4,4 +4,75 @@ import { afterEach } from 'vitest';
 
 import './app/i18n';
 
-afterEach(cleanup);
+/**
+ * jsdom has no `EventSource`. This stand-in records every instance (`instances`) and lets a test
+ * drive it: `open()`, `emit(type, data)` (a named event with JSON data) and `fail(closed)` (an
+ * `error`, leaving `CLOSED` when the server refused the stream, else `CONNECTING`). A closed source
+ * receives nothing more. Assigned directly, not with `vi.stubGlobal`, so the tests'
+ * `vi.unstubAllGlobals()` keeps it.
+ */
+export class FakeEventSource extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  static instances: FakeEventSource[] = [];
+
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSED = 2;
+  readonly url: string;
+  readonly withCredentials: boolean;
+  readyState = 0;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+
+  constructor(url: string | URL, init?: EventSourceInit) {
+    super();
+    this.url = String(url);
+    this.withCredentials = init?.withCredentials ?? false;
+    FakeEventSource.instances.push(this);
+  }
+
+  /** The instances not closed yet. */
+  static live(): FakeEventSource[] {
+    return FakeEventSource.instances.filter((s) => s.readyState !== FakeEventSource.CLOSED);
+  }
+
+  /** The newest instance. */
+  static latest(): FakeEventSource {
+    const latest = FakeEventSource.instances.at(-1);
+    if (latest === undefined) throw new Error('no EventSource was created');
+    return latest;
+  }
+
+  close(): void {
+    this.readyState = FakeEventSource.CLOSED;
+  }
+
+  open(): void {
+    if (this.readyState === FakeEventSource.CLOSED) return;
+    this.readyState = FakeEventSource.OPEN;
+    this.dispatchEvent(new Event('open'));
+  }
+
+  emit(type: string, data: unknown): void {
+    if (this.readyState === FakeEventSource.CLOSED) return;
+    this.dispatchEvent(new MessageEvent(type, { data: JSON.stringify(data) }));
+  }
+
+  fail(closed: boolean): void {
+    if (this.readyState === FakeEventSource.CLOSED) return;
+    this.readyState = closed ? FakeEventSource.CLOSED : FakeEventSource.CONNECTING;
+    this.dispatchEvent(new Event('error'));
+  }
+}
+
+globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
+// jsdom lays nothing out, so it has no scrolling either.
+Element.prototype.scrollIntoView = () => {};
+
+afterEach(() => {
+  cleanup();
+  FakeEventSource.instances = [];
+});

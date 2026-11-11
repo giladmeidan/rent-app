@@ -79,6 +79,16 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
         </div>
         {(isWithdrawable(application.status) || withdraw.isError) && (
           <div className="flex flex-col items-start gap-2 pt-1">
+            {application.status === 'shortlisted' && (
+              // The chat opens on shortlist (0005a); its id is the application's.
+              <Link
+                to={`/chat/${application.id}`}
+                aria-describedby={titleId}
+                className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-tint px-4 text-[15px] font-bold text-accent-text ${focusRing}`}
+              >
+                {t('applications.chat')}
+              </Link>
+            )}
             {isWithdrawable(application.status) && (
               <button
                 type="button"
