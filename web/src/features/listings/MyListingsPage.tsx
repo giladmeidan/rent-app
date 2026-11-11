@@ -96,6 +96,16 @@ function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date;
                 )}
               </Link>
             )}
+            {/* Every room card (live, paused, expired), after "people" when that is shown. */}
+            {listing.listing_type === 'room' && (
+              <Link
+                to={`/me/listings/${listing.id}/flatmates`}
+                aria-describedby={titleId}
+                className={action}
+              >
+                {t('listings.mine.flatmates', { count: listing.flatmate_count })}
+              </Link>
+            )}
           </div>
           {patch.isError && (
             <p role="alert" className={fieldError}>
