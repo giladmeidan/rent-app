@@ -22,18 +22,20 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–4 are merged. Slice 4 finished with `0004b` (PR #16, dc4d8b4) and `0004d` (PR #17, c553950). Slice 5
-(Chat) is specced and verified (`0005a`, `0005c`, `0005b`); no build started. Nothing in flight: no open PRs, no
-spec worktrees or branches, no spec stacks running; local `main` = `origin/main`.
-Slice 6 (Match score, planning session 2026-11-11): seven specs `0006a`–`0006g` written and verified, digests in
-each spec; uncommitted in the main checkout until Gilad OKs the commit (see Next Steps 9). Slice 5 build state is
-kept by the Slice 5 session (`git log` is the truth: 0005a merged as PR #18 at 04fdf29).
+Slices 1–4 merged. Slice 5 (Chat): `0005a` merged (PR #18, 04fdf29); `0005c` building; `0005b` waits for it.
+Slice 6 (Match score): `0006a`–`0006g` specced and verified (1539061, digests in each spec); no build started.
+Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-11
+2026-11-11 (Slice 5 build session)
 
 ## Current Work
-None in flight. Next is Slice 5 (see Next Steps 1).
+- **`0005c` SSE events API — building** in session "Build 0005c" (local_a2fe6706…), worktree
+  `../rent-app-0005c`, branch `spec/0005c-chat-events-api` (cut from 0005a's PR head), stack `rent-app-0005c` on
+  5442/6388/8009. Coder running locally, no PR yet; it merges `origin/main` before its one push and opens a
+  normal PR against `main`.
+- `../rent-app-0005a` worktree + local branch `spec/0005a-chat-api` are kept only until 0005c has merged `main`;
+  then remove both (rule 10). Its stack is already down.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -66,6 +68,10 @@ None in flight. Next is Slice 5 (see Next Steps 1).
   applications" with withdraw, safe `?next=` login return path. Review: 2 majors fixed.
 - [x] 0004d Inbox web — PR #17 (c553950): `/me/listings/:id/applicants` with totals, filters, shortlist /
   un-shortlist / decline; applicants link on "my listings". Review: 0 blockers, 0 majors. Slice 4 complete.
+- [x] 0005a Chat API — PR #18 (04fdf29): conversation per application opened on shortlist, list chats with unread
+  counts, read a thread, send while shortlisted; migration `0006_chat`; chat bodies use
+  `visible_characters_only`. Review: 0 blockers, 1 major fixed (invisible-only bodies), 6 minors → FOLLOWUPS.
+- [x] Slice 6 specced and verified: 0006a–0006g (1539061); Gilad's Slice 6 batch in PRODUCT.md "Matching".
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -76,28 +82,32 @@ None in flight. Next is Slice 5 (see Next Steps 1).
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **Slice 5 builds**: `0005a` chat API is ready now (depends on merged 0004c). Prepare `../rent-app-0005a` from
-   `origin/main` with its own `.env` and start `/build 0005a` (coder Opus/high: migration + backfill). Then
-   `0005c` SSE events API from 0005a's branch once its PR is open (Opus/high: async concurrency), then `0005b`
-   chat web after 0005a + 0005c (web, needs 5173).
-2. Merge each PR on Gilad's word after `api`/`web`/`e2e` are green on its head (`--match-head-commit`); mark
+1. **Slice 5**: wait for `0005c`'s PR → merge on Gilad's word → then `0005b` chat web (web spec, holds 5173;
+   branch from `origin/main` once 0005c merged, or from 0005c's branch once its PR is open).
+2. **Slice 6**: see item 10 (ready now: `0006a`). Before preparing a Slice 6 worktree, set the spec `in-progress`
+   on `main` (commit that file by path, push) — that is the lock that stops two sessions building the same spec.
+   Next free stack ports: 5443/6389/8010 (5441–5442 / 6387–6388 / 8008–8009 used by 0005a/0005c).
+3. Merge each PR on Gilad's word after `api`/`web`/`e2e` are green on its head (`--match-head-commit`); mark
    `done`; remove worktree + branch (rule 10).
-3. If another session commits in the main checkout, push it (`git pull --rebase` first) before branching a
+4. If another session commits in the main checkout, push it (`git pull --rebase` first) before branching a
    worktree from `origin/main`.
-4. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
+5. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
    unthrottled and writes a row per hit; owner PATCH rate limit (Slice 5); 0004d re-fetch on 404/409.
-5. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0005`), then
+6. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0006`), then
    `make dev` with the same ports when 5173 is free.
-6. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
+7. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
    number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
    photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-7. **Slice 5 notes**: Gilad's Slice 5 answers are in PRODUCT.md "Chat" (SSE chosen for events; no open
-   questions). Specs pushed (ae6dfc9).
-8. Housekeeping: archive finished build sessions (0001b … 0004d) if Gilad wants; decide on
+8. **Shared main checkout**: several sessions work in `/Users/giladmeidan/rent_app/rent-app`. Commit only your
+   own files by path (`git commit -m … -- <path>`), never `git add -A`, never stash; `git pull --rebase` fails
+   while someone has unstaged edits — use `git fetch` + `git merge --ff-only origin/main` when the incoming
+   files don't overlap. Chain shell steps with `set -e` so a failed step can't run the rest in the wrong folder.
+   Starting a build session from an automated turn (a session's note) is refused by the app: ask Gilad with a
+   button, then start it with `cwd` set to the prepared worktree.
+9. Housekeeping: archive finished build sessions (0001b … 0004d) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
-9. **Slice 6 (Match score)** — specs verified, not built. First commit + push `specs/0006*.md` and the
-   `specs/PRODUCT.md` "Matching" row (only on Gilad's OK; `git pull --rebase` first, stage those paths only).
+10. **Slice 6 (Match score)** — specs verified, not built; committed as 1539061 with the PRODUCT.md "Matching" row.
    Build order (Speed rule 2; web specs never alongside each other or `0005b`, port 5173):
    - `0006a` matching inputs API — ready once pushed (0005a merged); migration `0007` (down `0006`); coder Opus/high.
    - `0006b` match score API — after 0006a's PR is open. `0006c` inbox match API — after 0006b's PR is open.
@@ -117,7 +127,7 @@ None in flight. Next is Slice 5 (see Next Steps 1).
   `listings.py` with the cap under `SELECT … FOR UPDATE`, `LISTING_TTL_DAYS = 90`; `search.py::_public_listings()`
   is the only definition of "public"), thin `routers/` (`areas`, `auth`, `health`, `listings`, `search`),
   `i18n/he.py`, `worker.py`.
-- `api/alembic/versions/`: `0001_areas`, `0002_users_sessions`, `0003_listings`.
+- `api/alembic/versions/`: `0001`–`0006` (`0006_chat`); Slice 6 adds `0007`.
 - `web/src/`: `app/` (`routes.tsx`, `Layout.tsx`), `features/areas`, `features/auth`, `features/listings` (wizard,
   `ListingCard`, `ListingPage`, `validate.ts` with `cleanText`), `features/search` (`SearchPage`, `FiltersForm`,
   `ResultsList`, `SortSelect`), `components/` (`Skeleton`, `EmptyState`, `ErrorState`, `ChoiceGroup`, `Switch`),
@@ -156,6 +166,9 @@ None in flight. Next is Slice 5 (see Next Steps 1).
   (`0005c`), chosen for very large user counts over polling and WebSockets; polling only as a fallback while a
   stream is down. A chat is keyed by its application id; sending only while `shortlisted`, thread stays readable;
   no chat notifications in Slice 5.
+- Matching (Slice 6, Gilad 2026-11-11): see PRODUCT.md "Matching" — a hard-filter miss stays in results with
+  score capped at 59; seeker profile = housing preferences only; owner "העדפות" wizard step (smoking and pets are
+  deal-breakers); a seeker needs a profile to apply.
 - Gilad merges PRs or tells the orchestrator to; the orchestrator merges with `gh pr merge N --merge
   --match-head-commit <full sha>` only after `api`, `web`, `e2e` are green on that head.
 
@@ -201,6 +214,8 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-11 — Slice 5 build session: 0005a built (one major fixed) and merged on Gilad's word (PR #18);
+  0005c build started from 0005a's branch. In parallel another session specced Slice 6 (0006a–g, 1539061).
 - 2026-11-11 — Slice 6 planning session (parallel to the Slice 5 build session): Gilad decided the four Slice 6
   questions (failing listings stay visible, capped at 59; profile = housing prefs only; owner wizard step with
   smoking + pets deal-breakers; profile required to apply) — written to PRODUCT.md "Matching"; specced
