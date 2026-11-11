@@ -325,11 +325,9 @@ Build digest (spec session, after review round 1):
               6 minors to FOLLOWUPS (perf: integer math or bound seeker answers would cut room-page DB time
               38-64%, base sum evaluated twice, 50k plan goes parallel; security: 2 more owner-side regression
               tests, keyword-only snapshot args; qa: a room -> apartment test); 5 nits (1 folded, 1 spec line, 3 dropped)
-    Decisions I need from you: 1. PRODUCT.md "Rooms" says the questionnaire "only lowers" a room's score; the
-             shipped formula can raise a fully agreeing room a couple of points (90 -> 92). Reword to "soft,
-             weight 20, can raise or lower, never filters"? (recommend: yes - a cap means owners who answer can
-             only lose rank)
-    Changed in PRODUCT.md: nothing (pending decision 1)
+    Decisions I need from you: none.
+    Changed in PRODUCT.md: "Rooms" now says the questionnaire is soft (weight 20) and can raise or lower a room's
+             score, never filters (2131b96, orchestrator under Gilad's Slice 7 delegation).
     Next: 0007f (room search web) and 0007c (room inbox) branch from #31.
 
 ## Verifier findings — one round, 7 findings, all applied
