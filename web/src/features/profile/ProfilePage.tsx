@@ -341,7 +341,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
         error={groupError('parking_needed')}
       />
 
-      <section aria-labelledby={`${id}-room`} className="flex flex-col gap-[22px]">
+      <section aria-labelledby={`${id}-room`} className="mt-6 flex flex-col gap-[22px]">
         <div className="flex flex-col gap-1">
           <h2
             ref={roomHeading}
