@@ -1,7 +1,7 @@
 ---
 id: 0006e
 title: An owner says who the listing suits — households, no smokers, minimum contract — in a new wizard step "העדפות" (create and edit), and the listing page shows "מה בעל הדירה מחפש"
-status: in-progress
+status: done
 depends_on: [0006a]      # the three listing fields on POST / PATCH / GET, and 0006a's type-only web edits (ListingInBody Omit, fixture defaults)
 reviewers: [code, qa, ux]   # ux: a new wizard step and a new listing-page section; qa: the edit diff for an array field
 estimate: 1 coder run
@@ -333,3 +333,20 @@ duplication is fine, but whichever lands second could reuse the first's keys.
              Array diff could mark every edit changed - mitigation: set comparison + e2e PATCH body check.
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0006e-owner-preferences-web.md - PRODUCT.md "Matching", "Listing edit" - design/screens-v1/CreateListing.dc.html, Listing.dc.html
+
+    Spec 0006e - Owner preferences web: wizard step "העדפות" + "מה בעל הדירה מחפש"   PR OPEN (not merged)
+    Shipped: the listing wizard has four steps (type -> details -> העדפות -> preview); an owner picks accepted
+             households (default all four), "ללא מעשנים" and a minimum contract on create and edit (an edit sends
+             only what changed; households compared as a set); the listing page and the preview show
+             "מה בעל הדירה מחפש" chips after the location, before the match card; hidden when nothing is set.
+    Demo: make dev -> sign up as owner, /listings/new -> on העדפות keep "זוג" and "יחיד/ה", turn on "ללא מעשנים",
+          pick "שנה" -> publish -> /listings/<id> shows "יחיד/ה או זוג", "ללא מעשנים", "חוזה לשנה לפחות".
+    Tests: +7 unit (AC1, AC3-AC7, AC9; AC2 amends ac4_preview_then_publish_navigates; 12 existing tests
+             amended for the fourth step), +0 integration, +0 new e2e (2 extended, no new signup)
+    e2e: make e2e local 10/10 green on 68c8ac0 (CI e2e off, E2E_IN_CI=off)
+    Findings: 0 blockers, 0 majors; 3 minors: 1 fixed (households error lost after a round trip to details),
+              1 to FOLLOWUPS (check mark on checked segments), 1 no action; 5 nits dropped
+    Changed in PRODUCT.md: nothing
+    Merge note: origin/main (0006f) merged in; ListingPage order location -> owner prefs -> MatchCard -> apply,
+              and 0006f's ac8_match_card asserts that chain.
+    Next: 0006g (inbox match web), port 5173 is free.

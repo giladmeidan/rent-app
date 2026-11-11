@@ -59,9 +59,23 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByLabel(f.description).fill('דירה מוארת');
   await page.getByRole('button', { name: he.listings.next }).click();
 
+  // Preferences (0006e): no smokers.
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.listings.prefs.title }),
+  ).toBeVisible();
+  await page.getByRole('switch', { name: he.listings.prefs.noSmokers }).check();
+  await page.getByRole('button', { name: he.listings.next }).click();
+
   await expect(page.getByText(he.listings.preview.hint)).toBeVisible();
+  const published = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/listings' &&
+      response.status() === 201,
+  );
   // A double click publishes once (the second click lands before the button re-renders disabled).
   await page.getByRole('button', { name: he.listings.publish }).dblclick();
+  const { id } = (await (await published).json()) as { id: string };
 
   // My listings.
   await expect(page).toHaveURL('/me/listings');
@@ -70,6 +84,14 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(card).toContainText('כצנלסון');
   await expect(card.getByText(/7,200\s*₪/)).toBeVisible();
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.live);
+
+  // The public page shows the preference (before pausing: a paused listing is a 404 there).
+  await page.goto('/listings/' + id);
+  await expect(page.getByRole('region', { name: he.listing.ownerLooksFor.title })).toContainText(
+    he.listing.ownerLooksFor.noSmokers,
+  );
+  await page.goto('/me/listings');
+  await expect(card).toHaveCount(1);
 
   await card.getByRole('button', { name: he.listings.actions.pause }).click();
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.paused);
@@ -125,6 +147,11 @@ test('ac12_owner_edits_listing', async ({ page }) => {
   // Price 7500, arnona cleared, preview, save.
   await page.getByLabel(f.price).fill('7500');
   await page.getByLabel(f.arnona, { exact: true }).fill('');
+  await page.getByRole('button', { name: he.listings.next }).click();
+  // Preferences untouched: the households array must not join the PATCH body.
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.listings.prefs.title }),
+  ).toBeVisible();
   await page.getByRole('button', { name: he.listings.next }).click();
   await expect(page.getByText(he.listings.preview.hint)).toBeVisible();
   const patch = page.waitForRequest(

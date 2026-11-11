@@ -9,6 +9,7 @@ import {
   formFromListing,
   toListingIn,
   validate,
+  validatePreferences,
   type FieldName,
   type ListingForm,
 } from '../validate';
@@ -163,6 +164,9 @@ describe('validate', () => {
       vaad_ils: 150,
       // `\n` stays in the description; a lone `\r`, U+2028 and bidi marks go; ZWJ stays.
       description: 'a\nb c\u200dd',
+      accepted_households: ['single', 'couple', 'family', 'roommates'],
+      smoking_allowed: true,
+      min_contract_months: null,
     });
   });
 
@@ -344,5 +348,63 @@ describe('validate', () => {
     });
     expect(Object.keys(everything)).not.toContain('status');
     expect(Object.keys(changedFields({ ...l, status: 'paused' }, toListingIn(form)))).toEqual([]);
+  });
+
+  it('ac9_preference_helpers', () => {
+    // toListingIn: canonical order, whatever order they were checked in.
+    expect(
+      toListingIn({ ...valid, accepted_households: ['roommates', 'couple', 'single'] })
+        .accepted_households,
+    ).toEqual(['single', 'couple', 'roommates']);
+    expect(
+      toListingIn({ ...valid, smoking_allowed: false, min_contract_months: 24 }),
+    ).toMatchObject({ smoking_allowed: false, min_contract_months: 24 });
+
+    // formFromListing → toListingIn round-trips the three fields.
+    const l = listing({
+      accepted_households: ['couple', 'single'],
+      smoking_allowed: false,
+      min_contract_months: 12,
+    });
+    const form = formFromListing(l);
+    expect(form).toMatchObject({
+      accepted_households: ['couple', 'single'],
+      smoking_allowed: false,
+      min_contract_months: 12,
+    });
+    expect(toListingIn(form)).toMatchObject({
+      accepted_households: ['single', 'couple'],
+      smoking_allowed: false,
+      min_contract_months: 12,
+    });
+
+    // changedFields: households as a set.
+    expect(changedFields(l, toListingIn(form))).toEqual({});
+    const diff = (patch: Partial<ListingForm>) =>
+      changedFields(l, toListingIn({ ...form, ...patch }));
+    expect(diff({ accepted_households: ['single', 'couple'] })).toEqual({});
+    expect(diff({ accepted_households: ['single'] })).toEqual({ accepted_households: ['single'] });
+    expect(diff({ accepted_households: ['single', 'family'] })).toEqual({
+      accepted_households: ['single', 'family'],
+    });
+    expect(diff({ accepted_households: ['family', 'couple', 'single'] })).toEqual({
+      accepted_households: ['single', 'couple', 'family'],
+    });
+    expect(diff({ smoking_allowed: true })).toEqual({ smoking_allowed: true });
+    expect(diff({ min_contract_months: null })).toEqual({ min_contract_months: null });
+    expect(diff({ min_contract_months: 36 })).toEqual({ min_contract_months: 36 });
+
+    // emptyForm: every household, smokers welcome, no minimum; validatePreferences needs one.
+    expect(emptyForm).toMatchObject({
+      accepted_households: ['single', 'couple', 'family', 'roommates'],
+      smoking_allowed: true,
+      min_contract_months: null,
+    });
+    expect(validatePreferences(valid)).toEqual({});
+    expect(validatePreferences({ ...valid, accepted_households: [] })).toEqual({
+      accepted_households: { key: 'listings.errors.households' },
+    });
+    // validate() is the details step's only.
+    expect(validate({ ...valid, accepted_households: [] }, today)).toEqual({});
   });
 });

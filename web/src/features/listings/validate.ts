@@ -2,10 +2,20 @@
 // `cleanText`, the API's visible-characters rule (`api/app/schemas/_text.py`), so the body
 // `toListingIn` builds from a form that passes here is not a 422 (except `unknown_area`, which only
 // the API can know).
+import { HOUSEHOLDS } from './constants';
 import { addDays } from './format';
-import type { Furnished, ListingInBody, ListingOut, ListingPatch, ListingType } from './api';
+import type {
+  ContractMonths,
+  Furnished,
+  Household,
+  ListingInBody,
+  ListingOut,
+  ListingPatch,
+  ListingType,
+} from './api';
 
-/** Every input is kept as the string the person typed; `toListingIn` converts. */
+/** Every input is kept as the string the person typed; `toListingIn` converts. The preferences
+ * (0006e) hold the API values. */
 export type ListingForm = {
   listing_type: ListingType | null;
   area_id: string;
@@ -27,6 +37,9 @@ export type ListingForm = {
   arnona_ils: string;
   vaad_ils: string;
   description: string;
+  accepted_households: Household[];
+  smoking_allowed: boolean;
+  min_contract_months: ContractMonths | null;
 };
 
 export const emptyForm: ListingForm = {
@@ -48,9 +61,14 @@ export const emptyForm: ListingForm = {
   arnona_ils: '',
   vaad_ils: '',
   description: '',
+  accepted_households: [...HOUSEHOLDS],
+  smoking_allowed: true,
+  min_contract_months: null,
 };
 
-/** The validated fields, in the order they appear on the form (focus goes to the first invalid). */
+/** The validated fields, in the order they appear on the form (focus goes to the first invalid):
+ * the details step's, then the preferences step's (`smoking_allowed` is always a boolean, never
+ * an error). */
 export const FIELD_ORDER = [
   'area_id',
   'city',
@@ -65,6 +83,8 @@ export const FIELD_ORDER = [
   'arnona_ils',
   'vaad_ils',
   'description',
+  'accepted_households',
+  'min_contract_months',
 ] as const;
 export type FieldName = (typeof FIELD_ORDER)[number];
 
@@ -74,6 +94,7 @@ export type FieldError =
   | { key: 'listings.errors.floors' }
   | { key: 'listings.errors.tooLong'; max: number }
   | { key: 'listings.errors.dateRange' }
+  | { key: 'listings.errors.households' }
   /** The API rejected the field (a 422 naming it); its English `msg` is never shown. */
   | { key: 'listings.errors.invalid' };
 
@@ -176,7 +197,7 @@ function day(value: string, today: string): FieldError | undefined {
 }
 
 /**
- * Per-field error for `form`; an empty object means it can be published. `today` is Israel's
+ * Per-field error for the details step of `form`; an empty object means it can move on. `today` is Israel's
  * calendar day as `YYYY-MM-DD` (`todayInIsrael()`).
  */
 export function validate(form: ListingForm, today: string): FieldErrors {
@@ -197,6 +218,9 @@ export function validate(form: ListingForm, today: string): FieldErrors {
       visibleLength(form.description, { multiline: true }) > LIMITS.description
         ? { key: 'listings.errors.tooLong', max: LIMITS.description }
         : undefined,
+    // The preferences step's (`validatePreferences`).
+    accepted_households: undefined,
+    min_contract_months: undefined,
   };
   if (
     found.floor === undefined &&
@@ -212,6 +236,13 @@ export function validate(form: ListingForm, today: string): FieldErrors {
     if (error !== undefined) errors[name] = error;
   }
   return errors;
+}
+
+/** The preferences step's errors: at least one household. */
+export function validatePreferences(form: ListingForm): FieldErrors {
+  return form.accepted_households.length === 0
+    ? { accepted_households: { key: 'listings.errors.households' } }
+    : {};
 }
 
 export function firstInvalid(errors: FieldErrors): FieldName | undefined {
@@ -243,6 +274,10 @@ export function toListingIn(form: ListingForm): ListingInBody {
     city: cleanText(form.city),
     street: cleanText(form.street),
     area_id: form.area_id,
+    // Canonical order, whatever order they were checked in.
+    accepted_households: HOUSEHOLDS.filter((h) => form.accepted_households.includes(h)),
+    smoking_allowed: form.smoking_allowed,
+    min_contract_months: form.min_contract_months,
   };
 }
 
@@ -269,19 +304,31 @@ export function formFromListing(listing: ListingOut): ListingForm {
     arnona_ils: fromOptionalInt(listing.arnona_ils),
     vaad_ils: fromOptionalInt(listing.vaad_ils),
     description: listing.description ?? '',
+    accepted_households: [...listing.accepted_households],
+    smoking_allowed: listing.smoking_allowed,
+    min_contract_months: listing.min_contract_months,
   };
+}
+
+/** Same households, in any order. */
+function sameSet(a: readonly Household[], b: readonly Household[]): boolean {
+  return a.length === b.length && a.every((h) => b.includes(h));
 }
 
 /**
  * The `PATCH /listings/{id}` body: every key of `body` (as `toListingIn` builds it) whose value
- * differs from the stored listing's. A cleared nullable field is already `null` in `body`. Never
- * `status` (pausing stays on "my listings").
+ * differs from the stored listing's. A cleared nullable field is already `null` in `body`; the
+ * households are compared as a set (the API may store them in any order). Never `status` (pausing
+ * stays on "my listings").
  */
 export function changedFields(listing: ListingOut, body: ListingInBody): ListingPatch {
   const patch: Record<string, unknown> = {};
   for (const key of Object.keys(body) as (keyof ListingInBody)[]) {
-    const same =
-      key === 'rooms' ? Number(listing.rooms) === body.rooms : listing[key] === body[key];
+    let same: boolean;
+    if (key === 'rooms') same = Number(listing.rooms) === body.rooms;
+    else if (key === 'accepted_households') {
+      same = sameSet(listing.accepted_households, body.accepted_households);
+    } else same = listing[key] === body[key];
     if (!same) patch[key] = body[key];
   }
   return patch as ListingPatch;

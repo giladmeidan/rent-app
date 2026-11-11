@@ -88,6 +88,8 @@ async function changePriceAndSave(
   change(f.price, '7500');
   fireEvent.click(nextButton());
   expect(progress()).toHaveAttribute('aria-valuenow', '3');
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '4');
   fireEvent.click(saveButton());
   await vi.waitFor(() => {
     expect(opened.api.calls(`PATCH /listings/${a.id}`)).toHaveLength(1);
@@ -176,6 +178,7 @@ describe('EditListingPage', () => {
     expect(field(f.price)).toHaveValue(formatIls(7500));
     expect(field(f.street)).toHaveValue(a.street);
     fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
     fireEvent.click(saveButton());
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/me/listings');
@@ -237,6 +240,7 @@ describe('EditListingPage', () => {
     change(f.price, '7500');
     change(f.arnona, '');
     fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
 
     const card = screen.getByRole('article');
     expect(within(card).getByText(`${formatIls(7500)} ${he.listings.units.ils}`)).toBeVisible();
@@ -269,6 +273,7 @@ describe('EditListingPage', () => {
   it('ac4_unchanged_form_saves_nothing', async () => {
     const a = stored();
     const { api } = await openEdit(a);
+    fireEvent.click(nextButton());
     fireEvent.click(nextButton());
     fireEvent.click(saveButton());
     await vi.waitFor(() => {
@@ -322,13 +327,13 @@ describe('EditListingPage', () => {
     opened.view.unmount();
     vi.unstubAllGlobals();
 
-    // A model-level 422: common.error on step 3, no retry.
+    // A model-level 422: common.error on step 4, no retry.
     a = stored();
     opened = await changePriceAndSave(a, [
       json({ detail: [{ loc: ['body'], type: 'value_error', msg: 'bad row' }] }, 422),
     ]);
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     expect(document.body.textContent).not.toContain('bad row');
     opened.view.unmount();
@@ -339,7 +344,7 @@ describe('EditListingPage', () => {
     opened = await changePriceAndSave(a, [json({ detail: 'unknown_area' }, 422)]);
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(he.listings.errors.areaInactive);
-    fireEvent.click(within(alert).getByRole('button', { name: he.common.back }));
+    fireEvent.click(within(alert).getByRole('button', { name: he.listings.preview.backToDetails }));
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
     opened.view.unmount();
     vi.unstubAllGlobals();
@@ -490,5 +495,68 @@ describe('EditListingPage', () => {
     fireEvent.click(backLink());
     expect(confirm).not.toHaveBeenCalled();
     expect(currentPath()).toBe('/me/listings');
+  });
+
+  it('ac6_preferences_patch_only_changes', async () => {
+    const p = he.listings.prefs;
+    const household = (name: string) => screen.getByRole('checkbox', { name });
+    const noSmokers = () => screen.getByRole('switch', { name: p.noSmokers });
+    const minContract = () => field(p.minContract);
+    // The households as the API may order them.
+    const prefs = {
+      accepted_households: ['couple', 'single'],
+      smoking_allowed: true,
+      min_contract_months: null,
+    } as const satisfies Partial<ListingOut>;
+
+    // Only the minimum changes: the PATCH carries it alone.
+    let a = stored({ ...prefs, accepted_households: [...prefs.accepted_households] });
+    let opened = await openEdit(a, [() => json({ ...a, min_contract_months: 24 })]);
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(household(p.household.single)).toBeChecked();
+    expect(household(p.household.couple)).toBeChecked();
+    expect(household(p.household.family)).not.toBeChecked();
+    expect(household(p.household.roommates)).not.toBeChecked();
+    expect(noSmokers()).not.toBeChecked();
+    expect(minContract()).toHaveValue('');
+    fireEvent.change(minContract(), { target: { value: '24' } });
+    expect(minContract()).toHaveDisplayValue(p.contract['24']);
+    expect(beforeUnloadPrevented()).toBe(true);
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    fireEvent.click(saveButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(opened.api.calls(`PATCH /listings/${a.id}`).map((c) => c.body)).toStrictEqual([
+      { min_contract_months: 24 },
+    ]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Untouched: not dirty, and next → next → save sends nothing.
+    a = stored({ ...prefs, accepted_households: [...prefs.accepted_households] });
+    opened = await openEdit(a);
+    expect(beforeUnloadPrevented()).toBe(false);
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    fireEvent.click(saveButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(opened.api.calls(`PATCH /listings/${a.id}`)).toHaveLength(0);
+    expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // No smokers stored: the switch opens checked.
+    a = stored({ smoking_allowed: false, min_contract_months: 36 });
+    await openEdit(a);
+    fireEvent.click(nextButton());
+    expect(noSmokers()).toBeChecked();
+    expect(minContract()).toHaveDisplayValue(p.contract['36']);
+    expect(beforeUnloadPrevented()).toBe(false);
   });
 });
