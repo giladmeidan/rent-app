@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router';
+import { Link, Navigate, useParams } from 'react-router';
 
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
-import { hasStatus } from '../applications/api';
 import { useMe } from '../auth/useMe';
 import { formatIls, formatRooms } from '../listings/format';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
 import { formatMessageTime } from './format';
 import { Loading } from './Loading';
-import { useThread } from './useThread';
+import { isThreadNotFound, useThread } from './useThread';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
@@ -60,7 +61,7 @@ function Bubble({ message, otherName }: { message: MessageOut; otherName: string
         </span>
         <time
           dateTime={message.created_at}
-          className={`ms-auto text-[12px] ${mine ? 'text-white/80' : 'text-muted'}`}
+          className={`ms-auto text-[12px] ${mine ? 'text-white' : 'text-muted'}`}
         >
           {formatMessageTime(message.created_at)}
         </time>
@@ -94,7 +95,8 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   return (
     <>
       <h1 className="text-start text-2xl font-extrabold [overflow-wrap:anywhere]">
-        {thread.other_name}
+        {/* Its own direction: a Latin name in an RTL page stays in order. */}
+        <span dir="auto">{thread.other_name}</span>
       </h1>
       <p className="flex flex-wrap items-center gap-x-2 text-start text-sm text-muted">
         <span>
@@ -160,12 +162,18 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
 /** `/chat/:id`, for an owner or a seeker in that chat (`RequireUser`). */
 export function ChatThreadPage() {
   const { t } = useTranslation();
-  const { id = '' } = useParams();
-  const thread = useThread(id);
+  const { id: raw = '' } = useParams();
+  // A malformed id is not found without asking the API; a valid one is used in its canonical
+  // (lowercase) form, the one the event stream names, so its events reach this cache key.
+  const valid = UUID.test(raw);
+  const id = raw.toLowerCase();
+  const thread = useThread(id, valid);
+
+  if (valid && raw !== id) return <Navigate to={`/chat/${id}`} replace />;
 
   let body;
   // Not found first: a send's 404 then a 404 refetch leaves the old thread cached.
-  if (hasStatus(thread.error, 404)) {
+  if (!valid || isThreadNotFound(thread.error)) {
     body = <h1 className="text-start text-2xl font-extrabold">{t('chat.thread.notFound')}</h1>;
   } else if (thread.data === undefined) {
     body = thread.isError ? (

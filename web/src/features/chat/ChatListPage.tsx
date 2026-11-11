@@ -47,7 +47,7 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate text-[17px] font-extrabold">
+            <span dir="auto" className="min-w-0 truncate text-[17px] font-extrabold">
               {conversation.other_name}
             </span>
             {mark}

@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +9,7 @@ import {
   deferred,
   json,
   mockApi,
+  networkError,
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
@@ -20,6 +22,8 @@ import { chatRoutes, connected, ES, openStream, settle } from './harness';
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  onlineManager.setOnline(true);
 });
 
 type Reply = Parameters<typeof mockApi>[0][string][number];
@@ -37,7 +41,13 @@ function renderThread(
     me = seeker,
     list = [() => json([])],
     extra = {},
-  }: { me?: typeof seeker; list?: Reply[]; extra?: Record<string, Reply[]> } = {},
+    path = `/chat/${t.id}`,
+  }: {
+    me?: typeof seeker;
+    list?: Reply[];
+    extra?: Record<string, Reply[]>;
+    path?: string;
+  } = {},
 ) {
   const api = mockApi({
     'GET /me': [() => json(me)],
@@ -46,7 +56,7 @@ function renderThread(
     ...extra,
   });
   const client = testQueryClient();
-  const view = renderRoutes(`/chat/${t.id}`, chatRoutes, client);
+  const view = renderRoutes(path, chatRoutes, client);
   return { api, view, client };
 }
 
@@ -147,7 +157,7 @@ describe('ChatThreadPage', () => {
     const read = { ...listed, unread_count: 0, is_new: false };
     const first = deferred();
     const replies: { thread: () => Response } = { thread: () => json(T) };
-    const { api, client } = renderThread(T, [first.promise, () => replies.thread()], {
+    const { api, client, view } = renderThread(T, [first.promise, () => replies.thread()], {
       list: [json([listed]), () => json([read])],
       extra: { [postRoute(T)]: [() => json(sent('hi'), 201)] },
     });
@@ -208,6 +218,43 @@ describe('ChatThreadPage', () => {
     expect(within(log()).getByText('three')).toBeVisible();
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     expect(screen.queryByText(he.common.error)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A list request still in flight when the thread's GET marks the chat read (its answer may
+    // predate that) is restarted: its stale count never lands.
+    const R = thread({ messages: [message()] });
+    const unreadR = conversation({ id: R.id, unread_count: 2, is_new: true });
+    const staleList = deferred();
+    let race = renderThread(R, [() => json(R)], {
+      list: [staleList.promise, () => json([{ ...unreadR, unread_count: 0, is_new: false }])],
+    });
+    expect(await h1(R.other_name)).toBeVisible();
+    await vi.waitFor(() => {
+      expect(race.api.calls(LIST)).toHaveLength(2);
+    });
+    staleList.resolve(json([unreadR]));
+    await settle();
+    expect(
+      race.client.getQueryData<ConversationOut[]>(CONVERSATIONS_KEY)?.find((c) => c.id === R.id),
+    ).toMatchObject({ unread_count: 0, is_new: false });
+    expect(screen.getByRole('link', { name: he.header.chat })).toBeVisible();
+    reset(race.view);
+
+    // An uppercase id: the canonical (lowercase) URL and cache key, so the stream's event for the
+    // chat (which names the canonical id) refetches it.
+    const U = thread({ messages: [message({ body: 'before' })] });
+    const upper = { thread: () => json(U) };
+    race = renderThread(U, [() => upper.thread()], { path: `/chat/${U.id.toUpperCase()}` });
+    expect(await h1(U.other_name)).toBeVisible();
+    expect(currentPath()).toBe(`/chat/${U.id}`);
+    const stream = openStream();
+    await settle();
+    upper.thread = () => json(withMessages(U, message({ body: 'after' })));
+    act(() => {
+      stream.emit('chat', { conversation_id: U.id, kind: 'message' });
+    });
+    expect(await within(log()).findByText('after')).toBeVisible();
   });
 
   it('ac6_send_and_viewing_chip', async () => {
@@ -324,16 +371,35 @@ describe('ChatThreadPage', () => {
       reset(view);
     }
 
-    // 401 on the POST: the session is gone; to /login.
-    ({ view } = renderThread(T, [() => json(T)], {
+    // Offline: the send is not paused until the browser is back; it fails at once, text kept.
+    ({ view } = renderThread(T, [() => json(T)], { extra: { [postRoute(T)]: [networkError] } }));
+    expect(await h1(T.other_name)).toBeVisible();
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => {
+      onlineManager.setOnline(false);
+    });
+    fireEvent.change(textarea(), { target: { value: 'hi' } });
+    fireEvent.click(sendButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(textarea()).toHaveValue('hi');
+    expect(textarea()).not.toHaveAttribute('readonly');
+    expect(sendButton()).toBeEnabled();
+    reset(view);
+    vi.restoreAllMocks();
+    onlineManager.setOnline(true);
+
+    // 401 on the POST: the session is gone; to /login, and the sent text is not kept anywhere.
+    const expired = renderThread(T, [() => json(T)], {
       extra: { [postRoute(T)]: [json({ detail: 'unauthenticated' }, 401)] },
-    }));
+    });
+    view = expired.view;
     expect(await h1(T.other_name)).toBeVisible();
     fireEvent.change(textarea(), { target: { value: 'hi' } });
     fireEvent.click(sendButton());
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/login');
     });
+    expect(expired.client.getMutationCache().getAll()).toHaveLength(0);
     reset(view);
 
     // 401 on the thread's own GET: to /login, no further GET, the stream closed.
@@ -386,11 +452,31 @@ describe('ChatThreadPage', () => {
       'href',
       '/chat',
     );
-    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    // Past the 15 s fallback poll (the stream is not connected here).
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
     expect(api.calls(threadRoute(T))).toHaveLength(1);
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     reset(view);
+
+    // A 422 (an id the API cannot parse) is not found too, and stops the poll.
+    ({ api, view } = renderThread(T, [() => json({ detail: [{ msg: 'bad uuid' }] }, 422)]));
+    expect(await h1(he.chat.thread.notFound)).toBeVisible();
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(api.calls(threadRoute(T))).toHaveLength(1);
+    reset(view);
     vi.useRealTimers();
+
+    // A malformed id: not found at once, nothing requested, no composer.
+    for (const path of ['/chat/..', '/chat/not-a-uuid', `/chat/${T.id}x`]) {
+      ({ api, view } = renderThread(T, [() => json(T)], { path }));
+      expect(await h1(he.chat.thread.notFound)).toBeVisible();
+      await settle();
+      expect(api.fetchMock.mock.calls.map(([r]) => new URL(r.url).pathname)).not.toContainEqual(
+        expect.stringMatching(/^\/conversations\//),
+      );
+      expect(screen.queryByRole('textbox')).toBeNull();
+      reset(view);
+    }
 
     // A loaded thread whose POST and then refetch answer 404: not found replaces it.
     const loaded = thread({ messages: [message({ body: 'hello' })] });
