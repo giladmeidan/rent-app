@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 import { hasStatus } from '../applications/api';
 import { ApplicationStatusChip } from '../applications/ApplicationStatusChip';
@@ -14,6 +15,7 @@ const button = `inline-flex min-h-[44px] items-center justify-center rounded-xl 
 const primary = `${button} bg-accent font-bold text-white`;
 const secondary = `${button} border-[1.5px] border-accent bg-accent-tint font-bold text-accent-text`;
 const outline = `${button} border-[1.5px] border-[#D6D3D1] bg-white font-semibold`;
+const iconLink = `inline-flex min-h-[44px] w-11 flex-none items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white ${focusRing}`;
 
 /** What the page does once a change is settled (it owns focus, the announcement and the alert). */
 export type CardOutcome =
@@ -138,6 +140,29 @@ export function ApplicantCard({ listingId, applicant, headingId, onSettled }: Pr
                     {action.label}
                   </button>
                 ))}
+                {applicant.status === 'shortlisted' && (
+                  // The chat opens on shortlist (0005a); its id is the application's.
+                  <Link
+                    to={`/chat/${applicant.id}`}
+                    aria-label={t('chat.withName', { name })}
+                    aria-describedby={headingId}
+                    className={iconLink}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M21 12a8 8 0 0 1-11.6 7.2L4 21l1.8-5A8 8 0 1 1 21 12z" />
+                    </svg>
+                  </Link>
+                )}
               </div>
             )}
             {showError && (

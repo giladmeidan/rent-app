@@ -531,4 +531,23 @@ describe('ApplicantsPage', () => {
     expect(cards()).toHaveLength(2);
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.shortlisted);
   });
+  it('ac10_chat_button_on_shortlisted', async () => {
+    const shortlisted = applicant({ applicant_name: MICHAL, status: 'shortlisted' });
+    const submitted = applicant({ status: 'submitted' });
+    const declined = applicant({ status: 'declined' });
+    renderPage([json([shortlisted, submitted, declined])]);
+    await screen.findAllByRole('article');
+
+    // Only the shortlisted card: an icon link to its chat, named after the applicant and
+    // described by the card's heading.
+    const name = i18n.t('chat.withName', { name: MICHAL });
+    const link = within(cardOf(MICHAL)).getByRole('link', { name });
+    expect(link).toHaveAttribute('href', `/chat/${shortlisted.id}`);
+    expect(link).toHaveAccessibleDescription(MICHAL);
+    expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getAllByRole('link', { name: /^\u05e6'\u05d0\u05d8 / })).toEqual([link]);
+    for (const other of [submitted, declined]) {
+      expect(within(cardOf(other.applicant_name)).queryByRole('link')).toBeNull();
+    }
+  });
 });

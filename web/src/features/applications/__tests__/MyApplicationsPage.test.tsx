@@ -245,4 +245,20 @@ describe('MyApplicationsPage', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('ac10_chat_link_on_shortlisted', async () => {
+    const shortlisted = to('L1', { status: 'shortlisted' });
+    const submitted = to('L2', { status: 'submitted' });
+    renderPage([json([shortlisted, submitted])]);
+    await screen.findAllByRole('article');
+    const [first, second] = cards() as [HTMLElement, HTMLElement];
+
+    // Only the shortlisted card links to its chat, before the withdraw button.
+    const link = within(first).getByRole('link', { name: he.applications.chat });
+    expect(link).toHaveAttribute('href', `/chat/${shortlisted.id}`);
+    const withdraw = within(first).getByRole('button', { name: he.applications.withdraw });
+    expect(link.compareDocumentPosition(withdraw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(second).queryByRole('link', { name: he.applications.chat })).toBeNull();
+    expect(screen.getAllByRole('link', { name: he.applications.chat })).toHaveLength(1);
+  });
 });
