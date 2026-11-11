@@ -22,20 +22,25 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–4 merged. Slice 5 (Chat): `0005a` merged (PR #18, 04fdf29); `0005c` building; `0005b` waits for it.
-Slice 6 (Match score): `0006a`–`0006g` specced and verified (1539061, digests in each spec); no build started.
+Slices 1–5 merged. **Slice 5 (Chat) complete**: `0005a` (PR #18), `0005c` (PR #19), `0005b` (PR #22).
+Slice 6 (Match score): `0006a`–`0006d` merged (PRs #20, #21, #23, #24); `0006f` has a worktree (being built by a
+Slice 6 session); `0006e` and `0006g` are `verified`, not started. Alembic head on `main` is `0008`.
 Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-11 (Slice 5 build session)
+2026-11-11 (Slice 5 build session, after Slice 5 merged)
 
 ## Current Work
-- **`0005c` SSE events API — building** in session "Build 0005c" (local_a2fe6706…), worktree
-  `../rent-app-0005c`, branch `spec/0005c-chat-events-api` (cut from 0005a's PR head), stack `rent-app-0005c` on
-  5442/6388/8009. Coder running locally, no PR yet; it merges `origin/main` before its one push and opens a
-  normal PR against `main`.
-- `../rent-app-0005a` worktree + local branch `spec/0005a-chat-api` are kept only until 0005c has merged `main`;
-  then remove both (rule 10). Its stack is already down.
+- Slice 5: nothing in flight. All 0005 worktrees, local branches and stacks are removed.
+- Slice 6: run by separate sessions (not this one). `../rent-app-0006f` exists on `spec/0006f-match-web`
+  (stack 5448/6394/8015, holds web port 5173 while it builds), but `0006f` is still `verified` on `main` — the
+  in-progress lock (Next Steps 2) was skipped; check with that session before starting 0006f anywhere else.
+- **CI e2e outage (2026-11-11 ~14:00)**: GitHub runners could not resolve Ubuntu apt mirrors, so `e2e` hit its
+  10-minute timeout inside Playwright's browser-deps install before any test ran. Gilad OK'd merging PR #22
+  (0005b) and PR #24 (0006d) with e2e skipped (local `make e2e` was green). The first post-merge `main` run
+  re-checks e2e; look at it before trusting main.
+- Uncommitted in the main checkout, not from this session: `Makefile`, `infra/docker-compose.yml`,
+  `api/scripts/seed_demo.py` (someone's demo-seed work). Leave them to their owner.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -71,7 +76,14 @@ Last updated:
 - [x] 0005a Chat API — PR #18 (04fdf29): conversation per application opened on shortlist, list chats with unread
   counts, read a thread, send while shortlisted; migration `0006_chat`; chat bodies use
   `visible_characters_only`. Review: 0 blockers, 1 major fixed (invisible-only bodies), 6 minors → FOLLOWUPS.
+- [x] 0005c Chat events API — PR #19 (3700b27): one SSE stream per logged-in tab over Redis pub/sub
+  (`routers/events.py`, `services/chat_events.py`). Review: 1 major fixed (an open stream blocked uvicorn
+  shutdown/reload), 6 minors → FOLLOWUPS.
+- [x] 0005b Chat web — PR #22 (0cc352c): chats from the header, owner inbox and "my applications", live thread,
+  deposit warning. Review: 0 blockers, 1 major fixed (offline send), 6 minors fixed. **Merged with CI e2e skipped**
+  (runner outage, Gilad's word); local e2e green. Slice 5 complete.
 - [x] Slice 6 specced and verified: 0006a–0006g (1539061); Gilad's Slice 6 batch in PRODUCT.md "Matching".
+  Merged so far: 0006a PR #20 (a225239), 0006b PR #21 (ceda6fc), 0006c PR #23 (70e937f), 0006d PR #24 (3139ba9).
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -82,18 +94,20 @@ Last updated:
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **Slice 5**: wait for `0005c`'s PR → merge on Gilad's word → then `0005b` chat web (web spec, holds 5173;
-   branch from `origin/main` once 0005c merged, or from 0005c's branch once its PR is open).
-2. **Slice 6**: see item 10 (ready now: `0006a`). Before preparing a Slice 6 worktree, set the spec `in-progress`
-   on `main` (commit that file by path, push) — that is the lock that stops two sessions building the same spec.
-   Next free stack ports: 5443/6389/8010 (5441–5442 / 6387–6388 / 8008–8009 used by 0005a/0005c).
+1. **Check the `main` CI run after 0cc352c / 3139ba9**: e2e was skipped on #22 and #24; if main's e2e fails,
+   fix before the next merge. If the apt outage recurs, a small CI spec could stop Playwright's deps install from
+   eating the 10-minute timeout (cache the deps or raise the step limit).
+2. **Slice 6**: see item 10. Remaining: `0006f` (worktree exists), `0006e` (web, waits for 5173), `0006g` (after
+   0006f; 0006c and 0005b are merged). Before preparing a worktree, set the spec `in-progress` on `main` (commit
+   that file by path, push) — the lock that stops two sessions building the same spec. Stack ports used so far
+   go up to 5448/6394/8015; pick above that.
 3. Merge each PR on Gilad's word after `api`/`web`/`e2e` are green on its head (`--match-head-commit`); mark
    `done`; remove worktree + branch (rule 10).
 4. If another session commits in the main checkout, push it (`git pull --rebase` first) before branching a
    worktree from `origin/main`.
 5. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
    unthrottled and writes a row per hit; owner PATCH rate limit (Slice 5); 0004d re-fetch on 404/409.
-6. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0006`), then
+6. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0008`), then
    `make dev` with the same ports when 5173 is free.
 7. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
@@ -127,7 +141,7 @@ Last updated:
   `listings.py` with the cap under `SELECT … FOR UPDATE`, `LISTING_TTL_DAYS = 90`; `search.py::_public_listings()`
   is the only definition of "public"), thin `routers/` (`areas`, `auth`, `health`, `listings`, `search`),
   `i18n/he.py`, `worker.py`.
-- `api/alembic/versions/`: `0001`–`0006` (`0006_chat`); Slice 6 adds `0007`.
+- `api/alembic/versions/`: `0001`–`0008` (`0006_chat`, `0007_matching_inputs`, `0008_application_listing_snapshot`).
 - `web/src/`: `app/` (`routes.tsx`, `Layout.tsx`), `features/areas`, `features/auth`, `features/listings` (wizard,
   `ListingCard`, `ListingPage`, `validate.ts` with `cleanText`), `features/search` (`SearchPage`, `FiltersForm`,
   `ResultsList`, `SortSelect`), `components/` (`Skeleton`, `EmptyState`, `ErrorState`, `ChoiceGroup`, `Switch`),
@@ -214,8 +228,9 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
-- 2026-11-11 — Slice 5 build session: 0005a built (one major fixed) and merged on Gilad's word (PR #18);
-  0005c build started from 0005a's branch. In parallel another session specced Slice 6 (0006a–g, 1539061).
+- 2026-11-11 — Slice 5 build session: 0005a (PR #18), 0005c (PR #19) and 0005b (PR #22, e2e skipped on Gilad's
+  word during a runner apt/DNS outage) built and merged — Slice 5 done; all 0005 worktrees and branches removed.
+  In parallel other sessions specced Slice 6 and merged 0006a–0006d.
 - 2026-11-11 — Slice 6 planning session (parallel to the Slice 5 build session): Gilad decided the four Slice 6
   questions (failing listings stay visible, capped at 59; profile = housing prefs only; owner wizard step with
   smoking + pets deal-breakers; profile required to apply) — written to PRODUCT.md "Matching"; specced
