@@ -222,4 +222,68 @@ describe('ListingPage', () => {
     ).toBeVisible();
     expect(screen.getByText(he.listing.locationHint)).toBeVisible();
   });
+
+  it('ac7_owner_looks_for', async () => {
+    const title = he.listing.ownerLooksFor.title;
+    const following = (a: Node, b: Node) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    // Two households, no smokers, a year: the region after "location", before applying.
+    const picky = listingDetail({
+      accepted_households: ['single', 'couple'],
+      smoking_allowed: false,
+      min_contract_months: 12,
+    });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${picky.id}`]: [json(picky)],
+    });
+    let view = render(picky.id);
+    const region = await screen.findByRole('region', { name: title });
+    expect(within(region).getByRole('heading', { level: 2, name: title })).toBeVisible();
+    expect(
+      within(region)
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent),
+    ).toEqual(['יחיד/ה או זוג', 'ללא מעשנים', 'חוזה לשנה לפחות']);
+    const location = screen
+      .getByRole('heading', { level: 2, name: he.listing.location })
+      .closest('section') as HTMLElement;
+    expect(following(location, region)).toBe(true);
+    expect(location).not.toContainElement(region);
+    expect(following(region, await screen.findByText(he.applications.loginPrompt))).toBe(true);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Three households in any order: canonical order, joined "a, b or c"; nothing else set.
+    const three = listingDetail({ accepted_households: ['family', 'single', 'couple'] });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${three.id}`]: [json(three)],
+    });
+    view = render(three.id);
+    const threeRegion = await screen.findByRole('region', { name: title });
+    expect(
+      within(threeRegion)
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent),
+    ).toEqual(['יחיד/ה, זוג או משפחה']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Every household, smoking allowed, no minimum: no section at all.
+    const open = listingDetail({
+      accepted_households: ['single', 'couple', 'family', 'roommates'],
+      smoking_allowed: true,
+      min_contract_months: null,
+    });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${open.id}`]: [json(open)],
+    });
+    render(open.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('region', { name: title })).toBeNull();
+    expect(screen.queryByText(title)).toBeNull();
+  });
 });
