@@ -187,3 +187,25 @@ This file was split from the draft `0008e` by spec-verifier round 1 (finding 3).
              Flatmates see an application only once it has a conversation (as built in 0008d).
     Reviewers: code, qa, security, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008f-group-chat-web.md - PRODUCT.md "Flatmates" - design/screens-v1/InboxDesktop.dc.html
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008f - Group chat web   PR OPEN (not merged), code head 5344bb3
+    Shipped: room chats with flatmates list every member ("רוני (בעל/ת הדירה) · את/ה · נועה") and name each
+             sender once per run; a flatmate sees "הצטרפת לשיחה ב־…"; the chat list marks "שותף/ה" and
+             "קבוצה · N"; "הדירות שלי" (/me/flats) lists the flats and leaves one. One-to-one threads unchanged.
+    Demo: make dev -> owner posts a room and creates the invite link -> a second user joins from it -> a seeker
+          applies, owner shortlists -> the flatmate's /chat shows the chips, the member line and the joined
+          note -> owner removes the flatmate -> the flatmate sends: "כבר אינך משתתף/ת בשיחה הזו".
+    Tests: +6 unit (AC1-AC4, AC6 thread + list focus refetch), +1 e2e (AC5, three contexts). Local on edce333:
+           make lint, make i18n-check, make build-web green; make test-web 298/298 (api untouched; CI runs it);
+           make e2e 14/14 in 3 shards, twice (before and after the review fixes). CI: api + web on the PR head.
+    Findings: 0 blockers, 0 majors; 6 minors fixed (401 forgets the session on /me/flats and leave; leave and
+              join refetch cached threads; the removed state is a focused heading; sturdier AC1-AC3 tests; a
+              list focus test); 3 follow-ups logged (touch "show all" for a clamped member line, same-name
+              sender runs need a sender id, flatmate copy for the empty /chat); 4 nits fixed, 7 dropped.
+              Amendment 2026-11-11 built: focus refetch kept on and tested (AC6); a 404 on a thread already
+              on screen shows "no longer in this chat", a first-load 404 keeps "השיחה לא נמצאה".
+              Spec wording changed: no sr-only copy of the member line (the clamp is visual only).
+    Changed in PRODUCT.md: nothing.
+    Decisions I need from you: none. Follow-up with a copy choice: the empty /chat text for a new flatmate.
