@@ -1,7 +1,7 @@
 ---
 id: 0006d
 title: A seeker fills or edits a short housing profile at /me/profile, and the listing page sends a seeker without one there (and back) before applying
-status: verified
+status: in-review
 depends_on: [0006a]      # GET/PUT /me/profile and the 409 seeker_profile_required on apply
 reviewers: [code, qa, ux]   # ux: a new form screen with no artboard of its own; qa: the apply gate's states. No security: no new trust boundary, safeNext reused (AC6), the profile cache key is under ['me', …] so logout clears it
 estimate: 1 coder run

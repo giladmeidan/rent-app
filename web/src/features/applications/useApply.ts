@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router';
 
 import type { ListingDetail } from '../listings/api';
 import { clearSession } from '../auth/useLogout';
+import { PROFILE_KEY } from '../profile/useProfile';
+import { ApiError } from '../listings/api';
 import { applyToListing, hasStatus, type MyApplicationOut } from './api';
 import { MY_APPLICATIONS_KEY } from './useMyApplications';
 
@@ -13,8 +15,9 @@ export const loginPath = (listingId: string) =>
 /**
  * Applies to `listingId`. On 201 the new (or reopened) application tops the seeker's list and the
  * listing's count goes up by one in the cache: no refetch, so no extra counted view. A 409
- * `already_applied` refetches the list (it then holds the application); a 401 forgets the session
- * and sends the person to log in and come back.
+ * `seeker_profile_required` refetches the profile (the section then shows the profile gate); any
+ * other 409 (`already_applied`) refetches the list (it then holds the application); a 401 forgets
+ * the session and sends the person to log in and come back.
  */
 export function useApply(listingId: string) {
   const queryClient = useQueryClient();
@@ -35,8 +38,9 @@ export function useApply(listingId: string) {
       if (hasStatus(error, 401)) {
         clearSession(queryClient);
         void navigate(loginPath(listingId));
-      } else if (hasStatus(error, 409)) {
-        void queryClient.invalidateQueries({ queryKey: MY_APPLICATIONS_KEY, exact: true });
+      } else if (error instanceof ApiError && error.status === 409) {
+        const key = error.detail === 'seeker_profile_required' ? PROFILE_KEY : MY_APPLICATIONS_KEY;
+        void queryClient.invalidateQueries({ queryKey: key, exact: true });
       }
     },
   });

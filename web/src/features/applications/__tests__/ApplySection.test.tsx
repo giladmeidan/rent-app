@@ -16,6 +16,7 @@ import {
 import { LoginPage } from '../../auth/LoginPage';
 import { ListingPage } from '../../listings/ListingPage';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
+import { profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
 import { application } from './fixtures';
@@ -27,6 +28,7 @@ afterEach(() => {
 const LISTING = 'GET /listings/A';
 const MINE = 'GET /me/applications';
 const APPLY = 'POST /listings/A/applications';
+const PROFILE = 'GET /me/profile';
 const NEXT = '%2Flistings%2FA';
 const MESSAGE = 'Hi, we are a quiet couple';
 
@@ -90,6 +92,7 @@ function renderSeeker(
     'GET /me': [json(seeker)],
     [LISTING]: [listingReply(count)],
     [MINE]: mine,
+    [PROFILE]: [json(profile())],
     ...extra,
   });
   renderListing(client);
@@ -129,7 +132,7 @@ describe('ApplySection', () => {
     const viewers = [
       () => ({ 'GET /me': [unauthenticated()] }),
       () => ({ 'GET /me': [json(owner)] }),
-      () => ({ 'GET /me': [json(seeker)], [MINE]: [json([])] }),
+      () => ({ 'GET /me': [json(seeker)], [MINE]: [json([])], [PROFILE]: [json(profile())] }),
     ];
     for (const count of [0, 1, 12]) {
       for (const viewer of viewers) {
@@ -436,5 +439,115 @@ describe('ApplySection', () => {
       'href',
       `/login?next=${NEXT}`,
     );
+  });
+  it('ac7_profile_gate', async () => {
+    const noProfile = () => json({ detail: 'seeker_profile_not_found' }, 404);
+    const gateLink = (s: ReturnType<typeof within>) =>
+      s.getByRole('link', { name: he.applications.fillProfile });
+
+    // No profile: the gate, no apply button.
+    let api = renderSeeker([json([])], { [PROFILE]: [noProfile()] });
+    let s = await settled();
+    expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
+    expect(gateLink(s)).toHaveAttribute('href', `/me/profile?next=${NEXT}`);
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(api.calls(PROFILE)).toHaveLength(1);
+    expect(api.calls(PROFILE)[0]?.request.credentials).toBe('include');
+    cleanup();
+
+    // A profile: the apply button as today, no gate.
+    renderSeeker([json([])]);
+    s = await settled();
+    expect(s.getByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+    cleanup();
+
+    // The profile pending: the busy skeleton, neither the gate nor the button.
+    const pending = deferred();
+    api = renderSeeker([json([])], { [PROFILE]: [pending.promise] });
+    s = await section();
+    await vi.waitFor(() => {
+      expect(api.calls(MINE)).toHaveLength(1);
+      expect(api.calls(PROFILE)).toHaveLength(1);
+    });
+    expect(s.getByTestId('skeleton').closest('[aria-busy="true"]')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.getByTestId('skeleton')).toBeInTheDocument();
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+    cleanup();
+
+    // The profile fails: ErrorState; retry sends a second GET /me/profile.
+    api = renderSeeker([json([])], { [PROFILE]: [json({ detail: 'boom' }, 500), json(profile())] });
+    s = await section();
+    fireEvent.click(await s.findByRole('button', { name: he.common.retry }));
+    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(api.calls(PROFILE)).toHaveLength(2);
+    cleanup();
+
+    // The profile answers 401: the session is gone; the visitor prompt.
+    renderSeeker([json([])], { [PROFILE]: [unauthenticated()] });
+    s = await section();
+    expect(await s.findByText(he.applications.loginPrompt)).toBeVisible();
+    expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+    cleanup();
+
+    // A shortlisted application: the applied state, whether the profile is pending or missing.
+    const shortlisted = application({ status: 'shortlisted' });
+    for (const reply of [deferred().promise, noProfile()]) {
+      renderSeeker([json([shortlisted])], { [PROFILE]: [reply] });
+      s = await section();
+      expect(await s.findByText(appliedText(shortlisted))).toBeVisible();
+      expect(s.queryByTestId('skeleton')).toBeNull();
+      expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+      cleanup();
+    }
+
+    // A withdrawn application and no profile: the gate.
+    renderSeeker([json([application({ status: 'withdrawn' })])], { [PROFILE]: [noProfile()] });
+    s = await section();
+    expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    cleanup();
+
+    // A visitor and an owner never request the profile.
+    for (const me of [unauthenticated(), json(owner)]) {
+      api = mockApi({ 'GET /me': [me], [LISTING]: [listingReply()], [PROFILE]: [noProfile()] });
+      renderListing();
+      await settled();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(api.calls(PROFILE)).toHaveLength(0);
+      cleanup();
+    }
+  });
+
+  it('ac8_409_seeker_profile_required_refetches_profile', async () => {
+    // A cached profile, then the API says there is none: the profile is refetched and the gate
+    // replaces the form; the list is not refetched.
+    let api = renderSeeker([json([])], {
+      [PROFILE]: [json(profile()), json({ detail: 'seeker_profile_not_found' }, 404)],
+      [APPLY]: [json({ detail: 'seeker_profile_required' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    const s = await section();
+    expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
+    expect(s.queryByRole('textbox')).toBeNull();
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('alert')).toBeNull();
+    expect(api.calls(PROFILE)).toHaveLength(2);
+    expect(api.calls(MINE)).toHaveLength(1);
+    cleanup();
+
+    // 409 already_applied: the list is refetched, the profile is not.
+    const existing = application({ status: 'submitted' });
+    api = renderSeeker([json([]), json([existing])], {
+      [APPLY]: [json({ detail: 'already_applied' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    expect(await (await section()).findByText(appliedText(existing))).toBeVisible();
+    expect(api.calls(MINE)).toHaveLength(2);
+    expect(api.calls(PROFILE)).toHaveLength(1);
   });
 });
