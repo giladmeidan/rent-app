@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { API, postListing, signUp } from './helpers';
+import { API, postListing, putProfile, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
 const SEEKER_NAME = '\u05de\u05d9\u05db\u05dc';
@@ -19,6 +19,7 @@ test('ac8_owner_shortlists_and_declines', async ({ page, browser }) => {
   const seekerContext = await browser.newContext();
   const seekerPage = await seekerContext.newPage();
   await signUp(seekerPage, 'seeker', { name: SEEKER_NAME });
+  await putProfile(seekerPage); // applying needs a housing profile (0006a)
   const applied = await seekerPage.request.post(`${API}/listings/${id}/applications`, {
     data: { message: MESSAGE },
   });

@@ -17,6 +17,7 @@ from tests.conftest import (
     make_application,
     make_listing,
     make_owner,
+    make_profile,
     make_seeker,
     signup,
 )
@@ -183,6 +184,8 @@ def test_ac1_reapply_counts_as_new_and_ties_order_by_id(
     listing = make_listing(db_engine, _user_id(owner), gush_dan)
     x = signup(client, outbox, "x@example.com", "seeker")
     y = signup(client, outbox, "y@example.com", "seeker")
+    for applicant in (x, y):
+        make_profile(db_engine, _user_id(applicant), gush_dan)
     x_application = x.post(f"/listings/{listing}/applications", json={"message": "X here"}).json()
     y_response = y.post(f"/listings/{listing}/applications", json={"message": "Y here"})
     assert y_response.status_code == 201, y_response.text
@@ -314,6 +317,7 @@ def test_ac4_status_transitions(
         cells.append((application_id, name, current, target, code, no_op))
 
     seeker = signup(client, outbox, "s@example.com", "seeker")
+    make_profile(db_engine, _user_id(seeker), gush_dan)
     applied = seeker.post(f"/listings/{listing_a}/applications", json={"message": "Hello there"})
     assert applied.status_code == 201, applied.text
     s_application = applied.json()["id"]
@@ -494,6 +498,7 @@ def test_ac6_counts_follow_transitions(
     first = make_application(db_engine, listing, seeker_1)
     second = make_application(db_engine, listing, seeker_2)
     third_seeker = signup(client, outbox, "s3@example.com", "seeker")
+    make_profile(db_engine, _user_id(third_seeker), gush_dan)
     applied = third_seeker.post(f"/listings/{listing}/applications", json={"message": "Hello"})
     assert applied.status_code == 201, applied.text
     third = applied.json()["id"]

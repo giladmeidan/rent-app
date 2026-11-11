@@ -23,6 +23,7 @@ from tests.conftest import (
     make_application,
     make_listing,
     make_owner,
+    make_profile,
     make_seeker,
     signup,
 )
@@ -103,9 +104,20 @@ def _view_count(engine: Engine, listing_id: Any) -> int:
     return count
 
 
+def _seeker_with_profile(
+    client: TestClient, outbox: Outbox, email: str, area_id: uuid.UUID, db_engine: Engine
+) -> TestClient:
+    """A signed-up seeker who has a housing profile, so the apply gate (0006a) lets them through."""
+    caller = signup(client, outbox, email, "seeker")
+    make_profile(db_engine, _user_id(caller), area_id)
+    return caller
+
+
 @pytest.fixture
-def seeker(client: TestClient, outbox: Outbox) -> TestClient:
-    return signup(client, outbox, "s@example.com", "seeker")
+def seeker(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> TestClient:
+    return _seeker_with_profile(client, outbox, "s@example.com", gush_dan, db_engine)
 
 
 @pytest.fixture
@@ -178,7 +190,7 @@ def test_ac2_only_seekers_apply_never_to_own_listing(
 ) -> None:
     own_owner = signup(client, outbox, "own@example.com", "owner")
     other_owner = signup(client, outbox, "other@example.com", "owner")
-    seeker = signup(client, outbox, "s@example.com", "seeker")
+    seeker = _seeker_with_profile(client, outbox, "s@example.com", gush_dan, db_engine)
     created = own_owner.post("/listings", json=_listing_body(gush_dan))
     assert created.status_code == 201, created.text
     listing_a = created.json()["id"]
@@ -273,6 +285,7 @@ def test_ac4_one_application_per_seeker_and_listing(
 
     # Two concurrent applies of one fresh seeker to one fresh listing.
     fresh_seeker = make_seeker(db_engine, "fresh@example.com")
+    make_profile(db_engine, fresh_seeker, gush_dan)
     fresh_listing = make_listing(db_engine, owner_id, gush_dan)
     real_upsert = applications_service._upsert
 
@@ -540,10 +553,10 @@ def test_ac9_apply_rate_limits(
     assert 1 <= int(limited.headers["Retry-After"]) <= 3600
     assert _count(db_engine) == 10
 
-    other = signup(client, outbox, "other@example.com", "seeker")
+    other = _seeker_with_profile(client, outbox, "other@example.com", gush_dan, db_engine)
     _applied(other, listings[10])
 
-    daily = signup(client, outbox, "daily@example.com", "seeker")
+    daily = _seeker_with_profile(client, outbox, "daily@example.com", gush_dan, db_engine)
     daily_id = _user_id(daily)
     get_redis().set(f"rl:apply:user:day:{daily_id}", 30, ex=3600)
     assert _hourly(daily_id) == 0
@@ -551,7 +564,7 @@ def test_ac9_apply_rate_limits(
     assert day_limited.status_code == 429
     assert day_limited.json() == {"detail": "rate_limited"}
 
-    counted = signup(client, outbox, "counted@example.com", "seeker")
+    counted = _seeker_with_profile(client, outbox, "counted@example.com", gush_dan, db_engine)
     counted_id = _user_id(counted)
     assert _apply(counted, listings[0], "").status_code == 422
     assert _hourly(counted_id) == 0
@@ -566,3 +579,70 @@ def test_ac9_apply_rate_limits(
     assert _hourly(counted_id) == 2
     assert _apply(counted, listings[1]).status_code == 409
     assert _hourly(counted_id) == 3
+
+
+def _profile_body(area_id: uuid.UUID) -> dict[str, Any]:
+    """`P` (spec 0006a): a valid housing profile, move-in 30 days after today (UTC)."""
+    return {
+        "budget_max_ils": 7500,
+        "move_in_date": (dt.datetime.now(dt.UTC).date() + dt.timedelta(days=30)).isoformat(),
+        "move_in_flexible": False,
+        "area_ids": [str(area_id)],
+        "household": "couple",
+        "has_pets": False,
+        "smoker": False,
+        "contract_months": 24,
+        "parking_needed": 1,
+    }
+
+
+def test_ac5_apply_requires_profile(
+    client: TestClient,
+    outbox: Outbox,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    listing_l = make_listing(db_engine, owner_id, gush_dan)
+    no_profile = signup(client, outbox, "s@example.com", "seeker")
+    seeker_id = _user_id(no_profile)
+
+    refused = _apply(no_profile, listing_l)
+
+    assert refused.status_code == 409
+    assert refused.json() == {"detail": "seeker_profile_required"}
+    assert _count(db_engine) == 0
+    r = get_redis()
+    assert not r.exists(f"rl:apply:user:{seeker_id}")
+    assert not r.exists(f"rl:apply:user:day:{seeker_id}")
+    # Checked before the listing lookup: an unknown listing is the same 409, not a 404.
+    assert _apply(no_profile, uuid.uuid4()).json() == {"detail": "seeker_profile_required"}
+
+    saved = no_profile.put("/me/profile", json=_profile_body(gush_dan))
+    assert saved.status_code == 200, saved.text
+    applied = _apply(no_profile, listing_l)
+    assert applied.status_code == 201, applied.text
+    assert _count(db_engine) == 1
+    assert _hourly(seeker_id) == 1
+
+
+def test_ac6_existing_application_needs_no_profile(
+    client: TestClient,
+    outbox: Outbox,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    listing_a = make_listing(db_engine, owner_id, gush_dan)
+    no_profile = signup(client, outbox, "s@example.com", "seeker")
+    # Made as before Slice 6: no profile was needed then.
+    application_id = make_application(db_engine, listing_a, _user_id(no_profile))
+
+    withdrawn = _withdraw(no_profile, application_id)
+    listed = no_profile.get("/me/applications")
+
+    assert withdrawn.status_code == 200, withdrawn.text
+    assert withdrawn.json()["status"] == "withdrawn"
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [str(application_id)]
+    assert _scalar(db_engine, "SELECT count(*) FROM seeker_profiles") == 0

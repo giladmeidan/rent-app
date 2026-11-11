@@ -13,7 +13,14 @@ from sqlalchemy import Engine, event, text
 
 from app.redis_client import get_redis
 from app.schemas.application import ApplicationListingOut
-from tests.conftest import Outbox, make_application, make_listing, make_seeker, signup
+from tests.conftest import (
+    Outbox,
+    make_application,
+    make_listing,
+    make_profile,
+    make_seeker,
+    signup,
+)
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -152,8 +159,13 @@ def owner(client: TestClient, outbox: Outbox) -> TestClient:
 
 
 @pytest.fixture
-def seeker(client: TestClient, outbox: Outbox) -> TestClient:
-    return signup(client, outbox, S_EMAIL, "seeker", display_name="Dana")
+def seeker(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> TestClient:
+    """S, with a housing profile so that applying passes the 0006a gate."""
+    caller = signup(client, outbox, S_EMAIL, "seeker", display_name="Dana")
+    make_profile(db_engine, _user_id(caller), gush_dan)
+    return caller
 
 
 @pytest.fixture
@@ -299,6 +311,7 @@ def test_ac3_order_preview_unread_can_send(
     owner: TestClient,
     owner_id: uuid.UUID,
     listing_a: uuid.UUID,
+    gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
     conversations: dict[str, uuid.UUID] = {}
@@ -345,6 +358,7 @@ def test_ac3_order_preview_unread_can_send(
 
     seeker = signup(client, outbox, S_EMAIL, "seeker", display_name="Dana")
     seeker_id = _user_id(seeker)
+    make_profile(db_engine, seeker_id, gush_dan)
     application = _apply(seeker, listing_a)
     assert _set_status(owner, listing_a, application, "shortlisted").status_code == 200
     _execute(
@@ -593,6 +607,7 @@ def test_ac9_closed_after_unshortlist_decline_withdraw(
     seeker: TestClient,
     listing_a: uuid.UUID,
     chat: uuid.UUID,
+    gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
     assert _send(seeker, chat, "before").status_code == 201
@@ -620,6 +635,7 @@ def test_ac9_closed_after_unshortlist_decline_withdraw(
     assert _message_count(db_engine) == 2
 
     withdrawer = signup(client, outbox, "w@example.com", "seeker", display_name="Wren")
+    make_profile(db_engine, _user_id(withdrawer), gush_dan)
     withdrawn = _apply(withdrawer, listing_a)
     assert _set_status(owner, listing_a, withdrawn, "shortlisted").status_code == 200
     assert _send(withdrawer, withdrawn, "hello").status_code == 201

@@ -61,9 +61,14 @@ Applying needs a **seeker** session: sign up as above with `"role":"seeker"` and
 cookie to `seeker.txt`, then apply to a live listing (`LISTING_ID`, an `id` from `GET /listings`) with a
 message of 1–500 characters (one application per listing; again only after withdrawing). `GET
 /me/applications` lists yours with their status, `POST /me/applications/{id}/withdraw` withdraws one, and `GET
-/listings/{id}` shows `applicant_count`:
+/listings/{id}` shows `applicant_count`. Applying also needs a housing profile: `PUT /me/profile` saves it
+(budget, move-in date within a year, 1–20 area ids, household, pets, smoking, contract months 6/12/24/36,
+parking 0–2) and `GET /me/profile` reads it back; without one, applying is a 409 `seeker_profile_required`:
 
 ```sh
+curl -b seeker.txt -X PUT localhost:8000/me/profile -H 'Content-Type: application/json' -d '{"budget_max_ils":7500,
+  "move_in_date":"2026-12-15","move_in_flexible":false,"area_ids":["'"$AREA"'"],"household":"couple",
+  "has_pets":false,"smoker":false,"contract_months":24,"parking_needed":1}'
 curl -b seeker.txt -X POST localhost:8000/listings/$LISTING_ID/applications -H 'Content-Type: application/json' \
   -d '{"message":"שלום, אנחנו זוג שקט ומחפשים דירה לטווח ארוך"}'
 ```

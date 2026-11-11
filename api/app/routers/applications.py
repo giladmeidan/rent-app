@@ -73,7 +73,11 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
             "description": "not_found: unknown id, a paused, expired, room or inactive-area "
             "listing, or the caller's own",
         },
-        409: {"model": ErrorOut, "description": "already_applied"},
+        409: {
+            "model": ErrorOut,
+            "description": "already_applied, or seeker_profile_required: the seeker has no "
+            "housing profile (0006a)",
+        },
         429: {"model": ErrorOut, "description": "rate_limited; see Retry-After"},
     },
 )
@@ -86,6 +90,8 @@ def apply(
 ) -> MyApplicationOut:
     try:
         application, listing = applications_service.apply(db, r, seeker, listing_id, body.message)
+    except applications_service.ProfileRequiredError:
+        raise HTTPException(status_code=409, detail="seeker_profile_required") from None
     except RateLimitedError as exc:
         raise HTTPException(
             status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
