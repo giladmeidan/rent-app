@@ -26,6 +26,8 @@ describe('AuthMenu for an owner', () => {
     fireEvent.click(screen.getByRole('button', { name: he.header.logout }));
     expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
     expect(client.getQueryData(MY_LISTINGS_KEY)).toBeUndefined();
+    // Mutations (and the bodies they sent) are forgotten too.
+    expect(client.getMutationCache().getAll()).toHaveLength(0);
     expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
   });
 });

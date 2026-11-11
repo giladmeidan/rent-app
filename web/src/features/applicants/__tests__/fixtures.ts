@@ -13,6 +13,8 @@ export function applicant(overrides: Partial<ApplicantOut> = {}): ApplicantOut {
     applicant_name: `Applicant ${String(n)}`,
     created_at: '2026-11-10T10:00:00Z',
     updated_at: '2026-11-10T10:00:00Z',
+    match: null,
+    profile: null,
     ...overrides,
   };
 }

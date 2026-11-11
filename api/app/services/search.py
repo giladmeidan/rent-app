@@ -15,15 +15,13 @@ ordered on and explained in the same statement; it never filters and never chang
 Nothing else here depends on the caller, and a non-public listing is indistinguishable from an
 unknown id (`ListingNotFoundError`, a 404)."""
 
-import typing
 import uuid
-from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import Integer, Label, Row, Select, and_, cast, func, or_, select
+from sqlalchemy import Integer, Label, Select, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
-from app.matching.score import explain, match_columns
+from app.matching.score import explain_row, match_columns
 from app.models import Area, Listing, SeekerProfile
 from app.models.listing import PLAIN_GEOMETRY
 from app.schemas.match import MatchOut
@@ -124,11 +122,6 @@ def _with_match(
     return matched, score
 
 
-def _explain(row: Row[Any]) -> MatchOut:
-    """`explain` on one page row's columns (`row._mapping`, keyed by the match columns' labels)."""
-    return explain(typing.cast(Mapping[str, Any], row._mapping))
-
-
 def search_listings(
     db: Session, params: SearchParams, profile_user_id: uuid.UUID | None = None
 ) -> tuple[list[tuple[Listing, MatchOut | None]], int, SearchSort]:
@@ -150,7 +143,7 @@ def search_listings(
     rows = db.execute(
         matched.order_by(*_order(sort, score)).limit(params.limit).offset(params.offset)
     ).all()
-    return [(row[0], _explain(row)) for row in rows], total, sort
+    return [(row[0], explain_row(row)) for row in rows], total, sort
 
 
 def get_public_listing_with_match(
@@ -169,7 +162,7 @@ def get_public_listing_with_match(
     row = db.execute(matched).first()
     if row is None:
         raise ListingNotFoundError
-    return row[0], _explain(row)
+    return row[0], explain_row(row)
 
 
 def get_public_listing(db: Session, listing_id: uuid.UUID) -> Listing:

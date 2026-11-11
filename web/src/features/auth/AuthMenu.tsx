@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { Skeleton } from '../../components/Skeleton';
+import { ChatNavLink } from '../chat/ChatNavLink';
 import { useLogout } from './useLogout';
 import { useMe } from './useMe';
 
@@ -43,7 +44,8 @@ export function AuthMenu() {
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <ChatNavLink />
       {me.data.role === 'owner' ? (
         <Link
           to="/me/listings"

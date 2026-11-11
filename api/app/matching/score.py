@@ -14,6 +14,8 @@ A past `available_from` means "immediately" (spec 0002a) and a past stored `move
 "now", hence both `greatest(..., current_date)`; `current_date` is the database's (UTC). The
 expressions assume a profile row: with NULL profile columns they are not NULL but meaningless."""
 
+import typing
+import uuid
 from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any, Final, get_args
@@ -24,6 +26,7 @@ from sqlalchemy import (
     Integer,
     Label,
     Numeric,
+    Row,
     and_,
     any_,
     case,
@@ -75,10 +78,19 @@ def _days_if(flag: QueryableAttribute[bool]) -> ColumnElement[int]:
 def match_columns(
     listing: type[Listing] | AliasedClass[Listing],
     profile: type[SeekerProfile] | AliasedClass[SeekerProfile],
+    *,
+    price: QueryableAttribute[int] | ColumnElement[int] | None = None,
+    area_id: QueryableAttribute[uuid.UUID] | ColumnElement[uuid.UUID] | None = None,
 ) -> list[Label[Any]]:
     """The labelled match columns for a statement that selects `listing` joined to one `profile`
     row (either may be an alias): `m_<criterion>` for every criterion, `f_<criterion>` for every
-    `HARD` one, and `m_score`."""
+    `HARD` one, and `m_score`.
+
+    `price` / `area_id` replace `listing.price_ils` / `listing.area_id` as the inputs of the
+    budget and area criteria (default: the listing's live columns). The owner's inbox passes the
+    application's snapshot at apply time (spec 0006c, security B1); the seeker's views never do."""
+    listing_price = listing.price_ils if price is None else price
+    listing_area = listing.area_id if area_id is None else area_id
     today = func.current_date(type_=Date)
     gap = func.abs(
         func.greatest(listing.available_from, today, type_=Date)
@@ -90,9 +102,9 @@ def match_columns(
         gap - _days_if(listing.entry_flexible) - _days_if(profile.move_in_flexible),
         type_=Integer,
     )
-    in_area = listing.area_id == any_(profile.area_ids)
+    in_area = listing_area == any_(profile.area_ids)
     m: dict[Criterion, ColumnElement[Decimal]] = {
-        "budget": _ones_when(listing.price_ils <= profile.budget_max_ils),
+        "budget": _ones_when(listing_price <= profile.budget_max_ils),
         "move_in": func.greatest(
             _ZERO, _ONE - cast(days, Numeric) / MOVE_IN_WINDOW_DAYS, type_=Numeric
         ),
@@ -114,7 +126,7 @@ def match_columns(
         "pets": case((and_(profile.has_pets, not_(listing.pets_allowed)), _ZERO), else_=_ONE),
     }
     fails: dict[Criterion, ColumnElement[bool]] = {
-        "budget": listing.price_ils > profile.budget_max_ils,
+        "budget": listing_price > profile.budget_max_ils,
         "move_in": days > MOVE_IN_WINDOW_DAYS,
         "area": m["area"] == 0,
         "smoking": m["smoking"] == 0,
@@ -137,6 +149,11 @@ def match_columns(
         *(fails[c].label(f"f_{c}") for c in HARD),
         score.label("m_score"),
     ]
+
+
+def explain_row(row: Row[Any]) -> MatchOut:
+    """`explain` on one result row's columns (`row._mapping`, keyed by the match labels)."""
+    return explain(typing.cast(Mapping[str, Any], row._mapping))
 
 
 def explain(values: Mapping[str, Any]) -> MatchOut:

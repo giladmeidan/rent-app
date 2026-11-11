@@ -6,7 +6,10 @@ import { AreasList } from '../features/areas/AreasList';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireOwner } from '../features/auth/RequireOwner';
 import { RequireSeeker } from '../features/auth/RequireSeeker';
+import { RequireUser } from '../features/auth/RequireUser';
 import { SignupPage } from '../features/auth/SignupPage';
+import { ChatListPage } from '../features/chat/ChatListPage';
+import { ChatThreadPage } from '../features/chat/ChatThreadPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
@@ -34,6 +37,10 @@ export function AppRoutes() {
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />
           <Route path="me/profile" element={<ProfilePage />} />
+        </Route>
+        <Route element={<RequireUser />}>
+          <Route path="chat" element={<ChatListPage />} />
+          <Route path="chat/:id" element={<ChatThreadPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
