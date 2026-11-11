@@ -5,10 +5,14 @@ import { API, postListing, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
 const SEEKER_NAME = '\u05de\u05d9\u05db\u05dc';
-// i18next's `{{count}}` interpolation, for the copy the page renders.
+// signUp's default display name: the owner's.
+const OWNER_NAME = '\u05d3\u05e0\u05d4';
+// i18next's `{{count}}` / `{{name}}` interpolation, for the copy the page renders.
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
+const withName = (text: string, name: string) => text.replace('{{name}}', name);
 
-test('ac8_owner_shortlists_and_declines', async ({ page, browser }) => {
+// Extends 0004d's inbox flow with the chat (0005b AC12): no new signup (the e2e OTP budget).
+test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // An owner (the default signUp name) posts a listing.
@@ -23,6 +27,7 @@ test('ac8_owner_shortlists_and_declines', async ({ page, browser }) => {
     data: { message: MESSAGE },
   });
   expect(applied.status()).toBe(201);
+  const { id: applicationId } = (await applied.json()) as { id: string };
 
   // "My listings": the card's link reads one applicant, one new.
   await page.goto('/me/listings');
@@ -45,11 +50,59 @@ test('ac8_owner_shortlists_and_declines', async ({ page, browser }) => {
     applicant.getByText(he.applicants.status.shortlisted, { exact: true }),
   ).toBeVisible();
 
+  // The shortlisted card links to the chat; the owner opens it and writes first.
+  const chatLink = applicant.getByRole('link', { name: withName(he.chat.withName, SEEKER_NAME) });
+  await expect(chatLink).toBeVisible();
+  await chatLink.click();
+  await expect(page).toHaveURL(`/chat/${applicationId}`);
+  await expect(page.getByRole('heading', { level: 1, name: SEEKER_NAME })).toBeVisible();
+  await expect(page.getByRole('note')).toHaveText(he.chat.thread.warning);
+  await page.getByLabel(he.chat.composer.label).fill('Hello');
+  await page.getByRole('button', { name: he.chat.composer.send }).click();
+  const ownerLog = page.getByRole('log', { name: he.chat.thread.log });
+  await expect(ownerLog.getByText('Hello', { exact: true })).toBeVisible();
+  await expect(page.getByLabel(he.chat.composer.label)).toHaveValue('');
+
+  // The seeker, after a reload: the header's pill, the owner's name in the list, the message.
+  await seekerPage.reload();
+  const seekerChat = seekerPage.getByRole('link', { name: new RegExp(`^${he.header.chat}`) });
+  await expect(seekerChat).toHaveAccessibleName(
+    `${he.header.chat} ${withCount(he.header.chatNew, 1)}`,
+  );
+  await seekerChat.click();
+  await expect(seekerPage).toHaveURL('/chat');
+  const row = seekerPage.getByRole('link', { name: new RegExp(OWNER_NAME) });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(seekerPage).toHaveURL(`/chat/${applicationId}`);
+  const seekerLog = seekerPage.getByRole('log', { name: he.chat.thread.log });
+  await expect(seekerLog.getByText('Hello', { exact: true })).toBeVisible();
+
+  // The seeker replies; the owner's open thread shows it without a reload (the event stream).
+  await seekerPage.getByLabel(he.chat.composer.label).fill('Hi');
+  await seekerPage.getByRole('button', { name: he.chat.composer.send }).click();
+  await expect(seekerLog.getByText('Hi', { exact: true })).toBeVisible();
+  await expect(ownerLog.getByText('Hi', { exact: true })).toBeVisible({ timeout: 3_000 });
+
+  // Back to the inbox for the decline.
+  await page.getByRole('link', { name: he.chat.thread.toApplicants }).click();
+  await expect(page).toHaveURL(`/me/listings/${id}/applicants`);
+  await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
+
   // Decline, accepting the confirmation: no actions remain.
   page.once('dialog', (dialog) => void dialog.accept());
   await applicant.getByRole('button', { name: he.applicants.actions.decline }).click();
   await expect(applicant.getByText(he.applicants.status.declined, { exact: true })).toBeVisible();
   await expect(applicant.getByRole('button')).toHaveCount(0);
+  await expect(applicant.getByRole('link')).toHaveCount(0);
+
+  // The seeker's thread, after a reload: still readable, closed for sending.
+  await seekerPage.reload();
+  await expect(seekerLog.getByText('Hello', { exact: true })).toBeVisible();
+  await expect(
+    seekerPage.getByRole('status').filter({ hasText: he.chat.thread.closed }),
+  ).toBeVisible();
+  await expect(seekerPage.getByRole('textbox')).toHaveCount(0);
 
   // The seeker sees the decline.
   const mine = await seekerPage.request.get(`${API}/me/applications`);
