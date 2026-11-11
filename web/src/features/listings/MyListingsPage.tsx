@@ -5,7 +5,7 @@ import { Link, useLocation } from 'react-router';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
-import { ApiError, type ListingOut } from './api';
+import { ApiError, type MyListingOut } from './api';
 import { LISTING_CAP } from './constants';
 import { todayInIsrael } from './format';
 import { ListingCard } from './ListingCard';
@@ -18,7 +18,7 @@ const focusRing =
 const fieldError = 'text-sm font-semibold text-[#B91C1C]';
 const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
-function ListingRow({ listing, now, today }: { listing: ListingOut; now: Date; today: string }) {
+function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date; today: string }) {
   const { t } = useTranslation();
   const patch = usePatchListing(listing.id);
   const state = listingState(listing, now);
@@ -59,6 +59,23 @@ function ListingRow({ listing, now, today }: { listing: ListingOut; now: Date; t
                 {t('listings.actions.edit')}
               </Link>
             )}
+            {/* Every card, expired ones too: the applicants stay readable. The badge sits inside
+                the link, so its accessible name carries both counts. */}
+            <Link
+              to={`/me/listings/${listing.id}/applicants`}
+              aria-describedby={titleId}
+              className={`${action} gap-2`}
+            >
+              {t('applicants.link', { count: listing.applicant_count })}
+              {listing.new_applicant_count > 0 && (
+                <>
+                  {' '}
+                  <span className="rounded-full bg-warn px-2 py-[2px] text-[12px] font-bold text-warn-text">
+                    {t('applicants.newBadge', { count: listing.new_applicant_count })}
+                  </span>
+                </>
+              )}
+            </Link>
           </div>
           {patch.isError && (
             <p role="alert" className={fieldError}>
