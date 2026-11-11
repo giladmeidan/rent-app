@@ -28,14 +28,26 @@ CONVERSATION_KEYS = {
     "id",
     "listing",
     "other_name",
+    "my_role",  # 0008d
+    "member_count",  # 0008d
     "can_send",
     "is_new",
     "unread_count",
     "last_message",
     "created_at",
 }
-THREAD_KEYS = {"id", "listing", "other_name", "can_send", "messages", "truncated"}
-MESSAGE_KEYS = {"id", "body", "mine", "created_at"}
+THREAD_KEYS = {
+    "id",
+    "listing",
+    "other_name",
+    "my_role",  # 0008d
+    "members",  # 0008d
+    "visible_from",  # 0008d
+    "can_send",
+    "messages",
+    "truncated",
+}
+MESSAGE_KEYS = {"id", "body", "mine", "sender_name", "created_at"}  # sender_name: 0008d
 APPLICANT_KEYS = {
     "id",
     "status",
@@ -296,6 +308,8 @@ def test_ac2_list_conversations(
     assert set(item) == CONVERSATION_KEYS
     assert item["id"] == str(chat)
     assert item["other_name"] == "Noa"
+    assert item["my_role"] == "seeker"
+    assert item["member_count"] == 2
     assert item["can_send"] is True
     assert item["is_new"] is True
     assert item["unread_count"] == 0
@@ -305,7 +319,7 @@ def test_ac2_list_conversations(
     owner_response = owner.get("/me/conversations")
     assert owner_response.status_code == 200, owner_response.text
     (owner_item,) = owner_response.json()
-    assert owner_item == {**item, "other_name": "Dana", "is_new": False}
+    assert owner_item == {**item, "other_name": "Dana", "my_role": "owner", "is_new": False}
 
     for response in (seeker_response, owner_response):
         assert not _keys(response.json()) & USER_KEYS
@@ -452,6 +466,12 @@ def test_ac5_thread_reads_and_marks_read(
     assert set(body) == THREAD_KEYS
     assert body["id"] == str(chat)
     assert body["other_name"] == "Noa"
+    assert body["my_role"] == "seeker"
+    assert body["members"] == [
+        {"name": "Noa", "role": "owner", "is_me": False},
+        {"name": "Dana", "role": "seeker", "is_me": True},
+    ]
+    assert body["visible_from"] is None
     assert body["can_send"] is True
     assert body["truncated"] is False
     assert set(body["listing"]) == LISTING_SUMMARY_KEYS
@@ -459,6 +479,7 @@ def test_ac5_thread_reads_and_marks_read(
     assert all(set(m) == MESSAGE_KEYS for m in body["messages"])
     # m1 and m3 are S's own.
     assert [m["mine"] for m in body["messages"]] == [True, False, True]
+    assert [m["sender_name"] for m in body["messages"]] == ["Dana", "Noa", "Dana"]
     assert len(first) == 4, first  # session, header, messages, the read marker
     assert "FROM conversations" in first[1]
     assert "FROM messages" in first[2]
@@ -480,6 +501,11 @@ def test_ac5_thread_reads_and_marks_read(
     owner_thread = _thread(owner, chat)
     assert owner_thread.status_code == 200, owner_thread.text
     assert owner_thread.json()["other_name"] == "Dana"
+    assert owner_thread.json()["my_role"] == "owner"
+    assert owner_thread.json()["members"] == [
+        {"name": "Noa", "role": "owner", "is_me": True},
+        {"name": "Dana", "role": "seeker", "is_me": False},
+    ]
     assert [m["mine"] for m in owner_thread.json()["messages"]] == [False, True, False]
     assert _item(owner, chat)["unread_count"] == 0
 
@@ -590,6 +616,7 @@ def test_ac8_send_message(
     assert set(body) == MESSAGE_KEYS
     assert body["body"] == "\u05e9\u05dc\u05d5\u05dd"
     assert body["mine"] is True
+    assert body["sender_name"] == "Dana"
     last_message_at = _scalar(
         db_engine, "SELECT last_message_at FROM conversations WHERE application_id = :a", a=chat
     )
@@ -606,6 +633,7 @@ def test_ac8_send_message(
     reply = _send(owner, chat, "Hi Dana")
     assert reply.status_code == 201, reply.text
     assert reply.json()["mine"] is True
+    assert reply.json()["sender_name"] == "Noa"
     assert _item(seeker, chat)["unread_count"] == 1
     assert _item(owner, chat)["unread_count"] == 0
     assert _message_count(db_engine) == 3

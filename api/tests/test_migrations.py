@@ -1418,3 +1418,213 @@ def test_ac14_people_likes_upgrade_downgrade(migration_db_url: str) -> None:
             )  # the downgrade turned it into an applied one
     finally:
         engine.dispose()
+
+
+def test_ac11_flatmates_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0008d: 0012 adds `listings.flatmate_invite_hash` (unique), `listing_flatmates` and
+    # `conversation_reads`; the existing listing, application and conversation survive both ways.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0011")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"), ("mate", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " VALUES (:owner, :area, 'room', 'city', 'street', 3, 1, 80, 4500,"
+                    " current_date, false, 'none', false, now() + interval '90 days', 2)"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, status,"
+                    " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+                    " VALUES (:listing, :seeker, 'Hello', 'shortlisted', 4500, :area, 'room')"
+                    " RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"], "area": area_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO conversations (application_id, owner_id, seeker_id, owner_read_at)"
+                    " VALUES (:application, :owner, :seeker, now())"
+                ),
+                {"application": application_id, "owner": users["owner"], "seeker": users["seeker"]},
+            )
+        tables_0011 = _table_names(migration_db_url)
+        assert not {"listing_flatmates", "conversation_reads"} & tables_0011
+
+        def survivors(conn: Any) -> tuple[Any, ...]:
+            return tuple(
+                conn.execute(
+                    text(
+                        "SELECT l.id, a.id, a.status, c.owner_id, c.seeker_id FROM listings l"
+                        " JOIN applications a ON a.listing_id = l.id"
+                        " JOIN conversations c ON c.application_id = a.id"
+                    )
+                ).one()
+            )
+
+        with engine.connect() as conn:
+            before = survivors(conn)
+
+        command.upgrade(cfg, "0012")
+        assert _table_names(migration_db_url) == tables_0011 | {
+            "listing_flatmates",
+            "conversation_reads",
+        }
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert _columns(conn, "listings")["flatmate_invite_hash"] is True
+            assert conn.execute(text("SELECT flatmate_invite_hash FROM listings")).scalar() is None
+            assert _columns(conn, "listing_flatmates") == {
+                "id": False,
+                "listing_id": False,
+                "user_id": False,
+                "joined_at": False,
+            }
+            assert _columns(conn, "conversation_reads") == {
+                "conversation_id": False,
+                "user_id": False,
+                "read_at": False,
+            }
+            constraints = {
+                (table, name, kind)
+                for table, name, kind in conn.execute(
+                    text(
+                        "SELECT conrelid::regclass::text, conname, contype FROM pg_constraint"
+                        " WHERE conrelid IN ('listing_flatmates'::regclass,"
+                        " 'conversation_reads'::regclass) OR conname LIKE '%flatmate_invite%'"
+                    )
+                ).tuples()
+            }
+            foreign_keys = {
+                (table, column, target, action)
+                for table, column, target, action in conn.execute(
+                    text(
+                        "SELECT c.conrelid::regclass::text, a.attname, c.confrelid::regclass::text,"
+                        " c.confdeltype FROM pg_constraint c"
+                        " JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]"
+                        " WHERE c.conrelid IN ('listing_flatmates'::regclass,"
+                        " 'conversation_reads'::regclass) AND c.contype = 'f'"
+                    )
+                ).tuples()
+            }
+            indexes = {
+                name: definition
+                for name, definition in conn.execute(
+                    text(
+                        "SELECT indexname, indexdef FROM pg_indexes"
+                        " WHERE tablename IN ('listing_flatmates', 'conversation_reads')"
+                    )
+                ).tuples()
+            }
+        assert constraints == {
+            ("listings", "uq_listings_flatmate_invite_hash", "u"),
+            ("listing_flatmates", "listing_flatmates_pkey", "p"),
+            ("listing_flatmates", "uq_listing_flatmates_listing_user", "u"),
+            ("listing_flatmates", "listing_flatmates_listing_id_fkey", "f"),
+            ("listing_flatmates", "listing_flatmates_user_id_fkey", "f"),
+            ("conversation_reads", "conversation_reads_pkey", "p"),
+            ("conversation_reads", "conversation_reads_conversation_id_fkey", "f"),
+            ("conversation_reads", "conversation_reads_user_id_fkey", "f"),
+        }
+        assert foreign_keys == {
+            ("listing_flatmates", "listing_id", "listings", "c"),
+            ("listing_flatmates", "user_id", "users", "c"),
+            ("conversation_reads", "conversation_id", "conversations", "c"),
+            ("conversation_reads", "user_id", "users", "c"),
+        }
+        assert indexes["uq_listing_flatmates_listing_user"].endswith("(listing_id, user_id)")
+        assert indexes["ix_listing_flatmates_user_id"].endswith("(user_id)")
+        assert indexes["conversation_reads_pkey"].endswith("(conversation_id, user_id)")
+
+        def refused(constraint: str, sql: str, **params: Any) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(sql), params)
+
+        join = "INSERT INTO listing_flatmates (listing_id, user_id) VALUES (:listing, :user)"
+        with engine.begin() as conn:
+            conn.execute(text(join), {"listing": listing_id, "user": users["mate"]})
+            conn.execute(
+                text(
+                    "INSERT INTO conversation_reads (conversation_id, user_id, read_at)"
+                    " VALUES (:conversation, :user, now())"
+                ),
+                {"conversation": application_id, "user": users["mate"]},
+            )
+            conn.execute(
+                text("UPDATE listings SET flatmate_invite_hash = 'abc' WHERE id = :id"),
+                {"id": listing_id},
+            )
+            other_listing = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " SELECT owner_id, area_id, listing_type, city, street, rooms, floor,"
+                    " size_sqm, price_ils, available_from, elevator, furnished, pets_allowed,"
+                    " expires_at, flatmates_count FROM listings WHERE id = :id RETURNING id"
+                ),
+                {"id": listing_id},
+            ).scalar_one()
+        with engine.connect() as conn:
+            joined_at = conn.execute(text("SELECT joined_at FROM listing_flatmates")).scalar()
+            assert joined_at is not None  # DEFAULT now()
+        refused("uq_listing_flatmates_listing_user", join, listing=listing_id, user=users["mate"])
+        refused(
+            "uq_listings_flatmate_invite_hash",
+            "UPDATE listings SET flatmate_invite_hash = 'abc' WHERE id = :id",
+            id=other_listing,
+        )
+        refused(
+            "conversation_reads_pkey",
+            "INSERT INTO conversation_reads (conversation_id, user_id, read_at)"
+            " VALUES (:conversation, :user, now())",
+            conversation=application_id,
+            user=users["mate"],
+        )
+
+        command.downgrade(cfg, "0011")
+        assert _table_names(migration_db_url) == tables_0011
+        with engine.connect() as conn:
+            assert "flatmate_invite_hash" not in _columns(conn, "listings")
+            assert survivors(conn) == before
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint"
+                        " WHERE conname = 'uq_listings_flatmate_invite_hash'"
+                    )
+                ).scalar_one()
+                == 0
+            )
+
+        command.upgrade(cfg, "head")
+        assert {"listing_flatmates", "conversation_reads"} <= _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert conn.execute(text("SELECT count(*) FROM listing_flatmates")).scalar_one() == 0
+    finally:
+        engine.dispose()
