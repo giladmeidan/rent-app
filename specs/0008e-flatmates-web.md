@@ -1,7 +1,7 @@
 ---
 id: 0008e
 title: A room's lister creates and shares the flat's invite link and manages flatmates; whoever opens the link, logged in or not, joins the flat
-status: in-progress
+status: done
 depends_on: [0008d, 0008b, 0007f]   # 0008d: the flatmates endpoints and MyListingOut.flatmate_count / flatmate_invite_active; 0008b: the room card's link row in MyListingsPage this extends (same file, built first); 0007f: features/listings/cardTitle.ts
 reviewers: [code, qa, security, ux]   # security: an auth-guard redirect change (`next`) and a capability token in the URL, clipboard and join page; ux: two new screens; qa: invite create/rotate/disable, join states
 estimate: 1 coder run   # coder Sonnet/medium; Opus if the run overflows. Split from the draft 0008e by the verifier (screens limit); the group chat is 0008f
