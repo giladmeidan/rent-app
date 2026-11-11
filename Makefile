@@ -116,14 +116,19 @@ i18n-check: web/node_modules/.modules.yaml
 	$(PNPM) exec node scripts/i18n-check.mjs
 
 ## e2e: playwright smoke suite against the running compose stack (`make dev` first); waits up to
-## 90 s each for the api /health and the web, then clears the stack's Redis rate-limit keys (`rl:*`)
-## so a rerun within 15 min does not hit the OTP limit of 10 per IP (dev / CI compose stack only)
+## 90 s each for the api /health and the web, then runs the suite in E2E_SHARDS shards, clearing the
+## stack's Redis rate-limit keys (`rl:*`) before each so the OTP limit of 10 per IP per 15 min is not
+## hit (dev / CI compose stack only). Every shard runs; the target fails if any shard failed.
+# shortcut: 3 shards (E2E_SHARDS) fit ~25 sign-ups per 15 min; add a shard or an env override when the suite outgrows it
+E2E_SHARDS ?= 3
 e2e: web/node_modules/.modules.yaml
 	$(PNPM) exec playwright install --with-deps chromium
 	$(call wait_for,$(API_HEALTH),90,api)
 	$(call wait_for,$(WEB_URL),90,web)
-	$(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'
-	$(PNPM) exec playwright test
+	@status=0; for i in $$(seq $(E2E_SHARDS)); do \
+	  $(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'; \
+	  $(PNPM) exec playwright test --shard=$$i/$(E2E_SHARDS) || status=1; \
+	done; exit $$status
 
 ## build-web: production build (tsc --noEmit, vite build with the PWA manifest and service worker) into web/dist
 build-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts

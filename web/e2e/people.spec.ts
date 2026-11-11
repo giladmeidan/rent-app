@@ -3,12 +3,13 @@ import { expect, test } from '@playwright/test';
 import he from '../src/locales/he.json' with { type: 'json' };
 import { likeRoom, postListing, putProfile, signUp } from './helpers';
 
-const SEEKER_NAME = 'מיכל';
 const withName = (text: string, name: string) => text.replace('{{name}}', name);
 
 // A room lister likes back someone who liked the room: the like turns mutual, the chat opens, and
 // the inbox tags the match. No new signup beyond the two (the e2e OTP budget).
 test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
+  // Unique per run, so a rerun against the same database finds exactly one card.
+  const SEEKER_NAME = `\u05de\u05d9\u05db\u05dc ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // An owner posts a room.
