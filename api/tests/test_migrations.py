@@ -462,3 +462,153 @@ def test_ac10_applications_migration_roundtrip(migration_db_url: str) -> None:
             assert "view_count" in _listing_columns(conn)
     finally:
         engine.dispose()
+
+
+def _regclass_exists(conn: Any, table: str) -> bool:
+    return bool(conn.execute(text(f"SELECT to_regclass('public.{table}') IS NOT NULL")).scalar())
+
+
+def test_ac12_chat_tables_up_and_down(migration_db_url: str) -> None:
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0005")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("first", "seeker"), ("second", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at)"
+                    " VALUES (:owner, :area, 'apartment', 'city', 'street', 3, 1, 80, 6000,"
+                    " current_date, false, 'none', false, now() + interval '90 days')"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            applications = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO applications (listing_id, seeker_id, message, status)"
+                        " VALUES (:listing, :seeker, 'Hello', :status) RETURNING id"
+                    ),
+                    {"listing": listing_id, "seeker": users[name], "status": status},
+                ).scalar_one()
+                for name, status in (("first", "submitted"), ("second", "shortlisted"))
+            }
+
+        command.upgrade(cfg, "0006")
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT application_id, owner_id, seeker_id, owner_read_at IS NOT NULL,"
+                    " seeker_read_at, last_message_at FROM conversations"
+                )
+            ).all()
+            assert [tuple(row) for row in rows] == [
+                (applications["second"], users["owner"], users["second"], True, None, None)
+            ]
+            constraints = {
+                name: kind
+                for name, kind in conn.execute(
+                    text(
+                        "SELECT conname, contype FROM pg_constraint"
+                        " WHERE conrelid IN ('conversations'::regclass, 'messages'::regclass)"
+                        " AND contype = 'c'"
+                    )
+                ).tuples()
+            }
+            foreign_keys = {
+                (table, column, target, action)
+                for table, column, target, action in conn.execute(
+                    text(
+                        "SELECT c.conrelid::regclass::text, a.attname, c.confrelid::regclass::text,"
+                        " c.confdeltype FROM pg_constraint c"
+                        " JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]"
+                        " WHERE c.conrelid IN ('conversations'::regclass, 'messages'::regclass)"
+                        " AND c.contype = 'f'"
+                    )
+                ).tuples()
+            }
+            indexes = {
+                name: definition
+                for name, definition in conn.execute(
+                    text(
+                        "SELECT indexname, indexdef FROM pg_indexes"
+                        " WHERE tablename IN ('conversations', 'messages')"
+                    )
+                ).tuples()
+            }
+        assert set(constraints) == {"ck_conversations_two_people", "ck_messages_body_length"}
+        assert foreign_keys == {
+            ("conversations", "application_id", "applications", "c"),
+            ("conversations", "owner_id", "users", "c"),
+            ("conversations", "seeker_id", "users", "c"),
+            ("messages", "conversation_id", "conversations", "c"),
+            ("messages", "sender_id", "users", "c"),
+        }
+        assert indexes["ix_conversations_owner_id"].endswith("(owner_id)")
+        assert indexes["ix_conversations_seeker_id"].endswith("(seeker_id)")
+        assert indexes["ix_messages_conversation_created"].endswith(
+            "(conversation_id, created_at, id)"
+        )
+
+        insert = (
+            "INSERT INTO messages (conversation_id, sender_id, body)"
+            " VALUES (:conversation, :sender, :body)"
+        )
+        ids = {"conversation": applications["second"], "sender": users["second"]}
+        with pytest.raises(IntegrityError, match="ck_messages_body_length"), engine.begin() as conn:
+            conn.execute(text(insert), {**ids, "body": "x" * 2001})
+        two_people = pytest.raises(IntegrityError, match="ck_conversations_two_people")
+        with two_people, engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO conversations (application_id, owner_id, seeker_id)"
+                    " VALUES (:application, :owner, :owner)"
+                ),
+                {"application": applications["first"], "owner": users["owner"]},
+            )
+        with engine.begin() as conn:
+            conn.execute(text(insert), {**ids, "body": "Hello"})
+            conn.execute(
+                text("DELETE FROM applications WHERE id = :id"), {"id": applications["second"]}
+            )
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT count(*) FROM conversations")).scalar_one() == 0
+            assert conn.execute(text("SELECT count(*) FROM messages")).scalar_one() == 0
+
+        command.downgrade(cfg, "0005")
+        with engine.connect() as conn:
+            assert not _regclass_exists(conn, "conversations")
+            assert not _regclass_exists(conn, "messages")
+            assert (
+                conn.execute(
+                    text("SELECT status FROM applications WHERE id = :id"),
+                    {"id": applications["first"]},
+                ).scalar_one()
+                == "submitted"
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert _regclass_exists(conn, "conversations")
+            assert _regclass_exists(conn, "messages")
+    finally:
+        engine.dispose()

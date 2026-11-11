@@ -9,8 +9,18 @@ class Base(DeclarativeBase):
 
 from app.models.application import Application  # noqa: E402  (models must see Base first)
 from app.models.area import Area  # noqa: E402
+from app.models.conversation import Conversation, Message  # noqa: E402
 from app.models.listing import Listing  # noqa: E402
 from app.models.session import Session  # noqa: E402
 from app.models.user import User  # noqa: E402
 
-__all__ = ["Application", "Area", "Base", "Listing", "Session", "User"]
+__all__ = [
+    "Application",
+    "Area",
+    "Base",
+    "Conversation",
+    "Listing",
+    "Message",
+    "Session",
+    "User",
+]
