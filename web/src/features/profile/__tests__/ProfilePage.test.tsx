@@ -108,6 +108,9 @@ const AC2_BODY = {
   smoker: false,
   contract_months: 24,
   parking_needed: 1,
+  // Room section off: the people fields go as `false` / `null` (0008c).
+  people_visible: false,
+  about_me: null,
 };
 
 /** The text of the element(s) `el`'s `aria-describedby` names. */
@@ -256,6 +259,8 @@ describe('ProfilePage', () => {
         smoker: true,
         contract_months: 24,
         parking_needed: 1,
+        people_visible: false,
+        about_me: null,
       },
     ]);
   });
@@ -771,5 +776,94 @@ describe('ProfilePage', () => {
       expect(document.activeElement).toBe(document.body);
       cleanup();
     }
+  });
+
+  it('ac1_people_fields', async () => {
+    const roomSection = he.profile.room;
+    const stored = profile({ gender: 'woman' });
+    const switchOn = () => toggle(roomSection.peopleVisible);
+    const aboutMe = () => screen.getByLabelText<HTMLTextAreaElement>(roomSection.aboutMe);
+
+    // Opt in and write two lines: both are sent, the newline kept.
+    let api = renderPage({ [PROFILE]: [json(stored)] });
+    await form();
+    expect(switchOn()).not.toBeChecked();
+    expect(screen.getByText(roomSection.peopleVisibleHint)).toBeVisible();
+    expect(aboutMe()).toHaveValue('');
+    expect(aboutMe()).toHaveAttribute('maxlength', '300');
+    expect(aboutMe()).toHaveAttribute('rows', '4');
+    expect(aboutMe().tagName).toBe('TEXTAREA');
+    expect(switchOn()).toHaveAccessibleDescription(roomSection.peopleVisibleHint);
+    expect(aboutMe()).toHaveAccessibleDescription(
+      i18n.t('listings.fields.charsLeft', { count: 300 }),
+    );
+    fireEvent.click(switchOn());
+    set(aboutMe(), 'שלום, אני סטודנטית');
+    expect(aboutMe()).toHaveAccessibleDescription(
+      i18n.t('listings.fields.charsLeft', { count: 282 }),
+    );
+    save();
+    await expectSaved();
+    expect(api.calls(PUT)[0]?.body).toMatchObject({
+      people_visible: true,
+      about_me: 'שלום, אני סטודנטית',
+    });
+    set(aboutMe(), 'שורה ראשונה\nשורה שנייה');
+    save();
+    await vi.waitFor(() => {
+      expect(api.calls(PUT)).toHaveLength(2);
+    });
+    expect(api.calls(PUT)[1]?.body).toMatchObject({ about_me: 'שורה ראשונה\nשורה שנייה' });
+    cleanup();
+
+    // The room section off: the fields are gone and the body says false / null.
+    api = renderPage({
+      [PROFILE]: [json(profile({ gender: 'woman', people_visible: true, about_me: 'היי' }))],
+    });
+    await form();
+    expect(switchOn()).toBeChecked();
+    expect(aboutMe()).toHaveValue('היי');
+    fireEvent.click(toggle(he.profile.room.switch));
+    expect(screen.queryByLabelText(roomSection.aboutMe)).toBeNull();
+    expect(screen.queryByRole('switch', { name: roomSection.peopleVisible })).toBeNull();
+    save();
+    await expectSaved();
+    expect(api.calls(PUT)[0]?.body).toMatchObject({ people_visible: false, about_me: null });
+    cleanup();
+
+    // Client rules: too long and letterless show under the textarea, with focus.
+    api = renderPage({ [PROFILE]: [json(stored)] });
+    await form();
+    set(aboutMe(), 'א'.repeat(301));
+    save();
+    // The description is the counter, then the error (the birth-year field's pattern).
+    expect(aboutMe()).toHaveAttribute('aria-invalid', 'true');
+    expect(aboutMe()).toHaveFocus();
+    expect(aboutMe()).toHaveAccessibleDescription(
+      expect.stringContaining(he.profile.errors.aboutMeTooLong),
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(he.profile.errors.aboutMeTooLong);
+    expect(api.calls(PUT)).toHaveLength(0);
+    set(aboutMe(), '!!!');
+    save();
+    expect(aboutMe()).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent(required);
+    cleanup();
+
+    // A server 422 on about_me: under the textarea, focused.
+    renderPage({
+      [PROFILE]: [json(stored)],
+      [PUT]: [
+        json({ detail: [{ loc: ['body', 'about_me'], msg: 'bad', type: 'value_error' }] }, 422),
+      ],
+    });
+    await form();
+    set(aboutMe(), 'שלום');
+    save();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(he.listings.errors.invalid);
+    });
+    expect(aboutMe()).toHaveAttribute('aria-invalid', 'true');
+    expect(aboutMe()).toHaveFocus();
   });
 });

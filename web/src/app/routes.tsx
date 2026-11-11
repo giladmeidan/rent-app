@@ -10,6 +10,7 @@ import { RequireUser } from '../features/auth/RequireUser';
 import { SignupPage } from '../features/auth/SignupPage';
 import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
+import { MyLikesPage } from '../features/likes/MyLikesPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
@@ -38,6 +39,7 @@ export function AppRoutes() {
         </Route>
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />
+          <Route path="me/likes" element={<MyLikesPage />} />
           <Route path="me/profile" element={<ProfilePage />} />
         </Route>
         <Route element={<RequireUser />}>
