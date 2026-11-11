@@ -1051,6 +1051,15 @@ def _definition_of(conn: Any, condition: str) -> str:
     return definition
 
 
+# 0010's lifestyle CHECK text, frozen (the migration's `_LIFESTYLE_CHECK`).
+_LIFESTYLE_CHECK_0010 = (
+    "jsonb_typeof(lifestyle) = 'object'"
+    " AND (lifestyle - ARRAY['cleanliness', 'guests', 'night', 'social', 'kosher', 'shabbat',"
+    " 'work_from_home']) = '{}'::jsonb"
+    " AND NOT jsonb_path_exists(lifestyle,"
+    " 'strict $.* ? (@.type() != \"number\" || (@ != 1 && @ != 2 && @ != 3))')"
+)
+
 # Spec 0007b (the 0007a security follow-up): 0010 lets `lifestyle` hold only known keys and the
 # JSON numbers 1-3. Each value is refused by both tables' CHECK.
 _BAD_LIFESTYLES = (
@@ -1135,10 +1144,11 @@ def test_ac6_application_listing_type_backfill_and_downgrade(migration_db_url: s
             ).scalar_one()
             assert value == "apartment"
             assert _application_columns(conn)["listing_type_at_apply"] is False  # NOT NULL
-            # The models' CHECK text (`app/models/_checks.py`) is what 0010 created.
-            model_definition = _definition_of(conn, LIFESTYLE_CHECK)
+            # What 0010 created: its own frozen text, not the live model's (a later migration
+            # may change the keys).
+            frozen_definition = _definition_of(conn, _LIFESTYLE_CHECK_0010)
             for name in _LIFESTYLE_CHECK_NAMES:
-                assert _check_definition(conn, name) == model_definition, name
+                assert _check_definition(conn, name) == frozen_definition, name
 
         with (
             pytest.raises(IntegrityError, match="ck_applications_listing_type_at_apply"),
@@ -1195,5 +1205,9 @@ def test_ac6_application_listing_type_backfill_and_downgrade(migration_db_url: s
         command.upgrade(cfg, "head")
         with engine.connect() as conn:
             assert "listing_type_at_apply" in _application_columns(conn)
+            # At head the models' CHECK text (`app/models/_checks.py`) is what the database holds.
+            model_definition = _definition_of(conn, LIFESTYLE_CHECK)
+            for name in _LIFESTYLE_CHECK_NAMES:
+                assert _check_definition(conn, name) == model_definition, name
     finally:
         engine.dispose()

@@ -348,6 +348,7 @@ def test_ac5_room_apply_gate(
 
     no_section = _seeker(client, outbox, db_engine, gush_dan, "plain@example.com")
     refused(no_section, w, "seeker_gender_required")
+    refused(no_section, m, "seeker_gender_required")
     applied(no_section, a)
     applied(no_section, p)
 
@@ -474,3 +475,98 @@ def test_ac6_listing_type_snapshot_on_apply_and_reapply(
         assert inbox.json()
         bodies.append(inbox.json())
     assert "listing_type_at_apply" not in _keys(bodies)
+
+
+def test_ac5_gate_skipped_for_hidden_and_own_listing(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    owner: uuid.UUID,
+) -> None:
+    """A hidden or own listing is a plain 404, as for an unknown id: the gate never reveals
+    existence or ownership, and the attempt still counts against the rate limit."""
+    closed = _area(db_engine, "closed", active=False)
+    ago = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
+    hidden = {
+        "paused": _r0(db_engine, owner, gush_dan, gender_preference="men", status="paused"),
+        "expired": _r0(db_engine, owner, gush_dan, gender_preference="men", expires_at=ago),
+        "inactive_area": _r0(db_engine, owner, closed, gender_preference="men"),
+    }
+    woman = _seeker(client, outbox, db_engine, gush_dan, "w@example.com", gender="woman")
+    plain = _seeker(client, outbox, db_engine, gush_dan, "p@example.com")
+    woman_id = _user_id(woman)
+    plain_id = _user_id(plain)
+    unknown = _apply(woman, uuid.uuid4())
+    assert unknown.status_code == 404
+
+    def not_found(caller: TestClient, seeker_id: uuid.UUID, listing_id: str, label: str) -> None:
+        before = _counters(seeker_id)
+        response = _apply(caller, listing_id)
+        assert (response.status_code, response.content) == (404, unknown.content), label
+        assert _counters(seeker_id) == (before[0] + 1, before[1] + 1), label
+        assert _applications(db_engine, listing_id, seeker_id) == 0, label
+
+    for label, listing_id in hidden.items():
+        not_found(woman, woman_id, listing_id, f"woman/{label}")
+        not_found(plain, plain_id, listing_id, f"plain/{label}")
+
+    own_misfit = _r0(db_engine, woman_id, gush_dan, gender_preference="men")
+    own_needs_section = _r0(db_engine, plain_id, gush_dan, gender_preference="women")
+    not_found(woman, woman_id, own_misfit, "woman/own men room")
+    not_found(plain, plain_id, own_needs_section, "plain/own women room")
+
+
+def test_ac5_repost_after_gender_change_is_room_gender_mismatch(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    owner: uuid.UUID,
+) -> None:
+    room = _r0(db_engine, owner, gush_dan, gender_preference="women")
+    seeker = _seeker(client, outbox, db_engine, gush_dan, "w@example.com", gender="woman")
+    seeker_id = _user_id(seeker)
+
+    def row() -> tuple[str, str]:
+        with db_engine.connect() as conn:
+            found = conn.execute(
+                text(
+                    "SELECT status, listing_type_at_apply FROM applications"
+                    " WHERE listing_id = :listing AND seeker_id = :seeker"
+                ),
+                {"listing": room, "seeker": seeker_id},
+            ).one()
+        return (found[0], found[1])
+
+    def set_gender(value: str) -> None:
+        _execute(
+            db_engine,
+            "UPDATE seeker_profiles SET gender = :g WHERE user_id = :id",
+            g=value,
+            id=seeker_id,
+        )
+
+    first = _apply(seeker, room)
+    assert first.status_code == 201, first.text
+    assert row() == ("submitted", "room")
+
+    set_gender("man")
+    assert _detail(seeker, room)["room_fit"] is False
+    repost = _apply(seeker, room)
+    assert repost.status_code == 409, repost.text
+    assert repost.json() == {"detail": "room_gender_mismatch"}
+    assert row()[0] == "submitted"
+
+    withdrawn = seeker.post(f"/me/applications/{first.json()['id']}/withdraw")
+    assert withdrawn.status_code == 200, withdrawn.text
+    repost = _apply(seeker, room)
+    assert repost.status_code == 409, repost.text
+    assert repost.json() == {"detail": "room_gender_mismatch"}
+    assert row()[0] == "withdrawn"
+
+    set_gender("woman")
+    reopened = _apply(seeker, room)
+    assert reopened.status_code == 201, reopened.text
+    assert reopened.json()["id"] == first.json()["id"]
+    assert row() == ("submitted", "room")
