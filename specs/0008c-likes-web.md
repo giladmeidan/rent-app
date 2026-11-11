@@ -1,7 +1,7 @@
 ---
 id: 0008c
 title: A seeker opens their room profile to flats looking for a flatmate, likes rooms from the listing page, sees the rooms that liked them in "לייקים", likes back to open the chat; mutual matches are tagged in "my applications"
-status: in-progress
+status: done
 depends_on: [0008a, 0007f]   # 0008a: PUT /me/profile people_visible/about_me, PUT/DELETE /listings/{id}/like, GET /me/likes, ListingDetail.like, MyApplicationOut.source (and the type-only fixture edits); 0007f: the room listing page sections, RoomGate, ListingCard for rooms, cardTitle, useApply's room_fit cache write. 0007d (done): the profile's room section and roomSectionHref
 reviewers: [code, qa, ux]   # ux: a new page, a new profile block and a new control on the listing page, no artboard; qa: the like states against apply / gate / login, the no-refetch cache rule; no security: shows the caller's own data and public listings only
 estimate: 1 coder run   # coder Sonnet/medium; Opus if the run overflows
