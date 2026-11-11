@@ -4,6 +4,7 @@ import he from '../src/locales/he.json' with { type: 'json' };
 import { API, postListing, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
+const ROOM = he.profile.room;
 
 /** `YYYY-MM-DD`, `days` from today in Israel (the profile form's calendar). */
 function israelDay(days: number): string {
@@ -54,6 +55,23 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();
+  // The room section (0007d): a woman born 30 years ago, women as flatmates, one answer. Labels
+  // are found inside their group: "גבר" is a substring of "גברים".
+  const roomGroup = (legend: string) => page.getByRole('group', { name: legend, exact: true });
+  const roomRadio = (legend: string, name: string) =>
+    roomGroup(legend).getByRole('radio', { name, exact: true });
+  const cleanliness = he.lifestyle.cleanliness.question.seeker;
+  const birthYear = String(new Date().getUTCFullYear() - 30);
+  await page.getByRole('switch', { name: ROOM.switch }).check();
+  await expect(page.getByText(ROOM.privacy)).toBeVisible();
+  await roomGroup(ROOM.fields.gender).getByText(ROOM.gender.woman, { exact: true }).click();
+  await page.getByLabel(ROOM.fields.birthYear).fill(birthYear);
+  await roomGroup(ROOM.fields.flatmates)
+    .getByText(he.rooms.genderPreference.women, { exact: true })
+    .click();
+  await roomGroup(cleanliness)
+    .getByText(he.lifestyle.cleanliness.answer['3'], { exact: true })
+    .click();
   await page.getByRole('button', { name: he.profile.save }).click();
   await expect(page).toHaveURL(`/listings/${id}`);
   await expect(section.getByRole('button', { name: he.applications.apply })).toBeVisible();
@@ -93,6 +111,34 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(page.getByRole('switch', { name: he.profile.fields.smoker })).not.toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.contract['24'] })).toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.parking['1'] })).toBeChecked();
+  await expect(page.getByRole('switch', { name: ROOM.switch })).toBeChecked();
+  await expect(roomRadio(ROOM.fields.gender, ROOM.gender.woman)).toBeChecked();
+  await expect(page.getByLabel(ROOM.fields.birthYear)).toHaveValue(birthYear);
+  await expect(roomRadio(ROOM.fields.flatmates, he.rooms.genderPreference.women)).toBeChecked();
+  await expect(roomRadio(cleanliness, he.lifestyle.cleanliness.answer['3'])).toBeChecked();
+  await expect(page.getByRole('region', { name: he.lifestyle.title.seeker })).toBeVisible();
+
+  // The gate's entry point lands on the room heading; switching off and saving clears the section.
+  await page.goto('/me/profile?section=room');
+  await expect(page.getByRole('heading', { level: 2, name: ROOM.title })).toBeFocused();
+  await page.getByRole('switch', { name: ROOM.switch }).uncheck();
+  await page.getByRole('button', { name: he.profile.save }).click();
+  await expect(page.getByText(he.profile.saved, { exact: true })).toBeVisible();
+  // `goto`, not `reload`: `section=room` would open the switch again.
+  await page.goto('/me/profile');
+  await expect(page.getByLabel(he.profile.fields.budget)).toHaveValue('7500');
+  await expect(page.getByRole('switch', { name: ROOM.switch })).not.toBeChecked();
+  await expect(page.getByRole('group', { name: ROOM.fields.gender, exact: true })).toHaveCount(0);
+  await expect(page.getByLabel(ROOM.fields.birthYear)).toHaveCount(0);
+  await expect(page.getByRole('region', { name: he.lifestyle.title.seeker })).toHaveCount(0);
+  const stored = await page.request.get(API + '/me/profile');
+  expect(stored.ok()).toBe(true);
+  expect(await stored.json()).toMatchObject({
+    gender: null,
+    birth_year: null,
+    flatmate_gender: 'any',
+    lifestyle: {},
+  });
 
   await test.step('ac10 search and the listing pages show the match', async () => {
     // Sorted by match (the default for a seeker with a profile); the fitting listing scores 100.
