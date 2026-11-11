@@ -658,19 +658,31 @@ describe('people reasons', () => {
       'lifestyle',
     ];
     const person = { move_in_date: inDays(30) };
-    const short = he.match.owner.short;
-    // The owner chips that state a fact the card hides.
-    const forbidden = [short.smoking.agreeSmoker, short.pets.agreePet, short.contract.agreeLong];
+    // Words that state a fact about the person: none may appear on any line.
+    const forbidden = [
+      'לא מעשנים',
+      'מעשנים',
+      'בלי חיות',
+      'עם חיית מחמד',
+      'חוזה קצר',
+      'חסרה חניה',
+      'חוזה ארוך',
+      he.match.owner.short.smoking.agreeSmoker,
+      he.match.owner.short.pets.agreePet,
+      he.match.owner.short.contract.agreeLong,
+    ];
     for (const criterion of criteria) {
       for (const kind of ['agree', 'differ'] as const) {
         const line = personReason(criterion, kind, person, i18n.t);
         expect(personShort(criterion, kind, person, i18n.t)).toBe(line);
         expect(line).not.toBe('');
+        expect(line).not.toContain('people.');
         expect(line).not.toContain('match.');
-        for (const text of forbidden) expect(line).not.toBe(text);
-        if (criterion !== 'move_in') expect(line).toBe(short[criterion][kind]);
+        for (const text of forbidden) expect(line, `${criterion} ${kind}`).not.toContain(text);
       }
     }
+    expect(personReason('smoking', 'differ', person, i18n.t)).toBe('עישון: לא מתאים');
+    expect(personReason('pets', 'agree', person, i18n.t)).toBe('חיות מחמד: מתאים');
     // A stored move-in that has passed means today, as everywhere.
     expect(personReason('move_in', 'agree', { move_in_date: inDays(-5) }, i18n.t)).toBe(
       i18n.t('match.owner.move_in.agree', { date: formatDate(todayInIsrael()) }),

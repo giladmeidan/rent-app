@@ -369,7 +369,7 @@ export function ownerShort(
 }
 
 // The people page's voice (0008b): about a seeker who has not applied. Fact-free: it reuses the
-// owner-short `agree` / `differ` base keys, never `agreeSmoker` / `agreePet` / `agreeLong` or a
+// owner-short base keys for budget, area, household and lifestyle, `people.short.*` for the rest, never `agreeSmoker` / `agreePet` / `agreeLong` or a
 // line that states household, pets, smoking, contract or parking. Only `move_in` has a date,
 // which the card shows anyway.
 
@@ -385,18 +385,18 @@ const PERSON_BASE: Record<Criterion, Record<ReasonKind, string>> = {
     differ: 'match.owner.short.household.differ',
   },
   contract: {
-    agree: 'match.owner.short.contract.agree',
-    differ: 'match.owner.short.contract.differ',
+    agree: 'people.short.contract.agree',
+    differ: 'people.short.contract.differ',
   },
   parking: {
-    agree: 'match.owner.short.parking.agree',
-    differ: 'match.owner.short.parking.differ',
+    agree: 'people.short.parking.agree',
+    differ: 'people.short.parking.differ',
   },
   smoking: {
-    agree: 'match.owner.short.smoking.agree',
-    differ: 'match.owner.short.smoking.differ',
+    agree: 'people.short.smoking.agree',
+    differ: 'people.short.smoking.differ',
   },
-  pets: { agree: 'match.owner.short.pets.agree', differ: 'match.owner.short.pets.differ' },
+  pets: { agree: 'people.short.pets.agree', differ: 'people.short.pets.differ' },
   lifestyle: {
     agree: 'match.owner.short.lifestyle.agree',
     differ: 'match.owner.short.lifestyle.differ',
