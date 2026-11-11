@@ -32,6 +32,7 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     created_at: '2026-11-01T10:00:00Z',
     lat: null,
     lng: null,
+    match: null,
     ...overrides,
   };
 }
@@ -47,6 +48,7 @@ export const listings = (count: number) => Array.from({ length: count }, () => p
 export const page = (items: ListingPublic[], total = items.length): ListingSearchOut => ({
   items,
   total,
+  sort: 'newest',
 });
 
 /** A request's query as sorted `[key, value]` pairs (a set comparison that still sees repeats). */

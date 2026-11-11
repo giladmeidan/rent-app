@@ -323,7 +323,7 @@ def test_ac5_failures_keep_listing_live_and_off_the_map(
         str(a_2): (None, None),
     }
     boxed = client.get("/listings?west=34.74&south=31.95&east=34.95&north=32.17").json()
-    assert boxed == {"items": [], "total": 0}
+    assert boxed == {"items": [], "total": 0, "sort": "newest"}
 
     # Only a house number: not found without a call.
     number_only = make_listing(db_engine, owner_id, gush_dan, street="12")

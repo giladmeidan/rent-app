@@ -6,7 +6,10 @@ the listing's **approximate** point (the street's point plus a fixed per-listing
 ~200 m, 4 decimals), `null` until the worker has located it; never a geocoder's raw point.
 
 `SearchParams`' optional map box (`west`, `south`, `east`, `north`, all four or none) matches only
-listings whose approximate point is inside it."""
+listings whose approximate point is inside it.
+
+`ListingPublic.match` (spec 0006b) is the caller's match score and its explanation: only a score and
+criterion codes, never a profile value; `null` for everyone but a seeker with a profile."""
 
 import datetime as dt
 import uuid
@@ -16,9 +19,11 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
 from app.schemas.listing import Furnished, ListingType, Rooms
+from app.schemas.match import MatchOut
 from app.schemas.profile import ContractMonths, HouseholdsOut
 
-SearchSort = Literal["newest", "price_asc", "price_desc"]
+# `match` (spec 0006b) orders by the caller's match score; without a profile it is `newest`.
+SearchSort = Literal["newest", "price_asc", "price_desc", "match"]
 SearchPrice = Annotated[int, Field(ge=0, le=100_000)]
 
 SEARCH_LIMIT_DEFAULT = 20
@@ -43,7 +48,8 @@ class SearchParams(BaseModel):
     furnished: bool | None = None
     elevator: bool | None = None
     parking: bool | None = None
-    sort: SearchSort = "newest"
+    # Omitted: `match` for a seeker with a profile, else `newest` (`services/search.py`).
+    sort: SearchSort | None = None
     limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = SEARCH_LIMIT_DEFAULT
     offset: Annotated[int, Field(ge=0, le=SEARCH_OFFSET_MAX)] = 0
     # Map bounding box (spec 0003c), WGS84 degrees. No antimeridian boxes (`west < east`).
@@ -111,6 +117,9 @@ class ListingPublic(BaseModel):
     created_at: dt.datetime
     lat: float | None
     lng: float | None
+    # The caller's match (spec 0006b): set exactly when the caller is a seeker with a profile. The
+    # default keeps `model_validate(<ORM row>)` working; the router sets it.
+    match: MatchOut | None = None
 
 
 class ListingDetail(ListingPublic):
@@ -123,3 +132,5 @@ class ListingDetail(ListingPublic):
 class ListingSearchOut(BaseModel):
     items: list[ListingPublic]
     total: int  # rows matching the filters, ignoring `limit` / `offset`
+    # The order applied (spec 0006b): `match` falls back to `newest` without a profile.
+    sort: SearchSort
