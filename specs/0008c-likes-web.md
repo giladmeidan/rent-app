@@ -1,7 +1,7 @@
 ---
 id: 0008c
 title: A seeker opens their room profile to flats looking for a flatmate, likes rooms from the listing page, sees the rooms that liked them in "לייקים", likes back to open the chat; mutual matches are tagged in "my applications"
-status: in-progress
+status: done
 depends_on: [0008a, 0007f]   # 0008a: PUT /me/profile people_visible/about_me, PUT/DELETE /listings/{id}/like, GET /me/likes, ListingDetail.like, MyApplicationOut.source (and the type-only fixture edits); 0007f: the room listing page sections, RoomGate, ListingCard for rooms, cardTitle, useApply's room_fit cache write. 0007d (done): the profile's room section and roomSectionHref
 reviewers: [code, qa, ux]   # ux: a new page, a new profile block and a new control on the listing page, no artboard; qa: the like states against apply / gate / login, the no-refetch cache rule; no security: shows the caller's own data and public listings only
 estimate: 1 coder run   # coder Sonnet/medium; Opus if the run overflows
@@ -65,7 +65,7 @@ room cards reuse `ListingCard` as search renders rooms (`0007f`), and the profil
         `likes.toProfile` to `roomSectionHref(location.pathname)` (`features/profile/links.ts`). A like needs
         the room section either way, and the profile page creates the profile there;
       - `room_gender_mismatch`: sets the cached `room_fit: false`, as `useApply` does on `0007f`. The button
-        then hides and `RoomGate` explains, so there is no alert;
+        then hides and `ApplySection`'s misfit line (`rooms.apply.misfit`) explains, so there is no alert;
       - `already_applied`: sets the cached `like: null` and invalidates `MY_APPLICATIONS_KEY`. `ApplySection`
         then shows the application (`ApplySection.tsx:296-307`). On `/me/likes` it invalidates `MY_LIKES_KEY`
         instead;
@@ -101,7 +101,9 @@ room cards reuse `ListingCard` as search renders rooms (`0007f`), and the profil
   - When `mutualId` is set, `MutualBanner` renders right before `ApplySection`.
   - Else, when `listing.like !== null` (`0008a`: a seeker, a room, no open application) and `room_fit !==
     false`, `LikeRoomButton` renders there.
-  - When `room_fit === false`, `0007f`'s `RoomGate` explains, and no button renders.
+  - When `room_fit === false`, `ApplySection`'s misfit line (`rooms.apply.misfit`, `0007f`) explains, and no
+    button renders. (`RoomGate` is the no-gender state, which a like never reaches: the API checks the room
+    section first.)
 - `web/src/features/applications/MyApplicationsPage.tsx`: when `source === 'like'`, the whole "your message"
   block (`MyApplicationsPage.tsx:70-79`, the label and `data-testid="application-message"`) is replaced by the
   tag `applications.mutual` "התאמה הדדית" (`data-testid="application-mutual"`).
@@ -191,7 +193,7 @@ mobile.
 - [ ] AC4 Given the PUT answering:
   - 409 `room_section_required` or `seeker_profile_required`: the alert links to
     `/me/profile?section=room&next=%2Flistings%2FR`;
-  - 409 `room_gender_mismatch`: the button disappears and `RoomGate`'s text shows;
+  - 409 `room_gender_mismatch`: the button disappears and `ApplySection`'s misfit line (`rooms.apply.misfit`) shows;
   - `already_applied`: the control disappears and `MY_APPLICATIONS_KEY` refetches;
   - 404: the "no longer available" text;
   - 429: the rate-limit text;
@@ -233,7 +235,11 @@ API). `putProfile` already takes overrides (`0007f`), and so does `0008b`'s `lik
 - The listing page's like control sits next to the apply section, and the copy keeps them apart: a like is
   light ("אהבתי"), applying is the full step with a message. If the UX review finds them confusing, the
   fallback is a one-line hint under the button, "לייק הדדי פותח צ'אט בלי הודעת מועמדות" (key
-  `likes.hint`), in the same build.
+  `likes.hint`), in the same build. **Taken in review round 1** (the UX review found the idle state unclear):
+  the hint shows on the listing page under an idle button (neither liked by me nor liked me).
+- Review round 1 also settled two edge cases: a successful apply sets the cached `like` to `null` (`useApply`),
+  and `ApplySection` shows an application with `source: 'like'` as the `applications.mutual` tag instead of
+  "הגשת מועמדות ב־…", because the seeker never applied.
 
 Spec-verifier round 1 rejected with 1 blocker, 5 majors and 6 minors. All are applied. The second round is
 waived (one verifier round, Gilad).
@@ -251,3 +257,27 @@ waived (one verifier round, Gilad).
     Risks: like vs apply on one page may confuse - mitigation: distinct copy, one-line hint fallback in the same build.
     Reviewers: code, qa, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008c-likes-web.md - PRODUCT.md "People & likes" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008c - Likes web (seeker)   PR OPEN #37 (not merged), code head 1f7f103 (with main f05c76a: 0008a, 0008b)
+    Shipped: a seeker turns on "להציג אותי לדירות שמחפשות שותף/ה" and writes "קצת עליי" (300 chars) in the
+             profile's room section; likes rooms from the room page ("אהבתי את החדר", with a "the lister liked
+             you" line and the hint "לייק הדדי פותח צ'אט בלי הודעת מועמדות"); sees "אהבו אותך" / "חדרים שאהבתי"
+             under a new header link "לייקים" with a count badge; liking back shows "זו התאמה הדדית!" with the
+             chat link. A like-made application reads "התאמה הדדית" in my applications and on the room page.
+             A like never refetches the listing (views stay honest).
+    Demo: make dev -> seeker signs up, fills the room section, turns "להציג אותי" on -> owner posts a room and
+          likes the seeker (GET /listings/{id}/people, PUT .../like) -> seeker sees "לייקים 1", opens it, likes
+          back -> banner links to the chat; "my applications" shows "התאמה הדדית".
+    Tests: +13 web (AC1-AC8 plus apply-ends-like, mutual-not-applied, double click), +1 e2e (likes.spec AC9).
+           On 1f7f103: make lint, make test (api 457, web 285), make i18n-check, make build-web green; local
+           make e2e 12/12 green in 3 shards (Speed rule 7). CI: api + web on the PR head (see the PR).
+    Findings: 0 blockers; 3 majors fixed (a stale like control after an apply; AC6's zero-badge test proved
+              nothing; a mutual like read as "you applied"); 8 minors fixed (double-click guard, logout drops
+              the banner, focus to the chat link, privacy hint as the switch's description, likes.hint, test
+              gaps); 5 follow-ups logged; ~18 nits dropped. Spec wording fixed: a gender misfit shows
+              ApplySection's misfit line, not RoomGate.
+    Decisions I need from you: none. Built on my call (reverse it if you disagree): a like-made application shows "התאמה הדדית" instead
+             of "הגשת מועמדות ב־…" on the room page too, not only in my applications.
+    Changed in PRODUCT.md: nothing.

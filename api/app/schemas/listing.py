@@ -21,7 +21,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.schemas._text import visible_characters_only
+from app.schemas._text import lf_newlines, visible_characters_only
 from app.schemas.profile import (
     AGE_MAX,
     AGE_MIN,
@@ -54,8 +54,8 @@ def _not_too_far(value: dt.date) -> dt.date:
     return value
 
 
-def _lf_newlines(value: Any) -> Any:
-    return value.replace("\r\n", "\n") if isinstance(value, str) else value
+# Kept under its old name: `schemas/application.py` and `schemas/chat.py` import it from here.
+_lf_newlines = lf_newlines
 
 
 def _visible_multiline(value: str) -> str:
@@ -268,9 +268,17 @@ class ListingOut(BaseModel):
 
 class MyListingOut(ListingOut):
     """One of the caller's own listings on `GET /me/listings` (0004c): `ListingOut` plus its
-    applicant count (every application but withdrawn ones) and new-applicant count (`submitted`).
+    applicant count (every application but withdrawn ones), new-applicant count (`submitted`),
+    from 0008a its liked-me count and from 0008d its flatmate count and invite-link state.
     No `view_count`: owners do not see it (Gilad, 2026-11-10). `POST` / `PATCH /listings` keep
     returning `ListingOut`."""
 
     applicant_count: int
     new_applicant_count: int
+    # Seekers who liked this room and are waiting for a like back (0008a, a "pending seeker like":
+    # no non-withdrawn application yet); 0 for an apartment. Not re-checked for fit or opt-in.
+    liked_me_count: int
+    # The listing's flatmates (spec 0008d), and whether its invite link is live. The link's hash
+    # never leaves the server.
+    flatmate_count: int
+    flatmate_invite_active: bool

@@ -14,7 +14,10 @@ seven housing-profile fields listed explicitly: never the seeker's `budget_max_i
 fit).
 
 From 0007c a room application also carries `ApplicantRoomOut` (`gender`, `age`, `lifestyle`, listed
-explicitly): never the seeker's `birth_year` or `flatmate_gender`."""
+explicitly): never the seeker's `birth_year` or `flatmate_gender`.
+
+From 0008a both views carry `source`: `"apply"`, or `"like"` for an application a mutual like
+created (`services/people.py`), whose `message` is null (null exactly then)."""
 
 import datetime as dt
 import uuid
@@ -39,8 +42,10 @@ ApplicationStatus = Literal["submitted", "shortlisted", "declined", "withdrawn"]
 # What an owner sees and may set: a withdrawn application is invisible to the owner (0004c).
 ApplicantStatus = Literal["submitted", "shortlisted", "declined"]
 ApplicantSort = Literal["match", "newest"]
+# How the application began (0008a): applied with a message, or a mutual like (no message).
+ApplicationSource = Literal["apply", "like"]
 
-MESSAGE_MAX_LENGTH = 500  # ck_applications_message_length (migration 0005)
+MESSAGE_MAX_LENGTH = 500  # ck_applications_message (migrations 0005, 0011)
 
 
 def _visible_message(value: str) -> str:
@@ -82,7 +87,8 @@ class MyApplicationOut(BaseModel):
 
     id: uuid.UUID
     status: ApplicationStatus
-    message: str
+    source: ApplicationSource
+    message: str | None  # null exactly when `source == "like"`
     created_at: dt.datetime
     updated_at: dt.datetime
     listing: ApplicationListingOut
@@ -121,7 +127,8 @@ class ApplicantOut(BaseModel):
 
     id: uuid.UUID
     status: ApplicantStatus
-    message: str
+    source: ApplicationSource
+    message: str | None  # null exactly when `source == "like"`
     applicant_name: str
     created_at: dt.datetime
     updated_at: dt.datetime

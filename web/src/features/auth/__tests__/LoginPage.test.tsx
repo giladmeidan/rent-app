@@ -203,7 +203,8 @@ describe('LoginPage', () => {
     );
     // The previous person's list is still cached in this tab (their session ended without a 401
     // from a seeker call, e.g. a logout in another tab).
-    const previous = application({ message: 'the previous seeker wrote this' });
+    const previousMessage = 'the previous seeker wrote this';
+    const previous = application({ message: previousMessage });
     const client = testQueryClient();
     client.setQueryData(['me', 'applications'], [previous]);
     const list = deferred();
@@ -219,7 +220,7 @@ describe('LoginPage', () => {
       expect(currentPath()).toBe('/me/applications');
     });
     expect(screen.getByTestId('navigation')).toHaveTextContent('REPLACE');
-    expect(screen.queryByText(previous.message)).toBeNull();
+    expect(screen.queryByText(previousMessage)).toBeNull();
     expect(screen.queryByRole('article')).toBeNull();
     expect(screen.getByRole('list', { name: he.common.loading })).toHaveAttribute(
       'aria-busy',

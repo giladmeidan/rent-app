@@ -17,6 +17,9 @@ Room fields (spec 0007a): `gender_preference`, `flatmates_count`, `flatmate_ages
 resets the four server-side before validation (sent room values still win, so a non-default one is
 a 422), and any `listing_type` change writes all four. A pause or resume of a legacy room (NULL
 count) is not an edit and is let through; every other PATCH of it must send `flatmates_count`.
+
+Flatmates (spec 0008d): a switch to an apartment also turns the listing's invite link off
+(`flatmate_invite_hash = NULL`); its memberships stay.
 """
 
 import datetime as dt
@@ -29,7 +32,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Application, Area, Listing, User
+from app.models import Application, Area, Listing, ListingFlatmate, RoomPair, User
 from app.schemas.listing import ROOM_FIELD_DEFAULTS, ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
@@ -103,11 +106,17 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
     return listing
 
 
-def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, int]]:
+def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, int, int, int]]:
     """Every listing of `owner` (active, paused and expired), newest first, with its applicant
-    count (every application but withdrawn ones) and new-applicant count (`submitted`; spec
-    0004c). One statement: the counts are correlated scalar subqueries, each an index range scan
-    on `uq_applications_listing_seeker (listing_id, seeker_id)`."""
+    count (every application but withdrawn ones), new-applicant count (`submitted`; spec 0004c),
+    liked-me count (its pending seeker likes, `services/people.py`; 0 for an apartment; spec
+    0008a) and flatmate count (spec 0008d). One statement: the counts are correlated scalar
+    subqueries, each an index range scan on `uq_applications_listing_seeker (listing_id,
+    seeker_id)`, `uq_room_pairs_listing_seeker (listing_id, seeker_id)` or
+    `uq_listing_flatmates_listing_user (listing_id, user_id)`."""
+    # Imported here: `services/people.py` imports this module (through `services/search.py`).
+    from app.services.people import pending_seeker_like
+
     applicants = (
         select(func.count())
         .where(Application.listing_id == Listing.id, Application.status != "withdrawn")
@@ -118,8 +127,17 @@ def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, 
         .where(Application.listing_id == Listing.id, Application.status == "submitted")
         .scalar_subquery()
     )
+    liked_me = (
+        select(func.count()).select_from(RoomPair).where(pending_seeker_like()).scalar_subquery()
+    )
+    flatmates = (
+        select(func.count())
+        .select_from(ListingFlatmate)
+        .where(ListingFlatmate.listing_id == Listing.id)
+        .scalar_subquery()
+    )
     rows = db.execute(
-        select(Listing, applicants, new_applicants)
+        select(Listing, applicants, new_applicants, liked_me, flatmates)
         .where(Listing.owner_id == owner.id)
         .order_by(Listing.created_at.desc(), Listing.id)
     ).tuples()
@@ -170,6 +188,10 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         if "listing_type" in patch.model_fields_set:
             # Room -> apartment writes the reset; apartment -> room the merged (sent or default).
             values.update({name: getattr(data, name) for name in ROOM_FIELD_DEFAULTS})
+            if data.listing_type == "apartment":
+                # An apartment has no invite link (spec 0008d). Memberships stay: they reach room
+                # applications only (`services/chat.py`).
+                values["flatmate_invite_hash"] = None
         if patch.status is not None:
             values["status"] = patch.status
         if any(getattr(data, name) != getattr(listing, name) for name in _ADDRESS_FIELDS):

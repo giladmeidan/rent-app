@@ -10,10 +10,12 @@ import { RequireUser } from '../features/auth/RequireUser';
 import { SignupPage } from '../features/auth/SignupPage';
 import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
+import { MyLikesPage } from '../features/likes/MyLikesPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
 import { NewListingPage } from '../features/listings/NewListingPage';
+import { PeoplePage } from '../features/people/PeoplePage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { SearchPage } from '../features/search/SearchPage';
 import { Layout } from './Layout';
@@ -33,9 +35,11 @@ export function AppRoutes() {
           <Route path="me/listings" element={<MyListingsPage />} />
           <Route path="me/listings/:id/edit" element={<EditListingPage />} />
           <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
+          <Route path="me/listings/:id/people" element={<PeoplePage />} />
         </Route>
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />
+          <Route path="me/likes" element={<MyLikesPage />} />
           <Route path="me/profile" element={<ProfilePage />} />
         </Route>
         <Route element={<RequireUser />}>

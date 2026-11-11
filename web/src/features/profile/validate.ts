@@ -3,6 +3,7 @@
 // the API can know).
 import type { LifestyleAnswers } from '../lifestyle/keys';
 import { addDays, todayInIsrael } from '../listings/format';
+import { cleanText, visibleLength } from '../listings/validate';
 import type {
   ContractMonths,
   FlatmateGender,
@@ -51,6 +52,10 @@ export type ProfileForm = {
   birth_year: string;
   flatmate_gender: FlatmateGender;
   lifestyle: LifestyleAnswers;
+  /** Opt-in to people browse (0008a); sent only with the room section on. */
+  people_visible: boolean;
+  /** "A little about me", as typed (up to 300 characters). */
+  about_me: string;
 };
 
 export const emptyProfileForm: ProfileForm = {
@@ -68,6 +73,8 @@ export const emptyProfileForm: ProfileForm = {
   birth_year: '',
   flatmate_gender: 'any',
   lifestyle: {},
+  people_visible: false,
+  about_me: '',
 };
 
 /** A stored profile as the form's starting state. */
@@ -87,6 +94,8 @@ export function formFromProfile(profile: SeekerProfileOut): ProfileForm {
     birth_year: String(profile.birth_year ?? ''),
     flatmate_gender: profile.flatmate_gender,
     lifestyle: { ...profile.lifestyle },
+    people_visible: profile.people_visible,
+    about_me: profile.about_me ?? '',
   };
 }
 
@@ -100,6 +109,7 @@ export const FIELD_ORDER = [
   'parking_needed',
   'gender',
   'birth_year',
+  'about_me',
 ] as const;
 export type FieldName = (typeof FIELD_ORDER)[number];
 
@@ -109,6 +119,7 @@ export type FieldError =
   | { key: 'profile.errors.moveIn' }
   | { key: 'profile.errors.areas' }
   | { key: 'profile.errors.areaInactive' }
+  | { key: 'profile.errors.aboutMeTooLong' }
   /** The API rejected the field (a 422 naming it); its English `msg` is never shown. */
   | { key: 'listings.errors.invalid' };
 
@@ -144,6 +155,20 @@ function birthYear(value: string): FieldError | undefined {
   return undefined;
 }
 
+export const ABOUT_ME_MAX = 300;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+
+/** Empty after cleaning is valid (sent as `null`); otherwise a letter or digit, at most 300. */
+function aboutMe(value: string): FieldError | undefined {
+  const cleaned = cleanText(value, { multiline: true });
+  if (cleaned === '') return undefined;
+  if (!LETTER_OR_DIGIT.test(cleaned)) return required;
+  if (visibleLength(value, { multiline: true }) > ABOUT_ME_MAX) {
+    return { key: 'profile.errors.aboutMeTooLong' };
+  }
+  return undefined;
+}
+
 function moveIn(value: string, today: string): FieldError | undefined {
   if (value === '') return required;
   if (!DAY.test(value) || Number.isNaN(Date.parse(value))) return { key: 'profile.errors.moveIn' };
@@ -174,6 +199,7 @@ export function validate(
     // The room section is checked only while its switch is on.
     gender: form.room && form.gender === null ? required : undefined,
     birth_year: form.room ? birthYear(form.birth_year) : undefined,
+    about_me: form.room ? aboutMe(form.about_me) : undefined,
   };
   const errors: FieldErrors = {};
   for (const name of FIELD_ORDER) {
@@ -203,17 +229,21 @@ export function toProfileIn(form: ProfileForm, areas: readonly { id: string }[])
     contract_months: form.contract_months,
     parking_needed: form.parking_needed,
   };
-  // Room off: the four keys are omitted, so the server clears the section.
-  if (!form.room) return body;
+  // Room off: the four keys are omitted, so the server clears the section; the API refuses the
+  // people fields without a gender, so they go as `false` / `null`.
+  if (!form.room) return { ...body, people_visible: false, about_me: null };
   if (form.gender === null)
     throw new Error('toProfileIn: gender is required with the room switch on');
   const birthYear = form.birth_year.trim();
+  const about = cleanText(form.about_me, { multiline: true });
   return {
     ...body,
     gender: form.gender,
     ...(birthYear === '' ? {} : { birth_year: Number(birthYear) }),
     flatmate_gender: form.flatmate_gender,
     lifestyle: { ...form.lifestyle },
+    people_visible: form.people_visible,
+    about_me: about === '' ? null : about,
   };
 }
 

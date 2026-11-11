@@ -44,7 +44,7 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
 /** `GET /listings/{id}`'s shape: a public listing plus its applicant count and the caller's room
  * fit (0007b; `null` for an apartment). */
 export function listingDetail(overrides: Partial<ListingDetail> = {}): ListingDetail {
-  return { ...publicListing(), applicant_count: 0, room_fit: null, ...overrides };
+  return { ...publicListing(), applicant_count: 0, room_fit: null, like: null, ...overrides };
 }
 
 /** `count` fresh listings. */

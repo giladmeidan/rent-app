@@ -1211,3 +1211,420 @@ def test_ac6_application_listing_type_backfill_and_downgrade(migration_db_url: s
                 assert _check_definition(conn, name) == model_definition, name
     finally:
         engine.dispose()
+
+
+def _columns(conn: Any, table: str) -> dict[str, bool]:
+    """`table`'s columns and whether each is nullable."""
+    return {column["name"]: column["nullable"] for column in inspect(conn).get_columns(table)}
+
+
+def test_ac14_people_likes_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0008a: 0011 adds `room_pairs`, the profile's `people_visible` / `about_me` and
+    # `applications.source`, with `message` nullable exactly for a like-sourced application.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0010")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"), ("other", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " VALUES (:owner, :area, 'room', 'city', 'street', 3, 1, 80, 4500,"
+                    " current_date, false, 'none', false, now() + interval '90 days', 2)"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, price_ils_at_apply,"
+                    " area_id_at_apply, listing_type_at_apply)"
+                    " VALUES (:listing, :seeker, 'Hello', 4500, :area, 'room') RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"], "area": area_id},
+            ).scalar_one()
+            for user, gender in ((users["seeker"], "'woman'"), (users["other"], "NULL")):
+                conn.execute(
+                    text(
+                        "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date,"
+                        " area_ids, household, has_pets, smoker, contract_months, gender)"
+                        " VALUES (:user, 7500, current_date, ARRAY[:area]::uuid[], 'couple',"
+                        f" false, false, 24, {gender})"
+                    ),
+                    {"user": user, "area": area_id},
+                )
+        with engine.connect() as conn:
+            room_section_0010 = _check_definition(conn, "ck_seeker_profiles_room_section")
+        assert room_section_0010 is not None
+        assert "room_pairs" not in _table_names(migration_db_url)
+
+        command.upgrade(cfg, "0011")
+        assert "room_pairs" in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert conn.execute(
+                text("SELECT source, message FROM applications WHERE id = :id"),
+                {"id": application_id},
+            ).one() == ("apply", "Hello")
+            assert conn.execute(
+                text("SELECT people_visible, about_me FROM seeker_profiles WHERE user_id = :id"),
+                {"id": users["seeker"]},
+            ).one() == (False, None)
+            assert _columns(conn, "applications")["message"] is True
+            assert _columns(conn, "applications")["source"] is False
+            assert _columns(conn, "seeker_profiles")["people_visible"] is False
+
+        def refused(constraint: str, sql: str, **params: Any) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(sql), params)
+
+        insert_application = (
+            "INSERT INTO applications (listing_id, seeker_id, source, message, status,"
+            " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+            " VALUES (:listing, :seeker, :source, :message, 'shortlisted', 4500, :area, 'room')"
+        )
+        bad_rows = (
+            ("like", "Hello"),  # a like-sourced application has no message
+            ("apply", None),  # an applied one always has one (the NULL hole is closed)
+            ("apply", ""),
+            ("apply", "x" * 501),
+        )
+        for source, message in bad_rows:
+            refused(
+                "ck_applications_message",
+                insert_application,
+                listing=listing_id,
+                seeker=users["other"],
+                source=source,
+                message=message,
+                area=area_id,
+            )
+        # Any other source also fails `ck_applications_message`; whichever Postgres checks first.
+        refused(
+            "ck_applications_(source|message)",
+            insert_application,
+            listing=listing_id,
+            seeker=users["other"],
+            source="invite",
+            message=None,
+            area=area_id,
+        )
+        refused(
+            "ck_seeker_profiles_room_section",
+            "UPDATE seeker_profiles SET people_visible = true WHERE user_id = :id",
+            id=users["other"],
+        )
+        refused(
+            "ck_seeker_profiles_room_section",
+            "UPDATE seeker_profiles SET about_me = 'Hi' WHERE user_id = :id",
+            id=users["other"],
+        )
+        refused(
+            "ck_seeker_profiles_about_me",
+            "UPDATE seeker_profiles SET about_me = '' WHERE user_id = :id",
+            id=users["seeker"],
+        )
+        refused(
+            "ck_room_pairs_price",
+            "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen)"
+            " VALUES (:listing, :seeker, 0)",
+            listing=listing_id,
+            seeker=users["seeker"],
+        )
+        with engine.begin() as conn:
+            like_id = conn.execute(
+                text(insert_application + " RETURNING id"),
+                {
+                    "listing": listing_id,
+                    "seeker": users["other"],
+                    "source": "like",
+                    "message": None,
+                    "area": area_id,
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "UPDATE seeker_profiles SET people_visible = true, about_me = 'Hi'"
+                    " WHERE user_id = :id"
+                ),
+                {"id": users["seeker"]},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen,"
+                    " seeker_liked_at) VALUES (:listing, :seeker, 4500, now())"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"]},
+            )
+        refused(
+            "uq_room_pairs_listing_seeker",
+            "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen)"
+            " VALUES (:listing, :seeker, 4500)",
+            listing=listing_id,
+            seeker=users["seeker"],
+        )
+
+        command.downgrade(cfg, "0010")
+        assert "room_pairs" not in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert "source" not in _columns(conn, "applications")
+            assert _columns(conn, "applications")["message"] is False
+            assert set(_columns(conn, "seeker_profiles")).isdisjoint({"people_visible", "about_me"})
+            messages: dict[Any, str] = {
+                row.id: row.message
+                for row in conn.execute(text("SELECT id, message FROM applications"))
+            }
+            assert messages == {
+                application_id: "Hello",
+                like_id: "התאמה הדדית",
+            }
+            assert _check_definition(conn, "ck_applications_message") is None
+            assert _check_definition(conn, "ck_applications_source") is None
+            assert _check_definition(conn, "ck_seeker_profiles_about_me") is None
+            assert _check_definition(conn, "ck_applications_message_length") is not None
+            assert _check_definition(conn, "ck_seeker_profiles_room_section") == room_section_0010
+        refused(
+            "ck_applications_message_length",
+            "UPDATE applications SET message = '' WHERE id = :id",
+            id=application_id,
+        )
+
+        command.upgrade(cfg, "head")
+        assert "room_pairs" in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    text("SELECT source FROM applications WHERE id = :id"), {"id": like_id}
+                ).scalar_one()
+                == "apply"
+            )  # the downgrade turned it into an applied one
+    finally:
+        engine.dispose()
+
+
+def test_ac11_flatmates_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0008d: 0012 adds `listings.flatmate_invite_hash` (unique), `listing_flatmates` and
+    # `conversation_reads`; the existing listing, application and conversation survive both ways.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0011")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"), ("mate", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " VALUES (:owner, :area, 'room', 'city', 'street', 3, 1, 80, 4500,"
+                    " current_date, false, 'none', false, now() + interval '90 days', 2)"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, status,"
+                    " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+                    " VALUES (:listing, :seeker, 'Hello', 'shortlisted', 4500, :area, 'room')"
+                    " RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"], "area": area_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO conversations (application_id, owner_id, seeker_id, owner_read_at)"
+                    " VALUES (:application, :owner, :seeker, now())"
+                ),
+                {"application": application_id, "owner": users["owner"], "seeker": users["seeker"]},
+            )
+        tables_0011 = _table_names(migration_db_url)
+        assert not {"listing_flatmates", "conversation_reads"} & tables_0011
+
+        def survivors(conn: Any) -> tuple[Any, ...]:
+            return tuple(
+                conn.execute(
+                    text(
+                        "SELECT l.id, a.id, a.status, c.owner_id, c.seeker_id FROM listings l"
+                        " JOIN applications a ON a.listing_id = l.id"
+                        " JOIN conversations c ON c.application_id = a.id"
+                    )
+                ).one()
+            )
+
+        with engine.connect() as conn:
+            before = survivors(conn)
+
+        command.upgrade(cfg, "0012")
+        assert _table_names(migration_db_url) == tables_0011 | {
+            "listing_flatmates",
+            "conversation_reads",
+        }
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert _columns(conn, "listings")["flatmate_invite_hash"] is True
+            assert conn.execute(text("SELECT flatmate_invite_hash FROM listings")).scalar() is None
+            assert _columns(conn, "listing_flatmates") == {
+                "id": False,
+                "listing_id": False,
+                "user_id": False,
+                "joined_at": False,
+            }
+            assert _columns(conn, "conversation_reads") == {
+                "conversation_id": False,
+                "user_id": False,
+                "read_at": False,
+            }
+            constraints = {
+                (table, name, kind)
+                for table, name, kind in conn.execute(
+                    text(
+                        "SELECT conrelid::regclass::text, conname, contype FROM pg_constraint"
+                        " WHERE conrelid IN ('listing_flatmates'::regclass,"
+                        " 'conversation_reads'::regclass) OR conname LIKE '%flatmate_invite%'"
+                    )
+                ).tuples()
+            }
+            foreign_keys = {
+                (table, column, target, action)
+                for table, column, target, action in conn.execute(
+                    text(
+                        "SELECT c.conrelid::regclass::text, a.attname, c.confrelid::regclass::text,"
+                        " c.confdeltype FROM pg_constraint c"
+                        " JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]"
+                        " WHERE c.conrelid IN ('listing_flatmates'::regclass,"
+                        " 'conversation_reads'::regclass) AND c.contype = 'f'"
+                    )
+                ).tuples()
+            }
+            indexes = {
+                name: definition
+                for name, definition in conn.execute(
+                    text(
+                        "SELECT indexname, indexdef FROM pg_indexes"
+                        " WHERE tablename IN ('listing_flatmates', 'conversation_reads')"
+                    )
+                ).tuples()
+            }
+        assert constraints == {
+            ("listings", "uq_listings_flatmate_invite_hash", "u"),
+            ("listing_flatmates", "listing_flatmates_pkey", "p"),
+            ("listing_flatmates", "uq_listing_flatmates_listing_user", "u"),
+            ("listing_flatmates", "listing_flatmates_listing_id_fkey", "f"),
+            ("listing_flatmates", "listing_flatmates_user_id_fkey", "f"),
+            ("conversation_reads", "conversation_reads_pkey", "p"),
+            ("conversation_reads", "conversation_reads_conversation_id_fkey", "f"),
+            ("conversation_reads", "conversation_reads_user_id_fkey", "f"),
+        }
+        assert foreign_keys == {
+            ("listing_flatmates", "listing_id", "listings", "c"),
+            ("listing_flatmates", "user_id", "users", "c"),
+            ("conversation_reads", "conversation_id", "conversations", "c"),
+            ("conversation_reads", "user_id", "users", "c"),
+        }
+        assert indexes["uq_listing_flatmates_listing_user"].endswith("(listing_id, user_id)")
+        assert indexes["ix_listing_flatmates_user_id"].endswith("(user_id)")
+        assert indexes["conversation_reads_pkey"].endswith("(conversation_id, user_id)")
+
+        def refused(constraint: str, sql: str, **params: Any) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(sql), params)
+
+        join = "INSERT INTO listing_flatmates (listing_id, user_id) VALUES (:listing, :user)"
+        with engine.begin() as conn:
+            conn.execute(text(join), {"listing": listing_id, "user": users["mate"]})
+            conn.execute(
+                text(
+                    "INSERT INTO conversation_reads (conversation_id, user_id, read_at)"
+                    " VALUES (:conversation, :user, now())"
+                ),
+                {"conversation": application_id, "user": users["mate"]},
+            )
+            conn.execute(
+                text("UPDATE listings SET flatmate_invite_hash = 'abc' WHERE id = :id"),
+                {"id": listing_id},
+            )
+            other_listing = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " SELECT owner_id, area_id, listing_type, city, street, rooms, floor,"
+                    " size_sqm, price_ils, available_from, elevator, furnished, pets_allowed,"
+                    " expires_at, flatmates_count FROM listings WHERE id = :id RETURNING id"
+                ),
+                {"id": listing_id},
+            ).scalar_one()
+        with engine.connect() as conn:
+            joined_at = conn.execute(text("SELECT joined_at FROM listing_flatmates")).scalar()
+            assert joined_at is not None  # DEFAULT now()
+        refused("uq_listing_flatmates_listing_user", join, listing=listing_id, user=users["mate"])
+        refused(
+            "uq_listings_flatmate_invite_hash",
+            "UPDATE listings SET flatmate_invite_hash = 'abc' WHERE id = :id",
+            id=other_listing,
+        )
+        refused(
+            "conversation_reads_pkey",
+            "INSERT INTO conversation_reads (conversation_id, user_id, read_at)"
+            " VALUES (:conversation, :user, now())",
+            conversation=application_id,
+            user=users["mate"],
+        )
+
+        command.downgrade(cfg, "0011")
+        assert _table_names(migration_db_url) == tables_0011
+        with engine.connect() as conn:
+            assert "flatmate_invite_hash" not in _columns(conn, "listings")
+            assert survivors(conn) == before
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint"
+                        " WHERE conname = 'uq_listings_flatmate_invite_hash'"
+                    )
+                ).scalar_one()
+                == 0
+            )
+
+        command.upgrade(cfg, "head")
+        assert {"listing_flatmates", "conversation_reads"} <= _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert conn.execute(text("SELECT count(*) FROM listing_flatmates")).scalar_one() == 0
+    finally:
+        engine.dispose()

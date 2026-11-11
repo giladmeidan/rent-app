@@ -9,6 +9,7 @@ export function application(overrides: Partial<MyApplicationOut> = {}): MyApplic
   return {
     id: `00000000-0000-0000-0000-${String(n).padStart(12, 'a')}`,
     status: 'submitted',
+    source: 'apply',
     message: 'Hi, we are a quiet couple',
     created_at: '2026-11-10T10:00:00Z',
     updated_at: '2026-11-10T10:00:00Z',

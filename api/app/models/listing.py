@@ -1,8 +1,8 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
-Every CHECK, FK and index here matches migrations 0003, 0004, 0005, 0007, 0009 and 0010 exactly
-(autogenerate must see no diff). A listing is **live** while `status = 'active' AND expires_at >
-now()`.
+Every CHECK, FK, unique constraint and index here matches migrations 0003, 0004, 0005, 0007, 0009,
+0010 and 0012 exactly (autogenerate must see no diff). A listing is **live** while `status =
+'active' AND expires_at > now()`.
 
 Room fields (spec 0007a): `gender_preference` (who the room is for), `flatmates_count` (people
 already living there), `flatmate_ages` (optional: none, some or all of them) and `lifestyle` (the
@@ -33,6 +33,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     Text,
+    UniqueConstraint,
     cast,
     func,
     text,
@@ -109,6 +110,8 @@ class Listing(Base):
             " AND flatmate_ages = '{}' AND lifestyle = '{}'::jsonb)",
             name="ck_listings_room_fields",
         ),
+        # NULLs never collide: many listings have no live invite link (spec 0008d).
+        UniqueConstraint("flatmate_invite_hash", name="uq_listings_flatmate_invite_hash"),
         Index("ix_listings_owner_id", "owner_id"),
         Index("ix_listings_area_id", "area_id"),
         # Explicit GiST index on the planar cast (`location::geometry`), the expression the map-box
@@ -178,6 +181,10 @@ class Listing(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # The sha256 hex of the room's one live flatmate invite token (spec 0008d,
+    # `services/flatmates.py`); NULL = no live link. Never in any response: `GET /me/listings` shows
+    # only whether it is set.
+    flatmate_invite_hash: Mapped[str | None] = mapped_column(Text)
     # Deferred: no endpoint returns it (the public sees `lat` / `lng`); the worker writes it.
     location: Mapped[Any] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=False),
