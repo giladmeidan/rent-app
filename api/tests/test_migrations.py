@@ -165,6 +165,8 @@ _LISTINGS_CHECKS = {
     "ck_listings_geocode_status",
     "ck_listings_geocode_attempts",
     "ck_listings_location_status",
+    "ck_listings_accepted_households",
+    "ck_listings_min_contract_months",
 }
 
 
@@ -610,5 +612,127 @@ def test_ac12_chat_tables_up_and_down(migration_db_url: str) -> None:
         with engine.connect() as conn:
             assert _regclass_exists(conn, "conversations")
             assert _regclass_exists(conn, "messages")
+    finally:
+        engine.dispose()
+
+
+_PREFERENCE_COLUMNS = {"accepted_households", "smoking_allowed", "min_contract_months"}
+
+
+def test_ac9_matching_inputs_upgrade_downgrade(migration_db_url: str) -> None:
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0006")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            owner_id = conn.execute(
+                text(
+                    "INSERT INTO users (email, display_name, role)"
+                    " VALUES ('owner@example.com', 'owner', 'owner') RETURNING id"
+                )
+            ).scalar_one()
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at)"
+                    " VALUES (:owner, :area, 'apartment', 'city', 'street', 3, 1, 80, 6000,"
+                    " current_date, false, 'none', false, now() + interval '90 days')"
+                    " RETURNING id"
+                ),
+                {"owner": owner_id, "area": area_id},
+            ).scalar_one()
+
+        command.upgrade(cfg, "0007")
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT accepted_households, smoking_allowed, min_contract_months"
+                    " FROM listings WHERE id = :id"
+                ),
+                {"id": listing_id},
+            ).one()
+            assert tuple(row) == (["single", "couple", "family", "roommates"], True, None)
+            checks = set(
+                conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint"
+                        " WHERE conrelid = 'seeker_profiles'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+            foreign_keys = {
+                (column, target, action)
+                for column, target, action in conn.execute(
+                    text(
+                        "SELECT a.attname, c.confrelid::regclass::text, c.confdeltype"
+                        " FROM pg_constraint c"
+                        " JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]"
+                        " WHERE c.conrelid = 'seeker_profiles'::regclass AND c.contype = 'f'"
+                    )
+                ).tuples()
+            }
+        assert checks == {
+            "ck_seeker_profiles_budget",
+            "ck_seeker_profiles_area_ids",
+            "ck_seeker_profiles_household",
+            "ck_seeker_profiles_contract_months",
+            "ck_seeker_profiles_parking_needed",
+        }
+        assert foreign_keys == {("user_id", "users", "c")}  # ON DELETE CASCADE
+
+        for assignment, constraint in (
+            ("accepted_households = '{}'", "ck_listings_accepted_households"),
+            ("accepted_households = '{group}'", "ck_listings_accepted_households"),
+            ("min_contract_months = 18", "ck_listings_min_contract_months"),
+        ):
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(
+                    text(f"UPDATE listings SET {assignment} WHERE id = :id"), {"id": listing_id}
+                )
+
+        with engine.begin() as conn:
+            seeker_id = conn.execute(
+                text(
+                    "INSERT INTO users (email, display_name, role)"
+                    " VALUES ('seeker@example.com', 'seeker', 'seeker') RETURNING id"
+                )
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date, area_ids,"
+                    " household, has_pets, smoker, contract_months)"
+                    " VALUES (:user, 7500, current_date, ARRAY[:area]::uuid[], 'couple', false,"
+                    " false, 24)"
+                ),
+                {"user": seeker_id, "area": area_id},
+            )
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": seeker_id})
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT count(*) FROM seeker_profiles")).scalar_one() == 0
+
+        command.downgrade(cfg, "0006")
+        with engine.connect() as conn:
+            assert not _regclass_exists(conn, "seeker_profiles")
+            assert not _PREFERENCE_COLUMNS & _listing_columns(conn)
+            assert (
+                conn.execute(
+                    text("SELECT count(*) FROM listings WHERE id = :id"), {"id": listing_id}
+                ).scalar_one()
+                == 1
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert _regclass_exists(conn, "seeker_profiles")
+            assert _listing_columns(conn) >= _PREFERENCE_COLUMNS
     finally:
         engine.dispose()

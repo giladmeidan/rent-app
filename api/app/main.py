@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
-from app.routers import applications, areas, auth, chat, events, health, listings, search
+from app.routers import applications, areas, auth, chat, events, health, listings, profiles, search
 from app.schemas.error import ErrorOut
 
 log = logging.getLogger(__name__)
@@ -102,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(applications.router)
     app.include_router(chat.router)
     app.include_router(events.router)
+    app.include_router(profiles.router)
     return app
 
 

@@ -114,3 +114,27 @@ export async function postListing(page: Page, street: string): Promise<string> {
   const { id } = (await created.json()) as { id: string };
   return id;
 }
+
+/** Saves a housing profile (spec 0006a `P`: budget 7500, a couple, no pets, non-smoker, 24 months,
+ * one parking spot, the first area) through the API with the page's (seeker) session, so the
+ * seeker can apply. No screen creates one until 0006d. */
+export async function putProfile(page: Page): Promise<void> {
+  const areas = await page.request.get(API + '/areas');
+  expect(areas.ok()).toBe(true);
+  const [area] = (await areas.json()) as { id: string }[];
+  expect(area).toBeDefined();
+  const saved = await page.request.put(API + '/me/profile', {
+    data: {
+      budget_max_ils: 7500,
+      move_in_date: israelDay(30),
+      move_in_flexible: false,
+      area_ids: [area?.id],
+      household: 'couple',
+      has_pets: false,
+      smoker: false,
+      contract_months: 24,
+      parking_needed: 1,
+    },
+  });
+  expect(saved.status()).toBe(200);
+}

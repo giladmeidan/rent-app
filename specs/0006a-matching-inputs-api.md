@@ -1,7 +1,7 @@
 ---
 id: 0006a
 title: A seeker saves a housing profile (budget, move-in, areas, household, pets, smoking, contract length, parking) and needs it to apply; an owner sets who the listing suits (households, smoking, minimum contract)
-status: verified
+status: done
 depends_on: [0005a]      # migration chain 0006 -> 0007 (0005a adds revision "0006"); also edits services/applications.py beside 0005a
 reviewers: [code, qa, security]   # security: a new personal-data table readable only by its seeker, a new gate on apply; qa: validation table, PATCH merge of the new listing fields
 estimate: 1 coder run

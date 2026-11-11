@@ -28,7 +28,14 @@ from app.redis_client import get_redis
 from app.routers import events as events_router
 from app.services import chat_events
 from app.services.chat import CHAT_RATE_LIMIT_MINUTE
-from tests.conftest import TEST_DATABASE_URL, Outbox, make_application, make_listing, signup
+from tests.conftest import (
+    TEST_DATABASE_URL,
+    Outbox,
+    make_application,
+    make_listing,
+    make_profile,
+    signup,
+)
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -530,6 +537,7 @@ def test_ac8_publish_points_after_commit(
     other = signup(client, outbox, "t@example.com", "seeker", display_name="Tal")
     o_id, s_id, t_id = _user_id(owner), _user_id(seeker), _user_id(other)
     listing_id = make_listing(db_engine, o_id, gush_dan)
+    make_profile(db_engine, s_id, gush_dan)  # applying needs a housing profile (0006a)
 
     response = seeker.post(f"/listings/{listing_id}/applications", json={"message": "Hi there"})
     assert response.status_code == 201

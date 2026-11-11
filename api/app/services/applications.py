@@ -11,6 +11,9 @@ Rules (PRODUCT.md "Applications"):
   yield one application and one `AlreadyAppliedError`.
 - Only a public listing (`search.get_public_listing`, the one visibility rule) can be applied to,
   and never the caller's own: both are `ListingNotFoundError` (a 404, the same as an unknown id).
+- Applying needs a housing profile (spec 0006a, PRODUCT.md "Matching"): checked **first**, so a
+  seeker without one gets `ProfileRequiredError` and the call costs no rate-limit budget. Only
+  applying is gated: existing applications are listed and withdrawn as before.
 - Applying is rate limited per seeker (`APPLY_RATE_LIMIT_HOUR`, `APPLY_RATE_LIMIT_DAY`); every
   authenticated, body-valid attempt counts, a refused one does not.
 - The applicant count is every application of the listing except withdrawn ones (declined ones
@@ -30,6 +33,7 @@ from sqlalchemy.orm import Session
 from app.models import Application, Conversation, Listing, User
 from app.redis_client import RedisClient
 from app.schemas.application import ApplicantStatus
+from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
@@ -53,6 +57,10 @@ ALLOWED_FROM: dict[ApplicantStatus, frozenset[str]] = {
 
 class AlreadyAppliedError(Exception):
     """The seeker already has a submitted, shortlisted or declined application to the listing."""
+
+
+class ProfileRequiredError(Exception):
+    """The seeker has no housing profile yet (spec 0006a); they must `PUT /me/profile` first."""
 
 
 class ApplicationNotFoundError(Exception):
@@ -92,7 +100,10 @@ def apply(
     db: Session, r: RedisClient, seeker: User, listing_id: uuid.UUID, message: str
 ) -> tuple[Application, Listing]:
     """Apply `seeker` to a public listing with `message` (already validated by `ApplicationIn`).
-    Raises `RateLimitedError`, `ListingNotFoundError` or `AlreadyAppliedError`. Commits."""
+    Raises `ProfileRequiredError` (checked first: nothing counted), `RateLimitedError`,
+    `ListingNotFoundError` or `AlreadyAppliedError`. Commits."""
+    if not profiles_service.has_profile(db, seeker.id):
+        raise ProfileRequiredError
     count_or_raise(
         r,
         (

@@ -1,7 +1,7 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
-Every CHECK, FK and index here matches migrations 0003, 0004 and 0005 exactly (autogenerate must
-see no diff). A listing is **live** while `status = 'active' AND expires_at > now()`.
+Every CHECK, FK and index here matches migrations 0003, 0004, 0005 and 0007 exactly (autogenerate
+must see no diff). A listing is **live** while `status = 'active' AND expires_at > now()`.
 
 Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
 `approximate_point`), never the geocoder's raw point; the worker fills it while `geocode_status` is
@@ -30,7 +30,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.models import Base
@@ -68,6 +68,16 @@ class Listing(Base):
         CheckConstraint("geocode_attempts BETWEEN 0 AND 5", name="ck_listings_geocode_attempts"),
         CheckConstraint(
             "(geocode_status = 'ok') = (location IS NOT NULL)", name="ck_listings_location_status"
+        ),
+        # The owner's preferences (spec 0006a), read by the match score (0006b).
+        CheckConstraint(
+            "cardinality(accepted_households) BETWEEN 1 AND 4"
+            " AND accepted_households <@ ARRAY['single', 'couple', 'family', 'roommates']::text[]",
+            name="ck_listings_accepted_households",
+        ),
+        CheckConstraint(
+            "min_contract_months IS NULL OR min_contract_months IN (6, 12, 24, 36)",
+            name="ck_listings_min_contract_months",
         ),
         Index("ix_listings_owner_id", "owner_id"),
         Index("ix_listings_area_id", "area_id"),
@@ -109,6 +119,14 @@ class Listing(Base):
     arnona_ils: Mapped[int | None] = mapped_column(Integer)  # bi-monthly bill
     vaad_ils: Mapped[int | None] = mapped_column(Integer)  # monthly
     description: Mapped[str | None] = mapped_column(Text)
+    # Owner preferences (spec 0006a); the defaults mean "no preference".
+    accepted_households: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default=text("'{single,couple,family,roommates}'")
+    )
+    smoking_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    min_contract_months: Mapped[int | None] = mapped_column(SmallInteger)  # NULL = no minimum
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

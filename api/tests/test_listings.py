@@ -572,3 +572,83 @@ def test_review_validation_error_never_echoes_request_body(client: TestClient) -
     )
     _assert_clean_422(response)
     assert "x@example.com" not in response.text
+
+
+ALL_HOUSEHOLDS = ["single", "couple", "family", "roommates"]
+PREFERENCES = ("accepted_households", "smoking_allowed", "min_contract_months")
+
+
+def _preferences(item: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(item[name] for name in PREFERENCES)
+
+
+def test_ac7_owner_preferences_on_create_and_reads(
+    client: TestClient, owner: TestClient, gush_dan: uuid.UUID
+) -> None:
+    plain = _create(owner, gush_dan)
+    assert _preferences(plain) == (ALL_HOUSEHOLDS, True, None)
+
+    chosen = _create(
+        owner,
+        gush_dan,
+        accepted_households=["couple", "single"],
+        smoking_allowed=False,
+        min_contract_months=12,
+    )
+
+    expected = (["single", "couple"], False, 12)
+    assert _preferences(chosen) == expected
+    mine = {item["id"]: item for item in owner.get("/me/listings").json()}
+    assert _preferences(mine[chosen["id"]]) == expected
+    assert _preferences(mine[plain["id"]]) == (ALL_HOUSEHOLDS, True, None)
+    client.cookies.clear()
+    detail = client.get(f"/listings/{chosen['id']}")
+    assert detail.status_code == 200
+    assert _preferences(detail.json()) == expected
+    items = {item["id"]: item for item in client.get("/listings").json()["items"]}
+    assert _preferences(items[chosen["id"]]) == expected
+    assert _preferences(items[plain["id"]]) == (ALL_HOUSEHOLDS, True, None)
+
+
+def test_ac8_owner_preferences_patch(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    listing = _create(
+        owner,
+        gush_dan,
+        accepted_households=["couple", "single"],
+        smoking_allowed=False,
+        min_contract_months=12,
+    )
+    listing_id = listing["id"]
+
+    cleared = _patch(owner, listing_id, {"min_contract_months": None})
+
+    assert cleared.status_code == 200, cleared.text
+    body = cleared.json()
+    assert body["min_contract_months"] is None
+    unchanged = {"min_contract_months", "updated_at"}
+    assert {k: v for k, v in body.items() if k not in unchanged} == {
+        k: v for k, v in listing.items() if k not in unchanged
+    }
+    assert _row(db_engine, listing_id)["min_contract_months"] is None
+
+    family = _patch(owner, listing_id, {"accepted_households": ["family"]})
+    assert family.status_code == 200, family.text
+    assert family.json()["accepted_households"] == ["family"]
+    assert family.json()["smoking_allowed"] is False
+
+    row_before = _row(db_engine, listing_id)
+    bad_patches: list[dict[str, Any]] = [
+        {"accepted_households": []},
+        {"accepted_households": ["single", "single"]},
+        {"accepted_households": ["group"]},
+        {"accepted_households": None},
+        {"smoking_allowed": None},
+        {"min_contract_months": 18},
+    ]
+    for bad in bad_patches:
+        response = _patch(owner, listing_id, bad)
+        assert response.status_code == 422, (bad, response.text)
+        assert isinstance(response.json()["detail"], list), bad
+        assert _row(db_engine, listing_id) == row_before, bad
