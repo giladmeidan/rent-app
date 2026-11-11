@@ -7,17 +7,19 @@ channels (`chat:u:{id}`, fresh uuids per test) and at the hub client named `chat
 
 import asyncio
 import json
+import logging
 import os
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import fastapi.routing
 import pytest
 import pytest_asyncio
+import redis
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, NullPool, create_engine, text
 from starlette.types import Message
 
 from app.db import get_engine
@@ -25,7 +27,8 @@ from app.main import create_app
 from app.redis_client import get_redis
 from app.routers import events as events_router
 from app.services import chat_events
-from tests.conftest import Outbox, signup
+from app.services.chat import CHAT_RATE_LIMIT_MINUTE
+from tests.conftest import TEST_DATABASE_URL, Outbox, make_application, make_listing, signup
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -457,3 +460,154 @@ async def test_ac7_redis_failure_ends_streams_and_recovers(
     assert again.chat_events() == [{"conversation_id": str(cid), "kind": "message"}]
     (new_client,) = _hub_clients()
     assert new_client["id"] != hub_client["id"]
+
+
+# --- AC8-AC9: the publish points ----------------------------------------------------------------
+
+
+class Recorder:
+    """Stands in for `chat_events.publish`: records each call and, from a fresh connection of its
+    own, what is committed at that moment (`committed(conversation_id, kind)`)."""
+
+    def __init__(self, committed: Callable[[uuid.UUID, str], Any]) -> None:
+        self.calls: list[tuple[set[uuid.UUID], uuid.UUID, str, Any]] = []
+        self._committed = committed
+
+    def __call__(self, r: Any, user_ids: Any, conversation_id: uuid.UUID, kind: str) -> None:
+        ids = set(user_ids)
+        self.calls.append((ids, conversation_id, kind, self._committed(conversation_id, kind)))
+
+
+@pytest.fixture
+def fresh_engine() -> Iterator[Engine]:
+    """An unpooled engine of its own: every check is a brand-new connection."""
+    engine = create_engine(TEST_DATABASE_URL, poolclass=NullPool)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def recorder(fresh_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Recorder:
+    def committed(conversation_id: uuid.UUID, kind: str) -> Any:
+        with fresh_engine.connect() as conn:
+            if kind == "message":
+                return conn.execute(
+                    text("SELECT count(*) FROM messages WHERE conversation_id = :c"),
+                    {"c": conversation_id},
+                ).scalar_one()
+            return conn.execute(
+                text("SELECT status FROM applications WHERE id = :a"), {"a": conversation_id}
+            ).scalar_one()
+
+    rec = Recorder(committed)
+    monkeypatch.setattr(chat_events, "publish", rec)
+    return rec
+
+
+def _patch(owner: TestClient, listing_id: Any, application_id: Any, status: Any) -> int:
+    response = owner.patch(
+        f"/listings/{listing_id}/applications/{application_id}", json={"status": status}
+    )
+    code: int = response.status_code
+    return code
+
+
+def _send(caller: TestClient, conversation_id: Any, body: Any = "Hello") -> int:
+    response = caller.post(f"/conversations/{conversation_id}/messages", json={"body": body})
+    code: int = response.status_code
+    return code
+
+
+def test_ac8_publish_points_after_commit(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    recorder: Recorder,
+) -> None:
+    owner = signup(client, outbox, "o@example.com", "owner", display_name="Noa")
+    seeker = signup(client, outbox, "s@example.com", "seeker", display_name="Dana")
+    other = signup(client, outbox, "t@example.com", "seeker", display_name="Tal")
+    o_id, s_id, t_id = _user_id(owner), _user_id(seeker), _user_id(other)
+    listing_id = make_listing(db_engine, o_id, gush_dan)
+
+    response = seeker.post(f"/listings/{listing_id}/applications", json={"message": "Hi there"})
+    assert response.status_code == 201
+    p = uuid.UUID(response.json()["id"])
+    assert recorder.calls == []  # applying changes no conversation
+
+    assert _patch(owner, listing_id, p, "shortlisted") == 200
+    assert recorder.calls == [({o_id, s_id}, p, "status", "shortlisted")]
+    recorder.calls.clear()
+
+    assert _send(seeker, p) == 201
+    assert recorder.calls == [({o_id, s_id}, p, "message", 1)]
+    recorder.calls.clear()
+
+    # Failed sends publish nothing.
+    assert _send(seeker, uuid.uuid4()) == 404
+    assert _send(seeker, p, body="") == 422
+    get_redis().set(f"rl:chat:user:{s_id}", CHAT_RATE_LIMIT_MINUTE, ex=60)
+    assert _send(seeker, p) == 429
+    get_redis().delete(f"rl:chat:user:{s_id}")
+    assert recorder.calls == []
+
+    for status in ("submitted", "shortlisted", "declined"):
+        assert _patch(owner, listing_id, p, status) == 200
+        assert recorder.calls == [({o_id, s_id}, p, "status", status)]
+        recorder.calls.clear()
+
+    # Failed status changes and the send to the now-closed chat publish nothing.
+    assert _patch(owner, listing_id, uuid.uuid4(), "shortlisted") == 404
+    assert _patch(owner, listing_id, p, "shortlisted") == 409
+    assert _patch(owner, listing_id, p, "withdrawn") == 422
+    assert _send(seeker, p) == 409
+    assert recorder.calls == []
+
+    w = make_application(db_engine, listing_id, t_id, status="shortlisted")
+    response = other.post(f"/me/applications/{w}/withdraw")
+    assert response.status_code == 200
+    assert recorder.calls == [({o_id, t_id}, w, "status", "withdrawn")]
+    recorder.calls.clear()
+
+    assert other.post(f"/me/applications/{uuid.uuid4()}/withdraw").status_code == 404
+    assert other.post(f"/me/applications/{w}/withdraw").status_code == 409
+    assert other.post("/me/applications/not-a-uuid/withdraw").status_code == 422
+    assert recorder.calls == []
+
+
+def test_ac9_publish_failure_never_fails_a_request(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    owner = signup(client, outbox, "o@example.com", "owner", display_name="Noa")
+    seeker = signup(client, outbox, "s@example.com", "seeker", display_name="Dana")
+    o_id, s_id = _user_id(owner), _user_id(seeker)
+    listing_id = make_listing(db_engine, o_id, gush_dan)
+    p = make_application(db_engine, listing_id, s_id)
+    assert _patch(owner, listing_id, p, "shortlisted") == 200
+
+    def refuse(*_args: Any, **_kwargs: Any) -> int:
+        raise redis.ConnectionError("redis down")
+
+    monkeypatch.setattr(get_redis(), "publish", refuse)
+    with caplog.at_level(logging.WARNING, logger=chat_events.__name__):
+        response = seeker.post(f"/conversations/{p}/messages", json={"body": "Still here"})
+    assert response.status_code == 201
+    with db_engine.connect() as conn:
+        body = conn.execute(
+            text("SELECT body FROM messages WHERE id = :m"), {"m": response.json()["id"]}
+        ).scalar_one()
+    assert body == "Still here"
+    warnings = [r for r in caplog.records if r.name == chat_events.__name__]
+    assert [r.levelno for r in warnings] == [logging.WARNING]
+    assert "Still here" not in caplog.text
+
+    with caplog.at_level(logging.WARNING, logger=chat_events.__name__):
+        assert _patch(owner, listing_id, p, "submitted") == 200
+    warnings = [r for r in caplog.records if r.name == chat_events.__name__]
+    assert [r.levelno for r in warnings] == [logging.WARNING, logging.WARNING]
