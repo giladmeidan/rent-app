@@ -284,3 +284,24 @@ Spec-verifier round 1 rejected with 3 majors and 6 minors. All are applied, and 
              seeker sees every member, approval-per-joiner is the fallback.
     Reviewers: code, qa, security, perf   Estimated: 1 coder run (Opus/high), cut line named if it overflows
     Links: specs/0008d-flatmates-api.md - PRODUCT.md "Flatmates", "Chat" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008d - Flatmates & group chat API   PR OPEN (not merged), code head c639565
+    Shipped: a room lister makes, rotates and turns off an invite link; whoever joins is a flatmate in every
+             chat about that room from the join on (own unread count, writes while shortlisted, hears every
+             event); the lister lists and removes flatmates (removal also kills the link); a flatmate leaves.
+             Chat only: no inbox, people page or profiles. Web: type-only fixture edits.
+    Demo: make dev-api -> owner O POSTs /listings/{room}/flatmate-invite -> user F POSTs the token to
+          /flatmate-invites/preview, then /join -> F's GET /me/conversations lists the room's shortlisted chats
+          (my_role flatmate, messages from joined_at on) -> O DELETEs F's membership -> F gets 404 on them.
+    Tests: +17 integration (AC1-AC13, declined joiner, join racing apply and like, list plan on indexes);
+           api 474, web 263; make lint, make test, make i18n-check green locally on c639565. CI: api + web on
+           the PR head (see the PR). No e2e (API spec).
+    Perf (21k conversations, 10k listings): chat list one statement for every role, p50 1.9 ms typical owner,
+           13.6 ms flatmate of 40 rooms; existing chat, inbox, apply and like counts unchanged; send +0,
+           room status change +1 (member_ids).
+    Findings: 1 blocker fixed (a join racing an apply or like left someone both applicant and flatmate -
+              security); 1 major fixed (chat list scanned all conversations - perf); 1 major decided by Gilad
+              (option b: a declined applicant gets 409 `declined`, PRODUCT.md "Flatmates"); 4 minors fixed;
+              5 follow-ups logged; 12 nits dropped. Decisions I need from you: none new.
