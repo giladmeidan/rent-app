@@ -535,7 +535,7 @@ describe('ChatThreadPage', () => {
 
     const items = bubbles();
     // A name once per run of consecutive messages from one sender; never above my own.
-    const named = items.map((li) => li.querySelector('span.text-muted')?.textContent ?? null);
+    const named = items.map((li) => within(li).queryByTestId('sender-name')?.textContent ?? null);
     expect(named).toEqual(['רוני', null, null, 'רוני', 'נועה']);
     // The sr-only label names the sender.
     expect(items[1]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: 'רוני' }));
@@ -550,7 +550,7 @@ describe('ChatThreadPage', () => {
     expect(await h1(T.other_name)).toBeVisible();
     expect(screen.queryByRole('group', { name: he.chat.members })).toBeNull();
     expect(screen.queryByText(/הצטרפת לשיחה/)).toBeNull();
-    expect(bubbles().some((li) => li.querySelector('span.text-muted') !== null)).toBe(false);
+    expect(screen.queryAllByTestId('sender-name')).toHaveLength(0);
     reset(view);
 
     // An owner-role account that is a flatmate elsewhere: no applicants link.
@@ -598,7 +598,8 @@ describe('ChatThreadPage', () => {
     ({ view } = renderThread(T, [() => json(T), NOT_FOUND]));
     expect(await h1('נועה')).toBeVisible();
     await focus();
-    expect(await screen.findByText(he.chat.removed)).toBeVisible();
+    const removed = await screen.findByRole('heading', { level: 1, name: he.chat.removed });
+    expect(removed).toHaveFocus();
     expect(screen.getByRole('link', { name: he.chat.thread.back })).toHaveAttribute(
       'href',
       '/chat',
@@ -615,7 +616,7 @@ describe('ChatThreadPage', () => {
     expect(await h1('נועה')).toBeVisible();
     fireEvent.change(textarea(), { target: { value: 'hi' } });
     fireEvent.click(sendButton());
-    expect(await screen.findByText(he.chat.removed)).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: he.chat.removed })).toHaveFocus();
     expect(screen.getByRole('link', { name: he.chat.thread.back })).toBeVisible();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('log')).toBeNull();

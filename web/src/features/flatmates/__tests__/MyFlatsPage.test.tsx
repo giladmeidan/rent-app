@@ -4,10 +4,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
-import { deferred, empty, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
+import {
+  deferred,
+  empty,
+  json,
+  mockApi,
+  renderRoutes,
+  testQueryClient,
+} from '../../auth/__tests__/harness';
 import { RequireUser } from '../../auth/RequireUser';
 import { cardTitle } from '../../listings/cardTitle';
 import { seeker } from '../../listings/__tests__/fixtures';
+import { THREADS_KEY } from '../../chat/useThread';
 import type { MyFlatOut } from '../api';
 import { MyFlatsPage } from '../MyFlatsPage';
 
@@ -37,9 +45,13 @@ const routes = (
   </Routes>
 );
 
-function renderPage(list: Reply[], extra: Record<string, Reply[]> = {}) {
+function renderPage(
+  list: Reply[],
+  extra: Record<string, Reply[]> = {},
+  client = testQueryClient(),
+) {
   const api = mockApi({ 'GET /me': [json(seeker)], [FLATS]: list, ...extra });
-  const view = renderRoutes('/me/flats', routes);
+  const view = renderRoutes('/me/flats', routes, client);
   return { api, view };
 }
 
@@ -76,9 +88,13 @@ describe('MyFlatsPage', () => {
 
     // Success: title, owner and the Asia/Jerusalem join day.
     const confirm = vi.spyOn(window, 'confirm');
-    const api = renderPage([() => json([A, B]), () => json([B])], {
-      [leaveRoute(A)]: [() => empty()],
-    });
+    const client = testQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const api = renderPage(
+      [() => json([A, B]), () => json([B])],
+      { [leaveRoute(A)]: [() => empty()] },
+      client,
+    );
     view = api.view;
     const items = await screen.findAllByRole('listitem');
     expect(items).toHaveLength(2);
@@ -99,6 +115,8 @@ describe('MyFlatsPage', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
     expect(api.api.calls(leaveRoute(A))).toHaveLength(1);
     expect(api.api.calls(FLATS)).toHaveLength(2);
+    // Open or cached threads of the flat refetch (to the removed state).
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: THREADS_KEY });
     reset(view);
 
     // A failed leave shows the error inline and keeps the flat.

@@ -175,7 +175,11 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
                   }`}
                 >
                   {showName && (
-                    <span dir="auto" className="text-start text-sm text-muted">
+                    <span
+                      data-testid="sender-name"
+                      dir="auto"
+                      className="text-start text-sm text-muted"
+                    >
                       {message.sender_name}
                     </span>
                   )}
@@ -206,6 +210,21 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   );
 }
 
+/** The thread was on screen and is now refused: the person left the flat or was removed. The
+ * composer that had focus is gone, so the heading takes it. */
+function Removed() {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return (
+    <h1 ref={ref} tabIndex={-1} className="text-start text-2xl font-extrabold">
+      {t('chat.removed')}
+    </h1>
+  );
+}
+
 /** `/chat/:id`, for an owner or a seeker in that chat (`RequireUser`). */
 export function ChatThreadPage() {
   const { t } = useTranslation();
@@ -219,17 +238,10 @@ export function ChatThreadPage() {
   if (valid && raw !== id) return <Navigate to={`/chat/${id}`} replace />;
 
   let body;
-  // Not found first: a send's 404 then a 404 refetch leaves the old thread cached.
+  // Removed first: a send's 404 then a 404 refetch leaves the old thread cached, and that cached
+  // thread then means "no longer in this chat"; with nothing cached a 404 is plain not found.
   if (valid && thread.data !== undefined && hasStatus(thread.error, 404)) {
-    // The thread was on screen and is now refused: the person left the flat or was removed.
-    body = (
-      <p
-        role="status"
-        className="rounded-2xl border border-line bg-white px-4 py-3 text-start text-[15px] text-muted"
-      >
-        {t('chat.removed')}
-      </p>
-    );
+    body = <Removed />;
   } else if (!valid || isThreadNotFound(thread.error)) {
     body = <h1 className="text-start text-2xl font-extrabold">{t('chat.thread.notFound')}</h1>;
   } else if (thread.data === undefined) {

@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 
 import { api } from '../../api/client';
 import type { components } from '../../api/schema';
+import { hasStatus } from '../applications/api';
+import { clearSession } from '../auth/useLogout';
 import { CONVERSATIONS_KEY } from '../chat/useConversations';
+import { THREADS_KEY } from '../chat/useThread';
 import { ApiError, type MyListingOut } from '../listings/api';
 import { MY_LISTINGS_KEY } from '../listings/useMyListings';
 
@@ -164,6 +167,7 @@ export function useJoinFlat() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY }),
         queryClient.invalidateQueries({ queryKey: MY_FLATS_KEY }),
+        queryClient.invalidateQueries({ queryKey: THREADS_KEY }),
       ]);
     },
   });
@@ -176,7 +180,7 @@ export async function fetchMyFlats(): Promise<MyFlatOut[]> {
   return data;
 }
 
-/** Leaves the flat of `listingId` (204). 404 throws. */
+/** Leaves the flat of `listingId` (204). Any non-2xx throws. */
 export async function leaveFlat(listingId: string): Promise<void> {
   const { error, response } = await api.DELETE('/me/flats/{listing_id}', {
     params: { path: { listing_id: listingId } },
@@ -184,9 +188,21 @@ export async function leaveFlat(listingId: string): Promise<void> {
   if (!response.ok) throw new ApiError('DELETE', '/me/flats/{id}', response.status, error);
 }
 
-/** The caller's flats. Any error leaves the list empty: the chat list's link is optional. */
+/** The caller's flats. On an error the chat list hides its link; `MyFlatsPage` shows the error
+ * state. A 401 forgets the session. */
 export function useMyFlats() {
-  return useQuery({ queryKey: MY_FLATS_KEY, queryFn: fetchMyFlats });
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: MY_FLATS_KEY,
+    queryFn: async () => {
+      try {
+        return await fetchMyFlats();
+      } catch (error) {
+        if (hasStatus(error, 401)) clearSession(queryClient);
+        throw error;
+      }
+    },
+  });
 }
 
 /** Leaves a flat; the flats and the chats (the room's are gone) refetch. */
@@ -194,10 +210,15 @@ export function useLeaveFlat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (listingId: string) => leaveFlat(listingId),
+    onError: (error) => {
+      if (hasStatus(error, 401)) clearSession(queryClient);
+    },
+    // Open or cached threads of the flat refetch, to the removed state.
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: MY_FLATS_KEY }),
         queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY }),
+        queryClient.invalidateQueries({ queryKey: THREADS_KEY }),
       ]),
   });
 }
