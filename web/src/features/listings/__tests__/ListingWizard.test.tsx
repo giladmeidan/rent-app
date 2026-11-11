@@ -481,6 +481,17 @@ describe('ListingWizard', () => {
     expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
     expect(document.activeElement).toBe(household(p.household.single));
 
+    // A round trip to details (with a blur there) keeps it.
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    act(() => {
+      screen.getByLabelText(he.listings.fields.city).focus();
+      screen.getByLabelText(he.listings.fields.street).focus();
+    });
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
+
     // Another preference changing keeps the error; a household fixes it.
     fireEvent.click(noSmokers());
     expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);

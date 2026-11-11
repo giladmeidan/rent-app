@@ -301,7 +301,8 @@ export function ListingWizard({ listing }: Props) {
       if (form.listing_type !== null) goTo(2);
     } else if (step === 2 || step === 3) {
       const found = step === 2 ? validate(current, today) : validatePreferences(current);
-      setErrors(found);
+      // A shown households error survives a round trip to details (`found` alone decides the step).
+      setErrors(step === 2 ? { ...found, ...validatePreferences(current) } : found);
       setAttempted(true);
       const first = firstInvalid(found);
       if (first === undefined) {
