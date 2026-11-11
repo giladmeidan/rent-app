@@ -21,22 +21,22 @@ const differChip = `${chip} bg-warn text-warn-text`;
  * (amber). Not interactive. */
 export function MatchChips({ match, listing, profile }: Props) {
   const { t } = useTranslation();
-  const chips: { text: string; className: string }[] = [];
+  const chips: { kind: 'agree' | 'differ'; text: string; className: string }[] = [];
   const top = match.agrees[0];
   if (top !== undefined) {
     const text = seekerShort(top, 'agree', listing, profile, t);
-    if (text !== null) chips.push({ text, className: agreeChip });
+    if (text !== null) chips.push({ kind: 'agree', text, className: agreeChip });
   }
   if (match.differs !== null) {
     const text = seekerShort(match.differs, 'differ', listing, profile, t);
-    if (text !== null) chips.push({ text, className: differChip });
+    if (text !== null) chips.push({ kind: 'differ', text, className: differChip });
   }
   if (chips.length === 0) return null;
 
   return (
     <ul data-testid="match-chips" className="flex flex-wrap gap-[6px]">
-      {chips.map(({ text, className }) => (
-        <li key={className} className={className}>
+      {chips.map(({ kind, text, className }) => (
+        <li key={kind} className={className}>
           {text}
         </li>
       ))}

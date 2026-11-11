@@ -47,7 +47,12 @@ export function MatchCard({ match, listing }: Props) {
   // `isLoading`, not `isPending`: a disabled query (the session just ended) stays pending forever.
   if (profile.isLoading) {
     lines = (
-      <div aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-2">
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label={t('common.loading')}
+        className="flex flex-col gap-2"
+      >
         <Skeleton className="h-6 w-3/4" />
         <Skeleton className="h-6 w-2/3" />
         <Skeleton className="h-6 w-1/2" />
