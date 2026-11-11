@@ -92,13 +92,14 @@ def _upsert(
 ) -> Application | None:
     """Insert the application, or reopen a withdrawn one; None when one exists in any other
     status (including the row a concurrent apply just inserted). Both snapshot the listing's
-    price and area as the seeker applied to them (0006c, security B1)."""
+    price and area (0006c, security B1) and its type (0007b) as the seeker applied to them."""
     stmt = insert(Application).values(
         listing_id=listing.id,
         seeker_id=seeker_id,
         message=message,
         price_ils_at_apply=listing.price_ils,
         area_id_at_apply=listing.area_id,
+        listing_type_at_apply=listing.listing_type,
     )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_applications_listing_seeker",
@@ -107,6 +108,7 @@ def _upsert(
             "message": stmt.excluded.message,
             "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
             "area_id_at_apply": stmt.excluded.area_id_at_apply,
+            "listing_type_at_apply": stmt.excluded.listing_type_at_apply,
             "created_at": func.now(),
             "updated_at": func.now(),
         },

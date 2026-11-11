@@ -274,9 +274,10 @@ def make_application(
     engine: Engine, listing_id: uuid.UUID, seeker_id: uuid.UUID, **overrides: Any
 ) -> uuid.UUID:
     """Insert an application directly and return its id. Defaults: `message='Hello'`,
-    `status='submitted'`, and the listing's current `price_ils` / `area_id` as
-    `price_ils_at_apply` / `area_id_at_apply` (what applying snapshots, 0006c); `overrides` may set
-    any column (including `created_at`). Bypasses the service and its rate limit."""
+    `status='submitted'`, and the listing's current `price_ils` / `area_id` / `listing_type` as
+    `price_ils_at_apply` / `area_id_at_apply` (0006c) / `listing_type_at_apply` (0007b), which is
+    what applying snapshots; `overrides` may set any column (including `created_at` and a
+    snapshot). Bypasses the service, its room gate and its rate limit."""
     unknown = set(overrides) - _APPLICATION_COLUMNS
     if unknown:
         raise ValueError(f"not applications columns: {sorted(unknown)}")
@@ -289,7 +290,11 @@ def make_application(
     }
     snapshot = {
         column: f"(SELECT {source} FROM listings WHERE id = :listing_id)"
-        for column, source in (("price_ils_at_apply", "price_ils"), ("area_id_at_apply", "area_id"))
+        for column, source in (
+            ("price_ils_at_apply", "price_ils"),
+            ("area_id_at_apply", "area_id"),
+            ("listing_type_at_apply", "listing_type"),
+        )
         if column not in values
     }
     columns = ", ".join([*values, *snapshot])
