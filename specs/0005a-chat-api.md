@@ -1,7 +1,7 @@
 ---
 id: 0005a
 title: Shortlisting an applicant opens a one-to-one chat between the owner and that seeker; both list their chats with unread counts, read a thread and send plain-text messages while the applicant stays shortlisted
-status: in-review
+status: done
 depends_on: [0004c]      # merged (dabac4c): the shortlist transition this spec hooks into; migration chain 0005 -> 0006
 reviewers: [code, qa, security, perf]   # security: free text between two users, the owner's name revealed to the seeker, membership checks on every call, rate limits; qa: open / freeze rules per application status; perf: every pushed event (0005c) makes both users' tabs refetch the thread (the hot path), a conditional write on read
 estimate: 1 coder run
