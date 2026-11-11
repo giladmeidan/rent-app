@@ -1,7 +1,7 @@
 ---
 id: 0005c
 title: Every logged-in tab holds one server-sent event stream that tells it within a second when one of its chats gets a message, opens or closes, so chat pages update without polling
-status: in-progress
+status: in-review
 depends_on: [0005a]      # the conversations, the send endpoint and the shortlist hook this spec publishes from
 reviewers: [code, qa, security, perf]   # security: a long-lived authenticated connection, per-user fan-out (no event to the wrong user), connection exhaustion; perf: the scale path — idle streams must cost no DB, one Redis connection per process
 estimate: 1 coder run
