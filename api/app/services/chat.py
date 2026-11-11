@@ -214,12 +214,13 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
 
 def send_message(
     db: Session, r: RedisClient, me: User, conversation_id: uuid.UUID, body: str
-) -> Message:
+) -> tuple[Message, uuid.UUID, uuid.UUID]:
     """Send `body` (already validated by `MessageIn`) as `me` to one of `me`'s conversations whose
-    application is `shortlisted`. Raises `RateLimitedError`, `ConversationNotFoundError` or
-    `ChatClosedError`. Moves the conversation's `last_message_at` and `me`'s read marker forward
-    (never back: `greatest` skips nulls, so two sends committing out of order are safe).
-    Commits."""
+    application is `shortlisted`, and return the message with the conversation's `owner_id` and
+    `seeker_id` (the router publishes the chat event to both, spec 0005c). Raises
+    `RateLimitedError`, `ConversationNotFoundError` or `ChatClosedError`. Moves the conversation's
+    `last_message_at` and `me`'s read marker forward (never back: `greatest` skips nulls, so two
+    sends committing out of order are safe). Commits."""
     count_or_raise(
         r,
         (
@@ -256,7 +257,7 @@ def send_message(
                 raise ConversationNotFoundError
             raise ChatClosedError
         is_owner = Conversation.owner_id == me.id
-        db.execute(
+        participants = db.execute(
             update(Conversation)
             .where(Conversation.application_id == conversation_id)
             .values(
@@ -270,10 +271,11 @@ def send_message(
                     else_=func.greatest(Conversation.seeker_read_at, message.created_at),
                 ),
             )
+            .returning(Conversation.owner_id, Conversation.seeker_id)
             .execution_options(synchronize_session=False)
-        )
+        ).one()
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return message
+    return message, participants.owner_id, participants.seeker_id

@@ -4,7 +4,8 @@ Every endpoint requires a session (`current_user`, either role): 401 `unauthenti
 one. A conversation the caller is not in is a 404 `not_found`, identical to an unknown id or an
 application that was never shortlisted. Sending to a conversation whose application is not
 `shortlisted` is a 409 `chat_closed`; sending is rate limited (429 `rate_limited` with
-`Retry-After`)."""
+`Retry-After`). A sent message is published to both participants' event streams after the
+commit (spec 0005c)."""
 
 import uuid
 from typing import Annotated, Any
@@ -21,6 +22,7 @@ from app.schemas.application import ApplicationListingOut
 from app.schemas.chat import ConversationOut, LastMessageOut, MessageIn, MessageOut, ThreadOut
 from app.schemas.error import ErrorOut
 from app.services import chat as chat_service
+from app.services import chat_events
 from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["chat"])
@@ -122,7 +124,9 @@ def send_message(
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> MessageOut:
     try:
-        message = chat_service.send_message(db, r, me, conversation_id, body.body)
+        message, owner_id, seeker_id = chat_service.send_message(
+            db, r, me, conversation_id, body.body
+        )
     except RateLimitedError as exc:
         raise HTTPException(
             status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
@@ -131,4 +135,5 @@ def send_message(
         raise HTTPException(status_code=404, detail="not_found") from None
     except chat_service.ChatClosedError:
         raise HTTPException(status_code=409, detail="chat_closed") from None
+    chat_events.publish(r, [owner_id, seeker_id], conversation_id, "message")
     return MessageOut(id=message.id, body=message.body, mine=True, created_at=message.created_at)

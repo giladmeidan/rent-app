@@ -7,7 +7,10 @@ so is another seeker's application.
 
 Owner side (spec 0004c): the two inbox endpoints require an **owner** session (`current_owner`):
 401 `unauthenticated`, 403 `owner_only` for a seeker. Another owner's listing, an application of a
-different listing and a withdrawn application are a 404 `not_found`, identical to an unknown id."""
+different listing and a withdrawn application are a 404 `not_found`, identical to an unknown id.
+
+Every successful owner status change and seeker withdraw publishes a `status` chat event to the
+owner and the seeker after the commit (spec 0005c): it may open or close the application's chat."""
 
 import uuid
 from typing import Annotated, Any
@@ -28,6 +31,7 @@ from app.schemas.application import (
 )
 from app.schemas.error import ErrorOut
 from app.services import applications as applications_service
+from app.services import chat_events
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import RateLimitedError
 
@@ -120,13 +124,19 @@ def my_applications(seeker: SeekerDep, db: DbDep) -> list[MyApplicationOut]:
         409: {"model": ErrorOut, "description": "not_withdrawable: already withdrawn, or declined"},
     },
 )
-def withdraw(application_id: uuid.UUID, seeker: SeekerDep, db: DbDep) -> MyApplicationOut:
+def withdraw(
+    application_id: uuid.UUID,
+    seeker: SeekerDep,
+    db: DbDep,
+    r: Annotated[RedisClient, Depends(get_redis)],
+) -> MyApplicationOut:
     try:
         application, listing = applications_service.withdraw(db, seeker, application_id)
     except applications_service.ApplicationNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.NotWithdrawableError:
         raise HTTPException(status_code=409, detail="not_withdrawable") from None
+    chat_events.publish(r, [listing.owner_id, seeker.id], application.id, "status")
     return _out(application, listing)
 
 
@@ -176,6 +186,7 @@ def set_applicant_status(
     body: ApplicantStatusIn,
     owner: OwnerDep,
     db: DbDep,
+    r: Annotated[RedisClient, Depends(get_redis)],
 ) -> ApplicantOut:
     try:
         application, name = applications_service.set_applicant_status(
@@ -185,4 +196,5 @@ def set_applicant_status(
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.InvalidTransitionError:
         raise HTTPException(status_code=409, detail="invalid_transition") from None
+    chat_events.publish(r, [owner.id, application.seeker_id], application.id, "status")
     return _applicant_out(application, name)
