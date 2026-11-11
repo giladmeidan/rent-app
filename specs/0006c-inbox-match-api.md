@@ -1,7 +1,7 @@
 ---
 id: 0006c
 title: An owner sees each applicant's match score, its top-3 / top-1 explanation and a short housing summary, with the inbox sorted by match
-status: verified
+status: in-review
 depends_on: [0006b, 0005a]   # 0006b: matching/score.py; 0005a: edits set_applicant_status (open-on-shortlist) in the same file
 reviewers: [code, qa, security]   # security: a seeker's housing preferences shown to an owner they applied to (PII), explicit field lists; qa: ordering, nulls for pre-Slice-6 applicants; no perf: per-listing set, PK joins, 3 statements pinned by AC4 — the hot path is 0006b's
 estimate: 1 coder run
@@ -49,11 +49,22 @@ slice 6, part c of seven (overview in `0006a`). Artboards: `Inbox.dc.html` / `In
 - `api/tests/test_inbox.py` and `0005a`'s `api/tests/test_chat.py` amendments (Tests to write).
 - `web/src/features/applicants/__tests__/fixtures.ts`: `applicant()` adds `match: null, profile: null` (after
   `make client` both are required nullable keys of `ApplicantOut`; no component reads them yet).
+- Migration `api/alembic/versions/0008_application_listing_snapshot.py` (security B1, Gilad 2026-11-11):
+  `applications.price_ils_at_apply integer NOT NULL` and `applications.area_id_at_apply uuid NOT NULL` (FK
+  `fk_applications_area_id_at_apply` → `areas.id` ON DELETE RESTRICT, as `listings.area_id`), backfilled from each
+  row's listing, with a downgrade that drops both. Applying (`_upsert`) sets both from the listing, and a re-apply
+  after a withdrawal (which reopens the row) sets them again. `match_columns` gains keyword overrides `price=` /
+  `area_id=` (default: the listing's columns; one formula); `_applicants` passes the two snapshot columns, so the
+  owner's budget and area criteria use the listing as applied to. The seeker's views (search, listing page) are
+  unchanged. Neither column is in any response schema.
 
 **Out:**
 - Web (score badge, sort toggle, "why" panel, profile rows): `0006g`.
-- A snapshot of the score at apply time: the inbox shows the **current** profile and score (a seeker who edits
-  their profile changes their score everywhere at once; no history kept).
+- A snapshot of the score or the profile at apply time: the inbox shows the **current** profile and every other
+  criterion live (a seeker who edits their profile changes their score everywhere at once; no history kept).
+  Only the listing's price and area, as inputs to the owner's budget / area criteria, are frozen at apply time
+  (`price_ils_at_apply`, `area_id_at_apply`), so an owner cannot probe a seeker's budget or areas by editing the
+  listing (security B1).
 - The seeker's max budget and preferred areas: never shown to the owner (negotiation leverage and location
   privacy); only the criterion codes `budget` / `area` in `agrees` / `differs` say whether they fit.
 - Ages, occupation, income, "phone-verified" (PRODUCT.md "Matching": housing preferences only; verification is
@@ -63,7 +74,9 @@ slice 6, part c of seven (overview in `0006a`). Artboards: `Inbox.dc.html` / `In
 **New dependencies:** none.
 
 ## Data
-No schema change (tables from `0006a`; formula from `0006b`).
+Migration `0008` (down_revision `0007`): `applications.price_ils_at_apply` (integer, NOT NULL) and
+`applications.area_id_at_apply` (uuid, NOT NULL, FK → `areas.id` ON DELETE RESTRICT), backfilled from the
+listing; downgrade drops both (Scope). Other tables from `0006a`; formula from `0006b`.
 
 ## API
 | Method | Path | Auth rule | Request | Response | Errors |
@@ -88,8 +101,9 @@ which is a day off UTC (`make_profile`, `current_date`) between local midnight a
 - [ ] AC4 Given A with 3 applicants and listing C with 25 (half with profiles), When the owner lists each (after a warm-up and `statements.clear()`), Then exactly 3 statements each, as `0004c` AC3 (which keeps passing unchanged) — `test_inbox.py::test_ac4_still_three_statements`
 - [ ] AC5 Given S1 `submitted` on A, When the owner PATCHes S1 to `shortlisted`, Then 200 whose body equals S1's item in a following `GET /listings/{A}/applications` (same `match`, `profile`, new status); `0005a`'s conversation for S1 exists; PATCHing S3 (no profile) to `shortlisted` returns `match` and `profile` null; measured after a warm-up and `statements.clear()`, a PATCH to `shortlisted` executes exactly 4 statements (session, `UPDATE applications`, `INSERT INTO conversations`, one SELECT containing `FROM applications`) and one to `submitted` or `declined` exactly 3 — `test_inbox.py::test_ac5_patch_returns_scored_applicant`
 - [ ] AC6 Given S1 with `budget_max_ils` 7500 and `area_ids [gush_dan]`, When the owner lists A and PATCHes S1, Then walking the parsed JSON of both bodies finds no key at any depth named `budget_max_ils` or `area_ids` and no number equal to `7500`; neither body's text contains `str(gush_dan)`; S1's `match` key set is exactly `{score, agrees, differs}` — `test_inbox.py::test_ac6_owner_never_sees_budget_or_areas`
-- [ ] AC7 Given S1 (a `signup` seeker given `make_profile`) and A, Then S1's `GET /listings/{A}` `match` equals S1's item `match` in the owner's list (one formula, both directions) — `test_inbox.py::test_ac7_owner_and_seeker_see_the_same_score`
+- [ ] AC7 Given S1 (a `signup` seeker given `make_profile`) and A, Then S1's `GET /listings/{A}` `match` equals S1's item `match` in the owner's list (one formula, both directions), unless the owner has edited the listing's price or area since the apply (AC9) — `test_inbox.py::test_ac7_owner_and_seeker_see_the_same_score`
 - [ ] AC8 Given listing B = `L0` with `pets_allowed` false and S1 (a `signup` seeker with `P0`) applied to it, S1 scores 100; When S1 `PUT`s `P0`'s full body with `has_pets: true`, Then the owner's list of B shows S1 at 59 with `differs: pets` (live, not a snapshot) — `test_inbox.py::test_ac8_score_follows_profile_edits`
+- [ ] AC9 (security B1) Given S1 (`signup`, `P0`) applied to A = `L0` (the row holds `price_ils_at_apply` 7000 and `area_id_at_apply` `gush_dan`), When the owner PATCHes the listing's `price_ils` to 8000, Then S1's own `GET /listings/{A}` `match` is 59 / differs `budget` (live) while the owner's list and the shortlist PATCH keep `{score: 100, agrees: [budget, move_in, area], differs: null}`; the same when the owner moves the listing to a second active area (seeker: 59 / differs `area`); a non-snapshot criterion (pets) still follows the listing live; a withdraw and re-apply snapshots the new price (owner and seeker both 59 / differs `budget`). Given a seeker with budget 8437 and a paused listing, When the owner bisects the price over 16 PATCHes, reading the list and a status PATCH after each, Then every `match` equals the first one — `test_inbox.py::test_ac9_owner_match_ignores_price_and_area_edits_after_apply`, `test_inbox.py::test_ac9_budget_cannot_be_bisected_by_price_edits`; migration `0008` backfills, is NOT NULL with the RESTRICT FK, and downgrades — `test_migrations.py::test_ac9_application_snapshot_backfill_and_downgrade`
 - [ ] NF1 `make lint` clean (api and web `tsc`); `make client` regenerates `schema.d.ts` with `ApplicantProfileOut`, `ApplicantOut.match` / `.profile` and the `sort` query param; every existing `test_inbox.py` and `test_chat.py` test passes with the amendments in Tests to write — CI `api`, `web`
 - [ ] NF2 Privacy: `ApplicantOut` and `ApplicantProfileOut` list fields explicitly; the list query selects the seven profile columns by name, never the `SeekerProfile` entity — AC1 key sets, AC6 + security reviewer
 
@@ -241,6 +255,8 @@ statement and `0004c` AC3's `"FROM listings" in sent[1]` / one `FROM application
     budget or areas). If `0006d` is already verified, log it in `specs/FOLLOWUPS.md`.
 
 ## Digest (filled by orchestrator after verification)
+
+Decision 2026-11-11 (Gilad, security B1): owner-side budget/area criteria use the listing's price/area snapshot at apply (`price_ils_at_apply`, `area_id_at_apply`); the seeker's view stays live.
 
     Spec 0006c - Inbox match API: score + housing summary per applicant   (verified, part 3 of 7, depends on 0006b, 0005a - merged)
     What a user can do after this: an owner's GET /listings/{id}/applications returns each applicant's match and a

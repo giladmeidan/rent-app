@@ -21,18 +21,28 @@ Rules (PRODUCT.md "Applications"):
 - Owner side (0004c): a withdrawn application is invisible to the owner (a 404, like an unknown
   id, another owner's listing or an application of a different listing); a decline is final
   (PRODUCT.md, Q6). The listing's own state (live, paused, expired) never matters. The owner learns
-  of an applicant only `users.display_name` and the message (NF2): no query loads the `User`."""
+  of an applicant only `users.display_name` and the message (NF2): no query loads the `User`.
+- Owner side, matching (0006c): each applicant also carries their **current** match against the
+  listing (`matching.score.match_columns`, the number the seeker sees on that listing unless the
+  owner has since edited its price or area: the budget and area criteria use the listing's
+  `price_ils_at_apply` / `area_id_at_apply` snapshot, security B1) and seven
+  housing-profile columns selected by name, never `budget_max_ils` or `area_ids` (PRODUCT.md
+  "Matching": an owner never sees a seeker's budget or areas). A pre-Slice-6 applicant with no
+  profile row has NULL profile columns; its match columns are meaningless and never read. The
+  default order is by match, applicants with a profile first."""
 
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import Label, Row, Select, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.models import Application, Conversation, Listing, User
+from app.matching.score import match_columns
+from app.models import Application, Conversation, Listing, SeekerProfile, User
 from app.redis_client import RedisClient
-from app.schemas.application import ApplicantStatus
+from app.schemas.application import ApplicantSort, ApplicantStatus
 from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
@@ -78,16 +88,25 @@ class NotWithdrawableError(Exception):
 
 
 def _upsert(
-    db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID, message: str
+    db: Session, listing: Listing, seeker_id: uuid.UUID, message: str
 ) -> Application | None:
     """Insert the application, or reopen a withdrawn one; None when one exists in any other
-    status (including the row a concurrent apply just inserted)."""
-    stmt = insert(Application).values(listing_id=listing_id, seeker_id=seeker_id, message=message)
+    status (including the row a concurrent apply just inserted). Both snapshot the listing's
+    price and area as the seeker applied to them (0006c, security B1)."""
+    stmt = insert(Application).values(
+        listing_id=listing.id,
+        seeker_id=seeker_id,
+        message=message,
+        price_ils_at_apply=listing.price_ils,
+        area_id_at_apply=listing.area_id,
+    )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_applications_listing_seeker",
         set_={
             "status": "submitted",
             "message": stmt.excluded.message,
+            "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
+            "area_id_at_apply": stmt.excluded.area_id_at_apply,
             "created_at": func.now(),
             "updated_at": func.now(),
         },
@@ -116,7 +135,7 @@ def apply(
         # A user whose role changes later must never apply to their own listing.
         if listing.owner_id == seeker.id:
             raise ListingNotFoundError
-        application = _upsert(db, listing.id, seeker.id, message)
+        application = _upsert(db, listing, seeker.id, message)
         if application is None:
             raise AlreadyAppliedError
         db.commit()
@@ -197,25 +216,67 @@ def record_view(db: Session, listing_id: uuid.UUID) -> int:
     return int(count or 0)
 
 
+# The owner-facing housing summary (0006c, NF2): by name, never the `SeekerProfile` entity, so
+# `budget_max_ils` and `area_ids` are never loaded.
+_PROFILE_COLUMNS = (
+    SeekerProfile.household,
+    SeekerProfile.move_in_date,
+    SeekerProfile.move_in_flexible,
+    SeekerProfile.has_pets,
+    SeekerProfile.smoker,
+    SeekerProfile.contract_months,
+    SeekerProfile.parking_needed,
+)
+
+
+def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
+    """The non-withdrawn applications of `listing_id`, each with the applicant's display name, the
+    seven owner-facing profile columns (NULL without a profile row) and the match columns; and the
+    statement's `m_score` column. Unordered.
+
+    It has **no ownership condition** of its own: both callers establish ownership first (the
+    ownership SELECT in `list_applicants`, the UPDATE's WHERE in `set_applicant_status`)."""
+    # Budget and area against the listing as applied to (security B1): an owner editing the
+    # listing's price or area must not learn where the seeker's budget or areas lie. Every other
+    # criterion is live.
+    columns = match_columns(
+        Listing,
+        SeekerProfile,
+        price=Application.price_ils_at_apply,
+        area_id=Application.area_id_at_apply,
+    )
+    score = next(column for column in columns if column.name == "m_score")
+    query = (
+        select(Application, User.display_name, *_PROFILE_COLUMNS, *columns)
+        .join(User, User.id == Application.seeker_id)
+        .join(Listing, Listing.id == Application.listing_id)
+        .outerjoin(SeekerProfile, SeekerProfile.user_id == Application.seeker_id)
+        .where(Application.listing_id == listing_id, Application.status != "withdrawn")
+    )
+    return query, score
+
+
 def list_applicants(
-    db: Session, owner: User, listing_id: uuid.UUID
-) -> Sequence[tuple[Application, str]]:
-    """The non-withdrawn applications of one of `owner`'s listings (any listing state) with each
-    applicant's display name, newest `created_at` first, then `id`. Raises `ListingNotFoundError`
-    (unknown id or another owner's listing). Two statements: the ownership check, then the list,
-    which selects `users.display_name` only (NF2)."""
+    db: Session, owner: User, listing_id: uuid.UUID, sort: ApplicantSort = "match"
+) -> Sequence[Row[Any]]:
+    """The non-withdrawn applications of one of `owner`'s listings (any listing state), each row as
+    `_applicants` selects it. `sort="match"`: applicants with a profile first, then score, then
+    newest `created_at`, then `id` (no-profile rows tie on whatever `m_score` they get and fall
+    through to `created_at`); `"newest"`: newest `created_at` first, then `id`. Raises
+    `ListingNotFoundError` (unknown id or another owner's listing). Two statements: the ownership
+    check, then the list, which reads only `display_name` from `users` (NF2)."""
     own = db.scalar(
         select(Listing.id).where(Listing.id == listing_id, Listing.owner_id == owner.id)
     )
     if own is None:
         raise ListingNotFoundError
-    rows = db.execute(
-        select(Application, User.display_name)
-        .join(User, User.id == Application.seeker_id)
-        .where(Application.listing_id == listing_id, Application.status != "withdrawn")
-        .order_by(Application.created_at.desc(), Application.id)
-    ).tuples()
-    return rows.all()
+    query, score = _applicants(listing_id)
+    newest = (Application.created_at.desc(), Application.id)
+    if sort == "match":
+        order: tuple[Any, ...] = (SeekerProfile.user_id.is_(None), score.desc(), *newest)
+    else:
+        order = newest
+    return db.execute(query.order_by(*order)).all()
 
 
 def set_applicant_status(
@@ -224,49 +285,40 @@ def set_applicant_status(
     listing_id: uuid.UUID,
     application_id: uuid.UUID,
     status: ApplicantStatus,
-) -> tuple[Application, str]:
+) -> Row[Any]:
     """Set an applicant of one of `owner`'s listings to `status` (`shortlisted`, `submitted` or
-    `declined`), whatever the listing's state, and return it with the applicant's display name.
-    One conditional UPDATE: ownership, the listing / application pair and `ALLOWED_FROM` are all in
-    its WHERE, so a concurrent withdraw or decline cannot interleave. A same-status change keeps
-    `updated_at` (in Postgres the SET clause's CASE sees the pre-update status). Raises
-    `ApplicationNotFoundError` (unknown listing or application, another owner's listing, an
+    `declined`), whatever the listing's state, and return its row as `list_applicants` does (the
+    `_applicants` SELECT, run in the same transaction before the commit, so it sees the new
+    status). One conditional UPDATE: ownership, the listing / application pair and `ALLOWED_FROM`
+    are all in its WHERE, so a concurrent withdraw or decline cannot interleave. A same-status
+    change keeps `updated_at` (in Postgres the SET clause's CASE sees the pre-update status).
+    Raises `ApplicationNotFoundError` (unknown listing or application, another owner's listing, an
     application of a different listing, a withdrawn one) or `InvalidTransitionError`. The fallback
     status SELECT runs in a fresh READ COMMITTED snapshot, so a seeker withdrawing or re-applying
     between the UPDATE and the SELECT can turn a 404 into a 409 or the reverse; no data changes in
     either case and the client re-fetches. To `shortlisted`, also opens the application's chat in
     the same transaction (spec 0005a: one conversation per application, insert on conflict do
     nothing). Commits."""
-    applicant_name = (
-        select(User.display_name)
-        .where(User.id == Application.seeker_id)
-        .correlate(Application)
-        .scalar_subquery()
-    )
     try:
-        row = (
-            db.execute(
-                update(Application)
-                .where(
-                    Application.id == application_id,
-                    Application.listing_id == listing_id,
-                    Listing.id == Application.listing_id,
-                    Listing.owner_id == owner.id,
-                    Application.status.in_(ALLOWED_FROM[status]),
-                )
-                .values(
-                    status=status,
-                    updated_at=case(
-                        (Application.status == status, Application.updated_at), else_=func.now()
-                    ),
-                )
-                .returning(Application, applicant_name)
-                .execution_options(populate_existing=True, synchronize_session=False)
+        application = db.scalar(
+            update(Application)
+            .where(
+                Application.id == application_id,
+                Application.listing_id == listing_id,
+                Listing.id == Application.listing_id,
+                Listing.owner_id == owner.id,
+                Application.status.in_(ALLOWED_FROM[status]),
             )
-            .tuples()
-            .one_or_none()
+            .values(
+                status=status,
+                updated_at=case(
+                    (Application.status == status, Application.updated_at), else_=func.now()
+                ),
+            )
+            .returning(Application)
+            .execution_options(populate_existing=True, synchronize_session=False)
         )
-        if row is None:
+        if application is None:
             current = db.scalar(
                 select(Application.status).where(
                     Application.id == application_id,
@@ -278,8 +330,6 @@ def set_applicant_status(
             if current is None or current == "withdrawn":
                 raise ApplicationNotFoundError
             raise InvalidTransitionError
-        application: Application = row[0]
-        name: str = row[1]
         if status == "shortlisted":
             # Opens the chat (spec 0005a), once per application ever: a re-shortlist finds the
             # row and inserts nothing; an un-shortlist or a decline never touches it.
@@ -293,8 +343,12 @@ def set_applicant_status(
                 )
                 .on_conflict_do_nothing(index_elements=["application_id"])
             )
+        # The response row (0006c): the UPDATE's WHERE established ownership, and the row exists
+        # and is locked by this transaction.
+        query, _ = _applicants(listing_id)
+        row = db.execute(query.where(Application.id == application.id)).one()
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return application, name
+    return row
