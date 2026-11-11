@@ -56,7 +56,8 @@ PRODUCT.md rows "Rooms" (2026-11-11), "Gender preference", "Listings" (rooms hid
     and `LIFESTYLE_KEYS: tuple[LifestyleKey, ...] = get_args(LifestyleKey)` (canonical order, like
     `HOUSEHOLDS`);
   - `LifestyleAnswer = Literal[1, 2, 3]` and **`Lifestyle = dict[LifestyleKey, LifestyleAnswer]`**. An unknown
-    key or a value outside 1–3 is a 422. Only answered keys are stored and returned. Pydantic's lax mode turns
+    key or a value outside 1–3 is a 422. A `BeforeValidator` refuses more than 7 keys or any unknown key as one error at
+    `["body", "lifestyle"]` that names no key (review round 1, security). Only answered keys are stored and returned. Pydantic's lax mode turns
     `true` into 1 and `2.0` into 2 (stored as JSON integers), as it already does for `contract_months`; no test
     relies on either. Key order in a response is not significant (jsonb stores keys shortest first, then
     bytewise): clients iterate `LIFESTYLE_KEYS`. No sorting validator;
