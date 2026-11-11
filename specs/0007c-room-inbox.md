@@ -1,7 +1,7 @@
 ---
 id: 0007c
 title: On a room application the owner's inbox shows the applicant's gender and age beside the match score and reasons, with the questionnaire answers, compared with the flat's, behind "עוד פרטים"; never on an apartment application
-status: in-review
+status: done
 depends_on: [0007g, 0007d, 0006g]   # 0007g (specs/0007g-lifestyle-match-api.md, on 0007b): the lifestyle criterion, the inbox's match_columns(listing_type=Application.listing_type_at_apply), the owner-voice lifestyle reason copy; 0007b via 0007g: applications.listing_type_at_apply (migration 0010); 0007a via 0007b: the seeker's room section, MyListingOut.lifestyle; 0007d: features/lifestyle (keys, labels, topic, compareLifestyle); 0006g: the card this extends
 reviewers: [code, qa, security, ux]   # security: gender, age and lifestyle answers (sensitive PII) shown to an owner, keyed on a snapshot so a type switch cannot expose apartment applicants, explicit field lists; qa: nulls, type switches both ways, live edits and clearing, answer comparison cases; ux: a new line and disclosure on the inbox card; no perf: three CASE columns in the same statement, no new join or statement (0006c AC4 / AC5 counts unchanged)
 estimate: 1 coder run   # coder Opus/high (PII gate, Speed rule 6); see Risks
