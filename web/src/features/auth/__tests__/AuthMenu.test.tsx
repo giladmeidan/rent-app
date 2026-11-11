@@ -109,4 +109,26 @@ describe('AuthMenu', () => {
     expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
     expect(screen.queryByRole('link', { name: he.header.myApplications })).toBeNull();
   });
+  it('ac10_profile_link', async () => {
+    // A seeker: "my profile" links to /me/profile, right after "my applications".
+    mockApi({ 'GET /me': [json(noa)] });
+    let view = renderRoutes('/', <AuthMenu />);
+    const profile = await screen.findByRole('link', { name: he.header.myProfile });
+    expect(profile).toHaveAttribute('href', '/me/profile');
+    const links = screen.getAllByRole('link');
+    const applications = screen.getByRole('link', { name: he.header.myApplications });
+    expect(links.indexOf(profile)).toBe(links.indexOf(applications) + 1);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An owner and a visitor: no profile link.
+    for (const me of [json({ ...noa, role: 'owner' }), json({ detail: 'unauthenticated' }, 401)]) {
+      mockApi({ 'GET /me': [me] });
+      view = renderRoutes('/', <AuthMenu />);
+      expect(await screen.findAllByRole('link')).not.toHaveLength(0);
+      expect(screen.queryByRole('link', { name: he.header.myProfile })).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
 });
