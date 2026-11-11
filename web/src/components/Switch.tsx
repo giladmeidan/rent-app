@@ -4,6 +4,8 @@ type Props = {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  /** Id of a hint that describes the switch. */
+  describedBy?: string;
 };
 
 /**
@@ -12,7 +14,7 @@ type Props = {
  * CreateListing.dc.html: the thumb sits at the inline start when off and slides to the inline end,
  * on an accent track, when on.
  */
-export function Switch({ label, checked, onChange }: Props) {
+export function Switch({ label, checked, onChange, describedBy }: Props) {
   const id = useId();
   return (
     <div className="flex items-stretch justify-between gap-3 px-4">
@@ -27,6 +29,7 @@ export function Switch({ label, checked, onChange }: Props) {
           id={id}
           type="checkbox"
           role="switch"
+          aria-describedby={describedBy}
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
           className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"

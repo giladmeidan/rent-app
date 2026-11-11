@@ -261,4 +261,24 @@ describe('MyApplicationsPage', () => {
     expect(within(second).queryByRole('link', { name: he.applications.chat })).toBeNull();
     expect(screen.getAllByRole('link', { name: he.applications.chat })).toHaveLength(1);
   });
+
+  it('ac7_mutual_tag', async () => {
+    const mutual = to('L1', { source: 'like', message: null, status: 'shortlisted' });
+    const applied = to('L2');
+    renderPage([json([mutual, applied])]);
+    await screen.findAllByRole('article');
+    const [first, second] = cards() as [HTMLElement, HTMLElement];
+
+    expect(within(first).getByTestId('application-mutual')).toHaveTextContent(
+      he.applications.mutual,
+    );
+    expect(within(first).queryByText(he.applications.yourMessage)).toBeNull();
+    expect(within(first).queryByTestId('application-message')).toBeNull();
+    // An application made with a message is unchanged.
+    expect(within(second).queryByTestId('application-mutual')).toBeNull();
+    expect(within(second).getByText(he.applications.yourMessage)).toBeVisible();
+    expect(within(second).getByTestId('application-message')).toHaveTextContent(
+      applied.message ?? '',
+    );
+  });
 });

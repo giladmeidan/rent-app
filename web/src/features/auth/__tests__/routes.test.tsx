@@ -77,6 +77,7 @@ describe('routes', () => {
       vi.unstubAllGlobals();
     }
   });
+
   it('ac4_guards_keep_next', async () => {
     // A logged-out visit to a guarded page keeps its path and query in `next`, never the hash.
     for (const [path, target] of [
@@ -100,6 +101,35 @@ describe('routes', () => {
         await screen.findByRole('heading', { level: 1, name: he.auth.login.title }),
       ).toBeVisible();
       expect(api.calls('GET /me/listings')).toHaveLength(0);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac8_likes_is_seeker_only', async () => {
+    // A seeker: the page renders through AppRoutes.
+    let api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/likes': [json({ liked_me: [], mine: [] })],
+    });
+    let view = renderRoutes('/me/likes', <AppRoutes />);
+    expect(await screen.findByRole('heading', { level: 1, name: he.likes.title })).toBeVisible();
+    expect(currentPath()).toBe('/me/likes');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An owner lands on /, a visitor on /login; neither requests the likes.
+    for (const [me, path] of [
+      [json({ ...noa, role: 'owner' }), '/'],
+      [json({ detail: 'unauthenticated' }, 401), '/login?next=%2Fme%2Flikes'],
+    ] as const) {
+      api = mockApi({ 'GET /me': [me], 'GET /areas': [json([])] });
+      view = renderRoutes('/me/likes', <AppRoutes />);
+      await vi.waitFor(() => {
+        expect(currentPath()).toBe(path);
+      });
+      expect(screen.queryByRole('heading', { level: 1, name: he.likes.title })).toBeNull();
+      expect(api.calls('GET /me/likes')).toHaveLength(0);
       view.unmount();
       vi.unstubAllGlobals();
     }

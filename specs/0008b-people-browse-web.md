@@ -1,7 +1,7 @@
 ---
 id: 0008b
 title: A room lister opens "מחפשים חדר" from "my listings", pages through the people who want a room there, likes them, and lands in the chat when a like turns mutual; mutual matches are tagged in the applicant inbox
-status: in-progress
+status: done
 depends_on: [0008a, 0007c, 0007f]   # 0008a: GET /listings/{id}/people, the lister like PUT/DELETE, MyListingOut.liked_me_count, ApplicantOut.source (and the type-only fixture edits); 0007c: RoomDetails and applicants.room.line; 0007f: features/listings/cardTitle.ts
 reviewers: [code, qa, ux]   # ux: a new screen with no artboard; qa: like / unlike / mutual / error states, paging; no security: shows only what 0008a returns (its security review covers the fields and the fact-free reasons); no perf: one paged query
 estimate: 1 coder run   # coder Sonnet/medium is enough (no auth, money or data); Opus if the run overflows

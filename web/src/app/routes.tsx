@@ -12,6 +12,7 @@ import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
 import { FlatmatesPage } from '../features/flatmates/FlatmatesPage';
 import { JoinFlatPage } from '../features/flatmates/JoinFlatPage';
+import { MyLikesPage } from '../features/likes/MyLikesPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
@@ -43,6 +44,7 @@ export function AppRoutes() {
         </Route>
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />
+          <Route path="me/likes" element={<MyLikesPage />} />
           <Route path="me/profile" element={<ProfilePage />} />
         </Route>
         <Route element={<RequireUser />}>

@@ -5,7 +5,10 @@ import { Link, useParams } from 'react-router';
 import { ErrorState } from '../../components/ErrorState';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
+import { useMe } from '../auth/useMe';
 import { ApplySection } from '../applications/ApplySection';
+import { LikeRoomButton } from '../likes/LikeRoomButton';
+import { MutualBanner } from '../likes/MutualBanner';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
 import { RoomFacts } from '../rooms/RoomFacts';
@@ -26,6 +29,10 @@ export function ListingPage() {
   const listing = usePublicListing(id);
   // The small map is dropped when it cannot be shown; the address text stays.
   const [mapFailed, setMapFailed] = useState(false);
+  // Set by a like that made the pair mutual; it replaces the control and outlives the cache writes.
+  const [mutualId, setMutualId] = useState<string | null>(null);
+  // The banner is a seeker's: a logout (or another account) never inherits it.
+  const isSeeker = useMe().data?.role === 'seeker';
 
   let body;
   if (listing.isPending) {
@@ -143,6 +150,15 @@ export function ListingPage() {
         {/* Nothing for `match: null`: the apply section already invites a seeker without a
             profile to fill one. */}
         {l.match !== null && <MatchCard match={l.match} listing={l} />}
+
+        {mutualId !== null && isSeeker ? (
+          <MutualBanner applicationId={mutualId} />
+        ) : (
+          l.like !== null &&
+          l.room_fit !== false && (
+            <LikeRoomButton listingId={l.id} like={l.like} onMutual={setMutualId} showHint />
+          )
+        )}
 
         <ApplySection listing={l} />
       </article>
