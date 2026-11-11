@@ -210,12 +210,21 @@ export function ListingWizard({ listing }: Props) {
   function update(patch: Partial<ListingForm>) {
     const next = { ...form, ...patch };
     setForm(next);
-    if (Object.keys(patch).some((name) => name in serverErrors)) {
+    // A new type starts step 3's validation over: the room block has not been "attempted" yet.
+    if (patch.listing_type !== undefined && patch.listing_type !== form.listing_type) {
+      setPreferencesAttempted(false);
+    }
+    // The count and the ages are one question: a server error on either goes with a new count.
+    const touched = new Set<string>(Object.keys(patch));
+    if (touched.has('flatmates_count')) {
+      touched.add('flatmate_ages');
+    }
+    if ([...touched].some((name) => name in serverErrors)) {
       setServerErrors((shown) => {
         const kept: FieldErrors = {};
         for (const name of FIELD_ORDER) {
           const error = shown[name];
-          if (error !== undefined && !(name in patch)) kept[name] = error;
+          if (error !== undefined && !touched.has(name)) kept[name] = error;
         }
         return kept;
       });

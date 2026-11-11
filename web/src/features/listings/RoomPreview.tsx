@@ -21,6 +21,7 @@ export function RoomPreview({ body }: Props) {
   const genders = useGenderPreferenceLabels();
 
   const chips: string[] = [];
+  let showsPrivate = false;
   if (body.gender_preference !== 'any') {
     chips.push(t('listings.roomPreview.for', { who: genders[body.gender_preference] }));
   }
@@ -29,6 +30,7 @@ export function RoomPreview({ body }: Props) {
     // A copy: `body` is the caller's.
     const ages = [...body.flatmate_ages].sort((a, b) => a - b);
     const [age] = ages;
+    if (ages.length > 0) showsPrivate = true;
     if (count === 1) {
       chips.push(
         age === undefined
@@ -45,6 +47,7 @@ export function RoomPreview({ body }: Props) {
   }
   const answered = LIFESTYLE_KEYS.filter((key) => body.lifestyle[key] !== undefined).length;
   if (answered > 0) {
+    showsPrivate = true;
     chips.push(
       t('listings.roomPreview.lifestyle', { count: answered, total: LIFESTYLE_KEYS.length }),
     );
@@ -52,18 +55,21 @@ export function RoomPreview({ body }: Props) {
   if (chips.length === 0) return null;
 
   return (
-    <ul
-      aria-label={t('listings.room.title')}
-      className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white px-4 py-[14px]"
-    >
-      {chips.map((chip) => (
-        <li
-          key={chip}
-          className="rounded-full border border-[#E7E5E4] bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold"
-        >
-          {chip}
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul
+        aria-label={t('listings.room.title')}
+        className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white px-4 py-[14px]"
+      >
+        {chips.map((chip) => (
+          <li
+            key={chip}
+            className="rounded-full border border-[#E7E5E4] bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold"
+          >
+            {chip}
+          </li>
+        ))}
+      </ul>
+      {showsPrivate && <p className="text-sm text-muted">{t('listings.room.privacyNote')}</p>}
+    </>
   );
 }

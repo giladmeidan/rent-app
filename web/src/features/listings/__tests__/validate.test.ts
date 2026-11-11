@@ -364,6 +364,13 @@ describe('validate', () => {
       toListingIn({ ...valid, smoking_allowed: false, min_contract_months: 24 }),
     ).toMatchObject({ smoking_allowed: false, min_contract_months: 24 });
 
+    // ac9_legacy_room_to_apartment_sends_type_only: a legacy room (no count) switched to
+    // apartment diffs to the type alone.
+    const legacy = listing({ listing_type: 'room', flatmates_count: null });
+    expect(
+      changedFields(legacy, toListingIn({ ...formFromListing(legacy), listing_type: 'apartment' })),
+    ).toStrictEqual({ listing_type: 'apartment' });
+
     // formFromListing → toListingIn round-trips the three fields.
     const l = listing({
       accepted_households: ['couple', 'single'],

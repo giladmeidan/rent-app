@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -171,6 +171,7 @@ describe('RoomFields', () => {
       expect(input).toHaveValue('');
     }
     expect(describedBy(agesGroup())).toEqual([screen.getByText(r.agesHint)]);
+    for (const input of slots()) expect(describedBy(input)).toEqual([screen.getByText(r.agesHint)]);
 
     // Slot 3 first; lowering the count hides it, raising it brings it back with its age.
     fireEvent.change(slot(3), { target: { value: '41' } });
@@ -186,6 +187,25 @@ describe('RoomFields', () => {
     fireEvent.change(count(), { target: { value: '' } });
     expect(screen.queryByRole('group', { name: r.ages })).toBeNull();
     view.unmount();
+
+    // Switching the type after an earlier step-3 pass starts the validation over: no error on
+    // arriving at the room block, only after its own "next".
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    await toPreferences();
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    back();
+    back();
+    back();
+    fireEvent.click(screen.getByLabelText(he.listings.type.room));
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(nextButton());
+    expect(errorFor(count())).toHaveTextContent(he.listings.errors.required);
+    vi.unstubAllGlobals();
+    cleanup();
 
     // The slot write itself: typing into slot 3 of an empty list leaves no hole.
     const onChange = vi.fn<(patch: Partial<ListingForm>) => void>();
@@ -277,6 +297,8 @@ describe('RoomFields', () => {
       '2 שותפים בדירה (27, 30)',
       'שאלון הדירה: נענו 1 מתוך 7',
     ]);
+    // Ages or answers shown: the privacy note follows the chips.
+    expect(list.nextElementSibling).toHaveTextContent(r.privacyNote);
 
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
@@ -305,6 +327,8 @@ describe('RoomFields', () => {
     fireEvent.click(nextButton());
     expect(roomChips()).toEqual(['2 שותפים בדירה']);
     expect(screen.queryByText(/מתאים ל:/)).toBeNull();
+    // A bare count: no note.
+    expect(screen.queryByText(r.privacyNote)).toBeNull();
 
     // One flatmate, without and with an age.
     back();
@@ -315,6 +339,7 @@ describe('RoomFields', () => {
     fireEvent.change(slot(1), { target: { value: '45' } });
     fireEvent.click(nextButton());
     expect(roomChips()).toEqual([i18n.t('listings.roomPreview.flatmatesOneAge', { age: 45 })]);
+    expect(screen.getByText(r.privacyNote)).toBeInTheDocument();
     back();
     fireEvent.change(slot(1), { target: { value: '' } });
     fireEvent.change(count(), { target: { value: '2' } });
@@ -364,6 +389,23 @@ describe('RoomFields', () => {
     expect(errorFor(agesGroup())).toHaveTextContent(he.listings.errors.invalid);
     expect(document.activeElement).toBe(slot(1));
     fireEvent.change(slot(1), { target: { value: '31' } });
+    expect(agesGroup()).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByText(he.listings.errors.invalid)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A server error on the ages also goes when the count changes.
+    mockApi({ 'GET /areas': [json([gushDan])], 'POST /listings': [invalid('flatmate_ages')] });
+    view = await toPreferences(testQueryClient(), 'room');
+    fireEvent.change(count(), { target: { value: '2' } });
+    fireEvent.change(slot(1), { target: { value: '30' } });
+    fireEvent.click(nextButton());
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    });
+    expect(errorFor(agesGroup())).toHaveTextContent(he.listings.errors.invalid);
+    fireEvent.change(count(), { target: { value: '3' } });
     expect(agesGroup()).toHaveAttribute('aria-invalid', 'false');
     expect(screen.queryByText(he.listings.errors.invalid)).toBeNull();
     view.unmount();

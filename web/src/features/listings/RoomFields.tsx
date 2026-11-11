@@ -182,7 +182,11 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
                     value={value}
                     onChange={(e) => setAge(i, e.target.value)}
                     aria-invalid={invalid}
-                    aria-describedby={invalid ? errorId('flatmate_ages') : undefined}
+                    aria-describedby={
+                      invalid
+                        ? `${hintId('flatmate_ages')} ${errorId('flatmate_ages')}`
+                        : hintId('flatmate_ages')
+                    }
                     className={input}
                   />
                 </div>
@@ -193,12 +197,14 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
         </fieldset>
       )}
 
-      <LifestyleFields
-        perspective="flat"
-        headingLevel={4}
-        value={form.lifestyle}
-        onChange={(lifestyle) => onChange({ lifestyle })}
-      />
+      <div className="border-t border-line pt-[22px]">
+        <LifestyleFields
+          perspective="flat"
+          headingLevel={4}
+          value={form.lifestyle}
+          onChange={(lifestyle) => onChange({ lifestyle })}
+        />
+      </div>
     </section>
   );
 }
