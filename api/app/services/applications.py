@@ -11,6 +11,13 @@ Rules (PRODUCT.md "Applications"):
   yield one application and one `AlreadyAppliedError`. Applying sets `source = 'apply'`, also on a
   reopen (spec 0008a); a mutual like reopens a withdrawn row the same way, as a shortlisted
   `source = 'like'` application without a message (`services/people.py`).
+- Applying consumes the pair's likes (spec 0008a): in the same transaction, and **before** the
+  application INSERT, `people.consume_likes` clears both like columns of the (listing, seeker)
+  `room_pairs` row, so a one-sided like never outlives an application and after a withdraw both
+  sides start over. That UPDATE takes the pair's row lock first, the order the like paths use
+  (pair, then `applications`), so an apply racing a mutual cannot deadlock: a like waiting on the
+  lock sees the committed application and rolls back with `AlreadyAppliedError`, and an apply
+  waiting on a mutual finds the shortlisted row and gets `AlreadyAppliedError`.
 - Only a public listing (`search.get_public_listing_with_match`, the one visibility rule) can be
   applied to, apartments and rooms alike (spec 0007b), and never the caller's own: both are
   `ListingNotFoundError` (a 404, the same as an unknown id).
@@ -117,9 +124,15 @@ class NotWithdrawableError(Exception):
 def _upsert(
     db: Session, listing: Listing, seeker_id: uuid.UUID, message: str
 ) -> Application | None:
-    """Insert the application, or reopen a withdrawn one; None when one exists in any other
-    status (including the row a concurrent apply just inserted). Both snapshot the listing's
-    price and area (0006c, security B1) and its type (0007b) as the seeker applied to them."""
+    """Consume the pair's likes, then insert the application, or reopen a withdrawn one; None
+    when one exists in any other status (including the row a concurrent apply or mutual just
+    inserted; the caller rolls back, likes included). Both snapshot the listing's price and area
+    (0006c, security B1) and its type (0007b) as the seeker applied to them. Two statements."""
+    # Imported here: `services/people.py` imports this module. The pair's lock first, then the
+    # application row (the like paths' order; see the module docstring).
+    from app.services.people import consume_likes
+
+    consume_likes(db, listing.id, seeker_id)
     stmt = insert(Application).values(
         listing_id=listing.id,
         seeker_id=seeker_id,
@@ -153,7 +166,8 @@ def apply(
     Raises, in this order, `ProfileRequiredError` (nothing counted), `RoomGenderMismatchError` /
     `SeekerGenderRequiredError` (the room gate, nothing counted), `RateLimitedError`,
     `ListingNotFoundError` (unknown, not public or the caller's own) or `AlreadyAppliedError`.
-    One SELECT for the listing (with the match and room fit), before the limiter. Commits."""
+    One SELECT for the listing (with the match and room fit), before the limiter; after it, the
+    pair's likes are consumed and the application written (`_upsert`). Commits."""
     if not profiles_service.has_profile(db, seeker.id):
         raise ProfileRequiredError
     listing: Listing | None

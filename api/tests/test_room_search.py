@@ -401,8 +401,11 @@ def test_ac5_room_apply_gate(
     assert "FROM listings" in statements[2], statements
     statements.clear()
     applied(woman_any, fresh)
-    assert len(statements) == 4, statements  # plus the upsert
-    assert statements[3].lstrip().startswith("INSERT INTO applications"), statements
+    # Plus apply consuming the pair's likes (spec 0008a: the pair's lock before the application
+    # row), then the upsert.
+    assert len(statements) == 5, statements
+    assert statements[3].lstrip().startswith("UPDATE room_pairs"), statements
+    assert statements[4].lstrip().startswith("INSERT INTO applications"), statements
 
 
 def test_ac6_listing_type_snapshot_on_apply_and_reapply(

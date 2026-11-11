@@ -26,7 +26,11 @@ UPDATE, or an INSERT ... ON CONFLICT DO UPDATE), and only then run a **separate*
 for an application: as a new statement under READ COMMITTED it sees an apply or a mutual that
 committed while this transaction waited for the lock, and the like is rolled back with
 `AlreadyAppliedError`. Two concurrent likes of the two sides serialise on the lock, and the later
-one sees both timestamps, so exactly one of them turns the pair mutual."""
+one sees both timestamps, so exactly one of them turns the pair mutual. An apply consumes the
+pair's likes (`consume_likes`) under the same lock, **before** it writes its application, so the
+lock order is always the pair, then `applications`: a like waiting on an apply sees the committed
+application in its post-lock EXISTS, and an apply waiting on a mutual finds the shortlisted row
+(`AlreadyAppliedError`)."""
 
 import datetime as dt
 import uuid
@@ -86,6 +90,20 @@ def open_application(listing_id: _Id, seeker_id: _Id) -> Exists:
         Application.listing_id == listing_id,
         Application.seeker_id == seeker_id,
         Application.status != "withdrawn",
+    )
+
+
+def consume_likes(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> None:
+    """Clear both likes of the pair (`listing_id`, `seeker_id`), if it exists, in the caller's
+    transaction: an application consumes them (spec 0008a, Out: a one-sided like stays only until
+    an application for the pair exists), so after a withdraw both sides start over. Unconditional,
+    so it takes the pair's row lock even when both likes are already null; `applications.apply`
+    calls it before its application INSERT (the lock order above). One UPDATE."""
+    db.execute(
+        update(RoomPair)
+        .where(RoomPair.listing_id == listing_id, RoomPair.seeker_id == seeker_id)
+        .values(lister_liked_at=None, seeker_liked_at=None)
+        .execution_options(synchronize_session=False)
     )
 
 
