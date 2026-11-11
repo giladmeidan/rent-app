@@ -87,6 +87,19 @@ curl -b seeker.txt -X POST localhost:8000/conversations/$APPLICATION_ID/messages
   -d '{"body":"שלום! מתי אפשר לבוא לראות את הדירה?"}'
 ```
 
+Each logged-in tab can hold one server-sent event stream, `GET /me/events` (at most 5 per user, 30 opens a
+minute): it sends `event: chat` with `{"conversation_id","kind"}` whenever one of your chats gets a message
+(`message`) or opens / closes through a status change (`status`), `event: resync` when events were dropped
+(refetch everything), a `: ping` every 15 s, and ends after 15–16 minutes (the browser reconnects). `-N`
+keeps curl from buffering; take the cookie value from `cookies.txt`:
+
+```sh
+curl -N --cookie rent_session=… http://localhost:8000/me/events
+```
+
+An open stream does not hold up `make dev`'s reload or a stop: uvicorn runs with `--timeout-graceful-shutdown 5`,
+so after 5 s it cancels the open streams and the browsers reconnect.
+
 ## Make targets
 
 | target | what it does |

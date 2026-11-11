@@ -1,7 +1,7 @@
 ---
 id: 0005c
 title: Every logged-in tab holds one server-sent event stream that tells it within a second when one of its chats gets a message, opens or closes, so chat pages update without polling
-status: in-progress
+status: in-review
 depends_on: [0005a]      # the conversations, the send endpoint and the shortlist hook this spec publishes from
 reviewers: [code, qa, security, perf]   # security: a long-lived authenticated connection, per-user fan-out (no event to the wrong user), connection exhaustion; perf: the scale path — idle streams must cost no DB, one Redis connection per process
 estimate: 1 coder run
@@ -88,6 +88,10 @@ three:
   `@pytest_asyncio.fixture` (strict mode) that awaits `close_hub()` after each test (the hub is bound to the
   test's loop). `fastapi.routing._PING_INTERVAL` (routing imports it by name), `STREAM_MAX_S`,
   `STREAM_JITTER_S` and `QUEUE_MAX` are monkeypatched where an AC says so.
+- `infra/docker-compose.yml` (api `command`) and `infra/Dockerfile.api` (`CMD`): uvicorn gets
+  `--timeout-graceful-shutdown 5` (review round 1 major): without it an open stream holds a reload or a shutdown
+  for up to 960 s (uvicorn 0.54 waits for in-flight responses with no limit); with it the old worker cancels the
+  streams after 5 s and the browsers reconnect.
 - `README.md`: a `curl -N --cookie rent_session=… http://localhost:8000/me/events` line under "Posting a listing
   locally".
 - `specs/FOLLOWUPS.md`: append `0005c · infra (Slice 12) · production must serve the API over HTTP/2 end to end at
