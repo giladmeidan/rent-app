@@ -82,8 +82,8 @@ use the `/me/listings` page frame and its card tokens.
        from either call. It is kept on 429, 5xx and network errors, so a retry still has it.
 
     The preview POST and the join POST share one error mapping. As `0008d` is built, the preview answers 404,
-    409 `own_listing` or 429; the join adds 409 `already_applied` and `flatmates_full` (the preview has no
-    `full` / `applied` flags). Its states:
+    409 `own_listing` or 429; the join adds 409 `already_applied`, `declined` and `flatmates_full`
+    (the preview has no `full` / `applied` / `declined` flags). Its states:
     - **loading** (`Skeleton`);
     - **preview**: `cardTitle(listing)`, `flatmates.join.invitedBy` with the owner's name, and the CTA
       `flatmates.join.cta`, disabled while the POST runs;
@@ -91,8 +91,9 @@ use the `/me/listings` page frame and its card tokens.
     - **joined**: `navigate('/chat', { state: { joined: true } })`;
     - **404**: `flatmates.join.invalid`;
     - **409 `own_listing`**: `flatmates.join.own`;
-    - **409 `already_applied`** (an open application; `0008d` lets a declined applicant join for now, which
-      Gilad may still change): `flatmates.join.applied`. No "withdraw your application" copy anywhere;
+    - **409 `already_applied`** (an open application): `flatmates.join.applied`;
+    - **409 `declined`** (A2: the caller's application to this room was declined, so they cannot join its
+      flat; Gilad, 2026-11-11): `flatmates.join.declined`, with no "withdraw" hint;
     - **409 `flatmates_full`**: `flatmates.join.full`;
     - **429**: `flatmates.join.rateLimited`;
     - anything else: `ErrorState`.
@@ -138,6 +139,7 @@ use the `/me/listings` page frame and its card tokens.
   | `flatmates.join.invalid` | "הקישור לא בתוקף. בקשו מבעל/ת הדירה קישור חדש." |
   | `flatmates.join.own` | "זו המודעה שלך" |
   | `flatmates.join.applied` | "הגשת מועמדות לחדר הזה, ולכן אי אפשר להצטרף כשותף/ה" |
+  | `flatmates.join.declined` | "המועמדות שלך לחדר הזה לא נבחרה, ולכן אי אפשר להצטרף לדירה כשותף/ה" |
   | `flatmates.join.full` | "בדירה כבר 7 שותפים" |
   | `flatmates.join.rateLimited` | "יותר מדי ניסיונות. נסו שוב בעוד שעה." |
   | `listings.mine.flatmates` | "שותפים בדירה ({{count}})" |
@@ -183,7 +185,7 @@ reads left to right inside RTL). Buttons wrap under the input below 400 px. Mobi
     the join with `{token: "T"}` in the body, and navigates to `/chat`, where `flatmates.join.done` shows;
   - `member: true` shows "כבר הצטרפת";
   - each error shows its text from the call that returns it: from the preview, 404, 409 `own_listing` and 429;
-    from the join, those three plus 409 `already_applied` and `flatmates_full`;
+    from the join, those three plus 409 `already_applied`, `declined` and `flatmates_full`;
   - the stored token is cleared after a join, `member: true`, a 404 or a 409, and kept after a 429.
 
   — `web/src/features/flatmates/__tests__/JoinFlatPage.test.tsx::ac3_states`
@@ -230,7 +232,12 @@ never appears in a URL or a log". So the link carries the token in the fragment 
 `flatmates/join` is a public route that stashes the token in `sessionStorage` (memory as the fallback) and
 strips the hash before any login redirect, and the login `next` is a bare `/flatmates/join`. Scope and AC1,
 AC3, AC4 and AC6 are updated to match. Also from `0008d` as built: the preview has no `full` / `applied`
-flags, so those two errors come from the join only, and a declined applicant may join for now (Gilad's call).
+flags, so those two errors come from the join only.
+
+**Amendment A2 (Gilad, 2026-11-11).** A seeker whose application to the room was declined cannot join its
+flat. `0008d` answers the join with 409 `declined`, shown as `flatmates.join.declined` (in the tone of
+`applications.status.declined`, "לא נבחרה"), with no "withdraw" hint. `already_applied` stays the open-application
+case. Scope, the key table and AC3 are updated.
 
 ## Digest (filled by orchestrator after verification)
     Spec 0008e - Flatmates web: invite & join   (verified, Slice 8; depends on 0008d, 0008b, 0007f; split by the verifier)
@@ -243,5 +250,7 @@ flags, so those two errors come from the join only, and a declined applicant may
     Amended (A1, from 0008d's security review): the link is /flatmates/join#<token>. The token lives only in
              the URL fragment, sessionStorage and POST bodies - never in a path, query, request URL or log;
              the join route is public and strips the hash before the login redirect.
+    Amended (A2, Gilad): a seeker whose application to the room was declined cannot join; the join's new
+             409 `declined` shows its own copy, with no "withdraw" hint.
     Reviewers: code, qa, security, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008e-flatmates-web.md - PRODUCT.md "Flatmates" - no artboard
