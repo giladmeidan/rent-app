@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import { Skeleton } from '../../components/Skeleton';
 import { ChatNavLink } from '../chat/ChatNavLink';
+import { LikesNavLink } from '../likes/LikesNavLink';
 import { useLogout } from './useLogout';
 import { useMe } from './useMe';
 
@@ -61,6 +62,7 @@ export function AuthMenu() {
           >
             {t('header.myApplications')}
           </Link>
+          <LikesNavLink />
           <Link
             to="/me/profile"
             className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}

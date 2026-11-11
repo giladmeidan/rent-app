@@ -1,11 +1,19 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import { failMap, lastProps, resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
-import { deferred, json, mockApi, noa, renderRoutes } from '../../auth/__tests__/harness';
+import {
+  currentPath,
+  deferred,
+  empty,
+  json,
+  mockApi,
+  noa,
+  renderRoutes,
+} from '../../auth/__tests__/harness';
 import { formatDate } from '../format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
@@ -517,5 +525,170 @@ describe('ListingPage', () => {
       'התקציב שלך (עד 7,500 ₪) מתאים למחיר',
       'אורח החיים שלך קרוב לזה שבדירה (תשובות זהות: 2 מתוך 3)',
     ]);
+  });
+
+  describe('likes (0008c)', () => {
+    const likeRoom = (like: { liked_by_me: boolean; liked_me: boolean } | null, over = {}) =>
+      listingDetail({ listing_type: 'room', like, room_fit: true, ...over });
+    const seekerApi = (
+      room: ReturnType<typeof likeRoom>,
+      extra: Parameters<typeof mockApi>[0] = {},
+    ) =>
+      mockApi({
+        'GET /me': [json(noa)],
+        'GET /me/applications': [json([])],
+        'GET /me/profile': [json(profile({ gender: 'woman' }))],
+        [`GET /listings/${room.id}`]: [json(room)],
+        ...extra,
+      });
+    const likeButton = () => screen.findByRole('button', { name: he.likes.like });
+
+    it('ac2_like_back_mutual', async () => {
+      const room = likeRoom({ liked_by_me: false, liked_me: true });
+      const api = seekerApi(room, {
+        [`PUT /listings/${room.id}/like`]: [json({ liked: true, application_id: 'X' })],
+      });
+      render(room.id);
+      const button = await likeButton();
+      expect(screen.getByText(he.likes.likedYouLine)).toBeVisible();
+      const apply = await screen.findByRole('button', { name: he.applications.apply });
+      expect(button.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      fireEvent.click(button);
+      const banner = (await screen.findByText(he.likes.mutual)).closest<HTMLElement>(
+        '[role="status"]',
+      ) as HTMLElement;
+      expect(within(banner).getByText(he.likes.mutual)).toBeVisible();
+      expect(within(banner).getByRole('link', { name: he.likes.toChat })).toHaveAttribute(
+        'href',
+        '/chat/X',
+      );
+      expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
+      // The applications refetch (the new shortlisted one); the banner outlives the caches.
+      await vi.waitFor(() => {
+        expect(api.calls('GET /me/applications').length).toBeGreaterThanOrEqual(2);
+      });
+      expect(screen.getByText(he.likes.mutual)).toBeVisible();
+      expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
+    });
+
+    it('ac3_like_toggle_and_absent', async () => {
+      const room = likeRoom({ liked_by_me: false, liked_me: false });
+      const route = `PUT /listings/${room.id}/like`;
+      const api = seekerApi(room, {
+        [route]: [json({ liked: true, application_id: null })],
+        [`DELETE /listings/${room.id}/like`]: [empty()],
+      });
+      render(room.id);
+      const button = await likeButton();
+      expect(button).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByText(he.likes.likedYouLine)).toBeNull();
+      fireEvent.click(button);
+      const pressed = await screen.findByRole('button', { name: he.likes.unlikeLabel });
+      expect(pressed).toHaveAttribute('aria-pressed', 'true');
+      expect(pressed).toHaveTextContent(he.likes.liked);
+      await vi.waitFor(() => {
+        expect(pressed).toBeEnabled();
+      });
+      fireEvent.click(pressed);
+      expect(await screen.findByRole('button', { name: he.likes.like })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+      expect(api.calls(route)).toHaveLength(1);
+      expect(api.calls(`DELETE /listings/${room.id}/like`)).toHaveLength(1);
+      expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
+
+      // No control: anonymous / an apartment / an open application (`like: null`), or a misfit.
+      const absents = [
+        [likeRoom(null), he.applications.apply],
+        [
+          likeRoom({ liked_by_me: false, liked_me: true }, { room_fit: false }),
+          he.rooms.apply.misfit,
+        ],
+      ] as const;
+      for (const [absent, settled] of absents) {
+        cleanup();
+        vi.unstubAllGlobals();
+        seekerApi(absent);
+        render(absent.id);
+        await screen.findByRole('heading', { level: 1 });
+        // The apply section has settled, so a like control would be on the page by now.
+        expect(await screen.findByText(settled)).toBeVisible();
+        expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
+        expect(screen.queryByText(he.likes.likedYouLine)).toBeNull();
+      }
+    });
+
+    it('ac4_like_errors', async () => {
+      const cases: {
+        reply: () => Response;
+        check: (id: string, api: ReturnType<typeof mockApi>) => Promise<void>;
+      }[] = [
+        ...['room_section_required', 'seeker_profile_required'].map((code) => ({
+          reply: () => json({ detail: code }, 409),
+          check: async (id: string) => {
+            expect(await screen.findByText(he.likes.errors.roomSection)).toBeVisible();
+            expect(screen.getByRole('link', { name: he.likes.toProfile })).toHaveAttribute(
+              'href',
+              `/me/profile?section=room&next=${encodeURIComponent(`/listings/${id}`)}`,
+            );
+          },
+        })),
+        {
+          reply: () => json({ detail: 'room_gender_mismatch' }, 409),
+          check: async () => {
+            expect(await screen.findByText(he.rooms.apply.misfit)).toBeVisible();
+            expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
+            expect(screen.queryByRole('alert')).toBeNull();
+          },
+        },
+        {
+          reply: () => json({ detail: 'already_applied' }, 409),
+          check: async (_id, api) => {
+            await vi.waitFor(() => {
+              expect(api.calls('GET /me/applications').length).toBeGreaterThanOrEqual(2);
+            });
+            expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
+          },
+        },
+        {
+          reply: () => json({ detail: 'not_found' }, 404),
+          check: async () => {
+            expect(await screen.findByText(he.likes.errors.gone)).toBeVisible();
+          },
+        },
+        {
+          reply: () => json({ detail: 'rate_limited' }, 429),
+          check: async () => {
+            expect(await screen.findByText(he.likes.errors.rateLimited)).toBeVisible();
+          },
+        },
+        {
+          reply: () => json({ detail: 'unauthenticated' }, 401),
+          check: async (id) => {
+            await vi.waitFor(() => {
+              expect(currentPath()).toBe(`/login?next=${encodeURIComponent(`/listings/${id}`)}`);
+            });
+          },
+        },
+      ];
+      for (const { reply, check } of cases) {
+        const room = likeRoom({ liked_by_me: false, liked_me: false });
+        const api = seekerApi(room, { [`PUT /listings/${room.id}/like`]: [reply] });
+        render(room.id);
+        const button = await likeButton();
+        // The applications list has loaded (its query is enabled once `/me` answers).
+        await screen.findByRole('button', { name: he.applications.apply });
+        fireEvent.click(button);
+        await check(room.id, api);
+        // A 401 forgets the session, which resets the listing queries (as `useApply`'s does).
+        if (!currentPath()?.startsWith('/login')) {
+          expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
+        }
+        cleanup();
+        vi.unstubAllGlobals();
+      }
+    });
   });
 });

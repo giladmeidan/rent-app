@@ -5,7 +5,7 @@ import { AppRoutes } from '../../../app/routes';
 import he from '../../../locales/he.json';
 import { currentPath, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
 import { gushDan, owner, seeker } from '../../listings/__tests__/fixtures';
-import { page, publicListing } from './fixtures';
+import { listingDetail, page } from './fixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -43,7 +43,7 @@ describe('routes', () => {
     vi.unstubAllGlobals();
 
     // /listings/{uuid}, logged out: the public listing page asks for that listing.
-    const item = publicListing();
+    const item = listingDetail();
     let api = mockApi({ 'GET /me': [loggedOut()], [`GET /listings/${item.id}`]: [json(item)] });
     view = renderRoutes(`/listings/${item.id}`, <AppRoutes />);
     await vi.waitFor(() => {
