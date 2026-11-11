@@ -88,8 +88,11 @@ Last updated:
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
    number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
    photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-7. **Next slice**: Slice 5 (Chat — opens on owner shortlist) is not specced yet; spec and verify it (can run in
-   another session while 0004d builds).
+7. **Slice 5 (Chat)** is specced and verified (bd0d207, local main — push before a worktree branches from
+   `origin/main`). Build order: `0005a` chat API (ready now: depends only on merged 0004c; API spec, can run
+   beside 0004d) → `0005c` SSE event stream (from 0005a's branch once its PR is open) → `0005b` chat web (after
+   0005a, 0005c, 0004b, 0004d; web, needs 5173). Coders for 0005a and 0005c on Opus/high (migration + backfill;
+   async concurrency). Gilad's Slice 5 answers are in PRODUCT.md "Chat"; no open questions.
 8. Housekeeping: archive finished build sessions (0001b … 0004c) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
 
@@ -136,6 +139,10 @@ Last updated:
 - Tooling `uv` / `pnpm` (Node 22), TypeScript 5.9.
 - Spec branches are updated by merging `origin/main` once pushed (force push is denied); append-only
   `FOLLOWUPS.md` conflicts keep both sides.
+- Chat (Slice 5, Gilad 2026-11-11): realtime is **push** — one SSE stream per tab over Redis pub/sub
+  (`0005c`), chosen for very large user counts over polling and WebSockets; polling only as a fallback while a
+  stream is down. A chat is keyed by its application id; sending only while `shortlisted`, thread stays readable;
+  no chat notifications in Slice 5.
 - Gilad merges PRs or tells the orchestrator to; the orchestrator merges with `gh pr merge N --merge
   --match-head-commit <full sha>` only after `api`, `web`, `e2e` are green on that head.
 
@@ -181,6 +188,9 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-11 — Slice 5 planning session: specced 0005a (chat API), 0005c (SSE events API), 0005b (chat web), one
+  verifier round each, all findings applied, verified; Gilad answered Q2–Q5 (a) and delegated Q1 (chose SSE);
+  committed bd0d207 (not pushed). No builds.
 - 2026-11-11 (early) — Gilad's session: 0002f built and merged (PR #11); 0004a (PR #13) and 0004c (PR #14) built
   and merged; Gilad answered 0004c Q-A/Q-B; 0003d merged (PR #15); 0004b open as PR #16; 0004d prepared.
 - 2026-11-10 (after midnight) — Slice 4 specced as four specs (0004a–d), verified, Gilad accepted Q1–Q6;
