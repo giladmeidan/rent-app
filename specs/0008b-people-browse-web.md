@@ -1,7 +1,7 @@
 ---
 id: 0008b
 title: A room lister opens "מחפשים חדר" from "my listings", pages through the people who want a room there, likes them, and lands in the chat when a like turns mutual; mutual matches are tagged in the applicant inbox
-status: in-progress
+status: done
 depends_on: [0008a, 0007c, 0007f]   # 0008a: GET /listings/{id}/people, the lister like PUT/DELETE, MyListingOut.liked_me_count, ApplicantOut.source (and the type-only fixture edits); 0007c: RoomDetails and applicants.room.line; 0007f: features/listings/cardTitle.ts
 reviewers: [code, qa, ux]   # ux: a new screen with no artboard; qa: like / unlike / mutual / error states, paging; no security: shows only what 0008a returns (its security review covers the fields and the fact-free reasons); no perf: one paged query
 estimate: 1 coder run   # coder Sonnet/medium is enough (no auth, money or data); Opus if the run overflows
@@ -229,3 +229,30 @@ was moved into `0008a`. The second round is waived (one verifier round, Gilad).
     Risks: no artboard - mitigation: reuses the inbox card's anatomy and components; UX review against Inbox.dc.html.
     Reviewers: code, qa, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008b-people-browse-web.md - PRODUCT.md "People & likes" - design/screens-v1/Inbox.dc.html
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008b - People browse web (lister)   PR OPEN (not merged), code head 53ae862
+    Shipped: a room lister opens "מחפשים חדר" from a live room's card in "המודעות שלי" (badge "N אהבו את החדר"),
+             pages through person cards (liked-me first, then by match; fact-free chips), likes / unlikes, and gets a
+             focused "זו התאמה הדדית" banner with a link to the chat; the inbox tags mutual applicants "התאמה הדדית".
+    Demo: make dev -> seeker fills the room section with people_visible on and likes the room (API) -> owner opens
+          המודעות שלי -> "מחפשים חדר" -> "אהבתי" on the seeker's card -> banner -> "לצ'אט".
+    Tests: +9 component/unit (PeoplePage ac1-ac6, reasons ac1, MyListings ac7, Applicants ac8; RequireOwner ac9
+           path added), +1 e2e (people.spec ac10); web 272, api 457. make lint, make test, make i18n-check,
+           make build-web green; make e2e local 11/11 on 53ae862 (3 shards), rerun on the same DB 11/11.
+           CI: api + web on the PR head (see the PR); e2e local per Speed rule 7.
+    Findings: 1 blocker fixed (code+qa+ux: an already_applied / 404 like or unlike error vanished with the card,
+              because the refetch drops that person; it is now a page-level alert with the applicants link);
+              2 ux majors fixed (the mutual banner was off-screen and unannounced, so it now takes focus and scrolls
+              into view; focus fell to <body> on every like, so the button is now aria-disabled);
+              6 minors fixed (move-in clamp, toggle name per WCAG 2.5.3, AC1 asserts every card, 4 copy fixes);
+              5 minors logged to FOLLOWUPS; nits dropped.
+    Spec changes (orchestrator-approved): the spec's "reuse match.owner.short.*" is replaced for smoking, pets,
+             contract and parking by 8 neutral people.short.* keys ("עישון: מתאים / לא מתאים", ...), because the
+             base copy states facts ("לא מעשנים" could be false). The UI line "like errors show inline on the card"
+             now holds only for not-live / 429 / other; already_applied and 404 show above the list.
+             make e2e now runs 3 shards (E2E_SHARDS), each flushing rl:*, because one run passed the OTP limit of
+             10 per IP (shortcut, in FOLLOWUPS).
+    Changed in PRODUCT.md: nothing.
+    Next: 0008e (flatmates web) branches from this PR.

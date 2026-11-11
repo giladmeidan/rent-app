@@ -120,6 +120,13 @@ export async function postListing(
   return id;
 }
 
+/** The signed-in seeker (the page's session) likes the room `listingId` through the API (0008a;
+ * the seeker's own UI is 0008c). Needs a profile with a room section. */
+export async function likeRoom(page: Page, listingId: string): Promise<void> {
+  const liked = await page.request.put(`${API}/listings/${listingId}/like`);
+  expect(liked.status()).toBe(200);
+}
+
 /** Saves a housing profile (spec 0006a `P`: budget 7500, a couple, no pets, non-smoker, 24 months,
  * one parking spot, the first area) through the API with the page's (seeker) session, so the
  * seeker can apply. `overrides` replace or add fields of the body (e.g. `{ gender: 'man' }`, or
