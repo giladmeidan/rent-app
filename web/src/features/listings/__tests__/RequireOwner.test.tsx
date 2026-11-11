@@ -13,6 +13,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { ApplicantsPage } from '../../applicants/ApplicantsPage';
 import { RequireOwner } from '../../auth/RequireOwner';
+import { FlatmatesPage } from '../../flatmates/FlatmatesPage';
 import { PeoplePage } from '../../people/PeoplePage';
 import { EditListingPage } from '../EditListingPage';
 import { MyListingsPage } from '../MyListingsPage';
@@ -27,13 +28,15 @@ const A = listing({ listing_type: 'room' });
 const EDIT = `/me/listings/${A.id}/edit` as const;
 const APPLICANTS = `/me/listings/${A.id}/applicants` as const;
 const PEOPLE = `/me/listings/${A.id}/people` as const;
-const PATHS = ['/listings/new', '/me/listings', EDIT, APPLICANTS, PEOPLE] as const;
+const FLATMATES = `/me/listings/${A.id}/flatmates` as const;
+const PATHS = ['/listings/new', '/me/listings', EDIT, APPLICANTS, PEOPLE, FLATMATES] as const;
 const TITLES = {
   '/listings/new': he.listings.new.title,
   '/me/listings': he.listings.mine.title,
   [EDIT]: he.listings.edit.title,
   [APPLICANTS]: he.applicants.title,
   [PEOPLE]: he.people.title,
+  [FLATMATES]: he.flatmates.title,
 };
 
 const routes = (
@@ -46,6 +49,7 @@ const routes = (
       <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
       <Route path="/me/listings/:id/applicants" element={<ApplicantsPage />} />
       <Route path="/me/listings/:id/people" element={<PeoplePage />} />
+      <Route path="/me/listings/:id/flatmates" element={<FlatmatesPage />} />
     </Route>
   </Routes>
 );
@@ -60,6 +64,7 @@ describe('RequireOwner', () => {
         'GET /me/listings': [json([A])],
         [`GET /listings/${A.id}/applications`]: [json([])],
         [`GET /listings/${A.id}/people`]: [json({ items: [], total: 0 })],
+        [`GET /listings/${A.id}/flatmates`]: [json([])],
       });
       const view = renderRoutes(path, routes);
       expect(await screen.findByRole('heading', { level: 1, name: TITLES[path] })).toBeVisible();
@@ -83,6 +88,7 @@ describe('RequireOwner', () => {
           'GET /me/listings': [json([A])],
           [`GET /listings/${A.id}/applications`]: [json([])],
           [`GET /listings/${A.id}/people`]: [json({ items: [], total: 0 })],
+          [`GET /listings/${A.id}/flatmates`]: [json([])],
         });
         const view = renderRoutes(path, routes);
         await vi.waitFor(() => {
@@ -114,6 +120,7 @@ describe('RequireOwner', () => {
         'GET /me/listings': [json([A])],
         [`GET /listings/${A.id}/applications`]: [json([])],
         [`GET /listings/${A.id}/people`]: [json({ items: [], total: 0 })],
+        [`GET /listings/${A.id}/flatmates`]: [json([])],
       });
       const view = renderRoutes(path, routes);
       const retry = await screen.findByRole('button', { name: he.common.retry });
