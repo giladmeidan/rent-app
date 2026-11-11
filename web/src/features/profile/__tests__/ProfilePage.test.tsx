@@ -793,6 +793,7 @@ describe('ProfilePage', () => {
     expect(aboutMe()).toHaveAttribute('maxlength', '300');
     expect(aboutMe()).toHaveAttribute('rows', '4');
     expect(aboutMe().tagName).toBe('TEXTAREA');
+    expect(switchOn()).toHaveAccessibleDescription(roomSection.peopleVisibleHint);
     expect(aboutMe()).toHaveAccessibleDescription(
       i18n.t('listings.fields.charsLeft', { count: 300 }),
     );

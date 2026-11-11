@@ -165,3 +165,9 @@ Minor findings deferred by the coder. Format: `- [ ] NNNN · file:line · what �
 - [ ] 0008a · api/tests/test_people.py · the lister-side like rate limit has no test (the 31st lister PUT within an hour → 429; a `listing_not_live` or a foreign 404 is not counted) · review round 1 qa minor
 - [ ] 0008a · api/app/services/people.py `list_people` (`match_columns`) · pending decision (Gilad, Speed rule 9, asked): the person card's score reads the listing's live household, contract, parking, smoking and pets, so an owner editing a room learns those hidden fields for every candidate · review round 1 security
 - [ ] 0008a · api/app/routers/people.py `GET /listings/{id}/people` · pending decision (Gilad, Speed rule 9, asked): people browse has no rate limit · review round 1 security
+- [ ] 0008c · web/src/features/likes/MyLikesPage.tsx · a 404 or `already_applied` on a like makes the card vanish with no message; lift the problem into page state as `mutualId` is, and use the unused `likes.errors.alreadyApplied` · review round 1 minor
+- [ ] 0008c · web/src/features/likes/MyLikesPage.tsx · the cards lack search's `MatchBadge` / `MatchChips` / age chip (`ResultsList.tsx:74-83`) · review round 1 ux minor
+- [ ] 0008c · web/src/features/likes/MyLikesPage.tsx · after an unlike the card leaves and focus falls to `<body>`; focus the section `h2` · review round 1 ux minor
+- [ ] 0008c · api/app/services/search.py `liked_rooms` · `GET /me/likes` is unbounded; cap or page it in the API and the web · review round 1 perf minor
+- [ ] 0008c · web/e2e/likes.spec.ts · `israelDay` is copied a fourth time; export it from `helpers.ts` and import it in the e2e specs · review round 1 code minor
+- [ ] 0008c · web/src/features/search/ResultsList.tsx · heart (like) on room cards in /search and the map pins; the spec put it Out (liking is from the listing page and `/me/likes` only)

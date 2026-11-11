@@ -269,10 +269,12 @@ describe('AuthMenu', () => {
       [LIST]: [json([])],
       'GET /me/likes': [json({ liked_me: [], mine: [room()] })],
     });
-    view = renderRoutes('/', menu);
+    const client = testQueryClient();
+    view = renderRoutes('/', menu, client);
     const plain = await screen.findByRole('link', { name: he.header.likes });
+    // The list has loaded (one room of `mine`, none of `liked_me`) before "no badge" is asserted.
     await vi.waitFor(() => {
-      expect(plain).toHaveAttribute('href', '/me/likes');
+      expect(client.getQueryState(['me', 'likes'])?.status).toBe('success');
     });
     expect(within(plain).queryByText(/\d/)).toBeNull();
     view.unmount();

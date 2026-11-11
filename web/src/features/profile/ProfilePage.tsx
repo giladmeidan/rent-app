@@ -431,9 +431,12 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                 label={t('profile.room.peopleVisible')}
                 checked={form.people_visible}
                 onChange={(people_visible) => change({ people_visible })}
+                describedBy={`${id}-people-hint`}
               />
             </div>
-            <p className="text-start text-sm text-muted">{t('profile.room.peopleVisibleHint')}</p>
+            <p id={`${id}-people-hint`} className="text-start text-sm text-muted">
+              {t('profile.room.peopleVisibleHint')}
+            </p>
 
             <div className="flex flex-col gap-[6px]">
               <label htmlFor={fieldId('about_me')} className={label}>

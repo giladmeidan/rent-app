@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router';
 import { ErrorState } from '../../components/ErrorState';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
+import { useMe } from '../auth/useMe';
 import { ApplySection } from '../applications/ApplySection';
 import { LikeRoomButton } from '../likes/LikeRoomButton';
 import { MutualBanner } from '../likes/MutualBanner';
@@ -30,6 +31,8 @@ export function ListingPage() {
   const [mapFailed, setMapFailed] = useState(false);
   // Set by a like that made the pair mutual; it replaces the control and outlives the cache writes.
   const [mutualId, setMutualId] = useState<string | null>(null);
+  // The banner is a seeker's: a logout (or another account) never inherits it.
+  const isSeeker = useMe().data?.role === 'seeker';
 
   let body;
   if (listing.isPending) {
@@ -148,12 +151,12 @@ export function ListingPage() {
             profile to fill one. */}
         {l.match !== null && <MatchCard match={l.match} listing={l} />}
 
-        {mutualId !== null ? (
+        {mutualId !== null && isSeeker ? (
           <MutualBanner applicationId={mutualId} />
         ) : (
           l.like !== null &&
           l.room_fit !== false && (
-            <LikeRoomButton listingId={l.id} like={l.like} onMutual={setMutualId} />
+            <LikeRoomButton listingId={l.id} like={l.like} onMutual={setMutualId} showHint />
           )
         )}
 

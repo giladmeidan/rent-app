@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -7,6 +8,11 @@ const focusRing =
 /** "A mutual match": the chat of the shortlisted application the like created. */
 export function MutualBanner({ applicationId }: { applicationId: string }) {
   const { t } = useTranslation();
+  const chat = useRef<HTMLAnchorElement>(null);
+  // The like button that made the match has just unmounted: focus moves to the way forward.
+  useEffect(() => {
+    chat.current?.focus();
+  }, []);
   return (
     <div
       role="status"
@@ -14,6 +20,7 @@ export function MutualBanner({ applicationId }: { applicationId: string }) {
     >
       <p className="text-start text-[15px] font-bold text-accent-text">{t('likes.mutual')}</p>
       <Link
+        ref={chat}
         to={`/chat/${applicationId}`}
         className={`inline-flex min-h-[44px] items-center rounded-full bg-accent px-4 text-[15px] font-bold text-white ${focusRing}`}
       >

@@ -57,6 +57,7 @@ function useLikeFailure(listingId: string) {
           ['listing', listingId],
           (old) => old && { ...old, room_fit: false },
         );
+        void queryClient.invalidateQueries({ queryKey: MY_LIKES_KEY, exact: true });
       } else if (error.detail === 'already_applied') {
         setCachedLike(queryClient, listingId, () => null);
         void queryClient.invalidateQueries({ queryKey: MY_APPLICATIONS_KEY, exact: true });
@@ -78,7 +79,11 @@ export function useLikeRoom(listingId: string) {
     mutationFn: () => likeRoom(listingId),
     onSuccess: (result) => {
       if (result.application_id !== null) {
-        setCachedLike(queryClient, listingId, () => null);
+        // The mutual like is an application now: `like` ends and the count goes up, as an apply's.
+        queryClient.setQueryData<ListingDetail>(
+          ['listing', listingId],
+          (old) => old && { ...old, like: null, applicant_count: old.applicant_count + 1 },
+        );
         void queryClient.invalidateQueries({ queryKey: MY_APPLICATIONS_KEY, exact: true });
         void queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY, exact: true });
       } else {
