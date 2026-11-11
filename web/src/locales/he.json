@@ -378,7 +378,25 @@
     },
     "statusChanged": "{{name}}: {{status}}",
     "link": "מועמדויות ({{count}})",
-    "newBadge": "{{count}} חדשות"
+    "newBadge": "{{count}} חדשות",
+    "sort": {
+      "label": "מיון",
+      "match": "לפי התאמה",
+      "newest": "לפי תאריך"
+    },
+    "summary": "{{household}} · כניסה {{date}}",
+    "flexible": "(גמיש)",
+    "why": "למה ההתאמה?",
+    "profile": {
+      "household": "משק בית",
+      "moveIn": "תאריך כניסה",
+      "contract": "משך חוזה רצוי",
+      "pets": "חיות מחמד",
+      "smoker": "מעשנים",
+      "parking": "חניה",
+      "yes": "כן",
+      "no": "לא"
+    }
   },
   "chat": {
     "withName": "צ'אט עם {{name}}",
@@ -509,6 +527,82 @@
         "agree": "חיות מחמד",
         "agreeNoPets": "בלי חיות — מתאים",
         "differ": "ללא חיות מחמד"
+      }
+    },
+    "noScore": "אין ציון",
+    "owner": {
+      "budget": {
+        "agree": "התקציב מתאים למחיר",
+        "differ": "המחיר מעל התקציב שלהם"
+      },
+      "move_in": {
+        "agree": "תאריך הכניסה מתאים ({{date}})",
+        "differ": "מבקשים כניסה ב־{{date}}"
+      },
+      "area": {
+        "agree": "מחפשים באזור הזה",
+        "differ": "מחפשים באזור אחר"
+      },
+      "household": {
+        "agree": "{{household}} — כפי שביקשת",
+        "differ": "{{household}} — לא ברשימה שלך"
+      },
+      "contract": {
+        "agree": "מחפשים חוזה ל{{months}}",
+        "differ": "מחפשים חוזה ל{{months}} בלבד"
+      },
+      "parking": {
+        "agree": "צריכים {{parking}} — יש",
+        "agreeNone": "לא צריכים חניה",
+        "differ": "ביקשו {{parking}}, בדירה יש {{spots}}",
+        "differNone": "ביקשו {{parking}}, בדירה אין חניה"
+      },
+      "smoking": {
+        "agree": "לא מעשנים",
+        "agreeSmoker": "מעשנים — מותר אצלך",
+        "differ": "מעשנים"
+      },
+      "pets": {
+        "agree": "בלי חיות מחמד",
+        "agreePet": "עם חיית מחמד — מותר אצלך",
+        "differ": "עם חיית מחמד"
+      },
+      "short": {
+        "budget": {
+          "agree": "בתקציב",
+          "differ": "מעל התקציב"
+        },
+        "move_in": {
+          "agree": "כניסה מתאימה",
+          "differ": "כניסה {{date}}"
+        },
+        "area": {
+          "agree": "באזור",
+          "differ": "אזור אחר"
+        },
+        "household": {
+          "agree": "משק בית מתאים",
+          "differ": "משק בית אחר"
+        },
+        "contract": {
+          "agreeLong": "חוזה ארוך טווח",
+          "agree": "חוזה מתאים",
+          "differ": "חוזה קצר"
+        },
+        "parking": {
+          "agree": "חניה",
+          "differ": "חסרה חניה"
+        },
+        "smoking": {
+          "agree": "לא מעשנים",
+          "agreeSmoker": "מעשנים, מותר",
+          "differ": "מעשנים"
+        },
+        "pets": {
+          "agree": "בלי חיות",
+          "agreePet": "חיית מחמד, מותר",
+          "differ": "עם חיית מחמד"
+        }
       }
     }
   }

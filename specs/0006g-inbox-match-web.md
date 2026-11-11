@@ -1,7 +1,7 @@
 ---
 id: 0006g
 title: An owner's applicant inbox is sorted by match, each card shows the score, a household / move-in line, two chips and a "למה ההתאמה?" disclosure with the reasons and the applicant's housing details
-status: in-progress
+status: in-review
 depends_on: [0006c, 0006f, 0005b]   # 0006c: match + profile per applicant; 0006f: features/match (badge, chips, reasons); 0005b: also edits ApplicantCard (chat link) and renames the e2e inbox test
 reviewers: [code, qa, ux]   # ux: the inbox card vs Inbox.dc.html / InboxDesktop.dc.html; qa: sort toggle with filters and in-place updates
 estimate: 1 coder run
@@ -265,3 +265,20 @@ Verdict: reject as written (checklist 1 and 5 fail). Every fix below is concrete
     Risks: e2e declined-card button check breaks - mitigation: extends 0005b's inbox test, checks action buttons only.
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0006g-inbox-match-web.md - PRODUCT.md "Matching" - design/screens-v1/Inbox.dc.html, InboxDesktop.dc.html
+
+    Spec 0006g - Inbox match web: scores, summary, chips, "למה ההתאמה?"   PR OPEN (not merged)
+    Shipped: an owner's applicant inbox is sorted by match, with a "לפי התאמה / לפי תאריך" toggle that runs
+             client-side. Each card shows "התאמה N%" or "אין ציון", "זוג · כניסה 1.1.27 (גמיש)", two owner-voice
+             chips and a "למה ההתאמה?" disclosure with the reasons and six housing rows (never budget or areas).
+    Demo: make dev -> a seeker fills /me/profile and applies -> the owner opens /me/listings/:id/applicants: badge,
+          summary, chips -> press "למה ההתאמה?" -> press "לפי תאריך".
+    Tests: +37 unit (AC1-AC7; AC6 = 27 owner-copy rows), +0 integration, AC8 extends 1 e2e test (no new signup)
+    CI: api + web on the push; e2e local while CI e2e is off: 10 of 10 passed, 34.5 s (the first run hit a cold-start
+        map flake that 0006g does not touch)
+    Findings: 0 blockers, 0 majors; 1 minor fixed (chevron), 4 minors to FOLLOWUPS, 1 no action, 5 nits dropped
+    Decisions I need from you (copy, non-blocking):
+             1. The parking chip says "חניה" when 2 spots are needed and the listing has 1, which scores as an agree.
+                Recommend "חסרה חניה" for that case and "בלי חניה" when none are needed.
+             2. A 36-month seeker's line reads "מחפשים חוזה ל3 שנים ומעלה". Recommend "ל־3".
+    Changed in PRODUCT.md: nothing
+    Next: Slice 6 is complete after this; FOLLOWUPS 0006g has the 390 px badge-wrap check.

@@ -10,6 +10,7 @@ const OWNER_NAME = '\u05d3\u05e0\u05d4';
 // i18next's `{{count}}` / `{{name}}` interpolation, for the copy the page renders.
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 const withName = (text: string, name: string) => text.replace('{{name}}', name);
+const withScore = (text: string, score: number) => text.replace('{{score}}', String(score));
 
 // Extends 0004d's inbox flow with the chat (0005b AC12): no new signup (the e2e OTP budget).
 test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
@@ -44,6 +45,18 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const applicant = page.getByRole('article', { name: SEEKER_NAME });
   await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
   await expect(applicant.getByText(MESSAGE)).toBeVisible();
+
+  // The match (0006g AC8): the listing (7,200 ₪, entry in 30 days, one parking spot) against the
+  // seeker's profile `P` (budget 7,500, the same day and area, one spot) scores 100; the
+  // disclosure lists the reasons, budget first.
+  await expect(applicant.getByTestId('match-badge')).toHaveText(withScore(he.match.badge, 100));
+  const why = applicant.getByRole('button', { name: he.applicants.why });
+  await expect(why).toHaveAttribute('aria-expanded', 'false');
+  await why.click();
+  await expect(why).toHaveAttribute('aria-expanded', 'true');
+  const panel = page.locator(`[id="${(await why.getAttribute('aria-controls')) ?? ''}"]`);
+  await expect(panel.getByRole('list').getByRole('listitem').first()).toBeVisible();
+  await expect(panel.getByText(he.match.owner.budget.agree, { exact: true })).toBeVisible();
 
   // Shortlist.
   await applicant.getByRole('button', { name: he.applicants.actions.shortlist }).click();
@@ -90,11 +103,14 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   await expect(page).toHaveURL(`/me/listings/${id}/applicants`);
   await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
 
-  // Decline, accepting the confirmation: no actions remain.
+  // Decline, accepting the confirmation: no actions remain (the disclosure button stays).
   page.once('dialog', (dialog) => void dialog.accept());
   await applicant.getByRole('button', { name: he.applicants.actions.decline }).click();
   await expect(applicant.getByText(he.applicants.status.declined, { exact: true })).toBeVisible();
-  await expect(applicant.getByRole('button')).toHaveCount(0);
+  for (const action of Object.values(he.applicants.actions)) {
+    await expect(applicant.getByRole('button', { name: action, exact: true })).toHaveCount(0);
+  }
+  await expect(applicant.getByRole('button', { name: he.applicants.why })).toBeVisible();
   await expect(applicant.getByRole('link')).toHaveCount(0);
 
   // The seeker's thread, after a reload: still readable, closed for sending.

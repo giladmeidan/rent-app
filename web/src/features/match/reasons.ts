@@ -6,9 +6,10 @@
 // Keyed by criterion, so the owner's voice (`0006g`: `ownerShort` / `ownerReason`) sits beside it.
 import type { TFunction } from 'i18next';
 
+import type { ApplicantProfileOut } from '../applicants/api';
 import type { ListingPublic } from '../listings/api';
 import { formatDate, formatIls, todayInIsrael } from '../listings/format';
-import type { Household, SeekerProfileOut } from '../profile/api';
+import type { ContractMonths, Household, SeekerProfileOut } from '../profile/api';
 import type { Criterion, ReasonKind } from './types';
 
 type Line = (listing: ListingPublic, profile: SeekerProfileOut, t: TFunction) => string;
@@ -27,7 +28,8 @@ function entersLater(listing: ListingPublic, profile: SeekerProfileOut): boolean
   return later(listing.available_from, today) > later(profile.move_in_date, today);
 }
 
-function householdName(household: Household, t: TFunction): string {
+/** "זוג", as the profile form says it. */
+export function householdName(household: Household, t: TFunction): string {
   return {
     single: t('profile.household.single'),
     couple: t('profile.household.couple'),
@@ -181,4 +183,149 @@ export function seekerShort(
   t: TFunction,
 ): string | null {
   return SEEKER_SHORT[criterion][kind](listing, profile, t);
+}
+
+// The owner's voice (0006g): about the applicant, from their housing summary (no budget or areas
+// are ever sent, so those lines are words only) and, for parking, the listing's spots.
+
+type OwnerLine = (profile: ApplicantProfileOut, spots: number, t: TFunction) => string;
+type OwnerShort = (profile: ApplicantProfileOut, t: TFunction) => string;
+
+/** "שנתיים", as the profile form says it. */
+export function contractName(months: ContractMonths, t: TFunction): string {
+  return {
+    6: t('profile.contract.6'),
+    12: t('profile.contract.12'),
+    24: t('profile.contract.24'),
+    36: t('profile.contract.36'),
+  }[months];
+}
+
+/** "חניה אחת" / "2 חניות", as the profile form says it (`parking_needed` is 0, 1 or 2). */
+export function parkingName(needed: number, t: TFunction): string {
+  if (needed <= 0) return t('profile.parking.0');
+  return needed === 1 ? t('profile.parking.1') : t('profile.parking.2');
+}
+
+/** The applicant's move-in day as shown: a stored date that has passed means today (as `0006b`
+ * scores it). */
+export function applicantMoveIn(profile: ApplicantProfileOut): string {
+  return formatDate(later(profile.move_in_date, todayInIsrael()));
+}
+
+/** The parking line whenever the listing has fewer spots than asked for (a differ, or a 0.5 agree:
+ * two asked, one spot). */
+function parkingShortfall(profile: ApplicantProfileOut, spots: number, t: TFunction): string {
+  const parking = parkingName(profile.parking_needed, t);
+  return spots === 0
+    ? t('match.owner.parking.differNone', { parking })
+    : t('match.owner.parking.differ', { parking, spots });
+}
+
+const OWNER: Record<Criterion, Record<ReasonKind, OwnerLine>> = {
+  budget: {
+    agree: (_p, _s, t) => t('match.owner.budget.agree'),
+    differ: (_p, _s, t) => t('match.owner.budget.differ'),
+  },
+  move_in: {
+    agree: (p, _s, t) => t('match.owner.move_in.agree', { date: applicantMoveIn(p) }),
+    differ: (p, _s, t) => t('match.owner.move_in.differ', { date: applicantMoveIn(p) }),
+  },
+  area: {
+    agree: (_p, _s, t) => t('match.owner.area.agree'),
+    differ: (_p, _s, t) => t('match.owner.area.differ'),
+  },
+  household: {
+    agree: (p, _s, t) =>
+      t('match.owner.household.agree', { household: householdName(p.household, t) }),
+    differ: (p, _s, t) =>
+      t('match.owner.household.differ', { household: householdName(p.household, t) }),
+  },
+  contract: {
+    agree: (p, _s, t) =>
+      t('match.owner.contract.agree', { months: contractName(p.contract_months, t) }),
+    differ: (p, _s, t) =>
+      t('match.owner.contract.differ', { months: contractName(p.contract_months, t) }),
+  },
+  parking: {
+    agree: (p, spots, t) => {
+      if (p.parking_needed === 0) return t('match.owner.parking.agreeNone');
+      if (spots < p.parking_needed) return parkingShortfall(p, spots, t);
+      return t('match.owner.parking.agree', { parking: parkingName(p.parking_needed, t) });
+    },
+    differ: (p, spots, t) => parkingShortfall(p, spots, t),
+  },
+  smoking: {
+    // Smoking agrees for a smoker too when the listing allows it.
+    agree: (p, _s, t) =>
+      p.smoker ? t('match.owner.smoking.agreeSmoker') : t('match.owner.smoking.agree'),
+    differ: (_p, _s, t) => t('match.owner.smoking.differ'),
+  },
+  pets: {
+    agree: (p, _s, t) =>
+      p.has_pets ? t('match.owner.pets.agreePet') : t('match.owner.pets.agree'),
+    differ: (_p, _s, t) => t('match.owner.pets.differ'),
+  },
+};
+
+const OWNER_SHORT: Record<Criterion, Record<ReasonKind, OwnerShort>> = {
+  budget: {
+    agree: (_p, t) => t('match.owner.short.budget.agree'),
+    differ: (_p, t) => t('match.owner.short.budget.differ'),
+  },
+  move_in: {
+    agree: (_p, t) => t('match.owner.short.move_in.agree'),
+    differ: (p, t) => t('match.owner.short.move_in.differ', { date: applicantMoveIn(p) }),
+  },
+  area: {
+    agree: (_p, t) => t('match.owner.short.area.agree'),
+    differ: (_p, t) => t('match.owner.short.area.differ'),
+  },
+  household: {
+    agree: (_p, t) => t('match.owner.short.household.agree'),
+    differ: (_p, t) => t('match.owner.short.household.differ'),
+  },
+  contract: {
+    agree: (p, t) =>
+      p.contract_months >= 24
+        ? t('match.owner.short.contract.agreeLong')
+        : t('match.owner.short.contract.agree'),
+    differ: (_p, t) => t('match.owner.short.contract.differ'),
+  },
+  parking: {
+    agree: (_p, t) => t('match.owner.short.parking.agree'),
+    differ: (_p, t) => t('match.owner.short.parking.differ'),
+  },
+  smoking: {
+    agree: (p, t) =>
+      p.smoker ? t('match.owner.short.smoking.agreeSmoker') : t('match.owner.short.smoking.agree'),
+    differ: (_p, t) => t('match.owner.short.smoking.differ'),
+  },
+  pets: {
+    agree: (p, t) =>
+      p.has_pets ? t('match.owner.short.pets.agreePet') : t('match.owner.short.pets.agree'),
+    differ: (_p, t) => t('match.owner.short.pets.differ'),
+  },
+};
+
+/** The inbox disclosure's line for `criterion` on the `kind` side, in the owner's voice, about
+ * the applicant. `spots` is the listing's `parking_spots`. */
+export function ownerReason(
+  criterion: Criterion,
+  kind: ReasonKind,
+  profile: ApplicantProfileOut,
+  spots: number,
+  t: TFunction,
+): string {
+  return OWNER[criterion][kind](profile, spots, t);
+}
+
+/** An inbox card's chip for `criterion`, in the owner's voice. */
+export function ownerShort(
+  criterion: Criterion,
+  kind: ReasonKind,
+  profile: ApplicantProfileOut,
+  t: TFunction,
+): string {
+  return OWNER_SHORT[criterion][kind](profile, t);
 }
