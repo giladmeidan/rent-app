@@ -15,10 +15,12 @@ function israelDay(days: number): string {
 
 test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const overBudgetStreet = `${street} over`;
 
-  // An owner posts a listing.
+  // An owner posts a listing, and one above the seeker's budget (0006f AC10).
   await signUp(page, 'owner');
   const id = await postListing(page, street);
+  const overBudgetId = await postListing(page, overBudgetStreet, { price_ils: 7600 });
 
   // A visitor sees the count and the log-in prompt inside the apply section (the logged-out
   // header has its own log-in and signup links).
@@ -38,7 +40,8 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(section.getByText(he.applications.profileRequired)).toBeVisible();
   await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
 
-  // Fill the profile and come back to the listing.
+  // Fill the profile (0006a `P`: budget 7500, move-in in 30 days, the listing's area, a couple,
+  // no pets, a non-smoker, 24 months, one parking spot) and come back to the listing.
   await section.getByRole('link', { name: he.applications.fillProfile }).click();
   await expect(page).toHaveURL(`/me/profile?next=${encodeURIComponent(`/listings/${id}`)}`);
   await expect(page.getByRole('heading', { level: 1, name: he.profile.title })).toBeVisible();
@@ -49,7 +52,6 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   const areaName = (await areas.locator('label').first().textContent()) ?? '';
   await areas.locator('label').first().click();
   await page.getByText(he.profile.household.couple, { exact: true }).click();
-  await page.getByRole('switch', { name: he.profile.fields.pets }).check();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();
   await page.getByRole('button', { name: he.profile.save }).click();
@@ -87,8 +89,35 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(page.getByLabel(he.profile.fields.moveIn)).toHaveValue(moveIn);
   await expect(page.getByRole('checkbox', { name: areaName })).toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.household.couple })).toBeChecked();
-  await expect(page.getByRole('switch', { name: he.profile.fields.pets })).toBeChecked();
+  await expect(page.getByRole('switch', { name: he.profile.fields.pets })).not.toBeChecked();
   await expect(page.getByRole('switch', { name: he.profile.fields.smoker })).not.toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.contract['24'] })).toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.parking['1'] })).toBeChecked();
+
+  await test.step('ac10 search and the listing pages show the match', async () => {
+    // Sorted by match (the default for a seeker with a profile); the fitting listing scores 100.
+    // No overall order is asserted: the shared e2e database holds other 100s (0006b AC2 proves it).
+    await page.goto('/search');
+    await expect(page.locator('p[aria-live="polite"]')).toContainText(
+      he.search.sortedByMatch.trim(),
+    );
+    const fitting = page.getByRole('article').filter({ hasText: street }).filter({
+      hasNotText: overBudgetStreet,
+    });
+    await expect(fitting).toHaveCount(1);
+    await expect(fitting).toContainText(he.match.badge.replace('{{score}}', '100'));
+
+    // Over budget: capped at 59, the budget is what differs.
+    await page.goto(`/listings/${overBudgetId}`);
+    const overBudget = page.getByRole('region', { name: he.match.card.title });
+    await expect(page.getByText(he.match.badge.replace('{{score}}', '59'))).toBeVisible();
+    await expect(overBudget).toContainText(
+      he.match.seeker.budget.differ.replace('{{price}}', '7,600').replace('{{budget}}', '7,500'),
+    );
+
+    // The fitting listing's page has the card.
+    await page.goto(`/listings/${id}`);
+    await expect(page.getByRole('region', { name: he.match.card.title })).toBeVisible();
+    await expect(page.getByText(he.match.badge.replace('{{score}}', '100'))).toBeVisible();
+  });
 });
