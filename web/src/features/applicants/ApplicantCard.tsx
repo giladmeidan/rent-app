@@ -169,15 +169,25 @@ export function ApplicantCard({
         {profile !== null && match !== null && (
           <MatchChips voice="owner" match={match} profile={profile} spots={spots} />
         )}
-        {/* Free text from a seeker: React children only (never linkified or HTML), line breaks
-            kept, direction from its first strong character. */}
-        <p
-          data-testid="applicant-message"
-          dir="auto"
-          className="whitespace-pre-line break-words text-start text-[15px] leading-relaxed"
-        >
-          {applicant.message}
-        </p>
+        {applicant.source === 'like' ? (
+          // A mutual match has no message: the tag stands where it would be.
+          <p
+            data-testid="applicant-mutual"
+            className="inline-flex self-start rounded-full bg-accent-tint px-[10px] py-1 text-xs font-semibold text-accent-text"
+          >
+            {t('applicants.mutual')}
+          </p>
+        ) : (
+          // Free text from a seeker: React children only (never linkified or HTML), line breaks
+          // kept, direction from its first strong character.
+          <p
+            data-testid="applicant-message"
+            dir="auto"
+            className="whitespace-pre-line break-words text-start text-[15px] leading-relaxed"
+          >
+            {applicant.message}
+          </p>
+        )}
         {profile !== null && (
           <div className="flex flex-col gap-3">
             <button

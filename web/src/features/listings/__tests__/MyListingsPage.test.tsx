@@ -244,4 +244,39 @@ describe('MyListingsPage', () => {
     expect(link.textContent).toContain(i18n.t('applicants.link', { count: 12 }));
     expect(within(link).getByText(badgeText)).toBeVisible();
   });
+
+  it('ac7_people_link', async () => {
+    const two = listing({ listing_type: 'room', liked_me_count: 2 });
+    const one = listing({ listing_type: 'room', liked_me_count: 1 });
+    const none = listing({ listing_type: 'room', liked_me_count: 0 });
+    const paused = listing({ listing_type: 'room', status: 'paused', liked_me_count: 3 });
+    const expired = listing({ listing_type: 'room', expires_at: '2020-01-01T00:00:00Z' });
+    const apartment = listing({ liked_me_count: 4 });
+    mockApi({ 'GET /me/listings': [json([two, one, none, paused, expired, apartment])] });
+    render();
+    const cards = await screen.findAllByRole('article');
+    const peopleLink = (card: HTMLElement) =>
+      within(card)
+        .queryAllByRole('link')
+        .find((a) => a.getAttribute('href')?.endsWith('/people'));
+    const [cTwo, cOne, cNone, cPaused, cExpired, cApartment] = cards as HTMLElement[];
+
+    const a = peopleLink(cTwo as HTMLElement);
+    expect(a).toHaveAttribute('href', `/me/listings/${two.id}/people`);
+    expect(a).toHaveTextContent(he.listings.mine.people);
+    expect(
+      within(a as HTMLElement).getByText(i18n.t('listings.mine.peopleLiked', { count: 2 })),
+    ).toHaveClass('bg-warn', 'text-warn-text');
+    const b = peopleLink(cOne as HTMLElement);
+    expect(b).toHaveAttribute('href', `/me/listings/${one.id}/people`);
+    expect(within(b as HTMLElement).getByText(he.listings.mine.peopleLikedOne)).toBeVisible();
+    const c = peopleLink(cNone as HTMLElement);
+    expect(c).toHaveAttribute('href', `/me/listings/${none.id}/people`);
+    expect((c as HTMLElement).querySelector('span')).toBeNull();
+    expect(c).toHaveAccessibleName(he.listings.mine.people);
+
+    for (const card of [cPaused, cExpired, cApartment]) {
+      expect(peopleLink(card as HTMLElement)).toBeUndefined();
+    }
+  });
 });
