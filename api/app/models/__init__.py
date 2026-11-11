@@ -11,6 +11,7 @@ from app.models.application import Application  # noqa: E402  (models must see B
 from app.models.area import Area  # noqa: E402
 from app.models.conversation import Conversation, Message  # noqa: E402
 from app.models.listing import Listing  # noqa: E402
+from app.models.seeker_profile import SeekerProfile  # noqa: E402
 from app.models.session import Session  # noqa: E402
 from app.models.user import User  # noqa: E402
 
@@ -21,6 +22,7 @@ __all__ = [
     "Conversation",
     "Listing",
     "Message",
+    "SeekerProfile",
     "Session",
     "User",
 ]

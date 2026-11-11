@@ -104,13 +104,13 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `messages`, `conversations`, `applications`, `listings`,
-    `sessions`, `users` and `areas` tables."""
+    """Per-test engine on clean `seeker_profiles`, `messages`, `conversations`, `applications`,
+    `listings`, `sessions`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE messages, conversations, applications, listings, sessions, users,"
-                " areas"
+                "TRUNCATE TABLE seeker_profiles, messages, conversations, applications, listings,"
+                " sessions, users, areas"
             )
         )
     yield migrated_db
