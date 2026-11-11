@@ -45,6 +45,7 @@ APPLICANT_KEYS = {
     "updated_at",
     "match",
     "profile",
+    "room",  # 0007c
 }
 LISTING_SUMMARY_KEYS = set(ApplicationListingOut.model_fields)
 USER_KEYS = {"owner_id", "seeker_id", "sender_id", "user_id", "email"}

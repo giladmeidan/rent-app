@@ -41,7 +41,11 @@ Rules (PRODUCT.md "Applications"):
   when the seeker applied to a room (`listing_type_at_apply`, security): an apartment applicant's
   match never reflects their questionnaire answers, whatever the listing later becomes. A
   pre-Slice-6 applicant with no profile row has NULL profile columns; its match columns are
-  meaningless and never read. The default order is by match, applicants with a profile first."""
+  meaningless and never read. The default order is by match, applicants with a profile first.
+- Owner side, rooms (0007c): each applicant also carries the seeker's `gender`, `birth_year` and
+  `lifestyle`, selected by name only inside a CASE on `listing_type_at_apply = 'room'`
+  (`_ROOM_COLUMNS`), so an apartment application's room section never leaves the database, and
+  never `flatmate_gender`. Live, like the profile: NULL when the seeker has no room section now."""
 
 import uuid
 from collections.abc import Sequence
@@ -270,11 +274,25 @@ _PROFILE_COLUMNS = (
     SeekerProfile.parking_needed,
 )
 
+# The owner-facing room section (0007c, NF2): by name and only on an application made to a room
+# (the type snapshot, never the listing's live type), so an apartment application's gender, birth
+# year and answers are NULL in the result. `flatmate_gender` is never selected. `room_gender` is
+# NULL without a profile row (LEFT JOIN) or without a room section
+# (`ck_seeker_profiles_room_section`).
+_IS_ROOM_APPLICATION = Application.listing_type_at_apply == "room"
+_ROOM_COLUMNS = (
+    case((_IS_ROOM_APPLICATION, SeekerProfile.gender)).label("room_gender"),
+    case((_IS_ROOM_APPLICATION, SeekerProfile.birth_year)).label("room_birth_year"),
+    case((_IS_ROOM_APPLICATION, SeekerProfile.lifestyle)).label("room_lifestyle"),
+)
+
 
 def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
     """The non-withdrawn applications of `listing_id`, each with the applicant's display name, the
-    seven owner-facing profile columns (NULL without a profile row) and the match columns; and the
-    statement's `m_score` column. Unordered.
+    seven owner-facing profile columns (NULL without a profile row), the three room columns
+    (rooms (0007c): `room_gender`, `room_birth_year`, `room_lifestyle`, NULL unless the seeker
+    applied to a room and has a room section now) and the match columns; and the statement's
+    `m_score` column. Unordered.
 
     It has **no ownership condition** of its own: both callers establish ownership first (the
     ownership SELECT in `list_applicants`, the UPDATE's WHERE in `set_applicant_status`)."""
@@ -292,7 +310,7 @@ def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
     )
     score = next(column for column in columns if column.name == "m_score")
     query = (
-        select(Application, User.display_name, *_PROFILE_COLUMNS, *columns)
+        select(Application, User.display_name, *_PROFILE_COLUMNS, *_ROOM_COLUMNS, *columns)
         .join(User, User.id == Application.seeker_id)
         .join(Listing, Listing.id == Application.listing_id)
         .outerjoin(SeekerProfile, SeekerProfile.user_id == Application.seeker_id)
