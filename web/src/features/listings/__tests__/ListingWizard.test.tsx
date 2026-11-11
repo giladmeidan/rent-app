@@ -9,9 +9,10 @@ import {
   json,
   mockApi,
   networkError,
+  renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
-import type { ListingOut } from '../api';
+import type { Household, ListingOut } from '../api';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner, withoutCounts } from './fixtures';
 import {
@@ -23,6 +24,7 @@ import {
   nextButton,
   progress,
   renderWizard,
+  routes,
 } from './wizard';
 
 afterEach(() => {
@@ -32,8 +34,8 @@ afterEach(() => {
 const stepItem = (name: string) => screen.getByText(name).closest('li') as HTMLElement;
 const publishButton = () => screen.getByRole('button', { name: he.listings.publish });
 
-/** Renders the wizard, chooses apartment, fills the AC4 values and goes to the preview. */
-async function toPreview(client = testQueryClient()) {
+/** Renders the wizard, chooses apartment, fills the AC4 values and goes to the preferences. */
+async function toPreferences(client = testQueryClient()) {
   const view = renderWizard(client);
   chooseApartmentAndContinue();
   await areasLoaded();
@@ -42,6 +44,26 @@ async function toPreview(client = testQueryClient()) {
   expect(progress()).toHaveAttribute('aria-valuenow', '3');
   return view;
 }
+
+/** As `toPreferences`, then on to the preview with the preferences untouched. */
+async function toPreview(client = testQueryClient()) {
+  const view = await toPreferences(client);
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '4');
+  return view;
+}
+
+const p = he.listings.prefs;
+const household = (name: string) => screen.getByRole('checkbox', { name });
+const households = () => screen.getByRole('group', { name: p.households });
+const noSmokers = () => screen.getByRole('switch', { name: p.noSmokers });
+const minContract = () => screen.getByLabelText(p.minContract);
+const ALL_HOUSEHOLDS = [
+  p.household.single,
+  p.household.couple,
+  p.household.family,
+  p.household.roommates,
+];
 
 const expectedBody = {
   listing_type: 'apartment',
@@ -62,6 +84,9 @@ const expectedBody = {
   city: 'גבעתיים',
   street: 'כצנלסון',
   area_id: gushDan.id,
+  accepted_households: ['single', 'couple', 'family', 'roommates'] as Household[],
+  smoking_allowed: true,
+  min_contract_months: null,
 };
 
 describe('ListingWizard', () => {
@@ -71,7 +96,7 @@ describe('ListingWizard', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: he.listings.new.title })).toBeVisible();
     expect(progress()).toHaveAttribute('aria-valuenow', '1');
-    expect(progress()).toHaveAttribute('aria-valuemax', '3');
+    expect(progress()).toHaveAttribute('aria-valuemax', '4');
     expect(progress()).toHaveAccessibleName(he.listings.new.title);
     expect(stepItem(he.listings.steps.type)).toHaveAttribute('aria-current', 'step');
     expect(screen.getByRole('group', { name: he.listings.type.label })).toBeVisible();
@@ -174,7 +199,7 @@ describe('ListingWizard', () => {
   it('ac5_publish_errors', async () => {
     const alertText = () => screen.getByRole('alert').textContent;
 
-    // 409: cap reached, still on step 3.
+    // 409: cap reached, still on step 4.
     mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [json({ detail: 'listing_cap_reached' }, 409)],
@@ -185,7 +210,7 @@ describe('ListingWizard', () => {
       i18n.t('listings.errors.capReached', { cap: 3 }),
     );
     expect(alertText()).toContain('3');
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(publishButton()).toBeEnabled();
     view.unmount();
     vi.unstubAllGlobals();
@@ -216,7 +241,7 @@ describe('ListingWizard', () => {
     fireEvent.click(publishButton());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(he.listings.errors.areaInactive);
-    fireEvent.click(within(alert).getByRole('button', { name: he.common.back }));
+    fireEvent.click(within(alert).getByRole('button', { name: he.listings.preview.backToDetails }));
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
     expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue('גבעתיים');
     view.unmount();
@@ -306,5 +331,211 @@ describe('ListingWizard', () => {
       expect(currentPath()).toBe('/me/listings');
     });
     expect(api.calls('POST /listings')).toHaveLength(1);
+  });
+
+  it('ac1_four_steps', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    const view = renderWizard();
+    const s = he.listings.steps;
+    const names = [s.type, s.details, s.preferences, s.preview];
+
+    const items = within(stepItem(s.type).closest('ol') as HTMLElement).getAllByRole('listitem');
+    expect(items).toHaveLength(4);
+    items.forEach((item, i) => {
+      expect(item).toHaveTextContent(names[i] as string);
+    });
+    expect(progress()).toHaveAttribute('aria-valuemin', '1');
+    expect(progress()).toHaveAttribute('aria-valuemax', '4');
+    const at = (n: number) => {
+      expect(progress()).toHaveAttribute('aria-valuenow', String(n));
+      names.forEach((name, i) => {
+        if (i + 1 === n) expect(stepItem(name)).toHaveAttribute('aria-current', 'step');
+        else expect(stepItem(name)).not.toHaveAttribute('aria-current');
+      });
+    };
+
+    at(1);
+    chooseApartmentAndContinue();
+    at(2);
+    await areasLoaded();
+    fillValidDetails();
+    fireEvent.click(nextButton());
+    at(3);
+    expect(screen.getByRole('heading', { level: 2, name: p.title })).toBeVisible();
+    expect(screen.getByText(p.hint)).toBeVisible();
+    // The defaults: every household, smokers welcome, no minimum.
+    for (const name of ALL_HOUSEHOLDS) expect(household(name)).toBeChecked();
+    expect(noSmokers()).not.toBeChecked();
+    expect(minContract()).toHaveValue('');
+    expect(minContract()).toHaveDisplayValue(p.contract.none);
+    fireEvent.click(household(p.household.family));
+    fireEvent.click(noSmokers());
+    fireEvent.change(minContract(), { target: { value: '36' } });
+    fireEvent.click(nextButton());
+    at(4);
+    expect(screen.getByRole('button', { name: he.listings.publish })).toBeVisible();
+
+    // Back: preview → preferences → details → type, every value kept.
+    const back = () => fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    back();
+    at(3);
+    expect(household(p.household.single)).toBeChecked();
+    expect(household(p.household.family)).not.toBeChecked();
+    expect(noSmokers()).toBeChecked();
+    expect(minContract()).toHaveDisplayValue(p.contract['36']);
+    back();
+    at(2);
+    expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue('גבעתיים');
+    expect(screen.getByRole('switch', { name: he.listings.fields.pets })).toBeChecked();
+    back();
+    at(1);
+    expect(screen.getByRole('radio', { name: he.listings.type.apartment })).toBeChecked();
+    expect(screen.queryByRole('button', { name: he.common.back })).toBeNull();
+    // And forward again: still there.
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    at(3);
+    expect(household(p.household.family)).not.toBeChecked();
+    expect(minContract()).toHaveValue('36');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Edit mode opens on details; back reaches type.
+    const a = listing();
+    mockApi({
+      'GET /me': [() => json(owner)],
+      'GET /areas': [() => json([gushDan])],
+      'GET /me/listings': [() => json([a]), () => deferred().promise],
+    });
+    renderRoutes(`/me/listings/${a.id}/edit`, routes, testQueryClient());
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.listings.edit.title }),
+    ).toBeVisible();
+    await areasLoaded();
+    at(2);
+    expect(progress()).toHaveAttribute('aria-valuemax', '4');
+    back();
+    at(1);
+    expect(screen.getByRole('radio', { name: he.listings.type.apartment })).toBeChecked();
+  });
+
+  it('ac3_chosen_preferences_sent', async () => {
+    const post = deferred();
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [post.promise],
+      'GET /me/listings': [json([])],
+    });
+    await toPreferences();
+
+    for (const name of ALL_HOUSEHOLDS) fireEvent.click(household(name));
+    for (const name of ALL_HOUSEHOLDS) expect(household(name)).not.toBeChecked();
+    // Checked out of order on purpose: the body is in canonical order.
+    fireEvent.click(household(p.household.couple));
+    fireEvent.click(household(p.household.single));
+    fireEvent.click(noSmokers());
+    expect(noSmokers()).toBeChecked();
+    fireEvent.change(minContract(), { target: { value: '12' } });
+    expect(minContract()).toHaveDisplayValue(p.contract['12']);
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+
+    // The preview: the three chips under the card.
+    const card = screen.getByRole('article');
+    const region = screen.getByRole('region', { name: he.listing.ownerLooksFor.title });
+    expect(card.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card).not.toContainElement(region);
+    expect(
+      within(region)
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent),
+    ).toEqual(['יחיד/ה או זוג', 'ללא מעשנים', 'חוזה לשנה לפחות']);
+
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(api.calls('POST /listings')).toHaveLength(1);
+    });
+    expect(api.calls('POST /listings')[0]?.body).toEqual({
+      ...expectedBody,
+      accepted_households: ['single', 'couple'],
+      smoking_allowed: false,
+      min_contract_months: 12,
+    });
+    post.resolve(json(listing(), 201));
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+  });
+
+  it('ac4_households_required', async () => {
+    const api = mockApi({ 'GET /areas': [json([gushDan])], 'POST /listings': [] });
+    await toPreferences();
+    expect(households()).toHaveAttribute('aria-invalid', 'false');
+
+    for (const name of ALL_HOUSEHOLDS) fireEvent.click(household(name));
+    // A new error waits for "next".
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(nextButton());
+
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
+    expect(document.activeElement).toBe(household(p.household.single));
+
+    // Another preference changing keeps the error; a household fixes it.
+    fireEvent.click(noSmokers());
+    expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
+    fireEvent.change(minContract(), { target: { value: '6' } });
+    expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
+    fireEvent.click(household(p.household.family));
+    expect(households()).toHaveAttribute('aria-invalid', 'false');
+    expect(households()).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByText(he.listings.errors.households)).toBeNull();
+
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(api.calls('POST /listings')).toHaveLength(0);
+  });
+
+  it('ac5_server_error_on_preference_returns_to_step_3', async () => {
+    const invalid = (...fields: string[]) =>
+      json({ detail: fields.map((f) => ({ loc: ['body', f], msg: 'bad', type: 'x' })) }, 422);
+
+    // The minimum contract named: back on step 3, the error on the select and focus there.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [invalid('min_contract_months')],
+    });
+    let view = await toPreview();
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    });
+    expect(errorFor(minContract())).toHaveTextContent(he.listings.errors.invalid);
+    expect(document.activeElement).toBe(minContract());
+    expect(screen.queryByText('bad')).toBeNull();
+    // Changing it clears the error.
+    fireEvent.change(minContract(), { target: { value: '24' } });
+    expect(minContract()).toHaveAttribute('aria-invalid', 'false');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A details field and the households named: details first (step 2), the households' error
+    // waiting on step 3.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [invalid('accepted_households', 'city')],
+    });
+    view = await toPreview();
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    });
+    const city = screen.getByLabelText(he.listings.fields.city);
+    expect(errorFor(city)).toHaveTextContent(he.listings.errors.invalid);
+    expect(document.activeElement).toBe(city);
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(errorFor(households())).toHaveTextContent(he.listings.errors.invalid);
+    view.unmount();
   });
 });
