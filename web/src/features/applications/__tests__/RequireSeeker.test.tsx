@@ -43,9 +43,9 @@ describe('RequireSeeker', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Logged out → /login; an owner → /. Neither requests the list.
+    // Logged out → /login?next=<the page>; an owner → /. Neither requests the list.
     for (const [me, target] of [
-      [json({ detail: 'unauthenticated' }, 401), '/login'],
+      [json({ detail: 'unauthenticated' }, 401), `/login?next=${encodeURIComponent(PATH)}`],
       [json(owner), '/'],
     ] as const) {
       const api = mockApi({ 'GET /me': [me], 'GET /me/applications': [json([])] });

@@ -31,12 +31,12 @@ const pages = {
 
 describe('RequireUser', () => {
   it('ac2_require_user', async () => {
-    // A visitor is sent to /login from both pages, and neither page's data is requested.
+    // A visitor is sent to /login?next=<the page> from both pages, and neither page's data is requested.
     for (const path of Object.keys(pages)) {
       const api = mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)] });
       const view = renderRoutes(path, routes);
       await vi.waitFor(() => {
-        expect(currentPath()).toBe('/login');
+        expect(currentPath()).toBe(`/login?next=${encodeURIComponent(path)}`);
       });
       expect(api.calls('GET /me/conversations')).toHaveLength(0);
       expect(api.calls(`GET /conversations/${T.id}`)).toHaveLength(0);

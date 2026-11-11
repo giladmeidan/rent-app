@@ -397,7 +397,7 @@ describe('ChatThreadPage', () => {
     fireEvent.change(textarea(), { target: { value: 'hi' } });
     fireEvent.click(sendButton());
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent(`/chat/${T.id}`)}`);
     });
     expect(expired.client.getMutationCache().getAll()).toHaveLength(0);
     reset(view);
@@ -406,7 +406,7 @@ describe('ChatThreadPage', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     ({ api, view } = renderThread(T, [() => json({ detail: 'unauthenticated' }, 401)]));
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent(`/chat/${T.id}`)}`);
     });
     expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
     await act(() => vi.advanceTimersByTimeAsync(60_000));
@@ -421,7 +421,7 @@ describe('ChatThreadPage', () => {
     expect(ES.live()).toHaveLength(1);
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent(`/chat/${T.id}`)}`);
     });
     expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
     await act(() => vi.advanceTimersByTimeAsync(60_000));

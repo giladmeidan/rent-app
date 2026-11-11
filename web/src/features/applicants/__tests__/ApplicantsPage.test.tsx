@@ -513,7 +513,7 @@ describe('ApplicantsPage', () => {
     await screen.findByRole('article');
     shortlistP();
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent(PATH)}`);
     });
     reset(view);
 

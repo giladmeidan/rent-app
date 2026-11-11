@@ -279,4 +279,44 @@ describe('MyListingsPage', () => {
       expect(peopleLink(card as HTMLElement)).toBeUndefined();
     }
   });
+  it('ac5_flatmates_link', async () => {
+    const live = listing({ listing_type: 'room', flatmate_count: 2 });
+    const paused = listing({ listing_type: 'room', status: 'paused', flatmate_count: 0 });
+    const expired = listing({ listing_type: 'room', expires_at: '2020-01-01T00:00:00Z' });
+    const apartment = listing({ flatmate_count: 3 });
+    mockApi({ 'GET /me/listings': [json([live, paused, expired, apartment])] });
+    render();
+    const cards = (await screen.findAllByRole('article')) as HTMLElement[];
+    const hrefs = (card: HTMLElement) =>
+      within(card)
+        .queryAllByRole('link')
+        .map((a) => a.getAttribute('href') ?? '');
+    const [cLive, cPaused, cExpired, cApartment] = cards as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+
+    // Every room card links to its flatmates page with the count, as the last link: after
+    // "people" on a live room, after the applicants link on a paused or expired one.
+    for (const [card, l, before] of [
+      [cLive, live, 'people'],
+      [cPaused, paused, 'applicants'],
+      [cExpired, expired, 'applicants'],
+    ] as const) {
+      const link = within(card).getByRole('link', {
+        name: i18n.t('listings.mine.flatmates', { count: l.flatmate_count }),
+      });
+      expect(link).toHaveAttribute('href', `/me/listings/${l.id}/flatmates`);
+      expect(link).toHaveClass('min-h-[44px]');
+      const list = hrefs(card);
+      expect(list.at(-1)).toBe(`/me/listings/${l.id}/flatmates`);
+      expect(list.at(-2)).toBe(`/me/listings/${l.id}/${before}`);
+    }
+    expect(within(cLive).getByRole('link', { name: 'שותפים בדירה (2)' })).toBeVisible();
+
+    // Apartments have none.
+    expect(hrefs(cApartment).some((h) => h.endsWith('/flatmates'))).toBe(false);
+  });
 });
