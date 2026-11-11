@@ -25,6 +25,9 @@ Current focus:
 Slices 1–4 are merged. Slice 4 finished with `0004b` (PR #16, dc4d8b4) and `0004d` (PR #17, c553950). Slice 5
 (Chat) is specced and verified (`0005a`, `0005c`, `0005b`); no build started. Nothing in flight: no open PRs, no
 spec worktrees or branches, no spec stacks running; local `main` = `origin/main`.
+Slice 6 (Match score, planning session 2026-11-11): seven specs `0006a`–`0006g` written and verified, digests in
+each spec; uncommitted in the main checkout until Gilad OKs the commit (see Next Steps 9). Slice 5 build state is
+kept by the Slice 5 session (`git log` is the truth: 0005a merged as PR #18 at 04fdf29).
 
 Last updated:
 2026-11-11
@@ -93,6 +96,18 @@ None in flight. Next is Slice 5 (see Next Steps 1).
    questions). Specs pushed (ae6dfc9).
 8. Housekeeping: archive finished build sessions (0001b … 0004d) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
+9. **Slice 6 (Match score)** — specs verified, not built. First commit + push `specs/0006*.md` and the
+   `specs/PRODUCT.md` "Matching" row (only on Gilad's OK; `git pull --rebase` first, stage those paths only).
+   Build order (Speed rule 2; web specs never alongside each other or `0005b`, port 5173):
+   - `0006a` matching inputs API — ready once pushed (0005a merged); migration `0007` (down `0006`); coder Opus/high.
+   - `0006b` match score API — after 0006a's PR is open. `0006c` inbox match API — after 0006b's PR is open.
+   - `0006d` profile web and `0006e` owner-preferences web — after 0006a's PR is open; **0006d must merge before
+     any deploy after 0006a** (until then a seeker without a profile cannot apply from the web).
+   - `0006f` match web (Opus/high) — after 0006b + 0006d. `0006g` inbox match web — after 0006c, 0006f, 0005b.
+   - e2e OTP budget is 9 of 10 per 15 min: every Slice 6 e2e extends existing tests, no new signups.
+   - Gilad's non-blocking digest calls: (1) weights budget 25 / move-in 20 / area 20 / household 10 / contract
+     10 / parking 5 / smoking 5 / pets 5; (2) owners never see a seeker's budget or areas; (3) owners mostly see
+     budget / move-in / area as top reasons; (4) all Hebrew copy is the orchestrator's. Builds use these meanwhile.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -186,6 +201,10 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-11 — Slice 6 planning session (parallel to the Slice 5 build session): Gilad decided the four Slice 6
+  questions (failing listings stay visible, capped at 59; profile = housing prefs only; owner wizard step with
+  smoking + pets deal-breakers; profile required to apply) — written to PRODUCT.md "Matching"; specced
+  0006a–0006g, one verifier round each (87 findings applied), all verified with digests. Not committed.
 - 2026-11-11 (late) — 0004b (PR #16) and 0004d (PR #17, merged on Gilad's standing OK) merged: Slice 4 done;
   Slice 5 specs pushed; all worktrees/branches removed; main in sync.
 - 2026-11-11 — Slice 5 planning session: specced 0005a (chat API), 0005c (SSE events API), 0005b (chat web), one
