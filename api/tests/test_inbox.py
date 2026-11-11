@@ -4,7 +4,11 @@
 Match in the inbox (spec 0006c): each applicant's match and housing summary, sorted by match.
 AC1-AC8 are the `test_ac*_` functions after `# --- 0006c`. `L0` / `P0` are 0006b's
 (`test_matching.py`): `L0` scores 100 for `P0` (`make_profile`'s defaults); every date is UTC, as
-the database's `current_date` is."""
+the database's `current_date` is.
+
+Rooms in the inbox (spec 0007c): a room application's `room` (gender, age, answers), never an
+apartment application's, whatever the listing later becomes. AC1-AC5 are the `test_ac*_` functions
+after `# --- 0007c`."""
 
 import datetime as dt
 import json
@@ -41,6 +45,7 @@ APPLICANT_KEYS = {
     "updated_at",
     "match",
     "profile",
+    "room",  # 0007c
 }
 COUNT_KEYS = {"applicant_count", "new_applicant_count"}
 LISTING_OUT_KEYS = set(ListingOut.model_fields)
@@ -1134,3 +1139,238 @@ def test_ac4_apartment_applicant_lifestyle_never_scored_for_owner(
             assert _patched_match(owner, apartment, s1, next(statuses)) == baseline, (key, value)
             live = _ok(seeker.get(f"/listings/{apartment}"))["match"]
             assert "lifestyle" in [*live["agrees"], live["differs"]], (key, value)
+
+
+# --- 0007c: the room section in the owner's inbox, only on applications made to a room --------
+
+ROOM_KEYS = {"gender", "age", "lifestyle"}
+
+
+def _named_room_seeker(
+    client: TestClient, outbox: Outbox, email: str, area: uuid.UUID, name: str, **room: Any
+) -> TestClient:
+    """A seeker signed up as `name` (2+ characters, `SignupProfile`) whose `PUT /me/profile` is
+    `_p0_body(area, **room)`. (`_room_seeker` above is 0007g's, with a fixed email and name.)"""
+    seeker = signup(client, outbox, email, "seeker", name)
+    put = seeker.put("/me/profile", json=_p0_body(area, **room))
+    assert put.status_code == 200, put.text
+    return seeker
+
+
+def _this_year() -> int:
+    return dt.datetime.now(dt.UTC).year
+
+
+def _w(client: TestClient, outbox: Outbox, area: uuid.UUID, **room: Any) -> TestClient:
+    """W: a woman of 27 who wants women flatmates and answered cleanliness 3, night 1; `room`
+    overrides any of it."""
+    values: dict[str, Any] = {
+        "gender": "woman",
+        "birth_year": _this_year() - 27,
+        "flatmate_gender": "women",
+        "lifestyle": {"cleanliness": 3, "night": 1},
+        **room,
+    }
+    return _named_room_seeker(client, outbox, "w@example.com", area, "W1", **values)
+
+
+def _no_private_keys(body: Any, birth_year: int | None = None) -> None:
+    keys, numbers = _keys_and_numbers(body)
+    assert "birth_year" not in keys
+    assert "flatmate_gender" not in keys
+    if birth_year is not None:
+        assert birth_year not in numbers
+
+
+def test_ac1_room_applicants_show_gender_age_lifestyle(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _l0(db_engine, _user_id(owner), gush_dan, listing_type="room", flatmates_count=2)
+    w = _apply(_w(client, outbox, gush_dan), room)
+    m_seeker = _named_room_seeker(client, outbox, "m@example.com", gush_dan, "M1", gender="man")
+    m = _apply(m_seeker, room)
+    n = _apply(_named_room_seeker(client, outbox, "n@example.com", gush_dan, "N1"), room)
+    s0 = str(make_application(db_engine, room, make_seeker(db_engine, "s0@example.com", "S0")))
+    gone_seeker = _named_room_seeker(
+        client, outbox, "x@example.com", gush_dan, "Gone", gender="other"
+    )
+    gone = _apply(gone_seeker, room)
+    withdrawn = gone_seeker.post(f"/me/applications/{gone}/withdraw")
+    assert withdrawn.status_code == 200, withdrawn.text
+
+    body = _ok(_applicants(owner, room))
+    items = _by_id(body)
+    assert set(items) == {w, m, n, s0}
+    assert "Gone" not in [item["applicant_name"] for item in body]
+    for item in body:
+        assert set(item) == APPLICANT_KEYS
+
+    assert items[w]["room"] == {
+        "gender": "woman",
+        "age": 27,
+        "lifestyle": {"cleanliness": 3, "night": 1},
+    }
+    assert set(items[w]["room"]) == ROOM_KEYS
+    assert items[m]["room"] == {"gender": "man", "age": None, "lifestyle": {}}
+    assert items[n]["room"] is None
+    assert items[n]["match"] is not None
+    assert items[n]["profile"] is not None
+    assert items[s0]["room"] is None
+    assert items[s0]["match"] is None
+    assert items[s0]["profile"] is None
+    _no_private_keys(body, _this_year() - 27)
+
+
+def test_ac2_patch_returns_room_fields(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _l0(db_engine, _user_id(owner), gush_dan, listing_type="room", flatmates_count=2)
+    w = _apply(_w(client, outbox, gush_dan), room)
+    m_seeker = _named_room_seeker(client, outbox, "m@example.com", gush_dan, "M1", gender="man")
+    m = _apply(m_seeker, room)
+    m_room = _by_id(_ok(_applicants(owner, room)))[m]["room"]
+    assert m_room == {"gender": "man", "age": None, "lifestyle": {}}
+
+    shortlisted = _ok(_set_status(owner, room, w, {"status": "shortlisted"}))
+    assert shortlisted["status"] == "shortlisted"
+    assert shortlisted["room"] == {
+        "gender": "woman",
+        "age": 27,
+        "lifestyle": {"cleanliness": 3, "night": 1},
+    }
+    assert shortlisted == _by_id(_ok(_applicants(owner, room)))[w]
+
+    declined = _ok(_set_status(owner, room, m, {"status": "declined"}))
+    assert declined["status"] == "declined"
+    assert declined["room"] == m_room
+
+    for body in (shortlisted, declined):
+        _no_private_keys(body, _this_year() - 27)
+
+
+def _application_type(engine: Engine, application_id: str) -> Any:
+    return _scalar(
+        engine, "SELECT listing_type_at_apply FROM applications WHERE id = :a", a=application_id
+    )
+
+
+def _no_room_section(body: Any) -> None:
+    keys, _ = _keys_and_numbers(body)
+    assert not keys & {"gender", "age", "birth_year", "flatmate_gender", "lifestyle"}
+    assert "woman" not in json.dumps(body)
+
+
+def test_ac3_apartment_applicants_stay_hidden_after_switch_to_room(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    apartment = _l0(db_engine, _user_id(owner), gush_dan)
+    seeker = _w(client, outbox, gush_dan, lifestyle={"night": 3})
+    w = _apply(seeker, apartment)
+    assert _application_type(db_engine, w) == "apartment"
+    baseline = _match(100, TOP3, None)
+    item = _by_id(_ok(_applicants(owner, apartment)))[w]
+    assert item["room"] is None
+    assert item["match"] == baseline
+
+    _edit_listing(
+        owner,
+        apartment,
+        {"listing_type": "room", "flatmates_count": 2, "lifestyle": {"night": 1}},
+    )
+    # The seeker's own view is live: round(0.8 * 100 + 20 * 0).
+    live = _match(80, TOP3, "lifestyle")
+    assert _ok(seeker.get(f"/listings/{apartment}"))["match"] == live
+
+    listed = _ok(_applicants(owner, apartment))
+    patched = _ok(_set_status(owner, apartment, w, {"status": "shortlisted"}))
+    for body in (listed, patched):
+        entry = body[0] if isinstance(body, list) else body
+        assert entry["id"] == w
+        assert entry["room"] is None
+        assert entry["match"] == baseline
+        assert "lifestyle" not in [*entry["match"]["agrees"], entry["match"]["differs"]]
+        _no_room_section(body)
+
+    # A re-apply snapshots the type again: W now applied to an `any` room.
+    withdrawn = seeker.post(f"/me/applications/{w}/withdraw")
+    assert withdrawn.status_code == 200, withdrawn.text
+    assert _apply(seeker, apartment) == w
+    assert _application_type(db_engine, w) == "room"
+    item = _by_id(_ok(_applicants(owner, apartment)))[w]
+    assert item["room"] == {"gender": "woman", "age": 27, "lifestyle": {"night": 3}}
+    assert item["match"] == _ok(seeker.get(f"/listings/{apartment}"))["match"] == live
+
+
+def test_ac4_room_applicants_keep_room_after_switch_to_apartment(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _l0(db_engine, _user_id(owner), gush_dan, listing_type="room", flatmates_count=2)
+    w = _apply(_w(client, outbox, gush_dan), room)
+    _edit_listing(owner, room, {"lifestyle": {"night": 3}})
+    assert _owner_match(owner, room, w) == _match(80, TOP3, "lifestyle")
+    w_room = _by_id(_ok(_applicants(owner, room)))[w]["room"]
+    assert w_room == {"gender": "woman", "age": 27, "lifestyle": {"cleanliness": 3, "night": 1}}
+
+    _edit_listing(owner, room, {"listing_type": "apartment"})
+
+    assert _application_type(db_engine, w) == "room"
+    item = _by_id(_ok(_applicants(owner, room)))[w]
+    assert item["room"] == w_room
+    assert item["match"] == _match(100, TOP3, None)
+    mine = {i["id"]: i for i in _ok(owner.get("/me/listings"))}
+    assert mine[str(room)]["listing_type"] == "apartment"
+    assert mine[str(room)]["lifestyle"] == {}
+
+
+def test_ac5_room_fields_follow_profile_edits_and_clearing(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _l0(db_engine, _user_id(owner), gush_dan, listing_type="room", flatmates_count=2)
+    seeker = _w(client, outbox, gush_dan)
+    w = _apply(seeker, room)
+
+    edited = seeker.put(
+        "/me/profile",
+        json=_p0_body(
+            gush_dan, gender="woman", birth_year=_this_year() - 30, lifestyle={"guests": 2}
+        ),
+    )
+    assert edited.status_code == 200, edited.text
+    assert _by_id(_ok(_applicants(owner, room)))[w]["room"] == {
+        "gender": "woman",
+        "age": 30,
+        "lifestyle": {"guests": 2},
+    }
+
+    cleared = seeker.put("/me/profile", json=_p0_body(gush_dan))
+    assert cleared.status_code == 200, cleared.text
+    listed = _ok(_applicants(owner, room))
+    patched = _ok(_set_status(owner, room, w, {"status": "shortlisted"}))
+    for entry in (_by_id(listed)[w], patched):
+        assert entry["room"] is None
+        assert entry["match"] is not None
+        assert entry["profile"] is not None
+    for body in (listed, patched):
+        keys, _ = _keys_and_numbers(body)
+        assert "gender" not in keys
+        assert "woman" not in json.dumps(body)

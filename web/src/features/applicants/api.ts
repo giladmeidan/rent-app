@@ -9,6 +9,9 @@ export type ApplicantOut = components['schemas']['ApplicantOut'];
 export type ApplicantStatus = ApplicantOut['status'];
 /** The applicant's housing summary (0006c): no budget, no areas. `move_in_date` may be past. */
 export type ApplicantProfileOut = components['schemas']['ApplicantProfileOut'];
+/** The applicant's room section (0007c), only on an application made to a room: gender, the age
+ * this year (`null` when not given) and the answered questionnaire keys. Never a birth year. */
+export type ApplicantRoom = NonNullable<ApplicantOut['room']>;
 
 /** The applicants of one of the caller's listings, in the API's default order (best match first,
  * 0006c). 404 (not theirs) throws. */

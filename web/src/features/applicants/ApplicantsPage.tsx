@@ -260,6 +260,8 @@ export function ApplicantsPage() {
                 applicant={applicant}
                 headingId={headingIdOf(applicant.id)}
                 spots={listing.parking_spots}
+                flatLifestyle={listing.lifestyle}
+                flatIsRoom={listing.listing_type === 'room'}
                 onSettled={(outcome, button) => onSettled(applicant.id, outcome, button)}
               />
             ))}
