@@ -257,3 +257,27 @@ waived (one verifier round, Gilad).
     Risks: like vs apply on one page may confuse - mitigation: distinct copy, one-line hint fallback in the same build.
     Reviewers: code, qa, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008c-likes-web.md - PRODUCT.md "People & likes" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008c - Likes web (seeker)   PR OPEN #37 (not merged), code head 1f7f103 (with main f05c76a: 0008a, 0008b)
+    Shipped: a seeker turns on "להציג אותי לדירות שמחפשות שותף/ה" and writes "קצת עליי" (300 chars) in the
+             profile's room section; likes rooms from the room page ("אהבתי את החדר", with a "the lister liked
+             you" line and the hint "לייק הדדי פותח צ'אט בלי הודעת מועמדות"); sees "אהבו אותך" / "חדרים שאהבתי"
+             under a new header link "לייקים" with a count badge; liking back shows "זו התאמה הדדית!" with the
+             chat link. A like-made application reads "התאמה הדדית" in my applications and on the room page.
+             A like never refetches the listing (views stay honest).
+    Demo: make dev -> seeker signs up, fills the room section, turns "להציג אותי" on -> owner posts a room and
+          likes the seeker (GET /listings/{id}/people, PUT .../like) -> seeker sees "לייקים 1", opens it, likes
+          back -> banner links to the chat; "my applications" shows "התאמה הדדית".
+    Tests: +13 web (AC1-AC8 plus apply-ends-like, mutual-not-applied, double click), +1 e2e (likes.spec AC9).
+           On 1f7f103: make lint, make test (api 457, web 285), make i18n-check, make build-web green; local
+           make e2e 12/12 green in 3 shards (Speed rule 7). CI: api + web on the PR head (see the PR).
+    Findings: 0 blockers; 3 majors fixed (a stale like control after an apply; AC6's zero-badge test proved
+              nothing; a mutual like read as "you applied"); 8 minors fixed (double-click guard, logout drops
+              the banner, focus to the chat link, privacy hint as the switch's description, likes.hint, test
+              gaps); 5 follow-ups logged; ~18 nits dropped. Spec wording fixed: a gender misfit shows
+              ApplySection's misfit line, not RoomGate.
+    Decisions I need from you: none. Built on my call (reverse it if you disagree): a like-made application shows "התאמה הדדית" instead
+             of "הגשת מועמדות ב־…" on the room page too, not only in my applications.
+    Changed in PRODUCT.md: nothing.
