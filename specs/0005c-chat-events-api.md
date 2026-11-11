@@ -88,6 +88,10 @@ three:
   `@pytest_asyncio.fixture` (strict mode) that awaits `close_hub()` after each test (the hub is bound to the
   test's loop). `fastapi.routing._PING_INTERVAL` (routing imports it by name), `STREAM_MAX_S`,
   `STREAM_JITTER_S` and `QUEUE_MAX` are monkeypatched where an AC says so.
+- `infra/docker-compose.yml` (api `command`) and `infra/Dockerfile.api` (`CMD`): uvicorn gets
+  `--timeout-graceful-shutdown 5` (review round 1 major): without it an open stream holds a reload or a shutdown
+  for up to 960 s (uvicorn 0.54 waits for in-flight responses with no limit); with it the old worker cancels the
+  streams after 5 s and the browsers reconnect.
 - `README.md`: a `curl -N --cookie rent_session=… http://localhost:8000/me/events` line under "Posting a listing
   locally".
 - `specs/FOLLOWUPS.md`: append `0005c · infra (Slice 12) · production must serve the API over HTTP/2 end to end at

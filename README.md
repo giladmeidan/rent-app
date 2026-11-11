@@ -97,6 +97,9 @@ keeps curl from buffering; take the cookie value from `cookies.txt`:
 curl -N --cookie rent_session=… http://localhost:8000/me/events
 ```
 
+An open stream does not hold up `make dev`'s reload or a stop: uvicorn runs with `--timeout-graceful-shutdown 5`,
+so after 5 s it cancels the open streams and the browsers reconnect.
+
 ## Make targets
 
 | target | what it does |
