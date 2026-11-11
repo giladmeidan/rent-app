@@ -7,6 +7,7 @@ import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import { ApiError, type ListingDetail } from '../listings/api';
 import { useProfile } from '../profile/useProfile';
+import { RoomGate } from '../rooms/RoomGate';
 import { hasStatus, type MyApplicationOut } from './api';
 import { ApplicationStatusChip } from './ApplicationStatusChip';
 import { appliedOn } from './format';
@@ -78,8 +79,9 @@ function ApplyForm({ apply }: { apply: Apply }) {
         inFlight.current = false;
       },
       onError: (error) => {
-        // 401 (log in and come back) and both 409s, `already_applied` and
-        // `seeker_profile_required` (refetch), are the hook's.
+        // 401 (log in and come back) and every 409 (`already_applied`, `seeker_profile_required`,
+        // and a room's `seeker_gender_required` / `room_gender_mismatch`) are the hook's: the
+        // controls it swaps in are the feedback.
         if (hasStatus(error, 401) || hasStatus(error, 409)) return;
         // 404 removes the form; every other error keeps it, with focus back on the text.
         if (hasStatus(error, 404)) {
@@ -243,7 +245,9 @@ function Applied({ application }: { application: MyApplicationOut }) {
 
 /**
  * The listing page's apply section: the applicant count for everyone, then the visitor prompt,
- * nothing (an owner), or the seeker's applied state or apply form.
+ * nothing (an owner), or the seeker's applied state or apply form. A room adds two states (0007f):
+ * one that cannot take this seeker (`room_fit: false`), and a women- or men-only room that needs
+ * the profile's room section first.
  */
 export function ApplySection({ listing }: { listing: ListingDetail }) {
   const { t } = useTranslation();
@@ -318,10 +322,21 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
         <Applied application={application} />
       </div>
     );
+  } else if (listing.room_fit === false) {
+    // The API's answer for this seeker; it needs no profile request. No link: the cause may be
+    // the room's preference or the seeker's own, and the line nudges no one to change either.
+    controls = <p className="text-start text-[15px]">{t('rooms.apply.misfit')}</p>;
   } else if (profile.isPending) {
     controls = skeleton;
   } else if (profile.isError && profile.data === undefined) {
     controls = <ErrorState onRetry={() => void profile.refetch()} />;
+  } else if (
+    listing.listing_type === 'room' &&
+    listing.gender_preference !== 'any' &&
+    (profile.data === null || profile.data.gender === null)
+  ) {
+    // Before `ProfileGate`: the room section's page also creates the housing profile.
+    controls = <RoomGate listing={listing} />;
   } else if (profile.data === null) {
     controls = <ProfileGate listingId={listing.id} />;
   } else {
