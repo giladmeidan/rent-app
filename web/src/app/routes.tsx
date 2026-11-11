@@ -11,6 +11,7 @@ import { SignupPage } from '../features/auth/SignupPage';
 import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
 import { FlatmatesPage } from '../features/flatmates/FlatmatesPage';
+import { JoinFlatPage } from '../features/flatmates/JoinFlatPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
@@ -30,6 +31,8 @@ export function AppRoutes() {
         <Route path="search" element={<SearchPage />} />
         {/* Public; the static `listings/new` below outranks `:id`. */}
         <Route path="listings/:id" element={<ListingPage />} />
+        {/* Public (0008e A1): the page takes the token out of the hash before its own login check. */}
+        <Route path="flatmates/join" element={<JoinFlatPage />} />
         <Route element={<RequireOwner />}>
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings" element={<MyListingsPage />} />

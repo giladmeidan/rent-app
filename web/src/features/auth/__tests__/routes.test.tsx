@@ -4,11 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../app/i18n';
 import { AppRoutes } from '../../../app/routes';
 import he from '../../../locales/he.json';
+import { clearInviteToken } from '../../flatmates/inviteToken';
 import { gushDan } from '../../listings/__tests__/fixtures';
 import { currentPath, json, mockApi, noa, renderRoutes } from './harness';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  clearInviteToken();
 });
 
 describe('routes', () => {
@@ -82,6 +84,8 @@ describe('routes', () => {
       ['/me/listings?x=1#secret', '/login?next=%2Fme%2Flistings%3Fx%3D1'],
       ['/me/applications', '/login?next=%2Fme%2Fapplications'], // RequireSeeker
       ['/chat?a=b&c=d', '/login?next=%2Fchat%3Fa%3Db%26c%3Dd'], // RequireUser
+      // The public join page runs its own check: a bare `next`, the token never in it (A1).
+      ['/flatmates/join#secret', '/login?next=%2Fflatmates%2Fjoin'],
     ] as const) {
       const api = mockApi({
         'GET /me': [json({ detail: 'unauthenticated' }, 401)],

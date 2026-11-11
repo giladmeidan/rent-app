@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -87,11 +88,27 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
   );
 }
 
-/** `/chat`, for an owner or a seeker (`RequireUser`): their chats, in the API's order. */
+/** Set by the join page (`navigate('/chat', { state: { joined: true } })`, 0008e). */
+function isJoined(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && 'joined' in state && state.joined === true;
+}
+
+/** `/chat`, for an owner or a seeker (`RequireUser`): their chats, in the API's order. After a
+ * join it confirms it; the history entry's state is cleared at once, so the message lasts until
+ * the person leaves the page and a reload or Back does not show it again. */
 export function ChatListPage() {
   const { t } = useTranslation();
   const me = useMe();
   const conversations = useConversations();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [joined] = useState(() => isJoined(location.state));
+
+  useEffect(() => {
+    if (isJoined(location.state)) {
+      void navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, location.search, navigate]);
 
   let body;
   if (conversations.data === undefined) {
@@ -128,6 +145,11 @@ export function ChatListPage() {
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('chat.list.title')}</h1>
+      {joined && (
+        <p role="status" className="text-start text-sm font-semibold text-accent-text">
+          {t('flatmates.join.done')}
+        </p>
+      )}
       {body}
     </section>
   );
