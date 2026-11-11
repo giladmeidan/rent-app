@@ -188,3 +188,8 @@ Minor findings deferred by the coder. Format: `- [ ] NNNN · file:line · what �
 ## 0008e
 - [ ] 0008e · web/src/features/flatmates/JoinFlatPage.tsx · the own, full, declined, applied and invalid states have no way out (only the member state has "לשיחות"); a link out needs a copy decision · review round 1 ux minor
 - [ ] 0008e · api/app/schemas/flatmates.py:23 `InviteTokenIn` · the docstring still says the web reads the token from `/flatmates/join/:token`, which contradicts 0008e A1 (fragment) · for 0008d; review round 1 security nit
+
+## 0008f
+- [ ] 0008f · web/src/features/chat/ChatThreadPage.tsx `MemberLine` · past two lines at 360 px (6+ members or long names) the clamped members are reachable only through `title`, which touch users cannot open; add a "show all" control or an expandable line · review round 1 qa + ux minor
+- [ ] 0008f · web/src/features/chat/ChatThreadPage.tsx (sender runs) + api/app/schemas/chat.py `MessageOut` · runs are grouped by `sender_name`, so two members with the same display name merge into one run and the second gets no label; needs a stable sender id on `MessageOut` (an API shape) · review round 1 qa + ux minor
+- [ ] 0008f · web/src/features/chat/ChatListPage.tsx (empty state) · a new flatmate with no shortlisted chats yet reads "שיחה נפתחת כשבעלי הדירה מוסיפים אותך לרשימה הקצרה", which is wrong for them; needs flatmate copy (a copy decision) · noticed in 0008e and 0008f

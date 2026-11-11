@@ -107,8 +107,10 @@ former member, the same answer as for a wrong id.
 
 ## UI
 RTL: logical classes only. The member line separates names with " · " and wraps. At 360 px it wraps to at
-most two lines (`line-clamp-2`), with the full list in `title` and an sr-only copy. Sender names sit above the
-bubble on the start side, `text-sm text-muted`. MyFlatsPage is one column, `max-w-[480px]`.
+most two lines (`line-clamp-2`), with the full list in `title`. Review round 1 changed this: there is no
+sr-only copy. The clamp only clips visually, so a screen reader reads the whole line once, and a copy would be
+read twice. Touch users cannot open `title`, so a "show all" control is in `specs/FOLLOWUPS.md`. Sender names
+sit above the bubble on the start side, `text-sm text-muted`. MyFlatsPage is one column, `max-w-[480px]`.
 
 ## Acceptance criteria
 - [ ] AC1 Given a thread with `members` [owner רוני, flatmate דנה `is_me`, seeker נועה] and `visible_from`
