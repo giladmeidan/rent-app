@@ -168,3 +168,36 @@ export function useJoinFlat() {
     },
   });
 }
+
+/** The flats the caller is a flatmate of (`GET /me/flats`), newest join first as the API orders. */
+export async function fetchMyFlats(): Promise<MyFlatOut[]> {
+  const { data, error, response } = await api.GET('/me/flats');
+  if (data === undefined) throw new ApiError('GET', '/me/flats', response.status, error);
+  return data;
+}
+
+/** Leaves the flat of `listingId` (204). 404 throws. */
+export async function leaveFlat(listingId: string): Promise<void> {
+  const { error, response } = await api.DELETE('/me/flats/{listing_id}', {
+    params: { path: { listing_id: listingId } },
+  });
+  if (!response.ok) throw new ApiError('DELETE', '/me/flats/{id}', response.status, error);
+}
+
+/** The caller's flats. Any error leaves the list empty: the chat list's link is optional. */
+export function useMyFlats() {
+  return useQuery({ queryKey: MY_FLATS_KEY, queryFn: fetchMyFlats });
+}
+
+/** Leaves a flat; the flats and the chats (the room's are gone) refetch. */
+export function useLeaveFlat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (listingId: string) => leaveFlat(listingId),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: MY_FLATS_KEY }),
+        queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY }),
+      ]),
+  });
+}
