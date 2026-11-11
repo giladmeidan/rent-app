@@ -1059,3 +1059,78 @@ def test_ac8_room_section_never_outside_room_field(
         assert "birth_year" not in keys
         assert "flatmate_gender" not in keys
         assert birth_year not in numbers
+
+
+# --- 0007g: lifestyle in the owner's score, only on applications made to a room ---------------
+
+
+def _room_seeker(
+    client: TestClient, outbox: Outbox, area: uuid.UUID, lifestyle: dict[str, int]
+) -> TestClient:
+    """A signed-up seeker whose `PUT /me/profile` is `P0` with a woman / any room section."""
+    seeker = signup(client, outbox, "s1@example.com", "seeker")
+    put = seeker.put("/me/profile", json=_p0_body(area, gender="woman", lifestyle=lifestyle))
+    assert put.status_code == 200, put.text
+    return seeker
+
+
+def _apply(seeker: TestClient, listing_id: Any) -> str:
+    applied = seeker.post(f"/listings/{listing_id}/applications", json={"message": "Hello there"})
+    assert applied.status_code == 201, applied.text
+    application_id: str = applied.json()["id"]
+    return application_id
+
+
+def test_ac3_room_applicant_match_includes_lifestyle(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _l0(db_engine, _user_id(owner), gush_dan, listing_type="room", flatmates_count=2)
+    _edit_listing(owner, room, {"lifestyle": {"cleanliness": 3, "night": 1, "kosher": 2}})
+    seeker = _room_seeker(client, outbox, gush_dan, {"cleanliness": 3, "night": 3, "shabbat": 1})
+    s1 = _apply(seeker, room)
+
+    expected = _match(90, TOP3, "lifestyle")
+    assert _owner_match(owner, room, s1) == expected
+    assert _ok(seeker.get(f"/listings/{room}"))["match"] == expected
+    assert _patched_match(owner, room, s1, "shortlisted") == expected
+
+
+def test_ac4_apartment_applicant_lifestyle_never_scored_for_owner(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    apartment = _l0(db_engine, _user_id(owner), gush_dan)
+    seeker = _room_seeker(client, outbox, gush_dan, {"night": 1, "guests": 2})
+    s1 = _apply(seeker, apartment)
+    snapshot = "SELECT listing_type_at_apply FROM applications WHERE id = :a"
+    assert _scalar(db_engine, snapshot, a=s1) == "apartment"
+    baseline = _match(100, TOP3, None)
+    assert _owner_match(owner, apartment, s1) == baseline
+
+    # The probe: turn the apartment into a room and set one flat answer.
+    _edit_listing(
+        owner,
+        apartment,
+        {"listing_type": "room", "flatmates_count": 2, "lifestyle": {"night": 3}},
+    )
+    assert _owner_match(owner, apartment, s1) == baseline
+    assert _patched_match(owner, apartment, s1, "shortlisted") == baseline
+    # The seeker's own view is live: round(0.8 * 100 + 20 * 0).
+    assert _ok(seeker.get(f"/listings/{apartment}"))["match"] == _match(80, TOP3, "lifestyle")
+
+    # One answer per edit: the seeker's live score moves every time, the owner's never does.
+    statuses = iter(["submitted", "shortlisted"] * 3)
+    for key in ("night", "guests"):
+        for value in (1, 2, 3):
+            _edit_listing(owner, apartment, {"lifestyle": {key: value}})
+            assert _owner_match(owner, apartment, s1) == baseline, (key, value)
+            assert _patched_match(owner, apartment, s1, next(statuses)) == baseline, (key, value)
+            live = _ok(seeker.get(f"/listings/{apartment}"))["match"]
+            assert "lifestyle" in [*live["agrees"], live["differs"]], (key, value)
