@@ -432,7 +432,7 @@ def test_ac5_thread_reads_and_marks_read(
     assert set(body["listing"]) == LISTING_SUMMARY_KEYS
     assert [m["body"] for m in body["messages"]] == ["m1", "m2", "m3"]
     assert all(set(m) == MESSAGE_KEYS for m in body["messages"])
-    # m1 and m3 are S's own. (The spec's AC5 text has the two `mine` lists swapped.)
+    # m1 and m3 are S's own.
     assert [m["mine"] for m in body["messages"]] == [True, False, True]
     assert len(first) == 4, first  # session, header, messages, the read marker
     assert "FROM conversations" in first[1]
@@ -559,11 +559,11 @@ def test_ac8_send_message(
     )
     assert _list(owner)[0]["id"] == str(older)
 
-    response = _send(seeker, chat, "  שלום  ")
+    response = _send(seeker, chat, "  \u05e9\u05dc\u05d5\u05dd  ")
     assert response.status_code == 201, response.text
     body = response.json()
     assert set(body) == MESSAGE_KEYS
-    assert body["body"] == "שלום"
+    assert body["body"] == "\u05e9\u05dc\u05d5\u05dd"
     assert body["mine"] is True
     last_message_at = _scalar(
         db_engine, "SELECT last_message_at FROM conversations WHERE application_id = :a", a=chat
@@ -574,7 +574,7 @@ def test_ac8_send_message(
     assert owner_list[0]["id"] == str(chat)
     assert owner_list[0]["unread_count"] == 1
     assert owner_list[0]["last_message"]["mine"] is False
-    assert owner_list[0]["last_message"]["body"] == "שלום"
+    assert owner_list[0]["last_message"]["body"] == "\u05e9\u05dc\u05d5\u05dd"
     assert _item(seeker, chat)["unread_count"] == 0
     assert _item(seeker, chat)["last_message"]["mine"] is True
 
@@ -638,17 +638,24 @@ def test_ac10_body_validation(seeker: TestClient, chat: uuid.UUID, db_engine: En
         "",
         "   ",
         "x" * 2001,
-        "hi‮there",
-        "​​",
-        "aㅤb",
-        "א" + "ָ" * 5,
+        "hi\u202ethere",
+        "\u200b\u200b",
+        "a\u3164b",
+        "\u05d0" + "\u05b8" * 5,
+        # Only joiners, marks or variation selectors: nothing renders (review M1).
+        "\u200d",
+        "\u200c" * 5,
+        "\u034f",
+        "\ufe0f",
+        "\u180b",
+        "\u0300\u0301\u0302\u0303",
     ):
         assert _send(seeker, chat, invalid).status_code == 422, repr(invalid)
     missing = seeker.post(f"/conversations/{chat}/messages", json={})
     assert missing.status_code == 422
     assert _message_count(db_engine) == 0
 
-    for valid in ("\U0001f44d", "?"):
+    for valid in ("\U0001f44d", "\u2764\ufe0f", "?"):
         response = _send(seeker, chat, valid)
         assert response.status_code == 201, (valid, response.text)
         assert response.json()["body"] == valid
@@ -664,7 +671,7 @@ def test_ac10_body_validation(seeker: TestClient, chat: uuid.UUID, db_engine: En
     )
     assert extra.status_code == 201, extra.text
     assert extra.json()["mine"] is True
-    assert _message_count(db_engine) == 4
+    assert _message_count(db_engine) == 5
 
 
 def test_ac11_send_rate_limits(

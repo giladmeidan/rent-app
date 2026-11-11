@@ -20,8 +20,9 @@ BODY_MAX_LENGTH = 2000  # ck_messages_body_length (migration 0006)
 
 
 def _visible_body(value: str) -> str:
-    # No `require_alnum`: an emoji-only or punctuation-only message ("?") is a valid chat message.
-    return visible_characters_only(value, allow_newlines=True, field="body")
+    # No `require_alnum`: an emoji-only or punctuation-only message ("?") is a valid chat message;
+    # but at least one character must render (no joiner-, mark- or selector-only bodies).
+    return visible_characters_only(value, allow_newlines=True, field="body", require_visible=True)
 
 
 # Stripped (model config) and `\r\n` -> `\n` before the length check, so "   " is empty.

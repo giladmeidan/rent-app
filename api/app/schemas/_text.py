@@ -29,7 +29,12 @@ def _is_ignorable_unassigned(code_point: int) -> bool:
 
 
 def visible_characters_only(
-    value: str, *, allow_newlines: bool = False, field: str = "", require_alnum: bool = False
+    value: str,
+    *,
+    allow_newlines: bool = False,
+    field: str = "",
+    require_alnum: bool = False,
+    require_visible: bool = False,
 ) -> str:
     """Reject text that hides or spoofs characters: control, format (bidi, zero-width), line and
     paragraph separators (NUL is also rejected by Postgres), private-use characters, lone
@@ -38,10 +43,14 @@ def visible_characters_only(
     row ("Zalgo" text). ZWJ/ZWNJ stay (emoji, scripts) and do not end a run of marks; nor does
     any other unassigned (`Cn`) code point, which is accepted. With `allow_newlines`, `\\n` is
     allowed too (callers normalise `\\r\\n` first; a lone `\\r` is still rejected). With
-    `require_alnum`, the value must contain at least one letter or number. `field` prefixes the
-    error messages."""
+    `require_alnum`, the value must contain at least one letter or number. With `require_visible`,
+    it must contain at least one character that renders: not whitespace, a joiner (ZWJ, ZWNJ, or
+    the combining grapheme joiner U+034F), a combining mark or a variation selector (U+FE00-FE0F,
+    U+E0100-E01EF, U+180B-180F; all of them `Mn` or `Cf`); an emoji or any other symbol counts
+    (spec 0005a review M1). `field` prefixes the error messages."""
     marks_in_row = 0
     has_alnum = False
+    has_visible = False
     for ch in value:
         if ch in _JOINERS:
             continue
@@ -59,6 +68,7 @@ def visible_characters_only(
         if category == "Cn":
             # Newer than Python's Unicode tables (a Unicode 16 emoji or mark): accepted, and, like
             # ZWJ/ZWNJ, it neither counts toward nor ends a run of marks.
+            has_visible = True
             continue
         if category in _MARK_CATEGORIES:
             marks_in_row += 1
@@ -66,8 +76,12 @@ def visible_characters_only(
                 raise ValueError(f"{field} has too many combining marks in a row".lstrip())
             continue
         marks_in_row = 0
+        if not ch.isspace():
+            has_visible = True
         if category[0] in "LN":
             has_alnum = True
     if require_alnum and not has_alnum:
         raise ValueError(f"{field} must contain a letter or digit".lstrip())
+    if require_visible and not has_visible:
+        raise ValueError(f"{field} must contain a visible character".lstrip())
     return value
