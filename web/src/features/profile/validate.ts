@@ -1,14 +1,34 @@
 // Pure field rules for the housing profile form. They mirror spec 0006a's Data ranges, so the body
 // `toProfileIn` builds from a form that passes here is not a 422 (except `unknown_area`, which only
 // the API can know).
-import { addDays } from '../listings/format';
-import type { ContractMonths, Household, SeekerProfileIn, SeekerProfileOut } from './api';
+import type { LifestyleAnswers } from '../lifestyle/keys';
+import { addDays, todayInIsrael } from '../listings/format';
+import type {
+  ContractMonths,
+  FlatmateGender,
+  Gender,
+  Household,
+  SeekerProfileIn,
+  SeekerProfileOut,
+} from './api';
 
 /** The client's latest move-in date. The API allows `today + 365` in UTC; the client's today is
  * Israel time, which is a day ahead of UTC near midnight, so one day less never becomes a 422. */
 export const MOVE_IN_MAX_DAYS = 364;
 
 export const BUDGET = { min: 500, max: 100_000 } as const;
+
+/**
+ * The birth years the form accepts (spec 0007a: age 18 to 99). The API takes the age from the UTC
+ * year; Israel's year runs ahead of it near 1 January, so the youngest bound uses UTC and the
+ * oldest uses Israel's year: the client's range is never wider than the API's.
+ */
+export function birthYearRange(now: Date = new Date()): { min: number; max: number } {
+  return {
+    min: Number(todayInIsrael(now).slice(0, 4)) - 99,
+    max: now.getUTCFullYear() - 18,
+  };
+}
 
 /** The form's state. The budget is kept as typed; the rest keep the API's own types. */
 export type ProfileForm = {
@@ -23,6 +43,14 @@ export type ProfileForm = {
   smoker: boolean;
   contract_months: ContractMonths | null;
   parking_needed: number;
+  /** The room section's switch. Off, the four room keys are left out of the body (PUT replaces,
+   * so the server clears them); what was typed stays in memory. */
+  room: boolean;
+  gender: Gender | null;
+  /** As typed. */
+  birth_year: string;
+  flatmate_gender: FlatmateGender;
+  lifestyle: LifestyleAnswers;
 };
 
 export const emptyProfileForm: ProfileForm = {
@@ -35,6 +63,11 @@ export const emptyProfileForm: ProfileForm = {
   smoker: false,
   contract_months: null,
   parking_needed: 0,
+  room: false,
+  gender: null,
+  birth_year: '',
+  flatmate_gender: 'any',
+  lifestyle: {},
 };
 
 /** A stored profile as the form's starting state. */
@@ -49,6 +82,11 @@ export function formFromProfile(profile: SeekerProfileOut): ProfileForm {
     smoker: profile.smoker,
     contract_months: profile.contract_months,
     parking_needed: profile.parking_needed,
+    room: profile.gender !== null,
+    gender: profile.gender,
+    birth_year: String(profile.birth_year ?? ''),
+    flatmate_gender: profile.flatmate_gender,
+    lifestyle: { ...profile.lifestyle },
   };
 }
 
@@ -60,6 +98,8 @@ export const FIELD_ORDER = [
   'household',
   'contract_months',
   'parking_needed',
+  'gender',
+  'birth_year',
 ] as const;
 export type FieldName = (typeof FIELD_ORDER)[number];
 
@@ -93,6 +133,17 @@ function budget(value: string): FieldError | undefined {
   return undefined;
 }
 
+function birthYear(value: string): FieldError | undefined {
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  const { min, max } = birthYearRange();
+  const n = Number(trimmed);
+  if (!DIGITS.test(trimmed) || n < min || n > max) {
+    return { key: 'listings.errors.range', min, max };
+  }
+  return undefined;
+}
+
 function moveIn(value: string, today: string): FieldError | undefined {
   if (value === '') return required;
   if (!DAY.test(value) || Number.isNaN(Date.parse(value))) return { key: 'profile.errors.moveIn' };
@@ -120,6 +171,9 @@ export function validate(
     household: form.household === null ? required : undefined,
     contract_months: form.contract_months === null ? required : undefined,
     parking_needed: undefined,
+    // The room section is checked only while its switch is on.
+    gender: form.room && form.gender === null ? required : undefined,
+    birth_year: form.room ? birthYear(form.birth_year) : undefined,
   };
   const errors: FieldErrors = {};
   for (const name of FIELD_ORDER) {
@@ -138,7 +192,7 @@ export function toProfileIn(form: ProfileForm, areas: readonly { id: string }[])
   if (form.household === null || form.contract_months === null) {
     throw new Error('toProfileIn: household and contract are required');
   }
-  return {
+  const body: SeekerProfileIn = {
     budget_max_ils: Number(form.budget_max_ils.trim()),
     move_in_date: form.move_in_date,
     move_in_flexible: form.move_in_flexible,
@@ -148,6 +202,18 @@ export function toProfileIn(form: ProfileForm, areas: readonly { id: string }[])
     smoker: form.smoker,
     contract_months: form.contract_months,
     parking_needed: form.parking_needed,
+  };
+  // Room off: the four keys are omitted, so the server clears the section.
+  if (!form.room) return body;
+  if (form.gender === null)
+    throw new Error('toProfileIn: gender is required with the room switch on');
+  const birthYear = form.birth_year.trim();
+  return {
+    ...body,
+    gender: form.gender,
+    ...(birthYear === '' ? {} : { birth_year: Number(birthYear) }),
+    flatmate_gender: form.flatmate_gender,
+    lifestyle: { ...form.lifestyle },
   };
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addDays } from '../../listings/format';
 import { gushDan } from '../../listings/__tests__/fixtures';
 import {
+  birthYearRange,
   emptyProfileForm,
   firstInvalid,
   formFromProfile,
@@ -89,5 +90,62 @@ describe('validate', () => {
     });
     expect(serverFieldErrors('unknown_area')).toEqual({});
     expect(serverFieldErrors([{ loc: ['body'] }])).toEqual({});
+  });
+
+  it('ac6_birth_year_range', () => {
+    // Israel is already in 2027; UTC is still in 2026. The youngest bound uses UTC (age 18 in the
+    // API's year), the oldest Israel's year (99), so the range is inside the API's.
+    expect(birthYearRange(new Date('2026-12-31T22:30:00Z'))).toEqual({ min: 1928, max: 2008 });
+    expect(birthYearRange(new Date('2026-06-15T12:00:00Z'))).toEqual({ min: 1927, max: 2008 });
+
+    // The rules apply only while the room switch is on; the range is today's.
+    const { min, max } = birthYearRange();
+    const room: ProfileForm = { ...valid, room: true, gender: 'woman' };
+    const rangeError = { birth_year: { key: 'listings.errors.range', min, max } };
+    expect(validate(room, areas, TODAY)).toEqual({});
+    for (const birth_year of ['', ' ', String(min), String(max), ` ${String(max)} `]) {
+      expect(validate({ ...room, birth_year }, areas, TODAY), birth_year).toEqual({});
+    }
+    for (const birth_year of [
+      'abcd',
+      '19x5',
+      String(min - 1),
+      String(max + 1),
+      '-1990',
+      '1990.5',
+    ]) {
+      expect(validate({ ...room, birth_year }, areas, TODAY), birth_year).toEqual(rangeError);
+    }
+    expect(validate({ ...room, gender: null }, areas, TODAY)).toEqual({ gender: required });
+    expect(
+      validate({ ...valid, room: false, gender: null, birth_year: 'abcd' }, areas, TODAY),
+    ).toEqual({});
+    // Both room errors come after the housing fields, gender first.
+    const both = validate({ ...room, gender: null, birth_year: 'abcd' }, areas, TODAY);
+    expect(Object.keys(both)).toEqual(['gender', 'birth_year']);
+    expect(firstInvalid({ ...both, ...validate(emptyProfileForm, areas, TODAY) })).toBe(
+      'budget_max_ils',
+    );
+    expect(firstInvalid(both)).toBe('gender');
+
+    // The body: off omits the four keys; on sends them, birth year trimmed, as a number, or not at all.
+    const off = toProfileIn({ ...room, room: false, birth_year: '1990' }, areas);
+    for (const key of ['gender', 'birth_year', 'flatmate_gender', 'lifestyle']) {
+      expect(off).not.toHaveProperty(key);
+    }
+    expect(toProfileIn({ ...room, birth_year: ` ${String(max)} ` }, areas)).toMatchObject({
+      gender: 'woman',
+      birth_year: max,
+      flatmate_gender: 'any',
+      lifestyle: {},
+    });
+    expect(toProfileIn(room, areas)).not.toHaveProperty('birth_year');
+    // A 422 naming a room field marks it.
+    expect(
+      serverFieldErrors([{ loc: ['body', 'birth_year'] }, { loc: ['body', 'gender'] }]),
+    ).toEqual({
+      gender: { key: 'listings.errors.invalid' },
+      birth_year: { key: 'listings.errors.invalid' },
+    });
   });
 });
