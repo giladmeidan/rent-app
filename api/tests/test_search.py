@@ -35,6 +35,9 @@ PUBLIC_KEYS = {
     "arnona_ils",
     "vaad_ils",
     "description",
+    "accepted_households",
+    "smoking_allowed",
+    "min_contract_months",
     "created_at",
     "lat",
     "lng",
@@ -151,6 +154,10 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "arnona_ils": 480,
         "vaad_ils": 150,
         "description": "דירה מוארת",
+        # The owner's preferences (spec 0006a): the DB defaults, "no preference".
+        "accepted_households": ["single", "couple", "family", "roommates"],
+        "smoking_allowed": True,
+        "min_contract_months": None,
         "lat": None,  # not located yet (spec 0003c)
         "lng": None,
     }

@@ -20,6 +20,7 @@ from pydantic import (
 )
 
 from app.schemas._text import visible_characters_only
+from app.schemas.profile import HOUSEHOLDS, AcceptedHouseholds, ContractMonths, HouseholdsOut
 
 ListingType = Literal["apartment", "room"]
 ListingStatus = Literal["active", "paused"]
@@ -82,7 +83,9 @@ ArnonaIls = Annotated[int, Field(ge=0, le=20_000)]  # the bi-monthly bill
 VaadIls = Annotated[int, Field(ge=0, le=5_000)]  # monthly
 
 # Columns an explicit `null` in a PATCH clears; `null` on any other field is a 422.
-NULLABLE_FIELDS = frozenset({"total_floors", "arnona_ils", "vaad_ils", "description"})
+NULLABLE_FIELDS = frozenset(
+    {"total_floors", "arnona_ils", "vaad_ils", "description", "min_contract_months"}
+)
 
 
 class ListingIn(BaseModel):
@@ -108,6 +111,12 @@ class ListingIn(BaseModel):
     arnona_ils: ArnonaIls | None = None
     vaad_ils: VaadIls | None = None
     description: Description | None = None
+    # Who the listing suits (spec 0006a); the defaults mean "no preference". Factories, not plain
+    # defaults: a JSON-schema `default` makes the generated web type require the key, and the
+    # wizard sends none of the three until 0006e.
+    accepted_households: AcceptedHouseholds = Field(default_factory=lambda: list(HOUSEHOLDS))
+    smoking_allowed: bool = Field(default_factory=lambda: True)
+    min_contract_months: ContractMonths | None = None  # None = no minimum
 
     @field_validator("description")
     @classmethod
@@ -147,6 +156,9 @@ class ListingPatch(BaseModel):
     arnona_ils: ArnonaIls | None = None
     vaad_ils: VaadIls | None = None
     description: Description | None = None
+    accepted_households: AcceptedHouseholds | None = None
+    smoking_allowed: bool | None = None
+    min_contract_months: ContractMonths | None = None
     status: ListingStatus | None = None
 
     @field_validator("description")
@@ -190,6 +202,9 @@ class ListingOut(BaseModel):
     arnona_ils: int | None
     vaad_ils: int | None
     description: str | None
+    accepted_households: HouseholdsOut
+    smoking_allowed: bool
+    min_contract_months: ContractMonths | None
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime

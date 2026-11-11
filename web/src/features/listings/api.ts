@@ -10,8 +10,11 @@ export type ListingType = ListingOut['listing_type'];
 export type ListingStatus = ListingOut['status'];
 export type Furnished = ListingOut['furnished'];
 
-/** The create body as the wizard sends it: every key present, `rooms` a JSON number. */
-export type ListingInBody = Required<Omit<ListingIn, 'rooms'>> & { rooms: number };
+/** The create body as the wizard sends it: every key present, `rooms` a JSON number. The owner's
+ * preferences (0006a) are left to their server defaults until the wizard's step for them (0006e). */
+export type ListingInBody = Required<
+  Omit<ListingIn, 'rooms' | 'accepted_households' | 'smoking_allowed' | 'min_contract_months'>
+> & { rooms: number };
 
 /** A non-2xx answer. A network failure is the `TypeError` fetch throws, never this. */
 export class ApiError extends Error {
