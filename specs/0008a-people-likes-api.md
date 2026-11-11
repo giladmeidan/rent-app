@@ -1,7 +1,7 @@
 ---
 id: 0008a
 title: A room lister browses the seekers who want a flatmate and likes them; a seeker likes rooms; when both have liked, it becomes a shortlisted application with its chat open
-status: draft
+status: verified
 depends_on: [0007c, 0007g]   # 0007g: match_columns(listing_type=...) and the lifestyle criterion people cards score with; 0007c: the inbox row (ApplicantOut.room) this spec adds `source` next to. 0007a/0007b/0007d (done): the room section, room_fit, listing_type_at_apply
 reviewers: [code, qa, security, perf]   # security: a seeker's profile (gender, age, areas, answers) shown to owners, the budget-probe snapshot, a new write path into applications/conversations; perf: browse inserts snapshot rows and scores every candidate; qa: like/unlike/mutual state machine against apply, withdraw, decline
 estimate: 1 coder run   # coder Opus/high (data, migration, PII; Speed rule 6)
@@ -29,8 +29,10 @@ browse.
   Both model docstrings gain one line each on the new columns.
 - `api/app/schemas/profile.py`:
   - `ABOUT_ME_MAX_LENGTH = 300`.
-  - `AboutMe = Annotated[str, BeforeValidator(_lf_newlines), Field(min_length=1, max_length=300),
-    AfterValidator(_visible_about_me)]`. `_visible_about_me` calls
+  - `AboutMe = Annotated[str, BeforeValidator(_lf_newlines), StringConstraints(strip_whitespace=True,
+    min_length=1, max_length=ABOUT_ME_MAX_LENGTH), AfterValidator(_visible_about_me)]`. `SeekerProfileIn` has no
+    `str_strip_whitespace` (`schemas/profile.py:116`), so the strip lives on the type (verifier finding 7).
+    `_visible_about_me` calls
     `visible_characters_only(value, allow_newlines=True, field="about_me", require_alnum=True)`, as
     `schemas/application.py`'s `Message` does. `_lf_newlines` is imported from `schemas/listing.py`, as
     `schemas/application.py` already imports it.
@@ -62,7 +64,10 @@ browse.
 - `api/app/schemas/search.py`: `ListingDetail` gains `like: LikeStateOut | None` (see API, `GET /listings/{id}`).
 - `api/app/schemas/listing.py`: `MyListingOut` gains `liked_me_count: int`.
 - `api/app/services/people.py` (new) holds the people rules (see Rules). It is the only writer of
-  `room_pairs`, and the only place a like turns into an application.
+  `room_pairs`, and the only place a like turns into an application. It defines the new errors
+  `ListingNotLiveError` and `RoomSectionRequiredError` (codes `listing_not_live` and `room_section_required`,
+  both new), and `like_state(db, seeker_id, listing_id) -> LikeStateOut | None`, which `routers/search.py::get_listing`
+  calls so the router stays thin.
 - `api/app/services/applications.py`: `_upsert` sets `source="apply"` on insert and on reopen (the `set_`
   gains `"source": "apply"`). Its docstring's "One row per (listing, seeker)" paragraph adds that a mutual
   like reopens a withdrawn row the same way (`services/people.py`).
@@ -81,10 +86,20 @@ browse.
   gains `make_pair(engine, listing_id, seeker_id, *, price_ils_seen, lister_liked=False, seeker_liked=False)
   -> uuid.UUID`, and `make_profile` takes the two new columns through its `**overrides`.
 
+- **Web, type-only** (verifier finding 6). `make lint` regenerates `schema.d.ts`, so the new required keys
+  break tsc in five fixtures unless this spec updates them:
+  - `web/src/features/applicants/__tests__/fixtures.ts` `applicant()` gains `source: 'apply'`;
+  - `features/applications/__tests__/fixtures.ts` `application()` gains `source: 'apply'`;
+  - `features/listings/__tests__/fixtures.ts` `listing()` gains `liked_me_count: 0`, and `withoutCounts`
+    (line ~59) deletes it too;
+  - `features/profile/__tests__/fixtures.ts` `profile()` gains `people_visible: false` and `about_me: null`;
+  - `features/search/__tests__/fixtures.ts` `listingDetail()` gains `like: null`.
+
+  The regenerated `message: string | null` renders as nothing in `ApplicantCard` / `MyApplicationsPage`
+  (`0008b` / `0008c` show the tag). The web `make lint` and `make test` must stay green.
+
 **Out:**
-- All web (`0008b` lister, `0008c` seeker). This spec needs no web change: the regenerated `message: string |
-  null` renders as nothing in `ApplicantCard` / `MyApplicationsPage`, and `make lint` (tsc) on the web must
-  stay green.
+- All web screens (`0008b` lister, `0008c` seeker), beyond the fixture edits above.
 - Flatmates and group chats (`0008d`).
 - Notifications of any kind (no email, no SSE event for a plain like; PRODUCT.md "Applications" / "Chat" lines
   hold). A mutual like publishes the existing `status` chat event (API).
@@ -124,13 +139,18 @@ Migration `0011_people_likes` (down `0010`):
    - `source text NOT NULL DEFAULT 'apply'` with `ck_applications_source CHECK (source IN ('apply',
      'like'))`. The default backfills every existing row and is kept, because the test helpers insert by SQL.
    - `message` drops NOT NULL. `ck_applications_message_length` is dropped, and
-     `ck_applications_message CHECK ((source = 'apply' AND char_length(message) BETWEEN 1 AND 500) OR
-     (source = 'like' AND message IS NULL))` is added.
+     `ck_applications_message CHECK ((source = 'apply' AND message IS NOT NULL AND char_length(message) BETWEEN
+     1 AND 500) OR (source = 'like' AND message IS NULL))` is added. The `IS NOT NULL` closes the NULL hole: a
+     CHECK that evaluates to NULL passes (verifier finding 1).
 
-Downgrade, in reverse: set `message = 'התאמה הדדית'` where it is null, restore NOT NULL and the old CHECK, and
-drop `source`, `room_pairs`, the two profile columns and their CHECKs. The old `ck_seeker_profiles_room_section`
-is restored last. No rows are deleted. The Hebrew literal is built from code points in the migration, as the
-CLAUDE-noted `\u` rule asks.
+Downgrade, in reverse:
+1. Set `message = 'התאמה הדדית'` where it is null, then restore NOT NULL and the old message CHECK, and drop
+   `source` and its CHECK.
+2. Drop `room_pairs`. **Its likes and frozen prices are lost.**
+3. Drop `ck_seeker_profiles_room_section` explicitly, then the two profile columns (**opt-ins and about-me texts
+   are lost**) and `ck_seeker_profiles_about_me`, then recreate the `0009`/`0010` form of the room-section CHECK.
+
+No application rows are deleted. The Hebrew literal is written as `\u` escapes in the migration.
 
 Terms used below, each written **once** in `services/people.py`:
 - **candidate** of room listing `L`: a `seeker_profiles` row `P` where every one of these holds:
@@ -143,8 +163,11 @@ Terms used below, each written **once** in `services/people.py`:
   Declined, submitted and shortlisted applicants all live in the inbox. A decline is final, so a declined seeker
   never comes back to people browse.
 - **pending seeker like** of `L`: a pair of `L` with `seeker_liked_at IS NOT NULL` and no non-withdrawn
-  application for it. `liked_me_count` counts these without re-checking fit or opt-in. Browse re-checks
-  (shortcut, see Risks).
+  application for it, while `L.listing_type = 'room'`. `liked_me_count` counts these without re-checking fit
+  or opt-in. Browse re-checks (shortcut, see Risks).
+
+There is no area filter. A seeker who wants other areas is still a candidate and ranks lower through the
+`area` criterion (weight 20), exactly as search ranks a listing outside the seeker's areas.
 
 ## API
 | Method | Path | Auth rule | Request | Response | Errors |
@@ -164,10 +187,12 @@ Terms used below, each written **once** in `services/people.py`:
 shared module is allowed, but not required.
 
 ### Rules (`services/people.py`)
-- **`list_people(db, owner, listing_id, offset)`** runs three statements and one commit:
-  1. One SELECT of the listing with its public-ness: `Listing` left-joined to `_public_listings()`'s
-     conditions, as a boolean column. Unknown, another owner's or an apartment gives `ListingNotFoundError`;
-     not public gives `ListingNotLiveError`.
+- **`list_people(db, owner, listing_id, offset)`** runs three statements and one commit, after the session
+  lookup that every authenticated request makes:
+  1. One SELECT of the caller's listing with its public-ness as a correlated column:
+     `_public_listings().where(Listing.id == listing_id).exists()`. The visibility rule is never restated
+     (verifier finding 9). Unknown, another owner's or an apartment gives `ListingNotFoundError`; not public
+     gives `ListingNotLiveError`.
   2. Snapshot: `INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen) SELECT L.id, P.user_id,
      L.price_ils FROM seeker_profiles P WHERE <candidate by opt-in> ON CONFLICT DO NOTHING`. Every opted-in
      candidate gets its frozen price **before** anything is scored or ordered, so neither a score nor a
@@ -180,27 +205,33 @@ shared module is allowed, but not required.
      `count(*) OVER ()` as the total, and both like columns. The order is `seeker_liked_at IS NULL`,
      `m_score DESC`, `RoomPair.created_at`, `RoomPair.id`, with `LIMIT 20 OFFSET :offset`. An offset past the
      end returns `items: []` and the true `total`. That needs one extra `count` only when the page is empty, so
-     the statement count is 3, or 4 for an empty page.
+     a request runs **4** statements counting the session lookup, or **5** for an empty page (verifier
+     finding 3).
 - **Lister like `like_person(db, r, owner, listing_id, person_id)`** runs in this order:
   1. One ownership-and-live SELECT, as above.
   2. The limiter (`rl:like:user:{id}` hour, `rl:like:user:day:{id}` day). It counts only attempts that pass
      step 1.
   3. One conditional `UPDATE room_pairs SET lister_liked_at = coalesce(lister_liked_at, now()) WHERE id =
-     :person_id AND listing_id = :listing_id AND <candidate> RETURNING *`.
-  4. When nothing is returned, one SELECT tells `already_applied` (a non-withdrawn application exists) from
-     `not_found`.
-  5. When the returned row has `seeker_liked_at` set, **mutual** (below). Commits.
+     :person_id AND listing_id = :listing_id AND <candidate, without its application clause> RETURNING *`. This
+     takes the pair's row lock.
+  4. When nothing is returned, the pair is `not_found`.
+  5. **After the lock**, a separate `SELECT EXISTS (non-withdrawn application for the pair)`. As a new
+     statement under READ COMMITTED, it sees a mutual or an apply that committed while this transaction waited
+     for the lock (verifier finding 2). If true: `AlreadyAppliedError` and a rollback, so the stray like is
+     undone.
+  6. When the returned row has `seeker_liked_at` set, **mutual** (below). Commits.
 - **Seeker like `like_room(db, r, seeker, listing_id)`** runs in this order:
   1. The profile and its room section: no profile gives `ProfileRequiredError`; `gender` null gives
      `RoomSectionRequiredError`. Neither counts.
   2. `search.get_public_listing_with_match`. Not public, own or an apartment gives `ListingNotFoundError`.
      `fit is False` gives `RoomGenderMismatchError`. Neither counts. This is the same gate order as `apply`.
   3. The limiter.
-  4. One `INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen, seeker_liked_at) SELECT :l, :s,
-     :price, now() WHERE NOT EXISTS (<non-withdrawn application>) ON CONFLICT (uq) DO UPDATE SET
-     seeker_liked_at = coalesce(room_pairs.seeker_liked_at, excluded.seeker_liked_at) RETURNING *`.
-     `:price` is the listing's live price, frozen only if the row is new.
-  5. When nothing is returned, it is `AlreadyAppliedError`.
+  4. One `INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen, seeker_liked_at) VALUES (:l, :s,
+     :price, now()) ON CONFLICT (uq) DO UPDATE SET seeker_liked_at = coalesce(room_pairs.seeker_liked_at,
+     excluded.seeker_liked_at) RETURNING *`. `:price` is the listing's live price, frozen only if the row is
+     new. This takes the pair's row lock.
+  5. **After the lock**, the same separate `SELECT EXISTS (non-withdrawn application for the pair)` as the
+     lister path. If true: `AlreadyAppliedError` and a rollback.
   6. When the returned row has `lister_liked_at` set, **mutual**. Commits.
 - **Mutual** happens in the same transaction as the second like:
   1. `INSERT INTO applications (listing_id, seeker_id, source, message, status, price_ils_at_apply,
@@ -217,14 +248,17 @@ shared module is allowed, but not required.
   4. The router, after the commit, calls `chat_events.publish(r, [owner_id, seeker_id], application.id,
      "status")`.
 
-  Two concurrent second likes serialise on the pair row's lock. The later UPDATE re-reads the row and sees
-  both timestamps, so exactly one transaction is mutual (AC8).
+  Two concurrent likes serialise on the pair row's lock. The later statement re-reads the row and sees both
+  timestamps, so exactly one transaction is mutual. When the earlier one already turned it mutual (application
+  created, likes cleared), the later one's post-lock EXISTS sees the application. It then rolls back with
+  `already_applied`, so no stray like survives a mutual (AC8).
 - **Unlike**: `UPDATE room_pairs SET lister_liked_at = NULL` (respectively `seeker_liked_at`) on the caller's
   side. The lister DELETE returns 404 for a pair outside the caller's listing. The seeker DELETE always
   returns 204. No limiter.
 - **`liked_rooms(db, seeker_id)`** (`services/search.py`) is one statement: `_public_listings()` joined to
   `RoomPair` (`seeker_id = :me`) and to the seeker's profile (`_with_profile` / `_with_match`), where
-  `room_fit IS NOT FALSE` and there is no non-withdrawn application for the pair. It returns the
+  `Listing.listing_type = 'room'` (a room switched to an apartment keeps its pairs, and `room_fit` is NULL for
+  it), `room_fit IS NOT FALSE`, and there is no non-withdrawn application for the pair. It returns the
   `lister_liked_at` / `seeker_liked_at` columns, newest like first. The router splits it:
   - `liked_me`: `lister_liked_at` set and `seeker_liked_at` null; `liked_at = lister_liked_at`.
   - `mine`: `seeker_liked_at` set; `liked_at = seeker_liked_at`.
@@ -241,20 +275,23 @@ shared module is allowed, but not required.
   (visible, with a submitted application to `R`). When `O` GETs `/listings/{R}/people`, Then the items are `[A]`
   with `total` 1. `A`'s card has exactly the `PersonOut` keys. `match` equals what `match_columns` gives for `R`
   and `A` at `R`'s price. When `B` then likes `R`, `O`'s page is `[B, A]` (`B` has `liked_me: true`, so it comes
-  first). — `api/tests/test_people.py::test_ac1_candidates_and_order`
+  first). A fifth seeker `G` (visible, fits, but wants only another area) is listed after `A`, with `area` as its
+  `differs`. — `api/tests/test_people.py::test_ac1_candidates_and_order`
 - [ ] AC2 (security, budget freeze) Given `A`'s budget 5000 and `R` at 4500, When `O` GETs the page, Then `A`'s
   `match` has `budget` in `agrees`. When `O` then PATCHes `R`'s price to 6000 and GETs again, Then `A`'s `match`
   is unchanged and `room_pairs.price_ils_seen` is 4500. When a new seeker `E` (budget 5000, visible) signs up
   afterwards, Then `E`'s pair holds 6000 and `E`'s card has `differs: budget`, capped at 59. — `test_people.py::test_ac2_price_frozen_per_pair`
 - [ ] AC3 (security, NF2) Given AC1's data, Then `PersonOut`'s JSON for `A` contains no `budget_max_ils`,
   `household`, `has_pets`, `smoker`, `contract_months`, `parking_needed`, `flatmate_gender`, `seeker_id` or
-  email (the keys are asserted exactly). The page's SQL, captured with a `before_cursor_execute` listener,
-  never selects `seeker_profiles.budget_max_ils`. — `test_people.py::test_ac3_card_fields_only`
+  email (the keys are asserted exactly). An `after_cursor_execute` listener records each statement's
+  `cursor.description`: no result column is `budget_max_ils`, and the SQL never selects the `SeekerProfile`
+  entity (no `seeker_profiles.budget_max_ils AS`). `match_columns` still reads the budget inside its expression,
+  which is expected (verifier finding 4). — `test_people.py::test_ac3_card_fields_only`
 - [ ] AC4 Given AC1's data, Then a seeker GET gives 403 `owner_only`. Another owner, an apartment, or an
   unknown id gives 404 `not_found`. `R` paused gives 409 `listing_not_live`. `?offset=1001` gives 422.
   `?offset=40` gives `items: []` with `total` 1. — `test_people.py::test_ac4_people_errors`
 - [ ] AC5 (perf) Given 30 visible candidates, When `O` GETs page 1 and then page 2, Then each request runs
-  exactly 3 statements, plus 1 for an empty page. Page 1 has 20 items and page 2 has 10, with no overlap, and
+  exactly 4 statements counting the session lookup, plus 1 for an empty page. Page 1 has 20 items and page 2 has 10, with no overlap, and
   `total` is 30 on both. The second GET inserts no new `room_pairs` rows. — `test_people.py::test_ac5_statements_and_paging`
 - [ ] AC6 Given `A` on `R`'s page, When `O` PUTs the like, Then it returns `{liked: true, application_id: null}`,
   `A`'s card shows `liked_by_me: true`, and `A`'s `GET /me/likes` has `R` in `liked_me` (not in `mine`). Then,
@@ -285,13 +322,18 @@ shared module is allowed, but not required.
   `seeker_read_at` null. — `test_people.py::test_ac7_mutual_becomes_shortlisted_application`
 - [ ] AC8 (concurrency) Given `A` liked `R`, When `O`'s PUT and a second `A` PUT run at the same time on two
   connections (the pattern of `0004a`'s concurrent-apply test), Then there is exactly one application and one
-  conversation, and exactly one of the responses carries `application_id`. — `test_people.py::test_ac8_concurrent_second_likes`
+  conversation, and exactly one of the responses carries `application_id`. Two more cases:
+  - Both **first** likes at once (no prior like): exactly one mutual.
+  - `O`'s mutual commits while `A`'s second PUT waits on the pair lock: `A` gets 409 `already_applied`, and the
+    pair's like columns stay null.
+
+  — `test_people.py::test_ac8_concurrent_second_likes`
 - [ ] AC9 Given a mutual application `X`:
   - When `O` un-shortlists it, Then it is `submitted` with `source: "like"` and sending is closed.
   - When `A` withdraws it, Then a later like by `A` alone does not reopen it (the pair's likes were cleared).
     A like by `O` after that reopens `X` as `shortlisted`, `source='like'`, a new `created_at`, the same
     conversation id.
-  - When `O` declines it, Then `A` gets 409 `already_applied` on a like, `O` gets 404 on the pair, and `A`
+  - When `O` declines it, Then `A` gets 409 `already_applied` on a like, `O` gets 409 `already_applied` on the pair, and `A`
     never shows on `R`'s page again.
   - When `A` withdraws a like-sourced application and then **applies** with a message, Then the row is
     `source='apply'` with the message.
@@ -353,8 +395,9 @@ not Gilad calls:
   new prices gets one budget bit per new listing per seeker. Today only the 3-live cap bounds this (paused rows
   are unlimited, Known Issues). The pre-launch "total listings per owner" follow-up closes it. The other score
   criteria (smoking, pets, household, contract, parking) are live. An owner toggling `smoking_allowed` learns
-  whether an opted-in seeker smokes, which the inbox already shows outright once they apply. Accepted. The
-  security reviewer should confirm.
+  whether an opted-in seeker smokes, which the inbox already shows outright once they apply. An owner flipping
+  `gender_preference` can learn a candidate's `flatmate_gender` through who stays listed (`room_fit`), which
+  `0007c` never shows. Accepted. The security reviewer should confirm.
 - **Snapshot cost (perf):** statement 2 inserts a row for every opted-in candidate the first time a room's
   page is opened, and re-scans them on each later page (`ON CONFLICT DO NOTHING`). That is fine at MVP
   volume, where candidates are the opted-in room seekers whose gender fits. If browse passes a few hundred ms,
@@ -362,8 +405,29 @@ not Gilad calls:
   candidates without the budget term. Put a `shortcut:` comment at statement 2.
 - **`liked_me_count` does not re-check fit or opt-in.** It can overcount when the liker has since changed
   gender or lost the room section. The page itself re-checks. Accepted as a `shortcut:`.
-- **`message` turns nullable** in two response schemas the web already reads. Render-only for now (Out).
-  `0008b` / `0008c` show the "התאמה הדדית" tag instead.
+- **`message` turns nullable** in two response schemas the web already reads. It is render-only here (the
+  fixture edits in Scope), and `0008b` / `0008c` show the "התאמה הדדית" tag instead.
+- If the coder run overflows, the verifier's cut line is: (a) migration, profile fields, people browse, lister
+  like/unlike and `liked_me_count`; (b) seeker like/unlike, `/me/likes`, `ListingDetail.like`,
+  mutual-to-application and `source`.
+
+Spec-verifier round 1 rejected with 6 majors and 4 minors. All are applied. The second round is waived (one
+verifier round, Gilad). The verifier confirmed `0007g` is on main (c80a78c).
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+    Spec 0008a - People & likes API   (verified, Slice 8; depends on 0007c and 0007g, both merged: ready to build)
+    What a user can do after this: a room lister pages through opted-in seekers (and anyone who liked the room),
+             with a match score, and likes them; a seeker likes rooms and sees who liked them back; the second like
+             becomes a shortlisted application "התאמה הדדית" with its chat open.
+    Decisions I need from you: none new (yours today: room listers only, likes visible to both, mutual =
+             shortlisted application, budget frozen per pair, a like shares the card with that room only).
+             Assumptions you can overrule: 30 likes/hour and 100/day; no "hide" for a received like (follow-up);
+             liking needs the profile's room section even on a "לא משנה" room; likes are used up by the match.
+    KPIs this slice moves: mutual matches per room listing; time from room publish to first chat.
+    Acceptance targets: browse 4 statements (5 for an empty page); exactly one match under concurrent likes; the
+             card carries no budget, household, pets, smoker, contract, parking or user id.
+    Risks: budget probing by editing the price - mitigation: price frozen per pair; one bit leaks per newly
+             created listing until the pre-launch per-owner listings cap. Smoking/pets/flatmates-preference fit
+             readable through the score - accepted, security reviewer confirms.
+    Reviewers: code, qa, security, perf   Estimated: 1 coder run (Opus/high), cut line named if it overflows
+    Links: specs/0008a-people-likes-api.md - PRODUCT.md "People & likes" - no artboard
