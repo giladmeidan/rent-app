@@ -43,7 +43,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import Application, Listing  # noqa: E402
+from app.models import Application, Listing, SeekerProfile  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
@@ -236,6 +236,36 @@ def make_seeker(
 
 _LISTING_COLUMNS = frozenset(Listing.__table__.columns.keys())
 _APPLICATION_COLUMNS = frozenset(Application.__table__.columns.keys())
+_PROFILE_COLUMNS = frozenset(SeekerProfile.__table__.columns.keys())
+
+
+def make_profile(engine: Engine, user_id: uuid.UUID, area_id: uuid.UUID, **overrides: Any) -> None:
+    """Insert a housing profile for `user_id` directly (spec 0006a), bypassing the API's checks.
+    Defaults are the specs' valid body `P`: budget 7500, move-in 30 days after today (UTC, as the
+    API's window is), not flexible, `area_ids=[area_id]`, a couple, no pets, non-smoker, 24
+    months, one parking spot. `overrides` may set any column."""
+    unknown = set(overrides) - _PROFILE_COLUMNS
+    if unknown:
+        raise ValueError(f"not seeker_profiles columns: {sorted(unknown)}")
+    values: dict[str, Any] = {
+        "user_id": user_id,
+        "budget_max_ils": 7500,
+        "move_in_date": dt.datetime.now(dt.UTC).date() + dt.timedelta(days=30),
+        "move_in_flexible": False,
+        "area_ids": [area_id],
+        "household": "couple",
+        "has_pets": False,
+        "smoker": False,
+        "contract_months": 24,
+        "parking_needed": 1,
+        **overrides,
+    }
+    columns = ", ".join(values)
+    params = ", ".join(
+        "CAST(:area_ids AS uuid[])" if name == "area_ids" else f":{name}" for name in values
+    )
+    with engine.begin() as conn:
+        conn.execute(text(f"INSERT INTO seeker_profiles ({columns}) VALUES ({params})"), values)
 
 
 def make_application(
