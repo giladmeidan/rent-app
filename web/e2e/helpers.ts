@@ -122,8 +122,12 @@ export async function postListing(
 
 /** Saves a housing profile (spec 0006a `P`: budget 7500, a couple, no pets, non-smoker, 24 months,
  * one parking spot, the first area) through the API with the page's (seeker) session, so the
- * seeker can apply. No screen creates one until 0006d. */
-export async function putProfile(page: Page): Promise<void> {
+ * seeker can apply. `overrides` replace or add fields of the body (e.g. 0007a's room section:
+ * `gender`, `birth_year`, `lifestyle`). The PUT replaces the whole profile. */
+export async function putProfile(
+  page: Page,
+  overrides: Record<string, unknown> = {},
+): Promise<void> {
   const areas = await page.request.get(API + '/areas');
   expect(areas.ok()).toBe(true);
   const [area] = (await areas.json()) as { id: string }[];
@@ -139,6 +143,7 @@ export async function putProfile(page: Page): Promise<void> {
       smoker: false,
       contract_months: 24,
       parking_needed: 1,
+      ...overrides,
     },
   });
   expect(saved.status()).toBe(200);
