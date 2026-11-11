@@ -19,6 +19,14 @@ const focusRing =
 type Filter = 'all' | ApplicantStatus;
 const FILTERS: readonly Filter[] = ['all', 'submitted', 'shortlisted', 'declined'];
 
+type Sort = 'match' | 'newest';
+const SORTS: readonly Sort[] = ['match', 'newest'];
+
+/** Newest first, as `0006c`'s `created_at DESC, id`. Times compare as instants, never as strings
+ * (Pydantic drops zero microseconds, so `…:00Z` would sort after `…:00.5Z`). */
+const newestFirst = (a: ApplicantOut, b: ApplicantOut) =>
+  Date.parse(b.created_at) - Date.parse(a.created_at) || (a.id < b.id ? -1 : 1);
+
 /** Where focus goes once the page has re-rendered after an action (never lost: 0004d a11y). */
 type FocusRequest =
   { to: 'heading'; id: string } | { to: 'filter' } | { to: 'button'; element: HTMLButtonElement };
@@ -39,6 +47,8 @@ export function ApplicantsPage() {
   const listing = listings.data?.find((l) => l.id === id);
   const applicants = useApplicants(id, listing !== undefined);
   const [filter, setFilter] = useState<Filter>('all');
+  // "By match" is the API's order as received; "by date" is sorted here, on a copy.
+  const [sort, setSort] = useState<Sort>('match');
   const [announcement, setAnnouncement] = useState('');
   const [gone, setGone] = useState(false);
   // Set in the action's callback; applied by the effect after the next render.
@@ -171,7 +181,12 @@ export function ApplicantsPage() {
         tone: 'bg-[#F5F5F4]',
       },
     ];
-    const shown = list.filter((a) => matches(filter, a));
+    const filtered = list.filter((a) => matches(filter, a));
+    const shown = sort === 'newest' ? filtered.toSorted(newestFirst) : filtered;
+    const sortLabel: Record<Sort, string> = {
+      match: t('applicants.sort.match'),
+      newest: t('applicants.sort.newest'),
+    };
     body = (
       <>
         <ul data-testid="applicant-totals" className="flex flex-wrap gap-[10px]">
@@ -213,6 +228,27 @@ export function ApplicantsPage() {
             </button>
           ))}
         </div>
+        <div
+          role="group"
+          aria-label={t('applicants.sort.label')}
+          className="flex flex-wrap items-center gap-2"
+        >
+          {SORTS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={sort === s}
+              onClick={() => setSort(s)}
+              className={`min-h-[44px] rounded-full border-[1.5px] px-[14px] text-[13px] ${
+                sort === s
+                  ? 'border-accent bg-accent-tint font-bold text-accent-text'
+                  : 'border-[#D6D3D1] bg-white font-semibold text-muted'
+              } ${focusRing}`}
+            >
+              {sortLabel[s]}
+            </button>
+          ))}
+        </div>
         {shown.length === 0 ? (
           <EmptyState message={t('applicants.emptyFilter')} />
         ) : (
@@ -223,6 +259,7 @@ export function ApplicantsPage() {
                 listingId={listing.id}
                 applicant={applicant}
                 headingId={headingIdOf(applicant.id)}
+                spots={listing.parking_spots}
                 onSettled={(outcome, button) => onSettled(applicant.id, outcome, button)}
               />
             ))}

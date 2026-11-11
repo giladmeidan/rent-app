@@ -14,10 +14,12 @@ import {
   testQueryClient,
 } from '../../auth/__tests__/harness';
 import { RequireOwner } from '../../auth/RequireOwner';
+import { formatDate } from '../../listings/format';
 import { listing, owner, seeker } from '../../listings/__tests__/fixtures';
+import { inDays } from '../../profile/__tests__/fixtures';
 import type { ApplicantOut } from '../api';
 import { ApplicantsPage } from '../ApplicantsPage';
-import { applicant } from './fixtures';
+import { applicant, applicantProfile, match } from './fixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -87,6 +89,43 @@ const buttonsOf = (name: string) =>
   within(cardOf(name))
     .queryAllByRole('button')
     .map((b) => b.textContent);
+const names = () => cards().map((c) => within(c).getByRole('heading', { level: 2 }).textContent);
+const sortGroup = () => screen.getByRole('group', { name: he.applicants.sort.label });
+const sortButton = (key: 'match' | 'newest') =>
+  within(sortGroup()).getByRole('button', { name: he.applicants.sort[key] });
+const whyOf = (name: string) =>
+  within(cardOf(name)).getByRole('button', { name: he.applicants.why });
+/** The disclosure's panel, found through the button's `aria-controls`. */
+const panelOf = (name: string) => {
+  const id = whyOf(name).getAttribute('aria-controls') ?? '';
+  const panel = document.getElementById(id);
+  if (panel === null) throw new Error(`no panel #${id}`);
+  return panel;
+};
+const badge = (score: number) => i18n.t('match.badge', { score });
+
+// AC1's three applicants: A (94) applied newest-but-one, B (59) newest, C (before Slice 6) oldest.
+// B's time has a fraction and A's has none (Pydantic drops zero microseconds): compared as strings
+// A would sort first.
+function abc(overrides: { a?: Partial<ApplicantOut>; b?: Partial<ApplicantOut> } = {}) {
+  const a = applicant({
+    applicant_name: 'A',
+    created_at: '2026-11-10T10:00:00Z',
+    match: match(94),
+    profile: applicantProfile(),
+    ...overrides.a,
+  });
+  const b = applicant({
+    applicant_name: 'B',
+    created_at: '2026-11-10T10:00:00.500000Z',
+    match: match(59, ['move_in', 'area', 'household'], 'budget'),
+    profile: applicantProfile(),
+    ...overrides.b,
+  });
+  const c = applicant({ applicant_name: 'C', created_at: '2026-11-09T10:00:00Z' });
+  return [a, b, c] as const;
+}
+
 const appliedText = (p: ApplicantOut) =>
   i18n.t('applicants.appliedAt', {
     date: new Intl.DateTimeFormat('he-IL', {
@@ -548,6 +587,295 @@ describe('ApplicantsPage', () => {
     expect(screen.getAllByRole('link', { name: /^\u05e6'\u05d0\u05d8 / })).toEqual([link]);
     for (const other of [submitted, declined]) {
       expect(within(cardOf(other.applicant_name)).queryByRole('link')).toBeNull();
+    }
+  });
+
+  it('ac1_sorted_by_match', async () => {
+    const [a, b, c] = abc();
+    const { api } = renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+
+    // The API's order as received, each card with its score or "no score".
+    expect(names()).toEqual(['A', 'B', 'C']);
+    expect(within(cardOf('A')).getByTestId('match-badge')).toHaveTextContent(badge(94));
+    expect(within(cardOf('B')).getByTestId('match-badge')).toHaveTextContent(badge(59));
+    expect(within(cardOf('C')).queryByTestId('match-badge')).toBeNull();
+    expect(within(cardOf('C')).getByText(he.match.noScore)).toBeVisible();
+
+    // The toggle: its own labelled group, outside the filters, "by match" pressed.
+    expect(within(sortGroup()).getAllByRole('button')).toEqual([
+      sortButton('match'),
+      sortButton('newest'),
+    ]);
+    expect(sortButton('match')).toHaveAttribute('aria-pressed', 'true');
+    expect(sortButton('newest')).toHaveAttribute('aria-pressed', 'false');
+    expect(filters()).not.toContainElement(sortButton('match'));
+    // No `sort` is sent: the API's default is match.
+    expect(api.calls(APPS)).toHaveLength(1);
+    expect(new URL(api.calls(APPS)[0]?.request.url ?? '').search).toBe('');
+  });
+
+  it('ac2_sort_toggle_is_client_side', async () => {
+    const [a, b, c] = abc();
+    const { api } = renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+
+    // "By date": newest first, from the one loaded list.
+    fireEvent.click(sortButton('newest'));
+    expect(sortButton('newest')).toHaveAttribute('aria-pressed', 'true');
+    expect(sortButton('match')).toHaveAttribute('aria-pressed', 'false');
+    expect(names()).toEqual(['B', 'A', 'C']);
+    expect(api.calls(APPS)).toHaveLength(1);
+
+    // "By match" again: the API's order (the cached list was never sorted in place).
+    fireEvent.click(sortButton('match'));
+    expect(names()).toEqual(['A', 'B', 'C']);
+    expect(api.calls(APPS)).toHaveLength(1);
+  });
+
+  it('ac2_sort_toggle_is_client_side: with a filter, the totals unchanged', async () => {
+    const [a, b, c] = abc({ a: { status: 'shortlisted' }, b: { status: 'shortlisted' } });
+    const { api } = renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+    const before = totals();
+    expect(before).toEqual([
+      `3 ${he.applicants.stats.total}`,
+      `2 ${he.applicants.stats.shortlisted}`,
+      `1 ${he.applicants.stats.new}`,
+    ]);
+
+    fireEvent.click(filterButton('shortlisted', 2));
+    expect(names()).toEqual(['A', 'B']);
+    fireEvent.click(sortButton('newest'));
+    expect(names()).toEqual(['B', 'A']);
+    expect(filterButton('shortlisted', 2)).toHaveAttribute('aria-pressed', 'true');
+    expect(totals()).toEqual(before);
+    fireEvent.click(sortButton('match'));
+    expect(names()).toEqual(['A', 'B']);
+    expect(totals()).toEqual(before);
+    expect(api.calls(APPS)).toHaveLength(1);
+  });
+
+  it('ac3_summary_line', async () => {
+    const date = inDays(45);
+    const [a, b, c] = abc({
+      a: {
+        profile: applicantProfile({
+          household: 'couple',
+          move_in_date: date,
+          move_in_flexible: true,
+        }),
+      },
+      b: { profile: applicantProfile({ household: 'family', move_in_flexible: false }) },
+    });
+    renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+
+    expect(
+      within(cardOf('A')).getByText(
+        `${he.profile.household.couple} · כניסה ${formatDate(date)} ${he.applicants.flexible}`,
+      ),
+    ).toBeVisible();
+    // Not flexible: no suffix.
+    expect(
+      within(cardOf('B')).getByText(
+        `${he.profile.household.family} · כניסה ${formatDate(inDays(30))}`,
+      ),
+    ).toBeVisible();
+    expect(within(cardOf('A')).getByTestId('match-chips')).toBeVisible();
+
+    // C (before Slice 6): no summary, no chips, no disclosure.
+    const inC = within(cardOf('C'));
+    expect(inC.queryByText(/ · /)).toBeNull();
+    expect(inC.queryByTestId('match-chips')).toBeNull();
+    expect(inC.queryByRole('button', { name: he.applicants.why })).toBeNull();
+    expect(inC.queryByRole('term')).toBeNull();
+  });
+
+  it('ac3_summary_line: a past move-in shows as today', async () => {
+    const past = applicant({
+      applicant_name: 'P',
+      match: match(80),
+      profile: applicantProfile({ household: 'single', move_in_date: inDays(-10) }),
+    });
+    renderPage([json([past])]);
+    await screen.findByRole('article');
+    expect(
+      within(cardOf('P')).getByText(
+        `${he.profile.household.single} · כניסה ${formatDate(inDays(0))}`,
+      ),
+    ).toBeVisible();
+  });
+
+  it('ac4_why_disclosure', async () => {
+    // 0006b AC1 row 10: 98, agreeing on budget, move-in and area, differing on parking (2 asked,
+    // the listing has 1).
+    const date = inDays(30);
+    const a = applicant({
+      applicant_name: 'A',
+      status: 'declined',
+      match: match(98, ['budget', 'move_in', 'area'], 'parking'),
+      profile: applicantProfile({
+        household: 'couple',
+        move_in_date: date,
+        move_in_flexible: true,
+        has_pets: false,
+        smoker: false,
+        contract_months: 24,
+        parking_needed: 2,
+      }),
+    });
+    renderPage([json([a])], { mine: [json([{ ...A, parking_spots: 1 }])] });
+    await screen.findByRole('article');
+
+    // The chips in the owner's voice.
+    expect(
+      within(within(cardOf('A')).getByTestId('match-chips'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([he.match.owner.short.budget.agree, he.match.owner.short.parking.differ]);
+
+    // Closed at first (a declined card has it too); the button controls the panel.
+    const why = whyOf('A');
+    const heading = within(cardOf('A')).getByRole('heading', { level: 2 });
+    expect(why).toHaveAttribute('aria-expanded', 'false');
+    expect(why).toHaveAttribute('aria-controls', `${heading.id}-why`);
+    expect(panelOf('A')).not.toBeVisible();
+    expect(within(cardOf('A')).queryByRole('term')).toBeNull();
+
+    fireEvent.click(why);
+    expect(why).toHaveAttribute('aria-expanded', 'true');
+    const panel = panelOf('A');
+    expect(panel).toBeVisible();
+    // Opening moves no focus.
+    expect(heading).not.toHaveFocus();
+
+    // Three agreeing lines with the tick, then the differing one with the "!".
+    const items = within(within(panel).getByRole('list')).getAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual([
+      he.match.owner.budget.agree,
+      `תאריך הכניסה מתאים (${formatDate(date)})`,
+      he.match.owner.area.agree,
+      'ביקשו 2 חניות, בדירה יש 1',
+    ]);
+    for (const li of items) {
+      expect(li.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(items[0]?.querySelector('.bg-accent-tint')).not.toBeNull();
+    expect(items[3]?.querySelector('.bg-warn')).not.toBeNull();
+
+    // The six profile rows, with A's values.
+    const terms = within(panel)
+      .getAllByRole('term')
+      .map((dt) => dt.textContent);
+    const values = within(panel)
+      .getAllByRole('definition')
+      .map((dd) => dd.textContent);
+    expect(terms).toEqual([
+      he.applicants.profile.household,
+      he.applicants.profile.moveIn,
+      he.applicants.profile.contract,
+      he.applicants.profile.pets,
+      he.applicants.profile.smoker,
+      he.applicants.profile.parking,
+    ]);
+    expect(values).toEqual([
+      he.profile.household.couple,
+      `${formatDate(date)} (${he.listings.fields.entryFlexible})`,
+      he.profile.contract['24'],
+      he.listing.no,
+      he.applicants.profile.no,
+      he.profile.parking['2'],
+    ]);
+
+    // Pressing again hides them.
+    fireEvent.click(why);
+    expect(why).toHaveAttribute('aria-expanded', 'false');
+    expect(panelOf('A')).not.toBeVisible();
+    expect(within(cardOf('A')).queryByRole('term')).toBeNull();
+  });
+
+  it('ac4_why_disclosure: the other profile values', async () => {
+    const a = applicant({
+      applicant_name: 'A',
+      match: match(70, ['budget', 'area', 'smoking'], 'contract'),
+      profile: applicantProfile({
+        household: 'roommates',
+        move_in_flexible: false,
+        has_pets: true,
+        smoker: true,
+        contract_months: 6,
+        parking_needed: 0,
+      }),
+    });
+    renderPage([json([a])]);
+    await screen.findByRole('article');
+    fireEvent.click(whyOf('A'));
+    const panel = panelOf('A');
+    expect(
+      within(panel)
+        .getAllByRole('definition')
+        .map((dd) => dd.textContent),
+    ).toEqual([
+      he.profile.household.roommates,
+      formatDate(inDays(30)),
+      he.profile.contract['6'],
+      he.listing.yes,
+      he.applicants.profile.yes,
+      he.profile.parking['0'],
+    ]);
+    expect(
+      within(within(panel).getByRole('list'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      he.match.owner.budget.agree,
+      he.match.owner.area.agree,
+      he.match.owner.smoking.agreeSmoker,
+      'מחפשים חוזה לחצי שנה בלבד',
+    ]);
+  });
+
+  it('ac5_patch_keeps_place', async () => {
+    const [a, b] = abc();
+    const { api } = renderPage([json([a, b])], {
+      extra: {
+        [patchRoute(a)]: [json({ ...a, status: 'shortlisted', match: match(50) })],
+      },
+    });
+    await screen.findAllByRole('article');
+    expect(names()).toEqual(['A', 'B']);
+
+    fireEvent.click(
+      within(cardOf('A')).getByRole('button', { name: he.applicants.actions.shortlist }),
+    );
+    await vi.waitFor(() => {
+      expect(within(cardOf('A')).getByTestId('match-badge')).toHaveTextContent(badge(50));
+    });
+    // Now below B's 59, but the list is not re-sorted: A keeps its place.
+    expect(names()).toEqual(['A', 'B']);
+    expect(chipOf('A')).toHaveTextContent(he.applicants.status.shortlisted);
+    expect(sortButton('match')).toHaveAttribute('aria-pressed', 'true');
+    await vi.waitFor(() => {
+      expect(within(cardOf('A')).getByRole('heading', { level: 2 })).toHaveFocus();
+    });
+    expect(api.calls(APPS)).toHaveLength(1);
+  });
+
+  it('ac7_no_amount_in_cards', async () => {
+    const [a, b, c] = abc({
+      b: { match: match(40, ['move_in', 'area', 'household'], 'budget') },
+    });
+    renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+    for (const name of ['A', 'B']) fireEvent.click(whyOf(name));
+
+    // The header's price is the page's only amount.
+    expect(screen.getByText(/7,200[\s‎‏]*₪/)).toBeVisible();
+    expect(within(cardOf('A')).getByText(he.match.owner.budget.agree)).toBeVisible();
+    expect(within(cardOf('B')).getByText(he.match.owner.budget.differ)).toBeVisible();
+    for (const card of cards()) {
+      expect(card.textContent).not.toContain('₪');
     }
   });
 });
