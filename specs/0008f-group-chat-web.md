@@ -1,7 +1,7 @@
 ---
 id: 0008f
 title: Room chats become group chats on screen — every thread with flatmates lists its members and names each sender, a flatmate sees when their history starts, and a flatmate finds and leaves their flats from the chat list
-status: in-progress
+status: done
 depends_on: [0008e]   # 0008e: features/flatmates (api.ts, formatDay, the ['me','flats'] key) and the join flow; 0008d via 0008e: ThreadOut.members/my_role/visible_from, MessageOut.sender_name, ConversationOut.my_role/member_count, GET/DELETE /me/flats
 reviewers: [code, qa, security, ux]   # security: chat membership rendering and the owner-only link now keyed on my_role; ux: group header, sender names; qa: group vs one-to-one rendering
 estimate: 1 coder run   # coder Sonnet/medium. Split from the draft 0008e by the verifier
