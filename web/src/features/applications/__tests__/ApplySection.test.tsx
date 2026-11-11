@@ -615,7 +615,7 @@ describe('ApplySection', () => {
 
   it('ac9_room_section_gate', async () => {
     const GATE =
-      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את פרטי החיפוש של חדר.';
+      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.';
     const noProfile = () => json({ detail: 'seeker_profile_not_found' }, 404);
     const room = (gender_preference: 'any' | 'women') => [
       () =>
@@ -665,7 +665,7 @@ describe('ApplySection', () => {
   it('ac10_room_409s', async () => {
     const MISFIT = 'החדר לא מתאים לפרטים שבפרופיל שלך, ולכן אי אפשר להגיש אליו מועמדות.';
     const GATE =
-      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את פרטי החיפוש של חדר.';
+      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.';
     const room = (gender_preference: 'any' | 'women') => () =>
       json(listingDetail({ id: 'A', listing_type: 'room', gender_preference, room_fit: null }));
     const noBanners = (s: ReturnType<typeof within>) => {
