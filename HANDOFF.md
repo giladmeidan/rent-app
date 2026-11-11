@@ -22,22 +22,15 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–3 are merged (map web `0003d` PR #15, ec7d6ec). Slice 4: `0004a` and `0004c` merged; `0004b` open as
-PR #16 (in CI); `0004d` worktree prepared, build not started. Work runs from Gilad's session
-"Spec continuation from handoff"; other sessions should plan/spec only (no builds, merges or worktree changes).
+Slices 1–4 are merged. Slice 4 finished with `0004b` (PR #16, dc4d8b4) and `0004d` (PR #17, c553950). Slice 5
+(Chat) is specced and verified (`0005a`, `0005c`, `0005b`); no build started. Nothing in flight: no open PRs, no
+spec worktrees or branches, no spec stacks running; local `main` = `origin/main`.
 
 Last updated:
 2026-11-11
 
 ## Current Work
-- **0004b Apply web** — [PR #16](https://github.com/giladmeidan/rent-app/pull/16), head `4307ded`, pushed once,
-  `ready-to-merge`; `api` green, `web`/`e2e` were pending. Review: 2 majors fixed (a background refetch error
-  wiped the apply draft; a previous seeker's cached applications could show after the next login in the same
-  tab), minors fixed/logged. Stack down. On merge: mark `done`, remove `../rent-app-0004b` + branch — but only
-  after 0004d no longer needs it (0004d is branched from it; rule 10).
-- **0004d Inbox web** (`verified`) — worktree `../rent-app-0004d`, branch `spec/0004d-inbox-web` from
-  `origin/spec/0004b-apply-web` (4307ded) + main, `.env` on 5447/6393/8015. Needs 5173 (free). Build not started;
-  when #16 merges, it merges `origin/main`.
+None in flight. Next is Slice 5 (see Next Steps 1).
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -66,6 +59,10 @@ Last updated:
   `applicant_count` and `new_applicant_count` (no `view_count`). Review: 0 blockers, 0 majors.
 - [x] 0003d Map web — PR #15 (ec7d6ec): `/search` list/map toggle with price pins searching the visible area;
   approximate-area map on the listing page. Review: 1 blocker + 2 majors fixed.
+- [x] 0004b Apply web — PR #16 (dc4d8b4): apply from the listing page with the applicant count, "my
+  applications" with withdraw, safe `?next=` login return path. Review: 2 majors fixed.
+- [x] 0004d Inbox web — PR #17 (c553950): `/me/listings/:id/applicants` with totals, filters, shortlist /
+  un-shortlist / decline; applicants link on "my listings". Review: 0 blockers, 0 majors. Slice 4 complete.
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -76,10 +73,14 @@ Last updated:
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **0004d**: start `/build 0004d` in `../rent-app-0004d` (ask Gilad with a button if the turn is automated).
-2. **PR #16 (0004b)**: when `api`/`web`/`e2e` are green on its head, ask Gilad; merge with `--match-head-commit`;
-   mark `done`; tell the 0004d session to merge `origin/main`; remove the 0004b worktree + branch.
-3. **0004d PR**: merge on Gilad's word after green CI; clean up. That completes Slice 4.
+1. **Slice 5 builds**: `0005a` chat API is ready now (depends on merged 0004c). Prepare `../rent-app-0005a` from
+   `origin/main` with its own `.env` and start `/build 0005a` (coder Opus/high: migration + backfill). Then
+   `0005c` SSE events API from 0005a's branch once its PR is open (Opus/high: async concurrency), then `0005b`
+   chat web after 0005a + 0005c (web, needs 5173).
+2. Merge each PR on Gilad's word after `api`/`web`/`e2e` are green on its head (`--match-head-commit`); mark
+   `done`; remove worktree + branch (rule 10).
+3. If another session commits in the main checkout, push it (`git pull --rebase` first) before branching a
+   worktree from `origin/main`.
 4. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
    unthrottled and writes a row per hit; owner PATCH rate limit (Slice 5); 0004d re-fetch on 404/409.
 5. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0005`), then
@@ -88,12 +89,9 @@ Last updated:
    not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
    number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
    photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-7. **Slice 5 (Chat)** is specced and verified (bd0d207, local main — push before a worktree branches from
-   `origin/main`). Build order: `0005a` chat API (ready now: depends only on merged 0004c; API spec, can run
-   beside 0004d) → `0005c` SSE event stream (from 0005a's branch once its PR is open) → `0005b` chat web (after
-   0005a, 0005c, 0004b, 0004d; web, needs 5173). Coders for 0005a and 0005c on Opus/high (migration + backfill;
-   async concurrency). Gilad's Slice 5 answers are in PRODUCT.md "Chat"; no open questions.
-8. Housekeeping: archive finished build sessions (0001b … 0004c) if Gilad wants; decide on
+7. **Slice 5 notes**: Gilad's Slice 5 answers are in PRODUCT.md "Chat" (SSE chosen for events; no open
+   questions). Specs pushed (ae6dfc9).
+8. Housekeeping: archive finished build sessions (0001b … 0004d) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
 
 ## Architecture
@@ -188,6 +186,8 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-11 (late) — 0004b (PR #16) and 0004d (PR #17, merged on Gilad's standing OK) merged: Slice 4 done;
+  Slice 5 specs pushed; all worktrees/branches removed; main in sync.
 - 2026-11-11 — Slice 5 planning session: specced 0005a (chat API), 0005c (SSE events API), 0005b (chat web), one
   verifier round each, all findings applied, verified; Gilad answered Q2–Q5 (a) and delegated Q1 (chose SSE);
   committed bd0d207 (not pushed). No builds.
