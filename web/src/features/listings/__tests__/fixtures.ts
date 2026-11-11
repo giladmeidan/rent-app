@@ -51,16 +51,20 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     expires_at: '2099-01-01T10:00:00Z',
     applicant_count: 0,
     new_applicant_count: 0,
+    liked_me_count: 0,
     ...overrides,
   };
 }
 
-/** `l` as `POST` / `PATCH /listings` answer it: a `ListingOut`, without the applicant counts. */
+/** `l` as `POST` / `PATCH /listings` answer it: a `ListingOut`, without the applicant and like
+ * counts. */
 export function withoutCounts(l: MyListingOut): ListingOut {
-  const out: ListingOut & Partial<Pick<MyListingOut, 'applicant_count' | 'new_applicant_count'>> = {
+  const out: ListingOut &
+    Partial<Pick<MyListingOut, 'applicant_count' | 'new_applicant_count' | 'liked_me_count'>> = {
     ...l,
   };
   delete out.applicant_count;
   delete out.new_applicant_count;
+  delete out.liked_me_count;
   return out;
 }

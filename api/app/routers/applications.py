@@ -71,6 +71,7 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
     return MyApplicationOut(
         id=application.id,
         status=application.status,  # validated against ApplicationStatus (ck_applications_status)
+        source=application.source,  # validated against ApplicationSource (ck_applications_source)
         message=application.message,
         created_at=application.created_at,
         updated_at=application.updated_at,
@@ -178,6 +179,7 @@ def _applicant_out(row: Row[Any]) -> ApplicantOut:
     return ApplicantOut(
         id=application.id,
         status=application.status,  # never `withdrawn`: filtered out by the service
+        source=application.source,
         message=application.message,
         applicant_name=row.display_name,
         created_at=application.created_at,

@@ -21,7 +21,9 @@ own values through `ListingOut` (`GET /me/listings`). `ListingPublic.from_listin
 that applies this.
 `ListingDetail.room_fit` is the caller's own fit to a room: `true` / `false` exactly when the
 listing is a room and the caller is a seeker whose profile has a room section, else `null`. Search
-items do not carry it: a room that does not fit the caller never reaches them."""
+items do not carry it: a room that does not fit the caller never reaches them.
+`ListingDetail.like` (spec 0008a) is the caller's like state on a room (`LikeStateOut`): set only
+for a seeker on a room they have no non-withdrawn application to, else `null`."""
 
 import datetime as dt
 import uuid
@@ -172,13 +174,24 @@ class ListingPublic(BaseModel):
         return cls.model_validate({**values, **given})
 
 
+# Defined here, not in `schemas/people.py` (which re-exports it): `ListingDetail` needs it, and
+# `people` imports `ListingPublic` from this module.
+class LikeStateOut(BaseModel):
+    """The likes between the caller (a seeker) and one room (spec 0008a)."""
+
+    liked_by_me: bool
+    liked_me: bool
+
+
 class ListingDetail(ListingPublic):
     """The public listing page (spec 0004a): `ListingPublic` plus the exact number of applicants
-    (every application except withdrawn ones; declined ones count, they applied) and the caller's
-    room fit (spec 0007b; see the module docstring). The page is public whatever the fit."""
+    (every application except withdrawn ones; declined ones count, they applied), the caller's
+    room fit (spec 0007b; see the module docstring) and like state (spec 0008a). The page is public
+    whatever the fit."""
 
     applicant_count: int
     room_fit: bool | None
+    like: LikeStateOut | None
 
 
 class ListingSearchOut(BaseModel):

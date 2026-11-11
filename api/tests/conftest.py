@@ -105,13 +105,13 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `seeker_profiles`, `messages`, `conversations`, `applications`,
-    `listings`, `sessions`, `users` and `areas` tables."""
+    """Per-test engine on clean `room_pairs`, `seeker_profiles`, `messages`, `conversations`,
+    `applications`, `listings`, `sessions`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE seeker_profiles, messages, conversations, applications, listings,"
-                " sessions, users, areas"
+                "TRUNCATE TABLE room_pairs, seeker_profiles, messages, conversations, applications,"
+                " listings, sessions, users, areas"
             )
         )
     yield migrated_db
@@ -244,7 +244,8 @@ def make_profile(engine: Engine, user_id: uuid.UUID, area_id: uuid.UUID, **overr
     """Insert a housing profile for `user_id` directly (spec 0006a), bypassing the API's checks.
     Defaults are the specs' valid body `P`: budget 7500, move-in 30 days after today (UTC, as the
     API's window is), not flexible, `area_ids=[area_id]`, a couple, no pets, non-smoker, 24
-    months, one parking spot. `overrides` may set any column."""
+    months, one parking spot. `overrides` may set any column (0008a: `people_visible`, `about_me`
+    too)."""
     unknown = set(overrides) - _PROFILE_COLUMNS
     if unknown:
         raise ValueError(f"not seeker_profiles columns: {sorted(unknown)}")
@@ -304,6 +305,36 @@ def make_application(
             text(f"INSERT INTO applications ({columns}) VALUES ({params}) RETURNING id"), values
         ).scalar_one()
     return application_id
+
+
+def make_pair(
+    engine: Engine,
+    listing_id: uuid.UUID,
+    seeker_id: uuid.UUID,
+    *,
+    price_ils_seen: int,
+    lister_liked: bool = False,
+    seeker_liked: bool = False,
+) -> uuid.UUID:
+    """Insert a `room_pairs` row directly (spec 0008a) and return its id (the person card's id).
+    A like flag sets that side's timestamp to now(). Bypasses the service and its candidate
+    rules."""
+    with engine.begin() as conn:
+        pair_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen, lister_liked_at,"
+                " seeker_liked_at) VALUES (:listing_id, :seeker_id, :price,"
+                " CASE WHEN :lister THEN now() END, CASE WHEN :seeker THEN now() END) RETURNING id"
+            ),
+            {
+                "listing_id": listing_id,
+                "seeker_id": seeker_id,
+                "price": price_ils_seen,
+                "lister": lister_liked,
+                "seeker": seeker_liked,
+            },
+        ).scalar_one()
+    return pair_id
 
 
 def make_listing(

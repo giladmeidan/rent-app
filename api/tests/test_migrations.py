@@ -1211,3 +1211,210 @@ def test_ac6_application_listing_type_backfill_and_downgrade(migration_db_url: s
                 assert _check_definition(conn, name) == model_definition, name
     finally:
         engine.dispose()
+
+
+def _columns(conn: Any, table: str) -> dict[str, bool]:
+    """`table`'s columns and whether each is nullable."""
+    return {column["name"]: column["nullable"] for column in inspect(conn).get_columns(table)}
+
+
+def test_ac14_people_likes_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0008a: 0011 adds `room_pairs`, the profile's `people_visible` / `about_me` and
+    # `applications.source`, with `message` nullable exactly for a like-sourced application.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0010")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"), ("other", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " VALUES (:owner, :area, 'room', 'city', 'street', 3, 1, 80, 4500,"
+                    " current_date, false, 'none', false, now() + interval '90 days', 2)"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, price_ils_at_apply,"
+                    " area_id_at_apply, listing_type_at_apply)"
+                    " VALUES (:listing, :seeker, 'Hello', 4500, :area, 'room') RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"], "area": area_id},
+            ).scalar_one()
+            for user, gender in ((users["seeker"], "'woman'"), (users["other"], "NULL")):
+                conn.execute(
+                    text(
+                        "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date,"
+                        " area_ids, household, has_pets, smoker, contract_months, gender)"
+                        " VALUES (:user, 7500, current_date, ARRAY[:area]::uuid[], 'couple',"
+                        f" false, false, 24, {gender})"
+                    ),
+                    {"user": user, "area": area_id},
+                )
+        with engine.connect() as conn:
+            room_section_0010 = _check_definition(conn, "ck_seeker_profiles_room_section")
+        assert room_section_0010 is not None
+        assert "room_pairs" not in _table_names(migration_db_url)
+
+        command.upgrade(cfg, "0011")
+        assert "room_pairs" in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert conn.execute(
+                text("SELECT source, message FROM applications WHERE id = :id"),
+                {"id": application_id},
+            ).one() == ("apply", "Hello")
+            assert conn.execute(
+                text("SELECT people_visible, about_me FROM seeker_profiles WHERE user_id = :id"),
+                {"id": users["seeker"]},
+            ).one() == (False, None)
+            assert _columns(conn, "applications")["message"] is True
+            assert _columns(conn, "applications")["source"] is False
+            assert _columns(conn, "seeker_profiles")["people_visible"] is False
+
+        def refused(constraint: str, sql: str, **params: Any) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(sql), params)
+
+        insert_application = (
+            "INSERT INTO applications (listing_id, seeker_id, source, message, status,"
+            " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+            " VALUES (:listing, :seeker, :source, :message, 'shortlisted', 4500, :area, 'room')"
+        )
+        bad_rows = (
+            ("like", "Hello"),  # a like-sourced application has no message
+            ("apply", None),  # an applied one always has one (the NULL hole is closed)
+            ("apply", ""),
+            ("apply", "x" * 501),
+        )
+        for source, message in bad_rows:
+            refused(
+                "ck_applications_message",
+                insert_application,
+                listing=listing_id,
+                seeker=users["other"],
+                source=source,
+                message=message,
+                area=area_id,
+            )
+        # Any other source also fails `ck_applications_message`; whichever Postgres checks first.
+        refused(
+            "ck_applications_(source|message)",
+            insert_application,
+            listing=listing_id,
+            seeker=users["other"],
+            source="invite",
+            message=None,
+            area=area_id,
+        )
+        refused(
+            "ck_seeker_profiles_room_section",
+            "UPDATE seeker_profiles SET people_visible = true WHERE user_id = :id",
+            id=users["other"],
+        )
+        refused(
+            "ck_seeker_profiles_room_section",
+            "UPDATE seeker_profiles SET about_me = 'Hi' WHERE user_id = :id",
+            id=users["other"],
+        )
+        refused(
+            "ck_seeker_profiles_about_me",
+            "UPDATE seeker_profiles SET about_me = '' WHERE user_id = :id",
+            id=users["seeker"],
+        )
+        refused(
+            "ck_room_pairs_price",
+            "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen)"
+            " VALUES (:listing, :seeker, 0)",
+            listing=listing_id,
+            seeker=users["seeker"],
+        )
+        with engine.begin() as conn:
+            like_id = conn.execute(
+                text(insert_application + " RETURNING id"),
+                {
+                    "listing": listing_id,
+                    "seeker": users["other"],
+                    "source": "like",
+                    "message": None,
+                    "area": area_id,
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "UPDATE seeker_profiles SET people_visible = true, about_me = 'Hi'"
+                    " WHERE user_id = :id"
+                ),
+                {"id": users["seeker"]},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen,"
+                    " seeker_liked_at) VALUES (:listing, :seeker, 4500, now())"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"]},
+            )
+        refused(
+            "uq_room_pairs_listing_seeker",
+            "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen)"
+            " VALUES (:listing, :seeker, 4500)",
+            listing=listing_id,
+            seeker=users["seeker"],
+        )
+
+        command.downgrade(cfg, "0010")
+        assert "room_pairs" not in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert "source" not in _columns(conn, "applications")
+            assert _columns(conn, "applications")["message"] is False
+            assert set(_columns(conn, "seeker_profiles")).isdisjoint({"people_visible", "about_me"})
+            messages: dict[Any, str] = {
+                row.id: row.message
+                for row in conn.execute(text("SELECT id, message FROM applications"))
+            }
+            assert messages == {
+                application_id: "Hello",
+                like_id: "התאמה הדדית",
+            }
+            assert _check_definition(conn, "ck_applications_message") is None
+            assert _check_definition(conn, "ck_applications_source") is None
+            assert _check_definition(conn, "ck_seeker_profiles_about_me") is None
+            assert _check_definition(conn, "ck_applications_message_length") is not None
+            assert _check_definition(conn, "ck_seeker_profiles_room_section") == room_section_0010
+        refused(
+            "ck_applications_message_length",
+            "UPDATE applications SET message = '' WHERE id = :id",
+            id=application_id,
+        )
+
+        command.upgrade(cfg, "head")
+        assert "room_pairs" in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    text("SELECT source FROM applications WHERE id = :id"), {"id": like_id}
+                ).scalar_one()
+                == "apply"
+            )  # the downgrade turned it into an applied one
+    finally:
+        engine.dispose()

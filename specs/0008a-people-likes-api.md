@@ -205,7 +205,7 @@ shared module is allowed, but not required.
      `count(*) OVER ()` as the total, and both like columns. The order is `seeker_liked_at IS NULL`,
      `m_score DESC`, `RoomPair.created_at`, `RoomPair.id`, with `LIMIT 20 OFFSET :offset`. An offset past the
      end returns `items: []` and the true `total`. That needs one extra `count` only when the page is empty, so
-     a request runs **4** statements counting the session lookup, or **5** for an empty page (verifier
+     a request runs **4** statements counting the session lookup, or **5** for an empty page past the first (verifier
      finding 3).
 - **Lister like `like_person(db, r, owner, listing_id, person_id)`** runs in this order:
   1. One ownership-and-live SELECT, as above.
@@ -255,6 +255,10 @@ shared module is allowed, but not required.
 - **Unlike**: `UPDATE room_pairs SET lister_liked_at = NULL` (respectively `seeker_liked_at`) on the caller's
   side. The lister DELETE returns 404 for a pair outside the caller's listing. The seeker DELETE always
   returns 204. No limiter.
+- **Apply consumes the pair's likes** (review B1): in its transaction, under the pair's row lock and before the
+  application row, `apply` runs `UPDATE room_pairs SET lister_liked_at = NULL, seeker_liked_at = NULL WHERE
+  listing_id = :l AND seeker_id = :s` (`people.consume_likes`), so no one-sided like outlives an application and
+  a like racing an apply rolls back with `already_applied`.
 - **`liked_rooms(db, seeker_id)`** (`services/search.py`) is one statement: `_public_listings()` joined to
   `RoomPair` (`seeker_id = :me`) and to the seeker's profile (`_with_profile` / `_with_match`), where
   `Listing.listing_type = 'room'` (a room switched to an apartment keeps its pairs, and `room_fit` is NULL for
@@ -291,7 +295,7 @@ shared module is allowed, but not required.
   unknown id gives 404 `not_found`. `R` paused gives 409 `listing_not_live`. `?offset=1001` gives 422.
   `?offset=40` gives `items: []` with `total` 1. — `test_people.py::test_ac4_people_errors`
 - [ ] AC5 (perf) Given 30 visible candidates, When `O` GETs page 1 and then page 2, Then each request runs
-  exactly 4 statements counting the session lookup, plus 1 for an empty page. Page 1 has 20 items and page 2 has 10, with no overlap, and
+  exactly 4 statements counting the session lookup, plus 1 for an empty page past the first. Page 1 has 20 items and page 2 has 10, with no overlap, and
   `total` is 30 on both. The second GET inserts no new `room_pairs` rows. — `test_people.py::test_ac5_statements_and_paging`
 - [ ] AC6 Given `A` on `R`'s page, When `O` PUTs the like, Then it returns `{liked: true, application_id: null}`,
   `A`'s card shows `liked_by_me: true`, and `A`'s `GET /me/likes` has `R` in `liked_me` (not in `mine`). Then,
@@ -424,10 +428,40 @@ verifier round, Gilad). The verifier confirmed `0007g` is on main (c80a78c).
              Assumptions you can overrule: 30 likes/hour and 100/day; no "hide" for a received like (follow-up);
              liking needs the profile's room section even on a "לא משנה" room; likes are used up by the match.
     KPIs this slice moves: mutual matches per room listing; time from room publish to first chat.
-    Acceptance targets: browse 4 statements (5 for an empty page); exactly one match under concurrent likes; the
+    Acceptance targets: browse 4 statements (5 for an empty page past the first); exactly one match under concurrent likes; the
              card carries no budget, household, pets, smoker, contract, parking or user id.
     Risks: budget probing by editing the price - mitigation: price frozen per pair; one bit leaks per newly
              created listing until the pre-launch per-owner listings cap. Smoking/pets/flatmates-preference fit
              readable through the score - accepted, security reviewer confirms.
     Reviewers: code, qa, security, perf   Estimated: 1 coder run (Opus/high), cut line named if it overflows
     Links: specs/0008a-people-likes-api.md - PRODUCT.md "People & likes" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008a - People & likes API   PR OPEN (not merged), code head 1384a51
+    Shipped: a room lister pages through opted-in seekers (and anyone who liked the room) with a match score at the
+             pair's frozen price and likes them; a seeker likes rooms and sees who liked them back; the second like
+             becomes a shortlisted application (source "like", no message) with its chat open. An apply consumes the
+             pair's likes, so after a withdraw both sides start over. Web: type-only fixture edits.
+    Demo: make dev -> seeker A fills the room section, turns people_visible on -> owner O GETs /listings/{room}/people
+          and PUTs A's like -> A sees the room in GET /me/likes "liked_me", PUTs /listings/{room}/like ->
+          application_id returned; both inboxes show it shortlisted, source "like", chat open.
+    Tests: +2 unit (AboutMe), +17 integration (AC1-AC14 + apply-consumes-likes, withdrawn-like-not-revived,
+           apply racing a lister like); api 457, web 263; make lint, make test, make i18n-check green locally on
+           4a9c2ef. CI: api + web on the PR head (see the PR). No e2e (API spec).
+    Perf (10k profiles, 10k listings, 4k opted in): browse p95 76 ms (134 ms at 7k opted in), 4 statements per
+           page (5 for an empty page past the first); first visit inserts ~4k pairs in ~250 ms; /me/likes p95 31 ms
+           at 202 rows; no N+1, every new statement on an index.
+    Findings: 1 blocker fixed (a like given before an apply came back after a withdraw and let one click reopen a
+              shortlisted chat - code, security, qa); 2 majors to Gilad (Speed rule 9, below); 3 minors fixed
+              (AC3's SQL check now bites, AC9 pins the hidden-seeker 404, empty-page wording); 11 follow-ups logged;
+              12 nits dropped.
+    Decisions I need from you: 1. The person card's score reads the room's live household/contract/parking/
+             smoking/pets, so an owner editing a room learns those hidden answers for every opted-in candidate
+             (pets/smoking show even without an edit). (a) accept (b) freeze every room-side input per pair like
+             the price (c) score only what the card shows plus the frozen budget (recommend: a; security: b).
+             2. People browse has no rate limit (one room can read every opted-in card in at most 51 requests).
+             (a) a per-owner limiter as a follow-up (b) rely on the pre-launch listings cap (recommend: a).
+             Built as recommended meanwhile: no change in this PR.
+    Changed in PRODUCT.md: nothing.
+    Next: 0008b (people browse web), 0008c (likes web) and 0008d (flatmates API) branch from this PR.

@@ -1,8 +1,8 @@
 """`seeker_profiles` table (spec 0006a): a seeker's housing preferences, one row per seeker.
 
-Every CHECK and the FK match migrations 0007, 0009 and 0010 exactly (autogenerate must see no diff).
-Personal data (NF2): read only by its seeker (`GET /me/profile`), by the apply gate (existence
-only) and, from 0006b / 0006c, by the matching queries.
+Every CHECK and the FK match migrations 0007, 0009, 0010 and 0011 exactly (autogenerate must see
+no diff). Personal data (NF2): read only by its seeker (`GET /me/profile`), by the apply gate
+(existence only) and, from 0006b / 0006c, by the matching queries.
 
 The room section (spec 0007a): `gender` (NULL = not looking for a room), an optional `birth_year`,
 `flatmate_gender` (the flatmates preference) and `lifestyle` (the seeker's questionnaire answers,
@@ -10,6 +10,8 @@ key -> 1-3). Without a `gender` the other three hold their defaults
 (`ck_seeker_profiles_room_section`). Also personal data: in 0007a only its seeker reads it; from
 0007b the room fit rule and the match score read it; from 0007c, the owner's inbox reads `gender`,
 `birth_year` (as an age) and `lifestyle` on room applications only (never `flatmate_gender`).
+From 0008a the room section also holds `people_visible` (opt in to room listers' people browse) and
+`about_me`; people browse reads them with the card fields by name, never `budget_max_ils`.
 
 `area_ids` has no FK (an array cannot carry one): the API
 checks each id is an active area when the profile is written; a later-deactivated area simply never
@@ -67,8 +69,13 @@ class SeekerProfile(Base):
         # Known keys, values 1-3 only (migration 0010).
         CheckConstraint(LIFESTYLE_CHECK, name="ck_seeker_profiles_lifestyle"),
         CheckConstraint(
+            "about_me IS NULL OR char_length(about_me) BETWEEN 1 AND 300",
+            name="ck_seeker_profiles_about_me",
+        ),
+        # Opting in and "about me" belong to the room section too (migration 0011).
+        CheckConstraint(
             "gender IS NOT NULL OR (birth_year IS NULL AND flatmate_gender = 'any'"
-            " AND lifestyle = '{}'::jsonb)",
+            " AND lifestyle = '{}'::jsonb AND NOT people_visible AND about_me IS NULL)",
             name="ck_seeker_profiles_room_section",
         ),
     )
@@ -98,6 +105,12 @@ class SeekerProfile(Base):
     lifestyle: Mapped[dict[str, int]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'")
     )
+    # People browse (spec 0008a): shown to room listers whose rooms fit; and a short plain-text
+    # "about me" on the person card.
+    people_visible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    about_me: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
