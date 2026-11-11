@@ -10,6 +10,13 @@ Ownership: every query by listing id also carries `owner_id = :owner` in its `WH
 owner's listing is indistinguishable from an unknown id (`ListingNotFoundError`, a 404).
 
 Timestamps (`updated_at`, `expires_at`) come from the database's `now()`, never from Python.
+
+Room fields (spec 0007a): `gender_preference`, `flatmates_count`, `flatmate_ages` and `lifestyle`.
+`ListingIn` checks them on create and on a PATCH's merged row: an apartment holds
+`ROOM_FIELD_DEFAULTS`, a room needs a count, ages never outnumber it. A switch to an apartment
+resets the four server-side before validation (sent room values still win, so a non-default one is
+a 422), and any `listing_type` change writes all four. A pause or resume of a legacy room (NULL
+count) is not an edit and is let through; every other PATCH of it must send `flatmates_count`.
 """
 
 import datetime as dt
@@ -23,7 +30,7 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Application, Area, Listing, User
-from app.schemas.listing import ListingIn, ListingPatch
+from app.schemas.listing import ROOM_FIELD_DEFAULTS, ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
 # Changing any of these resets the listing's map location to `pending` (spec 0003c).
@@ -121,11 +128,15 @@ def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, 
 
 def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:
     """The listing as it would be after `patch`, re-validated as a whole (cross-field rules).
-    A failure is the request's fault: FastAPI's 422 with a list `detail`."""
+    A switch to an apartment first resets the room fields (`ROOM_FIELD_DEFAULTS`); a status-only
+    PATCH (pause / resume) does not need a room's `flatmates_count`. A failure is the request's
+    fault: FastAPI's 422 with a list `detail`."""
     current: dict[str, Any] = {name: getattr(listing, name) for name in ListingIn.model_fields}
     sent = patch.model_dump(include=patch.model_fields_set - {"status"})
+    if sent.get("listing_type") == "apartment":
+        current.update(ROOM_FIELD_DEFAULTS)
     try:
-        return ListingIn.model_validate({**current, **sent})
+        return ListingIn.model_validate({**current, **sent}, context={"status_only": not sent})
     except ValidationError as exc:
         raise RequestValidationError(
             [{**error, "loc": ("body", *error["loc"])} for error in exc.errors()]
@@ -156,6 +167,9 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         values: dict[str, Any] = {
             name: getattr(data, name) for name in patch.model_fields_set - {"status"}
         }
+        if "listing_type" in patch.model_fields_set:
+            # Room -> apartment writes the reset; apartment -> room the merged (sent or default).
+            values.update({name: getattr(data, name) for name in ROOM_FIELD_DEFAULTS})
         if patch.status is not None:
             values["status"] = patch.status
         if any(getattr(data, name) != getattr(listing, name) for name in _ADDRESS_FIELDS):

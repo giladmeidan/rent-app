@@ -7,6 +7,7 @@ AC1-AC8 are the `test_ac*_` functions after `# --- 0006c`. `L0` / `P0` are 0006b
 the database's `current_date` is."""
 
 import datetime as dt
+import json
 import uuid
 from collections.abc import Iterator
 from typing import Any
@@ -1014,3 +1015,47 @@ def test_ac9_budget_cannot_be_bisected_by_price_edits(
     assert all(match == baseline for match in seen), seen
     # Read as "always fits", the bisection walks to the ceiling, never to the budget.
     assert low > 8437 * 10
+
+
+# --- 0007a: the seeker's room section ----------------------------------------------------------
+
+ROOM_SECTION_KEYS = {"gender", "birth_year", "flatmate_gender", "lifestyle"}
+
+
+def test_ac8_room_section_never_outside_room_field(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    birth_year = dt.datetime.now(dt.UTC).year - 30
+    listing = make_listing(
+        db_engine, _user_id(owner), gush_dan, listing_type="room", flatmates_count=2
+    )
+    s1 = _profiled_seeker(
+        db_engine,
+        "s1@example.com",
+        gush_dan,
+        "S1",
+        gender="woman",
+        birth_year=birth_year,
+        flatmate_gender="women",
+        lifestyle={"night": 3},
+    )
+    application = make_application(db_engine, listing, s1)
+
+    listed = _applicants(owner, listing)
+    patched = _set_status(owner, listing, application, {"status": "shortlisted"})
+
+    for response in (listed, patched):
+        body = _ok(response)
+        items = body if isinstance(body, list) else [body]
+        assert [item["id"] for item in items] == [str(application)]
+        for item in items:
+            # `room` is 0007c's and is excluded on purpose.
+            item_wo_room = {k: v for k, v in item.items() if k != "room"}
+            assert set(item_wo_room["profile"]) == PROFILE_KEYS
+            keys, _ = _keys_and_numbers(item_wo_room)
+            assert not keys & ROOM_SECTION_KEYS
+            assert "woman" not in json.dumps(item_wo_room)
+        keys, numbers = _keys_and_numbers(body)
+        assert "birth_year" not in keys
+        assert "flatmate_gender" not in keys
+        assert birth_year not in numbers

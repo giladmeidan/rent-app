@@ -25,7 +25,18 @@ PROFILE_KEYS = {
     "smoker",
     "contract_months",
     "parking_needed",
+    "gender",
+    "birth_year",
+    "flatmate_gender",
+    "lifestyle",
     "updated_at",
+}
+# The room section of a profile without one (spec 0007a).
+ROOM_OFF: dict[str, Any] = {
+    "gender": None,
+    "birth_year": None,
+    "flatmate_gender": "any",
+    "lifestyle": {},
 }
 NOT_FOUND = {"detail": "seeker_profile_not_found"}
 
@@ -79,7 +90,7 @@ def test_ac1_seeker_creates_and_reads_profile(seeker: TestClient, gush_dan: uuid
     assert response.status_code == 200, response.text
     saved = response.json()
     assert set(saved) == PROFILE_KEYS
-    assert {k: v for k, v in saved.items() if k != "updated_at"} == body
+    assert {k: v for k, v in saved.items() if k != "updated_at"} == {**ROOM_OFF, **body}
     read = seeker.get("/me/profile")
     assert read.status_code == 200
     assert read.json() == saved
@@ -97,7 +108,7 @@ def test_ac2_put_replaces_profile(
     assert second.status_code == 200, second.text
     body = second.json()
     assert (body["budget_max_ils"], body["household"], body["has_pets"]) == (9000, "family", True)
-    assert {k: v for k, v in body.items() if k != "updated_at"} == changed
+    assert {k: v for k, v in body.items() if k != "updated_at"} == {**ROOM_OFF, **changed}
     seeker_id = uuid.UUID(seeker.get("/me").json()["id"])
     with db_engine.connect() as conn:
         rows = conn.execute(
@@ -223,3 +234,131 @@ def test_ac10_profile_is_private_to_its_seeker(
     assert _put(t, _p(gush_dan, budget_max_ils=6000)).status_code == 200
     assert t.get("/me/profile").json()["budget_max_ils"] == 6000
     assert s.get("/me/profile").json() == saved.json()
+
+
+# --- 0007a: the room section -----------------------------------------------------------------
+
+
+def _year() -> int:
+    """`Y`: the current UTC year, the API's age window."""
+    return dt.datetime.now(dt.UTC).year
+
+
+def _s() -> dict[str, Any]:
+    """`S`: a full room section."""
+    return {
+        "gender": "woman",
+        "birth_year": _year() - 30,
+        "flatmate_gender": "women",
+        "lifestyle": {
+            "cleanliness": 3,
+            "guests": 1,
+            "night": 2,
+            "social": 3,
+            "kosher": 2,
+            "shabbat": 1,
+            "work_from_home": 3,
+        },
+    }
+
+
+def _room_row(engine: Engine) -> tuple[Any, ...]:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT gender, birth_year, flatmate_gender, lifestyle FROM seeker_profiles")
+        ).one()
+    return tuple(row)
+
+
+def test_ac6_room_section_saved_read_and_cleared(
+    seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    room = _s()
+    response = _put(seeker, {**_p(gush_dan), **room})
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert set(saved) == PROFILE_KEYS
+    assert {k: saved[k] for k in ROOM_OFF} == room
+    assert seeker.get("/me/profile").json() == saved
+
+    # Gender alone is a room section.
+    response = _put(seeker, {**_p(gush_dan), "gender": "other", "lifestyle": {"night": 3}})
+    assert response.status_code == 200, response.text
+    assert {k: response.json()[k] for k in ROOM_OFF} == {
+        "gender": "other",
+        "birth_year": None,
+        "flatmate_gender": "any",
+        "lifestyle": {"night": 3},
+    }
+
+    for birth_year in (_year() - 18, _year() - 99):  # age bounds inclusive
+        response = _put(seeker, {**_p(gush_dan), "gender": "man", "birth_year": birth_year})
+        assert response.status_code == 200, (birth_year, response.text)
+        assert response.json()["birth_year"] == birth_year
+
+    # PUT replaces: omitting the section clears it.
+    response = _put(seeker, _p(gush_dan))
+    assert response.status_code == 200, response.text
+    assert {k: response.json()[k] for k in ROOM_OFF} == ROOM_OFF
+    assert _room_row(db_engine) == (None, None, "any", {})
+    assert _profile_count(db_engine) == 1
+
+
+# (case id, the change to `P`, the sent value the response must not echo, if any)
+_WOMAN = {"gender": "woman"}
+_ROOM_CASES: list[tuple[str, Any, Any]] = [
+    ("gender_female", lambda: {"gender": "female"}, "female"),
+    ("gender_empty", lambda: {"gender": ""}, None),
+    ("birth_year_age_17", lambda: {**_WOMAN, "birth_year": _year() - 17}, _year() - 17),
+    ("birth_year_age_100", lambda: {**_WOMAN, "birth_year": _year() - 100}, _year() - 100),
+    ("birth_year_fraction", lambda: {**_WOMAN, "birth_year": 1990.5}, None),
+    ("flatmate_gender_mixed", lambda: {**_WOMAN, "flatmate_gender": "mixed"}, None),
+    ("flatmate_gender_null", lambda: {**_WOMAN, "flatmate_gender": None}, None),
+    ("lifestyle_unknown_key", lambda: {**_WOMAN, "lifestyle": {"pets": 2}}, None),
+    ("lifestyle_0", lambda: {**_WOMAN, "lifestyle": {"night": 0}}, None),
+    ("lifestyle_4", lambda: {**_WOMAN, "lifestyle": {"night": 4}}, None),
+    ("lifestyle_string", lambda: {**_WOMAN, "lifestyle": {"night": "2"}}, None),
+    ("lifestyle_list", lambda: {**_WOMAN, "lifestyle": []}, None),
+    ("lifestyle_null", lambda: {**_WOMAN, "lifestyle": None}, None),
+    ("no_gender_birth_year", lambda: {"birth_year": _year() - 30}, None),
+    ("no_gender_flatmate_gender", lambda: {"flatmate_gender": "women"}, None),
+    ("no_gender_lifestyle", lambda: {"lifestyle": {"night": 2}}, None),
+    ("null_gender_birth_year", lambda: {"gender": None, "birth_year": _year() - 30}, None),
+]
+
+
+@pytest.mark.parametrize(
+    ("change", "not_echoed"),
+    [(c, e) for _, c, e in _ROOM_CASES],
+    ids=[i for i, _, _ in _ROOM_CASES],
+)
+def test_ac7_room_section_validation(
+    seeker: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    change: Any,
+    not_echoed: Any,
+) -> None:
+    response = _put(seeker, {**_p(gush_dan), **change()})
+
+    assert response.status_code == 422, response.text
+    assert isinstance(response.json()["detail"], list)
+    if not_echoed is not None:
+        assert str(not_echoed) not in response.text
+    assert _profile_count(db_engine) == 0
+
+
+def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
+    seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    # Review round 1 (security): one error at the field, never one per key, never naming a key.
+    many = {**{f"k{n}": 2 for n in range(19_999)}, "I am pregnant": 2}
+    eight = {**_s()["lifestyle"], "I am pregnant": 1}
+    for lifestyle in (many, eight):
+        response = _put(seeker, {**_p(gush_dan), "gender": "woman", "lifestyle": lifestyle})
+
+        assert response.status_code == 422, response.text[:500]
+        detail = response.json()["detail"]
+        assert [entry["loc"] for entry in detail] == [["body", "lifestyle"]]
+        assert "I am pregnant" not in response.text
+    assert _profile_count(db_engine) == 0

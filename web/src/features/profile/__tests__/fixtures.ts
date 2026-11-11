@@ -19,6 +19,10 @@ export function profile(overrides: Partial<SeekerProfileOut> = {}): SeekerProfil
     smoker: false,
     contract_months: 24,
     parking_needed: 1,
+    gender: null,
+    birth_year: null,
+    flatmate_gender: 'any',
+    lifestyle: {},
     updated_at: '2026-11-10T10:00:00Z',
     ...overrides,
   };

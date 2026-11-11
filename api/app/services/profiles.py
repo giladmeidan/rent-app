@@ -4,6 +4,11 @@ Privacy (NF2): a profile is personal data. This module returns it only to its ow
 (`get_profile`, `put_profile`); `has_profile` answers existence only (the apply gate in
 `services/applications.py`). From 0006b / 0006c the matching queries read it too.
 
+The room section (spec 0007a: `gender`, `birth_year`, `flatmate_gender`, `lifestyle`) is personal
+data too. `put_profile` writes it on every `PUT` (omitting it clears it); in 0007a only its seeker
+reads it. From 0007b the room fit rule and the match score read it, and from 0007c the owner inbox
+shows it on room applications only.
+
 `area_ids` has no FK (an array cannot carry one): `put_profile` checks every id is an active area
 in one statement and refuses the whole profile otherwise (`UnknownAreaError`, as listings do)."""
 

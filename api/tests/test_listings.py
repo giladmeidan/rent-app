@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 from app.db import get_sessionmaker
 from app.models import User
 from app.schemas.listing import ListingIn
+from app.schemas.profile import LIFESTYLE_KEYS
 from app.services import listings as listings_service
-from tests.conftest import Outbox, signup
+from tests.conftest import Outbox, make_listing, signup
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -652,3 +653,284 @@ def test_ac8_owner_preferences_patch(
         assert response.status_code == 422, (bad, response.text)
         assert isinstance(response.json()["detail"], list), bad
         assert _row(db_engine, listing_id) == row_before, bad
+
+
+# --- 0007a: room fields ----------------------------------------------------------------------
+
+ROOM_FIELDS = ("gender_preference", "flatmates_count", "flatmate_ages", "lifestyle")
+ROOM_DEFAULTS: tuple[Any, ...] = ("any", None, [], {})
+
+
+def _room(area_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
+    """`R` (spec 0007a): `_body` as a 4-room room for women, two flatmates aged 27 and 30, and two
+    questionnaire answers."""
+    room: dict[str, Any] = {
+        "listing_type": "room",
+        "rooms": 4,
+        "flatmates_count": 2,
+        "flatmate_ages": [27, 30],
+        "gender_preference": "women",
+        "lifestyle": {"cleanliness": 3, "night": 1},
+    }
+    return _body(area_id, **{**room, **overrides})
+
+
+def _create_room(owner: TestClient, area_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
+    response = owner.post("/listings", json=_room(area_id, **overrides))
+    assert response.status_code == 201, response.text
+    created: dict[str, Any] = response.json()
+    return created
+
+
+def _room_fields(item: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(item[name] for name in ROOM_FIELDS)
+
+
+def test_ac1_room_fields_on_create_and_reads(
+    client: TestClient, owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    expected = ("women", 2, [27, 30], {"cleanliness": 3, "night": 1})
+    room = _create_room(owner, gush_dan)
+    assert _room_fields(room) == expected
+    assert room["listing_type"] == "room"
+    assert _room_fields(_row(db_engine, room["id"])) == expected
+
+    apartment = _create(owner, gush_dan)
+    assert _room_fields(apartment) == ROOM_DEFAULTS
+    assert _room_fields(_row(db_engine, apartment["id"])) == ROOM_DEFAULTS
+
+    # Three creates = the default cap of 3.
+    some_ages = _create_room(owner, gush_dan, flatmates_count=3, flatmate_ages=[41])
+    assert _room_fields(some_ages) == ("women", 3, [41], {"cleanliness": 3, "night": 1})
+
+    mine = {item["id"]: item for item in owner.get("/me/listings").json()}
+    assert _room_fields(mine[room["id"]]) == expected
+    assert _room_fields(mine[apartment["id"]]) == ROOM_DEFAULTS
+    assert _room_fields(mine[some_ages["id"]]) == _room_fields(some_ages)
+
+    # Rooms stay hidden from the public until 0007b.
+    client.cookies.clear()
+    detail = client.get(f"/listings/{room['id']}")
+    assert detail.status_code == 404
+    assert detail.json() == {"detail": "not_found"}
+    search = client.get("/listings")
+    assert search.status_code == 200
+    ids = {item["id"] for item in search.json()["items"]}
+    assert room["id"] not in ids
+    assert some_ages["id"] not in ids
+    assert apartment["id"] in ids
+
+
+def _without_key(body: dict[str, Any], key: str) -> dict[str, Any]:
+    return {k: v for k, v in body.items() if k != key}
+
+
+# (case id, how to build the bad body from the area id)
+_ROOM_CASES: list[tuple[str, Any]] = [
+    ("count-missing", lambda a: _without_key(_room(a), "flatmates_count")),
+    ("count-0", lambda a: _room(a, flatmates_count=0)),
+    ("count-8", lambda a: _room(a, flatmates_count=8)),
+    ("count-null", lambda a: _room(a, flatmates_count=None)),
+    ("ages-17", lambda a: _room(a, flatmate_ages=[17])),
+    ("ages-100", lambda a: _room(a, flatmate_ages=[100])),
+    ("ages-three-for-two", lambda a: _room(a, flatmate_ages=[27, 30, 31])),
+    ("ages-null-element", lambda a: _room(a, flatmate_ages=[27, None])),
+    ("gender-female", lambda a: _room(a, gender_preference="female")),
+    ("gender-null", lambda a: _room(a, gender_preference=None)),
+    ("lifestyle-unknown-key", lambda a: _room(a, lifestyle={"pets": 2})),
+    ("lifestyle-0", lambda a: _room(a, lifestyle={"night": 0})),
+    ("lifestyle-4", lambda a: _room(a, lifestyle={"night": 4})),
+    ("lifestyle-string", lambda a: _room(a, lifestyle={"night": "2"})),
+    ("lifestyle-fraction", lambda a: _room(a, lifestyle={"night": 2.5})),
+    ("lifestyle-null-value", lambda a: _room(a, lifestyle={"night": None})),
+    ("lifestyle-list", lambda a: _room(a, lifestyle=[])),
+    ("lifestyle-string-body", lambda a: _room(a, lifestyle="often")),
+    ("lifestyle-null", lambda a: _room(a, lifestyle=None)),
+    ("apartment-gender", lambda a: _body(a, gender_preference="women")),
+    ("apartment-count", lambda a: _body(a, flatmates_count=2)),
+    ("apartment-ages", lambda a: _body(a, flatmate_ages=[30])),
+    ("apartment-lifestyle", lambda a: _body(a, lifestyle={"night": 2})),
+]
+
+
+# Rules (1)-(3) of `_room_fields` are model-level, at `["body"]` (0007e relies on it).
+_BODY_LEVEL = {"count-missing", "ages-three-for-two"} | {
+    i for i, _ in _ROOM_CASES if i.startswith("apartment-")
+}
+
+
+@pytest.mark.parametrize("make_body", [m for _, m in _ROOM_CASES], ids=[i for i, _ in _ROOM_CASES])
+def test_ac2_room_fields_validation(
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    make_body: Any,
+    request: pytest.FixtureRequest,
+) -> None:
+    response = owner.post("/listings", json=make_body(gush_dan))
+
+    assert response.status_code == 422, response.text
+    assert isinstance(response.json()["detail"], list)
+    if request.node.callspec.id in _BODY_LEVEL:
+        assert response.json()["detail"][0]["loc"] == ["body"]
+    assert _count(db_engine) == 0
+
+
+def _assert_refused(
+    owner: TestClient, engine: Engine, listing_id: str, bodies: list[dict[str, Any]]
+) -> None:
+    """Each PATCH is a 422 with a list `detail` and leaves the row unchanged."""
+    row_before = _row(engine, listing_id)
+    for body in bodies:
+        response = _patch(owner, listing_id, body)
+        assert response.status_code == 422, (body, response.text)
+        assert isinstance(response.json()["detail"], list), body
+        assert _row(engine, listing_id) == row_before, body
+
+
+def _patched(owner: TestClient, listing_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    response = _patch(owner, listing_id, body)
+    assert response.status_code == 200, (body, response.text)
+    patched: dict[str, Any] = response.json()
+    return patched
+
+
+def test_ac3_room_fields_patch(owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine) -> None:
+    room = _create_room(owner, gush_dan)
+    room_id = room["id"]
+
+    anyone = _patched(owner, room_id, {"gender_preference": "any"})
+    assert anyone["gender_preference"] == "any"
+    unchanged = {"gender_preference", "updated_at"}
+    assert {k: v for k, v in anyone.items() if k not in unchanged} == {
+        k: v for k, v in room.items() if k not in unchanged
+    }
+
+    _assert_refused(owner, db_engine, room_id, [{"flatmates_count": 1}])  # two ages stored
+
+    three = _patched(owner, room_id, {"flatmates_count": 3, "flatmate_ages": [27, 30, 35]})
+    assert (three["flatmates_count"], three["flatmate_ages"]) == (3, [27, 30, 35])
+
+    _assert_refused(owner, db_engine, room_id, [{"flatmate_ages": [27, 30, 35, 40]}])
+
+    replaced = _patched(owner, room_id, {"lifestyle": {"guests": 2}})
+    assert replaced["lifestyle"] == {"guests": 2}
+    assert _row(db_engine, room_id)["lifestyle"] == {"guests": 2}
+
+    assert _patched(owner, room_id, {"lifestyle": {}})["lifestyle"] == {}
+    assert _patched(owner, room_id, {"flatmate_ages": []})["flatmate_ages"] == []
+    assert _room_fields(_row(db_engine, room_id)) == ("any", 3, [], {})
+
+    _assert_refused(
+        owner,
+        db_engine,
+        room_id,
+        [
+            *({name: None} for name in ROOM_FIELDS),
+            {"lifestyle": {"pets": 1}},
+            {"gender_preference": "female"},
+        ],
+    )
+
+
+def test_ac4_type_switch_room_fields(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    apartment_id = _create(owner, gush_dan)["id"]
+
+    _assert_refused(owner, db_engine, apartment_id, [{"listing_type": "room"}])
+
+    room = _patched(
+        owner,
+        apartment_id,
+        {
+            "listing_type": "room",
+            "flatmates_count": 2,
+            "flatmate_ages": [30],
+            "gender_preference": "men",
+            "lifestyle": {"kosher": 3},
+        },
+    )
+    room_values = ("men", 2, [30], {"kosher": 3})
+    assert room["listing_type"] == "room"
+    assert _room_fields(room) == room_values
+    assert _room_fields(_row(db_engine, apartment_id)) == room_values
+
+    _assert_refused(
+        owner,
+        db_engine,
+        apartment_id,
+        [
+            {"listing_type": "apartment", "gender_preference": "women"},
+            {"listing_type": "apartment", "flatmates_count": None},  # an explicit null stays a 422
+        ],
+    )
+
+    # Exactly the body 0007e sends on this switch: the server resets the four fields.
+    switched = _patched(owner, apartment_id, {"listing_type": "apartment"})
+    assert switched["listing_type"] == "apartment"
+    assert _room_fields(switched) == ROOM_DEFAULTS
+    row = _row(db_engine, apartment_id)
+    assert row["listing_type"] == "apartment"
+    assert _room_fields(row) == ROOM_DEFAULTS
+
+    _assert_refused(
+        owner,
+        db_engine,
+        apartment_id,
+        [
+            {"gender_preference": "women"},
+            {"flatmates_count": 2},
+            {"flatmate_ages": [30]},
+            {"lifestyle": {"night": 2}},
+        ],
+    )
+
+    assert _patched(owner, apartment_id, {"gender_preference": "any"})["gender_preference"] == "any"
+
+
+def test_ac5_legacy_room_fills_count_on_next_edit(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    owner_id = uuid.UUID(owner.get("/me").json()["id"])
+    legacy_1 = str(make_listing(db_engine, owner_id, gush_dan, listing_type="room"))
+    legacy_2 = str(make_listing(db_engine, owner_id, gush_dan, listing_type="room"))
+
+    mine = {item["id"]: item for item in owner.get("/me/listings").json()}
+    assert _room_fields(mine[legacy_1]) == ROOM_DEFAULTS
+    assert _room_fields(mine[legacy_2]) == ROOM_DEFAULTS
+
+    _assert_refused(owner, db_engine, legacy_1, [{"price_ils": 3000}])
+
+    # A pause or resume is not an edit.
+    assert _patched(owner, legacy_1, {"status": "paused"})["status"] == "paused"
+    assert _patched(owner, legacy_1, {"status": "active"})["status"] == "active"
+
+    filled = _patched(owner, legacy_1, {"price_ils": 3000, "flatmates_count": 2})
+    assert (filled["price_ils"], filled["flatmates_count"]) == (3000, 2)
+
+    # An apartment needs no count.
+    switched = _patched(owner, legacy_2, {"listing_type": "apartment"})
+    assert switched["listing_type"] == "apartment"
+    assert _room_fields(switched) == ROOM_DEFAULTS
+
+
+def _many_unknown_keys() -> dict[str, int]:
+    """20,000 unknown questionnaire keys, one of them a sensitive sentence."""
+    keys = {f"k{n}": 2 for n in range(19_999)}
+    return {**keys, "I am pregnant": 2}
+
+
+def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    # Review round 1 (security): one error at the field, never one per key, never naming a key.
+    eight: dict[str, int] = {**dict.fromkeys(LIFESTYLE_KEYS, 1), "I am pregnant": 1}
+    for lifestyle in (_many_unknown_keys(), eight):
+        response = owner.post("/listings", json=_room(gush_dan, lifestyle=lifestyle))
+
+        assert response.status_code == 422, response.text[:500]
+        detail = response.json()["detail"]
+        assert [entry["loc"] for entry in detail] == [["body", "lifestyle"]]
+        assert "I am pregnant" not in response.text
+    assert _count(db_engine) == 0

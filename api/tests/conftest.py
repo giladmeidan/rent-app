@@ -19,6 +19,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
+from psycopg.types.json import Jsonb
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -260,6 +261,7 @@ def make_profile(engine: Engine, user_id: uuid.UUID, area_id: uuid.UUID, **overr
         "parking_needed": 1,
         **overrides,
     }
+    values = {k: Jsonb(v) if isinstance(v, dict) else v for k, v in values.items()}  # `lifestyle`
     columns = ", ".join(values)
     params = ", ".join(
         "CAST(:area_ids AS uuid[])" if name == "area_ids" else f":{name}" for name in values
@@ -332,6 +334,7 @@ def make_listing(
         "expires_at": dt.datetime.now(dt.UTC) + dt.timedelta(days=90),
         **overrides,
     }
+    values = {k: Jsonb(v) if isinstance(v, dict) else v for k, v in values.items()}  # `lifestyle`
     columns = ", ".join(values)
     params = ", ".join(f":{name}" for name in values)
     with engine.begin() as conn:

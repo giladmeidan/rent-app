@@ -1,7 +1,7 @@
 ---
 id: 0007a
 title: An owner's room listing stores who the room is for, how many flatmates live there (and, optionally, their ages) and the flat's questionnaire; a seeker saves a profile "room section" (gender, birth year, flatmates preference, questionnaire). Stored and validated only; rooms stay hidden from search
-status: in-progress
+status: in-review
 depends_on: []           # migration chain 0008 -> 0009 (0008 is main's head); 0007b adds 0010 on top
 reviewers: [code, qa, security]   # security: gender and birth year are new personal data on seeker_profiles; qa: validation table, PATCH merge and type-switch rules
 estimate: 1 coder run
@@ -56,7 +56,8 @@ PRODUCT.md rows "Rooms" (2026-11-11), "Gender preference", "Listings" (rooms hid
     and `LIFESTYLE_KEYS: tuple[LifestyleKey, ...] = get_args(LifestyleKey)` (canonical order, like
     `HOUSEHOLDS`);
   - `LifestyleAnswer = Literal[1, 2, 3]` and **`Lifestyle = dict[LifestyleKey, LifestyleAnswer]`**. An unknown
-    key or a value outside 1–3 is a 422. Only answered keys are stored and returned. Pydantic's lax mode turns
+    key or a value outside 1–3 is a 422. A `BeforeValidator` refuses more than 7 keys or any unknown key as one error at
+    `["body", "lifestyle"]` that names no key (review round 1, security). Only answered keys are stored and returned. Pydantic's lax mode turns
     `true` into 1 and `2.0` into 2 (stored as JSON integers), as it already does for `contract_months`; no test
     relies on either. Key order in a response is not significant (jsonb stores keys shortest first, then
     bytewise): clients iterate `LIFESTYLE_KEYS`. No sorting validator;
@@ -483,3 +484,22 @@ Checked against the code and found correct (no change needed):
              the web cannot set the new fields (accepted, nothing deployed).
     Reviewers: code, qa, security   Estimated: 1 coder run (Opus/high: data + migration), 1 review round
     Links: specs/0007a-room-inputs-api.md - PRODUCT.md "Rooms", "Gender preference" - no artboard
+
+    Spec 0007a - Room inputs API   PR OPEN #28 (not merged), code head 083d5e3
+    Shipped: a room listing stores who it is for (any / women / men), its flatmates count (1-7), optional ages
+             (18-99) and the flat's 7-question lifestyle answers (1-3). A seeker's profile stores a "room section"
+             (gender, birth year, flatmates preference, own answers), returned only to that seeker. Rooms stay
+             hidden from search, the listing page and applying until 0007b. API only.
+    Demo: make dev-api -> an owner POSTs /listings with listing_type "room", flatmates_count 2 and a lifestyle
+          object, then GET /me/listings -> a seeker PUTs /me/profile with gender, birth_year and lifestyle, then
+          GET /me/profile. No screen until 0007d / 0007e.
+    Tests: +49 integration (AC1-AC9 + NF2; AC2 and AC7 parametrized), +0 web, +0 e2e (api 384, web 214)
+    CI: api + web on the push (api green in 81 s on 083d5e3); e2e local while CI e2e is off: 10 of 10, 24.4 s
+    Findings: 0 blockers; 1 major fixed (security: an unbounded lifestyle dict let a 249 KB body return a 5.6 MB
+              422; it is now one error that names no key); 2 minors fixed (that key echo, the loc ["body"] test);
+              4 minors to FOLLOWUPS (tighten the lifestyle CHECKs before 0007b reads them, 2 PATCH null-rule
+              notes, a 422 / body-size cap before deploy); 9 nits dropped
+    Decisions I need from you: none.
+    Changed in PRODUCT.md: nothing
+    Next: 0007b (room search API) and 0007d (room profile web) branch from #28. 0007b should take the
+          FOLLOWUPS lifestyle-CHECK line into migration 0010.
