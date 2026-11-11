@@ -18,6 +18,10 @@ Rules (PRODUCT.md "Applications"):
   (pair, then `applications`), so an apply racing a mutual cannot deadlock: a like waiting on the
   lock sees the committed application and rolls back with `AlreadyAppliedError`, and an apply
   waiting on a mutual finds the shortlisted row and gets `AlreadyAppliedError`.
+- A flatmate of the listing cannot apply (spec 0008d), even racing their own join: the listing
+  SELECT takes `FOR KEY SHARE` (waiting for a join's `FOR UPDATE`), before the pair's lock, and the
+  application INSERT ... SELECT re-tests membership (`ListingNotFoundError`). The lock order is the
+  listing, then the pair, then `applications`, as on the like paths (`services/people.py`).
 - Only a public listing (`search.get_public_listing_with_match`, the one visibility rule) can be
   applied to, apartments and rooms alike (spec 0007b), and never the caller's own nor one whose
   flat the caller is a flatmate of (spec 0008d, treated like the owner): all are
@@ -61,7 +65,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Label, Row, Select, case, exists, func, select, update
+from sqlalchemy import Label, Row, Select, case, exists, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -126,22 +130,32 @@ def _upsert(
 ) -> Application | None:
     """Consume the pair's likes, then insert the application, or reopen a withdrawn one; None
     when one exists in any other status (including the row a concurrent apply or mutual just
-    inserted; the caller rolls back, likes included). Both snapshot the listing's price and area
-    (0006c, security B1) and its type (0007b) as the seeker applied to them. Two statements."""
-    # Imported here: `services/people.py` imports this module. The pair's lock first, then the
-    # application row (the like paths' order; see the module docstring).
-    from app.services.people import consume_likes
+    inserted) or when the seeker is a flatmate of the listing (a join that committed while the
+    caller waited for the listing's lock, spec 0008d); the caller rolls back, likes included.
+    Both snapshot the listing's price and area (0006c, security B1) and its type (0007b) as the
+    seeker applied to them. Two statements; the caller holds the listing's `FOR KEY SHARE` lock,
+    so both run after any concurrent join committed."""
+    # Imported here: `services/people.py` imports this module. The listing's lock (the caller's),
+    # then the pair's, then the application row (the like paths' order; see the module docstring).
+    from app.services.people import consume_likes, flatmate_of
 
     consume_likes(db, listing.id, seeker_id)
-    stmt = insert(Application).values(
-        listing_id=listing.id,
-        seeker_id=seeker_id,
-        source="apply",
-        message=message,
-        price_ils_at_apply=listing.price_ils,
-        area_id_at_apply=listing.area_id,
-        listing_type_at_apply=listing.listing_type,
+    values = {
+        "listing_id": listing.id,
+        "seeker_id": seeker_id,
+        "source": "apply",
+        "message": message,
+        "price_ils_at_apply": listing.price_ils,
+        "area_id_at_apply": listing.area_id,
+        "listing_type_at_apply": listing.listing_type,
+    }
+    columns = Application.__table__.c
+    # INSERT ... SELECT ... WHERE NOT EXISTS (membership): a new statement, so it sees a join that
+    # committed while this transaction waited for the listing's lock.
+    source = select(*(literal(value, columns[name].type) for name, value in values.items())).where(
+        ~flatmate_of(listing.id, seeker_id)
     )
+    stmt = insert(Application).from_select(list(values), source)
     stmt = stmt.on_conflict_do_update(
         constraint="uq_applications_listing_seeker",
         set_={
@@ -167,8 +181,9 @@ def apply(
     `SeekerGenderRequiredError` (the room gate, nothing counted), `RateLimitedError`,
     `ListingNotFoundError` (unknown, not public or the caller's own) or `AlreadyAppliedError`.
     One SELECT for the profile check (with whether the seeker is a flatmate of the listing, 0008d),
-    one for the listing (with the match and room fit), both before the limiter; after it, the
-    pair's likes are consumed and the application written (`_upsert`). Commits."""
+    one for the listing (with the match and room fit, taking `FOR KEY SHARE` on it, so a
+    concurrent flatmate join is waited for), both before the limiter; after it, the pair's likes
+    are consumed and the application written (`_upsert`, which re-tests the membership). Commits."""
     # Imported here: `services/people.py` imports this module.
     from app.services.people import flatmate_of
 
@@ -185,7 +200,7 @@ def apply(
     try:
         try:
             listing, _, fit = search_service.get_public_listing_with_match(
-                db, listing_id, seeker.id
+                db, listing_id, seeker.id, lock=True
             )
         except ListingNotFoundError:
             listing, fit = None, None
@@ -212,6 +227,10 @@ def apply(
             raise ListingNotFoundError
         application = _upsert(db, listing, seeker.id, message)
         if application is None:
+            # Only on a refusal: the seeker joined the flat while we waited (a 404, as above), or
+            # already applied. One more SELECT.
+            if db.scalar(select(flatmate_of(listing.id, seeker.id))):
+                raise ListingNotFoundError
             raise AlreadyAppliedError
         db.commit()
     except Exception:

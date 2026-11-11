@@ -20,11 +20,12 @@ class InviteOut(BaseModel):
 
 
 class InviteTokenIn(BaseModel):
-    """The token of an invite link, as the web read it from its `/flatmates/join/:token` URL."""
+    """The token of an invite link, as the web read it from its `/flatmates/join/:token` URL:
+    trimmed, then 1-100 URL-safe base64 characters (anything else is a 422, before the limiter)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
-    token: str = Field(min_length=1, max_length=100)
+    token: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class InvitePreviewOut(BaseModel):

@@ -67,7 +67,8 @@ is `0008e`.
     pair. They come from its existing UPDATE: `RETURNING owner_id, seeker_id, ARRAY(SELECT user_id FROM
     listing_flatmates WHERE listing_id = <the application's listing> AND <application is room> AND user_id
     <> seeker_id)`. So a send adds **no** statement (verifier finding 2).
-  - New `member_ids(db, application_id) -> list[UUID]`: the owner, the seeker and the flatmates. It is one
+  - New `member_ids(db, application_id) -> list[UUID]`: the owner, the seeker and the flatmates (the flatmates
+    only once the application's conversation exists: review round 1). It is one
     statement, run **only for a room application** (`listing_type_at_apply = 'room'`). For an apartment
     application, the routers publish `[owner_id, seeker_id]` from rows they already hold, with no query. So
     every existing statement-count test stays as it is, because all of them use apartment fixtures
@@ -153,7 +154,7 @@ Downgrade drops the three in reverse. A re-join after leaving inserts a new memb
 | POST | `/listings/{listing_id}/flatmate-invite` | `current_owner`, own **room** listing (any status) | — | 201 `InviteOut` (rotates: the old link stops working) | 401; 403 `owner_only`; 404 `not_found` (unknown, another's, an apartment) |
 | DELETE | `/listings/{listing_id}/flatmate-invite` | `current_owner`, own listing | — | 204 | 401; 403; 404 |
 | POST | `/flatmate-invites/preview` | `current_user` (any role) | `{token: str}` (`InviteTokenIn`, 1–100 chars) | 200 `InvitePreviewOut` | 401; 404 `not_found` (unknown or rotated token, the listing is an apartment); 409 `own_listing`; 422; 429 |
-| POST | `/flatmate-invites/join` | `current_user` | `{token: str}` | 200 `JoinOut` (idempotent: a member gets 200 and keeps the original `joined_at`) | 401; 404; 409 `own_listing`, `already_applied` (the caller has a non-withdrawn application to it), `flatmates_full` (`FLATMATES_MAX`); 422; 429 |
+| POST | `/flatmate-invites/join` | `current_user` | `{token: str}` | 200 `JoinOut` (idempotent: a member gets 200 and keeps the original `joined_at`) | 401; 404; 409 `own_listing`, `already_applied` (the caller has a submitted or shortlisted application to it), `declined` (the caller's application to it was declined), `flatmates_full` (`FLATMATES_MAX`); 422; 429 |
 | GET | `/listings/{listing_id}/flatmates` | `current_owner`, own listing | — | 200 `list[FlatmateOut]`, oldest first | 401; 403; 404 |
 | DELETE | `/listings/{listing_id}/flatmates/{flatmate_id}` | `current_owner`, own listing | — | 204 | 401; 403; 404 (unknown, or another listing's membership) |
 | GET | `/me/flats` | `current_user` | — | 200 `list[MyFlatOut]`, newest join first | 401 |
@@ -176,7 +177,8 @@ knows them.
 - [ ] AC2 Given a live token, When user `F` (any role) POSTs it to `/flatmate-invites/preview`, Then the
   preview has the listing summary, `owner_name` and `member: false`. After the join POST, `member` is true. A
   second join returns 200 with the same `joined_at`. `O` previewing gets 409 `own_listing`. A seeker with a
-  submitted application to `R` gets 409 `already_applied`. The 8th joiner gets 409 `flatmates_full`, including
+  submitted application to `R` gets 409 `already_applied`; a declined applicant gets 409 `declined` (Gilad,
+  2026-11-11, option b; `test_flatmates.py::test_join_after_decline`). The 8th joiner gets 409 `flatmates_full`, including
   when the 7th and 8th join concurrently on two connections. The 21st preview or join in an hour gets 429. No
   route has the token in its path: a test walks `app.routes` and asserts it. — `test_flatmates.py::test_ac2_preview_and_join`
 - [ ] AC3 (security: history from joining on) Given a shortlisted application of seeker `S` to `R` whose
@@ -247,6 +249,8 @@ Gilad's decisions are in PRODUCT.md "Flatmates". The orchestrator made these ass
 - **Applicants must withdraw before joining.** The likeliest joiner is the tenant who just moved in, and while
   their application is still `shortlisted` the join gets 409 `already_applied` until they withdraw. `0008e`'s
   copy says so (`flatmates.join.applied`). This is listed for Gilad's digest.
+- **Declined applicants cannot join** (Gilad, 2026-11-11): the link may reach them from a flatmate rather than
+  the owner, so join returns 409 `declined`; `0008e` shows its own copy.
 - **Membership LEFT JOIN on every chat statement (perf):** an OR across `conversations` columns and a joined
   `listing_flatmates` row defeats Postgres's BitmapOr, so the list may seq-scan `conversations` for every
   caller. That is fine at MVP volume. Put a `shortcut:` comment on it. The fallback is one statement whose

@@ -11,7 +11,8 @@ Rules (PRODUCT.md "Chat", "Flatmates"):
   never multiply) and the condition `owner_id = me OR seeker_id = me OR F.id IS NOT NULL`, in the
   WHERE of **every** statement, so an unknown id, an application never shortlisted and a
   conversation the caller is not in are one case (`ConversationNotFoundError`, a 404), on a read
-  and on a send alike.
+  and on a send alike. The list also ANDs in the same rule restated on `conversations`' own
+  indexed columns (`_indexed_member`), so it never scans the whole table.
 - The caller's role (`my_role`) resolves in order: owner, then seeker, then flatmate, so a
   withdrawn seeker who later joined the flat (or a join racing an apply) is never both.
 - A flatmate sees the messages sent from their `joined_at` on (`visible_from`; `-infinity` for the
@@ -42,8 +43,10 @@ from typing import Any, Literal
 from sqlalchemy import (
     DateTime,
     Row,
+    Select,
     Text,
     and_,
+    any_,
     case,
     exists,
     func,
@@ -148,16 +151,39 @@ def _read_join(me: User) -> Any:
 
 
 def _is_member(me: User) -> Any:
-    # shortcut: an OR across `conversations` columns and the outer-joined `listing_flatmates` row
-    # defeats a BitmapOr of `ix_conversations_owner_id` / `_seeker_id`, so the list may seq-scan
-    # `conversations` for every caller; fine at MVP volume. The fallback is one statement whose
-    # member-ids CTE is a UNION ALL of the owner/seeker branch and the flatmate branch
-    # (`listing_flatmates(user_id)` -> `applications(listing_id)` -> `conversations`), spec 0008d
-    # Risks.
+    """The membership condition, exact: the owner, the seeker, or a flatmate through `_F` (the
+    statement outer-joins `_F`, which also gives the role and `joined_at`). An OR over an
+    outer-joined row cannot drive an index, so a statement over many conversations also ANDs in
+    `_indexed_member` (`list_conversations`); a statement pinned to one id by its primary key
+    needs only this."""
     return or_(
         Conversation.owner_id == me.id,
         Conversation.seeker_id == me.id,
         _F.id.is_not(None),
+    )
+
+
+def _indexed_member(me: User) -> Any:
+    """`_is_member` restated on `conversations`' own indexed columns, so the planner can BitmapOr
+    `ix_conversations_owner_id`, `ix_conversations_seeker_id` and the primary key: the owner, the
+    seeker, or a conversation (= application) id among the room applications of `me`'s flats (an
+    uncorrelated `array(SELECT ...)`, `ix_listing_flatmates_user_id` -> `applications(listing_id)`,
+    run once). It may only narrow: `_is_member` stays the exact rule."""
+    # shortcut: a flatmate of many busy rooms gets one long id array (the room applications of
+    # every flat, chat or not); fine at MVP volume (perf review: 13.6 ms for a flatmate of 40
+    # rooms at 21k conversations). If it grows, restrict the array to applications that have a
+    # conversation.
+    flat_applications = (
+        select(Application.id)
+        .join(ListingFlatmate, ListingFlatmate.listing_id == Application.listing_id)
+        .where(ListingFlatmate.user_id == me.id, Application.listing_type_at_apply == "room")
+        .correlate(None)  # its own `applications`, not the outer statement's
+        .scalar_subquery()
+    )
+    return or_(
+        Conversation.owner_id == me.id,
+        Conversation.seeker_id == me.id,
+        Conversation.application_id == any_(func.array(flat_applications)),
     )
 
 
@@ -217,9 +243,15 @@ def _flatmate_ids() -> Any:
 
 def list_conversations(db: Session, me: User) -> Sequence[Row[Any]]:
     """Every conversation `me` is a member of (any role, any application status), latest activity
-    first (`coalesce(last_message_at, created_at)` desc, then id). One statement: the listing
-    summary, `other_name`, `my_role`, `member_count`, `can_send`, `is_new`, the newest visible
-    message (`last_*`, null when none; its body cut to `PREVIEW_LENGTH`) and the unread count."""
+    first (`coalesce(last_message_at, created_at)` desc, then id). One statement
+    (`list_statement`): the listing summary, `other_name`, `my_role`, `member_count`, `can_send`,
+    `is_new`, the newest visible message (`last_*`, null when none; its body cut to
+    `PREVIEW_LENGTH`) and the unread count."""
+    return db.execute(list_statement(me)).all()
+
+
+def list_statement(me: User) -> Select[Any]:
+    """`list_conversations`' one statement (also EXPLAINed by the tests)."""
     my_read_at = _my_read_at(me)
     visible_from = _visible_from(me)
     newest = (
@@ -262,7 +294,7 @@ def list_conversations(db: Session, me: User) -> Sequence[Row[Any]]:
         .scalar_subquery()
     )
     member_count = literal(2) + case((_is_room(), flatmates), else_=literal(0))
-    rows = db.execute(
+    return (
         select(
             Conversation.application_id.label("id"),
             Conversation.created_at.label("created_at"),
@@ -284,13 +316,12 @@ def list_conversations(db: Session, me: User) -> Sequence[Row[Any]]:
         .outerjoin(_R, _read_join(me))
         .join(User, _is_other(me))
         .outerjoin(newest, true())
-        .where(_is_member(me))
+        .where(_indexed_member(me), _is_member(me))
         .order_by(
             func.coalesce(Conversation.last_message_at, Conversation.created_at).desc(),
             Conversation.application_id,
         )
     )
-    return rows.all()
 
 
 def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:

@@ -31,7 +31,16 @@ one sees both timestamps, so exactly one of them turns the pair mutual. An apply
 pair's likes (`consume_likes`) under the same lock, **before** it writes its application, so the
 lock order is always the pair, then `applications`: a like waiting on an apply sees the committed
 application in its post-lock EXISTS, and an apply waiting on a mutual finds the shortlisted row
-(`AlreadyAppliedError`)."""
+(`AlreadyAppliedError`).
+
+Flatmates (spec 0008d): a flatmate join holds the listing row `FOR UPDATE` while it checks for an
+open application and inserts the membership. Every path that may create an application (apply,
+both likes) first takes `FOR KEY SHARE` on the listing row, folded into its listing SELECT, so it
+waits for a running join; its post-lock statements then re-test flatmate membership
+(`_has_application`, and `_fits()` in `like_person`'s UPDATE), and a join waiting on it sees its
+committed application. The full lock order is the listing, then the pair, then `applications`, so
+the join (listing only) cannot deadlock with them. A caller is never both an applicant and a
+flatmate."""
 
 import datetime as dt
 import uuid
@@ -152,21 +161,25 @@ def pending_seeker_like() -> ColumnElement[bool]:
         Listing.listing_type == "room",
         RoomPair.seeker_liked_at.is_not(None),
         ~open_application(RoomPair.listing_id, RoomPair.seeker_id),
+        ~flatmate_of(RoomPair.listing_id, RoomPair.seeker_id),  # 0008d: never a candidate
     )
 
 
-def _own_room(db: Session, owner: User, listing_id: uuid.UUID) -> Listing:
+def _own_room(db: Session, owner: User, listing_id: uuid.UUID, *, lock: bool = False) -> Listing:
     """The caller's room listing, if it is live. One SELECT, with its public-ness as a correlated
     column (`_public_listings()`, the one visibility rule). Raises `ListingNotFoundError` (unknown,
-    another owner's, an apartment) or `ListingNotLiveError` (paused, expired, inactive area)."""
+    another owner's, an apartment) or `ListingNotLiveError` (paused, expired, inactive area).
+    `lock`: the SELECT also takes `FOR KEY SHARE` on the listing row (a like that may create an
+    application, spec 0008d: it waits for a flatmate join holding the row `FOR UPDATE`)."""
     live = search_service._public_listings().where(Listing.id == listing_id).exists()
-    row = db.execute(
-        select(Listing, live.label("live")).where(
-            Listing.id == listing_id,
-            Listing.owner_id == owner.id,
-            Listing.listing_type == "room",
-        )
-    ).first()
+    query = select(Listing, live.label("live")).where(
+        Listing.id == listing_id,
+        Listing.owner_id == owner.id,
+        Listing.listing_type == "room",
+    )
+    if lock:
+        query = query.with_for_update(read=True, key_share=True, of=Listing)
+    row = db.execute(query).first()
     if row is None:
         raise ListingNotFoundError
     if not row.live:
@@ -281,8 +294,19 @@ def list_people(
 
 def _has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> bool:
     """The post-lock check: a separate statement, so it sees an application that committed while
-    this transaction waited for the pair's lock."""
-    return bool(db.scalar(select(open_application(listing_id, seeker_id))))
+    this transaction waited for the pair's lock, and a flatmate join that committed while it
+    waited for the listing's (spec 0008d). Raises `ListingNotFoundError` when the seeker is a
+    flatmate there (treated like the owner); else whether they have a non-withdrawn application.
+    The caller rolls the like back either way."""
+    row = db.execute(
+        select(
+            flatmate_of(listing_id, seeker_id).label("flatmate"),
+            open_application(listing_id, seeker_id).label("applied"),
+        )
+    ).one()
+    if row.flatmate:
+        raise ListingNotFoundError
+    return bool(row.applied)
 
 
 def _mutual(db: Session, listing: Listing, pair: RoomPair, *, lister_second: bool) -> Application:
@@ -348,10 +372,13 @@ def like_person(
     (for the chat event). In order: the listing (`ListingNotFoundError`, `ListingNotLiveError`,
     nothing counted), the limiter (`RateLimitedError`), one conditional UPDATE that takes the
     pair's lock (`ListingNotFoundError` when it is unknown, another listing's, or not a candidate
-    any more), the post-lock EXISTS (`AlreadyAppliedError`, the like rolled back), then mutual when
-    the seeker had liked. A second like keeps the first `lister_liked_at`. Commits."""
+    any more), the post-lock check (`AlreadyAppliedError`, the like rolled back), then mutual when
+    the seeker had liked. A second like keeps the first `lister_liked_at`. The listing SELECT takes
+    `FOR KEY SHARE` before the pair's lock (spec 0008d), and the UPDATE's candidate condition and
+    the post-lock check both re-test flatmate membership after it (`ListingNotFoundError`).
+    Commits."""
     try:
-        listing = _own_room(db, owner, listing_id)
+        listing = _own_room(db, owner, listing_id, lock=True)
         _count_like(r, owner)
         pair = db.scalar(
             update(RoomPair)
@@ -418,8 +445,9 @@ def like_room(
     apartment; `RoomGenderMismatchError` when it does not fit), none of them
     counted; the limiter (`RateLimitedError`); one INSERT ... ON CONFLICT DO UPDATE that takes the
     pair's lock (the live price is frozen only if the pair is new; a second like keeps the first
-    `seeker_liked_at`); the post-lock EXISTS (`AlreadyAppliedError`, the like rolled back); then
-    mutual when the lister had liked. Commits."""
+    `seeker_liked_at`); the post-lock check (`ListingNotFoundError` for a flatmate join that
+    committed while the listing SELECT's `FOR KEY SHARE` waited, `AlreadyAppliedError`; the like
+    rolled back); then mutual when the lister had liked. Commits."""
     try:
         profile = db.execute(
             select(
@@ -430,7 +458,9 @@ def like_room(
             raise ProfileRequiredError
         if profile.gender is None:
             raise RoomSectionRequiredError
-        listing, _, fit = search_service.get_public_listing_with_match(db, listing_id, seeker.id)
+        listing, _, fit = search_service.get_public_listing_with_match(
+            db, listing_id, seeker.id, lock=True
+        )
         if listing.owner_id == seeker.id or listing.listing_type != "room" or profile.flatmate:
             raise ListingNotFoundError
         if fit is False:

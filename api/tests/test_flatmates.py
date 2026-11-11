@@ -20,18 +20,23 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
+from sqlalchemy.orm import Session
 
 from app.db import get_sessionmaker
 from app.models import User
 from app.redis_client import get_redis
+from app.services import applications as applications_service
+from app.services import chat as chat_service
 from app.services import chat_events
 from app.services import flatmates as flatmates_service
+from app.services import people as people_service
 from app.services.flatmates import FLATMATES_MAX
 from tests.conftest import (
     Outbox,
     make_application,
     make_flatmate,
     make_listing,
+    make_pair,
     make_seeker,
     signup,
 )
@@ -257,7 +262,10 @@ def test_ac1_invite_create_rotate_disable(
 ) -> None:
     assert _my_listing(owner, room)["flatmate_invite_active"] is False
 
-    first = _invite(owner, room)
+    created = owner.post(f"/listings/{room}/flatmate-invite")
+    assert created.status_code == 201, created.text
+    assert created.headers["Cache-Control"] == "no-store"
+    first: str = created.json()["token"]
     assert len(first) == TOKEN_LENGTH
     stored = _scalar(db_engine, "SELECT flatmate_invite_hash FROM listings WHERE id = :id", id=room)
     assert stored == hashlib.sha256(first.encode()).hexdigest()
@@ -415,6 +423,16 @@ def test_ac2_preview_and_join(
     assert response.json() == {"detail": "already_applied"}
     _ok(seeker.post(f"/me/applications/{application_id}/withdraw"))
     assert _ok(_join(seeker, token)) == {"listing_id": room}
+
+    # Surrounding whitespace is trimmed; a blank or non-URL-safe token is a 422, never counted.
+    assert _ok(_preview(mate, f"  {token}\n"))["member"] is True
+    assert _ok(_join(mate, f" {token} ")) == {"listing_id": room}
+    counter = f"rl:flatmate:user:{mate_id}"
+    counted = int(get_redis().get(counter) or 0)
+    for bad in ("   ", "a b", "x" * 42 + "=", "../x"):
+        assert _preview(mate, bad).status_code == 422, bad
+        assert _join(mate, bad).status_code == 422, bad
+    assert int(get_redis().get(counter) or 0) == counted
 
     # Unknown and malformed tokens.
     assert _preview(mate, "x" * 43).json() == NOT_FOUND
@@ -602,6 +620,11 @@ def test_ac4_flatmate_sends_and_hears_events(
     for caller in (mate, owner, seeker):
         _ok(_send(caller, chat), 201)
     assert [call[0] for call in published.calls[1:]] == [everyone] * 3
+
+    # The seeker's withdraw reaches every member too.
+    published.calls.clear()
+    _ok(seeker.post(f"/me/applications/{chat}/withdraw"))
+    assert published.calls == [(everyone, chat, "status")]
 
     # A room application without a chat has no flatmate audience: its events reach the two sides.
     published.calls.clear()
@@ -805,8 +828,10 @@ def test_ac8_flatmate_cannot_apply_or_like_own_flat(
     assert _ok(_like_room(mate, room)) == {"liked": True, "application_id": None}
     (card,) = _page(owner, room)["items"]
     assert card["display_name"] == "Fay"
+    assert _my_listing(owner, room)["liked_me_count"] == 1
 
     _ok(_join(mate, _invite(owner, room)))
+    assert _my_listing(owner, room)["liked_me_count"] == 0  # a flatmate's like is not pending
     response = mate.post(f"/listings/{room}/applications", json={"message": "Hello there"})
     assert response.status_code == 404
     assert response.json() == NOT_FOUND
@@ -827,6 +852,149 @@ def test_ac8_flatmate_cannot_apply_or_like_own_flat(
     # After leaving, they are a candidate again.
     assert mate.delete(f"/me/flats/{room}").status_code == 204
     assert [item["display_name"] for item in _page(owner, room)["items"]] == ["Fay"]
+
+
+def _while_joining(
+    db_engine: Engine, listing_id: str, user_id: uuid.UUID, call: Callable[[], str]
+) -> str:
+    """Run `call` in a thread while connection A is in the middle of `user_id`'s join, as
+    `flatmates.join` does it: the listing locked `FOR UPDATE` and the membership inserted, not yet
+    committed. Asserts that `call` waits for A, then commits A and returns `call`'s outcome."""
+    outcome = [""]
+
+    def run() -> None:
+        try:
+            outcome[0] = call()
+        except Exception as exc:
+            outcome[0] = type(exc).__name__
+
+    with db_engine.connect() as join:
+        join.execute(text("SELECT id FROM listings WHERE id = :id FOR UPDATE"), {"id": listing_id})
+        join.execute(
+            text("INSERT INTO listing_flatmates (listing_id, user_id) VALUES (:l, :u)"),
+            {"l": listing_id, "u": user_id},
+        )
+        thread = threading.Thread(target=run)
+        thread.start()
+        time.sleep(0.5)
+        assert outcome == [""], outcome  # it waits for the join's lock
+        join.commit()
+    thread.join(timeout=15)
+    return outcome[0]
+
+
+def _as(user_id: uuid.UUID, action: Callable[[Any, User], Any]) -> Callable[[], str]:
+    """`action(db, user)` on a session of its own, as `user_id`; "ok" when it returns."""
+
+    def call() -> str:
+        with get_sessionmaker()() as db:
+            user = db.get(User, user_id)
+            assert user is not None
+            db.rollback()
+            action(db, user)
+            return "ok"
+
+    return call
+
+
+def _open_applications(engine: Engine, listing_id: str, user_id: uuid.UUID) -> int:
+    count: int = _scalar(
+        engine,
+        "SELECT count(*) FROM applications WHERE listing_id = :l AND seeker_id = :u"
+        " AND status <> 'withdrawn'",
+        l=listing_id,
+        u=user_id,
+    )
+    return count
+
+
+def test_ac8_join_racing_apply_is_never_both(
+    client: TestClient,
+    outbox: Outbox,
+    room: str,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    fresh = _user_id(_seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi"))
+    reopening = _user_id(_seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat"))
+    make_application(db_engine, uuid.UUID(room), reopening, status="withdrawn")
+    for user_id in (fresh, reopening):  # a new application, and a withdrawn one reopened
+        apply = _as(
+            user_id,
+            lambda db, user: applications_service.apply(
+                db, get_redis(), user, uuid.UUID(room), "Hello there"
+            ),
+        )
+        outcome = _while_joining(db_engine, room, user_id, apply)
+        assert outcome == "ListingNotFoundError", outcome  # the router's 404
+        assert _open_applications(db_engine, room, user_id) == 0
+        assert _scalar(db_engine, "SELECT count(*) FROM room_pairs") == 0
+
+
+def test_ac8_join_racing_like_is_never_both(
+    client: TestClient,
+    outbox: Outbox,
+    owner_id: uuid.UUID,
+    room: str,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    # The seeker's like would make it mutual: the lister liked them first.
+    a = _user_id(_seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi"))
+    make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=4500, lister_liked=True)
+    like_room = _as(
+        a, lambda db, user: people_service.like_room(db, get_redis(), user, uuid.UUID(room))
+    )
+    assert _while_joining(db_engine, room, a, like_room) == "ListingNotFoundError"
+    assert _open_applications(db_engine, room, a) == 0
+
+    # The lister's like would make it mutual: the seeker liked first.
+    b = _user_id(_seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat"))
+    pair = make_pair(db_engine, uuid.UUID(room), b, price_ils_seen=4500, seeker_liked=True)
+    like_person = _as(
+        owner_id,
+        lambda db, user: people_service.like_person(db, get_redis(), user, uuid.UUID(room), pair),
+    )
+    assert _while_joining(db_engine, room, b, like_person) == "ListingNotFoundError"
+    assert _open_applications(db_engine, room, b) == 0
+    assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 0
+
+
+def test_join_after_decline(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    room: str,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    token = _invite(owner, room)
+    callers = {
+        name: _seeker(client, outbox, db_engine, gush_dan, f"{name}@example.com", name.title())
+        for name in ("straight", "later", "submitted", "shortlisted", "withdrawn")
+    }
+    applications = {
+        name: make_application(db_engine, uuid.UUID(room), _user_id(caller))
+        for name, caller in callers.items()
+    }
+    _set_status(owner, room, applications["straight"], "declined")  # from submitted
+    _set_status(owner, room, applications["later"], "shortlisted")
+    _set_status(owner, room, applications["later"], "declined")  # after a shortlist
+    _set_status(owner, room, applications["shortlisted"], "shortlisted")
+    _ok(callers["withdrawn"].post(f"/me/applications/{applications['withdrawn']}/withdraw"))
+
+    for name, detail in (
+        ("straight", "declined"),
+        ("later", "declined"),
+        ("submitted", "already_applied"),
+        ("shortlisted", "already_applied"),
+    ):
+        response = _join(callers[name], token)
+        assert response.status_code == 409, (name, response.text)
+        assert response.json() == {"detail": detail}
+    assert _ok(_join(callers["withdrawn"], token)) == {"listing_id": room}
+    assert [f["display_name"] for f in _flatmates(owner, room)] == ["Withdrawn"]
+    assert _scalar(db_engine, "SELECT count(*) FROM listing_flatmates") == 1
 
 
 def test_ac9_flatmate_read_marker(
@@ -999,6 +1167,50 @@ def test_ac12_statement_counts(
     assert "FROM applications" in room_change[3]
     assert len(measure(partial(patch, room, chat, "shortlisted"))) == 5  # plus the chat INSERT
     assert len(measure(partial(patch, apartment, flat, "submitted"))) == 3
+
+
+def _scans_of(node: dict[str, Any], relation: str) -> Iterator[dict[str, Any]]:
+    """Every plan node of an `EXPLAIN (FORMAT JSON)` tree that reads `relation`."""
+    if node.get("Relation Name") == relation:
+        yield node
+    for child in node.get("Plans", []):
+        yield from _scans_of(child, relation)
+
+
+def test_ac12_list_uses_indexes_for_every_role(
+    owner: TestClient,
+    owner_id: uuid.UUID,
+    seeker_id: uuid.UUID,
+    mate: TestClient,
+    mate_id: uuid.UUID,
+    room: str,
+    chat: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """The list's membership must drive an index (perf review major 1). With sequential scans
+    priced out, every read of `conversations` must still be bounded by an index condition: a seq
+    scan, or a primary-key index scan without a condition (a full scan in index order, what the
+    planner picks for the bare OR), fails."""
+    _ok(_join(mate, _invite(owner, room)))
+    with Session(db_engine) as db:
+        for user_id in (owner_id, seeker_id, mate_id):
+            user = db.get(User, user_id)
+            assert user is not None
+            compiled = chat_service.list_statement(user).compile(dialect=db_engine.dialect)
+            with db_engine.connect() as conn:
+                conn.exec_driver_sql("SET LOCAL enable_seqscan = off")
+                (plan,) = conn.exec_driver_sql(
+                    "EXPLAIN (FORMAT JSON) " + str(compiled), compiled.params
+                ).scalar_one()
+                conn.rollback()
+            scans = list(_scans_of(plan["Plan"], "conversations"))
+            assert scans, plan
+            for scan in scans:
+                assert scan["Node Type"] != "Seq Scan", scan
+                if scan["Node Type"] in ("Index Scan", "Index Only Scan"):
+                    assert "Index Cond" in scan, scan
+                else:
+                    assert scan["Node Type"] == "Bitmap Heap Scan", scan
 
 
 def test_ac13_non_member_send_is_404(

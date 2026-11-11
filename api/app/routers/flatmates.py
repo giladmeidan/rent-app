@@ -83,13 +83,16 @@ def _rate_limited(exc: RateLimitedError) -> HTTPException:
         },
     },
 )
-def create_invite(listing_id: uuid.UUID, owner: OwnerDep, db: DbDep) -> InviteOut:
+def create_invite(
+    listing_id: uuid.UUID, owner: OwnerDep, db: DbDep, response: Response
+) -> InviteOut:
     """Create the room's invite link, or rotate it (the old link stops working). The token is
-    returned only here and can never be read again."""
+    returned only here and can never be read again; the response is never cached."""
     try:
         token = flatmates_service.create_invite(db, owner, listing_id)
     except ListingNotFoundError:
         raise _not_found() from None
+    response.headers["Cache-Control"] = "no-store"
     return InviteOut(token=token)
 
 
@@ -139,8 +142,8 @@ def preview_invite(body: InviteTokenIn, me: UserDep, db: DbDep, r: RedisDep) -> 
         409: {
             "model": ErrorOut,
             "description": "own_listing: the caller owns the listing; already_applied: the caller "
-            "has a non-withdrawn application to it; flatmates_full: it has the maximum number of "
-            "flatmates (7)",
+            "has a submitted or shortlisted application to it; declined: the caller's application "
+            "to it was declined; flatmates_full: it has the maximum number of flatmates (7)",
         },
     },
 )
@@ -156,6 +159,8 @@ def join(body: InviteTokenIn, me: UserDep, db: DbDep, r: RedisDep) -> JoinOut:
         raise HTTPException(status_code=409, detail="own_listing") from None
     except AlreadyAppliedError:
         raise HTTPException(status_code=409, detail="already_applied") from None
+    except flatmates_service.DeclinedError:
+        raise HTTPException(status_code=409, detail="declined") from None
     except flatmates_service.FlatmatesFullError:
         raise HTTPException(status_code=409, detail="flatmates_full") from None
     return JoinOut(listing_id=listing_id)

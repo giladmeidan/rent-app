@@ -15,9 +15,13 @@ Rules:
   both): every authenticated attempt counts, found or not, so tokens cannot be scanned cheaply.
 - Joining locks the listing row (`SELECT ... FOR UPDATE` by hash) before it counts the members and
   inserts, so two concurrent joins at `FLATMATES_MAX - 1` members cannot both pass the bound. The
-  owner cannot join their own listing (`OwnListingError`); someone with a non-withdrawn application
-  to it must withdraw first (`AlreadyAppliedError`). A member joining again keeps their membership
-  and its `joined_at` (idempotent).
+  owner cannot join their own listing (`OwnListingError`); someone with a submitted or shortlisted
+  application to it must withdraw first (`AlreadyAppliedError`), and a declined applicant cannot
+  join (`DeclinedError`; Gilad, 2026-11-11); a withdrawn application does not block. Every path that
+  creates an application takes `FOR KEY SHARE` on the listing first and re-tests membership after
+  it (`services/applications.py`, `services/people.py`), so a join and an apply racing each other
+  never leave the caller both. A member joining again keeps their membership and its `joined_at`
+  (idempotent).
 - The owner's removal of a flatmate also turns the link off in the same transaction, so a removed
   flatmate cannot re-join with the link they still hold; leaving does not touch the link. Both
   delete that user's `conversation_reads` rows for the listing's conversations. A re-join is a new
@@ -38,7 +42,6 @@ from app.redis_client import RedisClient
 from app.services.applications import AlreadyAppliedError
 from app.services.auth import _token_hash
 from app.services.listings import ListingNotFoundError
-from app.services.people import open_application
 from app.services.rate_limit import count_or_raise
 
 # The `FlatmatesCount` bound (spec 0007a): at most 7 people share a room's flat with its lister.
@@ -57,6 +60,11 @@ class OwnListingError(Exception):
 
 class FlatmatesFullError(Exception):
     """The listing already has `FLATMATES_MAX` flatmates."""
+
+
+class DeclinedError(Exception):
+    """The caller's application to the listing was declined (Gilad, 2026-11-11: the link may reach
+    a declined applicant from a flatmate rather than the owner)."""
 
 
 def _count_attempt(r: RedisClient, user: User) -> None:
@@ -136,7 +144,8 @@ def join(db: Session, r: RedisClient, me: User, token: str) -> uuid.UUID:
     """Make `me` a flatmate of the room a live invite token is for and return its id. Counts the
     attempt first (`RateLimitedError`); then locks the listing by hash (`ListingNotFoundError` for
     an unknown, rotated or disabled token or an apartment), and raises `OwnListingError`,
-    `AlreadyAppliedError` (a non-withdrawn application of `me` to it) or `FlatmatesFullError`. A
+    `AlreadyAppliedError` (a submitted or shortlisted application of `me` to it), `DeclinedError`
+    (a declined one) or `FlatmatesFullError`. A
     member gets the listing id again, membership untouched. Commits."""
     _count_attempt(r, me)
     try:
@@ -159,7 +168,10 @@ def join(db: Session, r: RedisClient, me: User, token: str) -> uuid.UUID:
                 exists()
                 .where(ListingFlatmate.listing_id == listing.id, ListingFlatmate.user_id == me.id)
                 .label("member"),
-                open_application(listing.id, me.id).label("applied"),
+                select(Application.status)
+                .where(Application.listing_id == listing.id, Application.seeker_id == me.id)
+                .scalar_subquery()
+                .label("application_status"),
                 select(func.count())
                 .select_from(ListingFlatmate)
                 .where(ListingFlatmate.listing_id == listing.id)
@@ -168,8 +180,10 @@ def join(db: Session, r: RedisClient, me: User, token: str) -> uuid.UUID:
             )
         ).one()
         if not state.member:
-            if state.applied:
+            if state.application_status in ("submitted", "shortlisted"):
                 raise AlreadyAppliedError
+            if state.application_status == "declined":
+                raise DeclinedError
             if state.members >= FLATMATES_MAX:
                 raise FlatmatesFullError
             db.execute(insert(ListingFlatmate).values(listing_id=listing.id, user_id=me.id))
