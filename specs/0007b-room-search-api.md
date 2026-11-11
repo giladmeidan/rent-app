@@ -1,7 +1,7 @@
 ---
 id: 0007b
 title: Rooms appear in search, on the map and on their page next to apartments (with an apartment/room filter); a seeker never sees a room whose gender preference does not fit them and cannot apply to one; every application records the type it was made to
-status: verified
+status: in-progress
 depends_on: [0007a]      # 0007a: listings.gender_preference / flatmates_count / flatmate_ages / lifestyle, seeker_profiles.gender / flatmate_gender, `GenderPreference` / `Lifestyle` (app.schemas.profile), migration 0009
 reviewers: [code, qa, security, perf]   # perf: a caller-dependent join + filter on the public search hot path; security: the first per-caller hiding rule, an apply gate ahead of the rate limiter, a snapshot that 0007c keys PII on; qa: the 13-caller fit table, a migration
 estimate: 1 coder run    # coder on Opus/high (migration, apply gate). Split from the original 0007b at Gilad's word (verifier finding 1); the lifestyle score is 0007g
