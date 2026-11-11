@@ -149,3 +149,17 @@ export async function putProfile(
   });
   expect(saved.status()).toBe(200);
 }
+
+/** Likes a person for a room through the API with the page's (owner) session: `personId` is the
+ * `id` of a card on `GET /listings/{id}/people` (spec 0008a). Returns the like's `application_id`
+ * (set when it made the pair mutual). */
+export async function likePerson(
+  page: Page,
+  listingId: string,
+  personId: string,
+): Promise<string | null> {
+  const liked = await page.request.put(`${API}/listings/${listingId}/people/${personId}/like`);
+  expect(liked.status()).toBe(200);
+  const { application_id } = (await liked.json()) as { application_id: string | null };
+  return application_id;
+}
