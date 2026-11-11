@@ -16,7 +16,8 @@ by match by default (`?sort=newest` for the 0004c order), applicants without a p
 application also carries the seeker's room section as `room` (spec 0007c: gender, age, answers).
 
 Every successful owner status change and seeker withdraw publishes a `status` chat event to the
-owner and the seeker after the commit (spec 0005c): it may open or close the application's chat."""
+chat's members after the commit (spec 0005c): it may open or close the application's chat. On a
+room application that includes the listing's flatmates (`chat.event_members`, spec 0008d)."""
 
 import datetime as dt
 import uuid
@@ -43,6 +44,7 @@ from app.schemas.application import (
 )
 from app.schemas.error import ErrorOut
 from app.services import applications as applications_service
+from app.services import chat as chat_service
 from app.services import chat_events
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import RateLimitedError
@@ -156,7 +158,8 @@ def withdraw(
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.NotWithdrawableError:
         raise HTTPException(status_code=409, detail="not_withdrawable") from None
-    chat_events.publish(r, [listing.owner_id, seeker.id], application.id, "status")
+    members = chat_service.event_members(db, application, listing.owner_id)
+    chat_events.publish(r, members, application.id, "status")
     return _out(application, listing)
 
 
@@ -253,5 +256,6 @@ def set_applicant_status(
     except applications_service.InvalidTransitionError:
         raise HTTPException(status_code=409, detail="invalid_transition") from None
     application: Application = row.Application
-    chat_events.publish(r, [owner.id, application.seeker_id], application.id, "status")
+    members = chat_service.event_members(db, application, owner.id)
+    chat_events.publish(r, members, application.id, "status")
     return _applicant_out(row)

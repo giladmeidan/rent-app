@@ -14,8 +14,8 @@ nothing about the listing.
 Both like `PUT`s share one rate limit per user (`LIKE_RATE_LIMIT_HOUR` / `_DAY`, a 429 with
 `Retry-After`), counted only once the listing gate passed. A like that makes the pair mutual
 returns the new shortlisted application's id (also its chat's) and, after the commit, publishes a
-`status` chat event to the owner and the seeker (spec 0005c), as a shortlist does. A plain like
-notifies no one."""
+`status` chat event to the chat's members, the room's flatmates included (spec 0005c, 0008d), as a
+shortlist does. A plain like notifies no one."""
 
 import uuid
 from typing import Annotated, Any
@@ -40,6 +40,7 @@ from app.schemas.people import (
     PersonOut,
 )
 from app.schemas.search import ListingPublic
+from app.services import chat as chat_service
 from app.services import chat_events
 from app.services import people as people_service
 from app.services import search as search_service
@@ -156,7 +157,8 @@ def like_person(
         raise HTTPException(status_code=409, detail="already_applied") from None
     if application is None:
         return LikeOut(liked=True, application_id=None)
-    chat_events.publish(r, [owner.id, seeker_id], application.id, "status")
+    members = chat_service.event_members(db, application, owner.id)
+    chat_events.publish(r, members, application.id, "status")
     return LikeOut(liked=True, application_id=application.id)
 
 
@@ -217,7 +219,8 @@ def like_room(listing_id: uuid.UUID, seeker: SeekerDep, db: DbDep, r: RedisDep) 
         raise HTTPException(status_code=409, detail="already_applied") from None
     if application is None:
         return LikeOut(liked=True, application_id=None)
-    chat_events.publish(r, [listing.owner_id, seeker.id], application.id, "status")
+    members = chat_service.event_members(db, application, listing.owner_id)
+    chat_events.publish(r, members, application.id, "status")
     return LikeOut(liked=True, application_id=application.id)
 
 
