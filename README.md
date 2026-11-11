@@ -74,8 +74,7 @@ curl -b seeker.txt -X POST localhost:8000/listings/$LISTING_ID/applications -H '
   -d '{"message":"שלום, אנחנו זוג שקט ומחפשים דירה לטווח ארוך"}'
 ```
 
-Back as the owner, `GET /listings/{id}/applications` lists a listing's applicants (display name and message,
-newest first), `PATCH /listings/{id}/applications/{application_id}` with `{"status":"shortlisted"}`,
+Back as the owner, `GET /listings/{id}/applications` lists a listing's applicants (display name, message, `match` and a `profile` of the 7 housing fields, never budget or areas; sorted by match by default, `?sort=newest` for newest first), `PATCH /listings/{id}/applications/{application_id}` with `{"status":"shortlisted"}`,
 `"submitted"` or `"declined"` shortlists, un-shortlists or declines one (a decline is final), and `GET
 /me/listings` shows `applicant_count` and `new_applicant_count` per listing:
 

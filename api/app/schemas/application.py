@@ -35,6 +35,7 @@ from app.schemas.profile import ContractMonths, Household
 ApplicationStatus = Literal["submitted", "shortlisted", "declined", "withdrawn"]
 # What an owner sees and may set: a withdrawn application is invisible to the owner (0004c).
 ApplicantStatus = Literal["submitted", "shortlisted", "declined"]
+ApplicantSort = Literal["match", "newest"]
 
 MESSAGE_MAX_LENGTH = 500  # ck_applications_message_length (migration 0005)
 

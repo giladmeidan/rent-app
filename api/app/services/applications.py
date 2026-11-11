@@ -31,7 +31,7 @@ Rules (PRODUCT.md "Applications"):
 
 import uuid
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
 from sqlalchemy import Label, Row, Select, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -40,7 +40,7 @@ from sqlalchemy.orm import Session
 from app.matching.score import match_columns
 from app.models import Application, Conversation, Listing, SeekerProfile, User
 from app.redis_client import RedisClient
-from app.schemas.application import ApplicantStatus
+from app.schemas.application import ApplicantSort, ApplicantStatus
 from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
@@ -204,8 +204,6 @@ def record_view(db: Session, listing_id: uuid.UUID) -> int:
         raise
     return int(count or 0)
 
-
-ApplicantSort = Literal["match", "newest"]
 
 # The owner-facing housing summary (0006c, NF2): by name, never the `SeekerProfile` entity, so
 # `budget_max_ils` and `area_ids` are never loaded.

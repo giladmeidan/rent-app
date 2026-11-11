@@ -15,9 +15,7 @@ by match by default (`?sort=newest` for the 0004c order), applicants without a p
 Every successful owner status change and seeker withdraw publishes a `status` chat event to the
 owner and the seeker after the commit (spec 0005c): it may open or close the application's chat."""
 
-import typing
 import uuid
-from collections.abc import Mapping
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,12 +24,13 @@ from sqlalchemy.orm import Session
 
 from app.auth import current_owner, current_seeker
 from app.db import get_session
-from app.matching.score import explain
+from app.matching.score import explain_row
 from app.models import Application, Listing, User
 from app.redis_client import RedisClient, get_redis
 from app.schemas.application import (
     ApplicantOut,
     ApplicantProfileOut,
+    ApplicantSort,
     ApplicantStatusIn,
     ApplicationIn,
     ApplicationListingOut,
@@ -161,7 +160,7 @@ def _applicant_out(row: Row[Any]) -> ApplicantOut:
         applicant_name=row.display_name,
         created_at=application.created_at,
         updated_at=application.updated_at,
-        match=explain(typing.cast(Mapping[str, Any], row._mapping)) if has_profile else None,
+        match=explain_row(row) if has_profile else None,
         profile=(
             ApplicantProfileOut(
                 household=row.household,
@@ -190,7 +189,7 @@ def list_applicants(
     listing_id: uuid.UUID,
     owner: OwnerDep,
     db: DbDep,
-    sort: Annotated[applications_service.ApplicantSort, Query()] = "match",
+    sort: Annotated[ApplicantSort, Query()] = "match",
 ) -> list[ApplicantOut]:
     try:
         rows = applications_service.list_applicants(db, owner, listing_id, sort)

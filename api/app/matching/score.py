@@ -14,6 +14,7 @@ A past `available_from` means "immediately" (spec 0002a) and a past stored `move
 "now", hence both `greatest(..., current_date)`; `current_date` is the database's (UTC). The
 expressions assume a profile row: with NULL profile columns they are not NULL but meaningless."""
 
+import typing
 from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any, Final, get_args
@@ -24,6 +25,7 @@ from sqlalchemy import (
     Integer,
     Label,
     Numeric,
+    Row,
     and_,
     any_,
     case,
@@ -137,6 +139,11 @@ def match_columns(
         *(fails[c].label(f"f_{c}") for c in HARD),
         score.label("m_score"),
     ]
+
+
+def explain_row(row: Row[Any]) -> MatchOut:
+    """`explain` on one result row's columns (`row._mapping`, keyed by the match labels)."""
+    return explain(typing.cast(Mapping[str, Any], row._mapping))
 
 
 def explain(values: Mapping[str, Any]) -> MatchOut:
