@@ -453,10 +453,12 @@ def test_ac10_cookie_responses_are_private(
             response = caller.get(path)
             assert response.status_code == 200, path
             assert response.headers.get("cache-control") == "private", path
+            assert "Cookie" in response.headers.get("vary", ""), path
     for path in paths:
         response = client.get(path)
         assert response.status_code == 200, path
         assert "cache-control" not in response.headers, path
+        assert "Cookie" in response.headers.get("vary", ""), path
 
 
 def _values(**overrides: Any) -> dict[str, Any]:

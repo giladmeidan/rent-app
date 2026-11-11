@@ -43,7 +43,9 @@ def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
 
 def _private_if_cookie(request: Request, response: Response) -> None:
     """A response that may differ per caller must not be shared-cached. The raw cookie, not the
-    user: `optional_user` is None for an expired one."""
+    user: `optional_user` is None for an expired one. Every 200 says `Vary: Cookie` (appended, so
+    CORS's `Vary: Origin` stays), since the body differs with the cookie."""
+    response.headers.append("Vary", "Cookie")
     if COOKIE_NAME in request.cookies:
         response.headers["Cache-Control"] = "private"
 

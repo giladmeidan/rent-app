@@ -90,7 +90,11 @@ class SearchParams(BaseModel):
 
 
 class ListingPublic(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    # `match` has a default only so `model_validate(<ORM row>)` works; the key is always sent, so
+    # the response schema lists it as required (nullable).
+    model_config = ConfigDict(
+        from_attributes=True, json_schema_serialization_defaults_required=True
+    )
 
     id: uuid.UUID
     listing_type: ListingType

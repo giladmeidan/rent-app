@@ -33,6 +33,7 @@ from sqlalchemy import (
     or_,
 )
 from sqlalchemy.orm import QueryableAttribute
+from sqlalchemy.orm.util import AliasedClass
 
 from app.models import Listing, SeekerProfile
 from app.schemas.match import Criterion, MatchOut
@@ -71,7 +72,10 @@ def _days_if(flag: QueryableAttribute[bool]) -> ColumnElement[int]:
     return case((flag, FLEXIBLE_DAYS), else_=0)
 
 
-def match_columns(listing: type[Listing], profile: type[SeekerProfile]) -> list[Label[Any]]:
+def match_columns(
+    listing: type[Listing] | AliasedClass[Listing],
+    profile: type[SeekerProfile] | AliasedClass[SeekerProfile],
+) -> list[Label[Any]]:
     """The labelled match columns for a statement that selects `listing` joined to one `profile`
     row (either may be an alias): `m_<criterion>` for every criterion, `f_<criterion>` for every
     `HARD` one, and `m_score`."""
