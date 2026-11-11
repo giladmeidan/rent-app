@@ -1,11 +1,10 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 
 import { RoomDetails } from '../applicants/RoomDetails';
 import { hasStatus } from '../applications/api';
 import { ApiError, type MyListingOut } from '../listings/api';
-import { formatDate } from '../listings/format';
+import { formatDate, todayInIsrael } from '../listings/format';
 import { AgreeIcon, DifferIcon } from '../match/icons';
 import { MatchBadge } from '../match/MatchBadge';
 import { personReason, personShort } from '../match/reasons';
@@ -23,6 +22,9 @@ const differChip = `${chip} bg-warn text-warn-text`;
 const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
 
 export type Mutual = { name: string; applicationId: string };
+/** An outcome after which the card is gone from the refetched list (the API drops a person with an
+ * open application or who no longer fits), so the page, not the card, shows it. */
+export type PageAlert = { kind: 'alreadyApplied' | 'gone'; name: string };
 
 type Props = {
   person: PersonOut;
@@ -31,9 +33,11 @@ type Props = {
   /** The person's area names, already resolved (an id with no name is left out). */
   areaNames: string[];
   onMutual: (mutual: Mutual) => void;
+  onAlert: (alert: PageAlert) => void;
 };
 
 type LikeError = 'alreadyApplied' | 'gone' | 'notLive' | 'rateLimited' | 'failed';
+type InlineError = Exclude<LikeError, 'alreadyApplied' | 'gone'>;
 
 /** The alert a failed like / unlike shows; `null` for 401 / 403 (`RequireOwner` leaves the page). */
 function errorKind(error: unknown): LikeError | null {
@@ -50,12 +54,12 @@ function errorKind(error: unknown): LikeError | null {
 
 /** One person on a room's people page: the inbox card's anatomy (0006g / 0007c) for someone who
  * has not applied. Free text (`about_me`) is plain text; the chips and reasons are fact-free. */
-export function PersonCard({ person, listing, areaNames, onMutual }: Props) {
+export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Props) {
   const { t } = useTranslation();
   const headingId = useId();
   const [whyOpen, setWhyOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [error, setError] = useState<LikeError | null>(null);
+  const [error, setError] = useState<InlineError | null>(null);
   const like = useLikePerson(listing.id);
   const unlike = useUnlikePerson(listing.id);
   const inFlight = useRef(false);
@@ -64,6 +68,9 @@ export function PersonCard({ person, listing, areaNames, onMutual }: Props) {
   const moreId = `${headingId}-more`;
   const { match } = person;
   const name = person.display_name;
+  // A stored move-in that has passed means today (as the inbox shows it).
+  const today = todayInIsrael();
+  const moveIn = person.move_in_date > today ? person.move_in_date : today;
   const gender = t(`profile.room.gender.${person.gender}`);
 
   async function toggle() {
@@ -80,7 +87,9 @@ export function PersonCard({ person, listing, areaNames, onMutual }: Props) {
         }
       }
     } catch (caught) {
-      setError(errorKind(caught));
+      const kind = errorKind(caught);
+      if (kind === 'alreadyApplied' || kind === 'gone') onAlert({ kind, name });
+      else setError(kind);
     } finally {
       inFlight.current = false;
     }
@@ -136,8 +145,8 @@ export function PersonCard({ person, listing, areaNames, onMutual }: Props) {
               </p>
             )}
             <p className="text-start text-[13px] text-[#44403C]">
-              {t('people.moveIn', { date: formatDate(person.move_in_date) })}
-              {person.move_in_flexible && <> {t('people.flexible')}</>}
+              {t('people.moveIn', { date: formatDate(moveIn) })}
+              {person.move_in_flexible && <> {t('applicants.flexible')}</>}
             </p>
           </div>
         </div>
@@ -218,35 +227,25 @@ export function PersonCard({ person, listing, areaNames, onMutual }: Props) {
           </div>
         </div>
         <div className="flex flex-col items-start gap-2">
+          {/* `aria-disabled`, not `disabled`: the focused button stays focusable while it runs. */}
           <button
             type="button"
             aria-pressed={person.liked_by_me}
-            aria-label={person.liked_by_me ? t('people.unlikeLabel') : undefined}
             aria-describedby={headingId}
-            disabled={pending}
+            aria-disabled={pending}
+            aria-busy={pending}
             onClick={() => void toggle()}
-            className={`inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 text-[15px] font-bold disabled:opacity-60 ${focusRing} ${
+            className={`inline-flex min-h-[44px] items-center justify-center gap-1 rounded-xl px-4 text-[15px] font-bold aria-disabled:opacity-60 ${focusRing} ${
               person.liked_by_me
                 ? 'border-[1.5px] border-accent bg-accent-tint text-accent-text'
                 : 'bg-accent text-white'
             }`}
           >
-            {person.liked_by_me ? t('people.liked') : t('people.like')}
+            {t('people.like')}
+            {person.liked_by_me && <span aria-hidden="true">✓</span>}
           </button>
           {error !== null && (
             <p role="alert" className={fieldError}>
-              {error === 'alreadyApplied' && (
-                <>
-                  {t('people.errors.alreadyApplied')}{' '}
-                  <Link
-                    to={`/me/listings/${listing.id}/applicants`}
-                    className={`underline ${focusRing}`}
-                  >
-                    {t('people.errors.toApplicants')}
-                  </Link>
-                </>
-              )}
-              {error === 'gone' && t('people.errors.gone')}
               {error === 'notLive' && t('people.notLive')}
               {error === 'rateLimited' && t('people.errors.rateLimited')}
               {error === 'failed' && t('common.error')}

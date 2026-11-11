@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
@@ -11,7 +11,7 @@ import { hasStatus } from '../applications/api';
 import { cardTitle } from '../listings/cardTitle';
 import { useMyListings } from '../listings/useMyListings';
 import { flattenPeople, usePeople } from './usePeople';
-import { PersonCard, type Mutual } from './PersonCard';
+import { PersonCard, type Mutual, type PageAlert } from './PersonCard';
 
 const section = 'mx-auto flex w-full max-w-[640px] flex-col gap-4';
 const focusRing =
@@ -53,6 +53,22 @@ export function PeoplePage() {
   const people = usePeople(id, isRoom);
   const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
   const [mutual, setMutual] = useState<Mutual | null>(null);
+  // The two outcomes after which the card leaves the refetched list: kept here, like `mutual`.
+  const [alert, setAlert] = useState<PageAlert | null>(null);
+  const mutualRef = useRef<HTMLDivElement>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  // The card (and the focused button) is gone by now: move focus to the message and bring it into
+  // view. The regions are always in the DOM, so the text change is announced.
+  useEffect(() => {
+    if (mutual === null) return;
+    mutualRef.current?.focus();
+    mutualRef.current?.scrollIntoView({ block: 'center' });
+  }, [mutual]);
+  useEffect(() => {
+    if (alert === null) return;
+    alertRef.current?.focus();
+    alertRef.current?.scrollIntoView({ block: 'center' });
+  }, [alert]);
   const items = useMemo(() => (people.data ? flattenPeople(people.data) : []), [people.data]);
 
   const areaName = useMemo(
@@ -115,7 +131,14 @@ export function PeoplePage() {
                 person={person}
                 listing={listing}
                 areaNames={person.area_ids.flatMap((areaId) => areaName.get(areaId) ?? [])}
-                onMutual={setMutual}
+                onMutual={(m) => {
+                  setAlert(null);
+                  setMutual(m);
+                }}
+                onAlert={(a) => {
+                  setMutual(null);
+                  setAlert(a);
+                }}
               />
             ))}
           </ul>
@@ -141,17 +164,45 @@ export function PeoplePage() {
         <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>
         <p className="text-start font-bold">{cardTitle(t, listing)}</p>
       </div>
-      {mutual !== null && (
-        <div
-          role="status"
-          className="flex flex-wrap items-center gap-3 rounded-2xl bg-accent-tint px-4 py-3 text-start text-[15px] font-semibold text-accent-text"
-        >
-          <span>{t('people.mutual', { name: mutual.name })}</span>
-          <Link to={`/chat/${mutual.applicationId}`} className={`underline ${focusRing}`}>
-            {t('people.toChat')}
-          </Link>
-        </div>
-      )}
+      <div
+        ref={mutualRef}
+        role="status"
+        tabIndex={-1}
+        className={
+          mutual === null
+            ? undefined
+            : 'flex flex-wrap items-center gap-3 rounded-2xl bg-accent-tint px-4 py-3 text-start text-[15px] font-semibold text-accent-text focus:outline-none'
+        }
+      >
+        {mutual !== null && (
+          <>
+            <span>{t('people.mutual', { name: mutual.name })}</span>
+            <Link to={`/chat/${mutual.applicationId}`} className={`underline ${focusRing}`}>
+              {t('people.toChat')}
+            </Link>
+          </>
+        )}
+      </div>
+      <div
+        ref={alertRef}
+        role="alert"
+        tabIndex={-1}
+        className={
+          alert === null
+            ? undefined
+            : 'rounded-2xl bg-warn px-4 py-3 text-start text-[15px] font-semibold text-warn-text focus:outline-none'
+        }
+      >
+        {alert?.kind === 'alreadyApplied' && (
+          <>
+            <strong>{alert.name}</strong> <span>{t('people.errors.alreadyApplied')}</span>{' '}
+            <Link to={`/me/listings/${listing.id}/applicants`} className={`underline ${focusRing}`}>
+              {t('people.errors.toApplicants')}
+            </Link>
+          </>
+        )}
+        {alert?.kind === 'gone' && <span>{t('people.errors.gone')}</span>}
+      </div>
       {body}
     </section>
   );

@@ -77,10 +77,11 @@ const page = (items: ReturnType<typeof person>[], total = items.length) => json(
 // The harness's location probe is an `<output>` (role status): the banner is found by its text.
 const banners = () =>
   screen.queryAllByRole('status').filter((el) => el.textContent.includes('התאמה הדדית עם'));
+// The page's alert region is always in the DOM (empty until used): only non-empty ones count.
+const alerts = () => screen.queryAllByRole('alert').filter((el) => el.textContent !== '');
 const cards = () => screen.getAllByRole('article');
 const cardOf = (name: string) => screen.getByRole('article', { name });
-const likeButton = (name: string) =>
-  within(cardOf(name)).getByRole('button', { name: /^(אהבתי|ביטול לייק)/ });
+const likeButton = (name: string) => within(cardOf(name)).getByRole('button', { name: /^אהבתי/ });
 const offsets = (api: ReturnType<typeof mockApi>) =>
   api.calls(PEOPLE).map((c) => new URL(c.request.url).searchParams.get('offset'));
 
@@ -110,7 +111,7 @@ describe('PeoplePage', () => {
     expect(one.getByText('אזורים: גוש דן וגבעתיים')).toBeVisible();
     expect(
       one.getByText(
-        `${he.people.moveIn.replace('{{date}}', formatDate(inDays(30)))} ${he.people.flexible}`,
+        `${he.people.moveIn.replace('{{date}}', formatDate(inDays(30)))} ${he.applicants.flexible}`,
       ),
     ).toBeVisible();
     const about = one.getByTestId('person-about');
@@ -119,26 +120,31 @@ describe('PeoplePage', () => {
     expect(about).toHaveAttribute('dir', 'auto');
     expect(one.getByTestId('match-badge')).toBeVisible();
     expect(one.getByTestId('match-chips')).toHaveTextContent(he.match.owner.short.budget.agree);
-    expect(one.getByTestId('match-chips')).toHaveTextContent(he.match.owner.short.pets.differ);
+    expect(one.getByTestId('match-chips')).toHaveTextContent(he.people.short.pets.differ);
 
     const two = within(cardOf('P2'));
     expect(two.queryByText(he.people.likedMe)).toBeNull();
     expect(two.getByText('גבר')).toBeVisible();
     expect(two.queryByTestId('person-about')).toBeNull();
+    expect(
+      two.getByText(he.people.moveIn.replace('{{date}}', formatDate(inDays(30)))),
+    ).toBeVisible();
+    expect(two.getByTestId('match-badge')).toBeVisible();
+    expect(two.getByTestId('match-chips')).toHaveTextContent(he.match.owner.short.budget.agree);
 
-    // Nothing the card hides: no household, pets, smoking, contract or parking fact.
-    const text = cardOf('P1').textContent ?? '';
-    for (const hidden of [
-      he.match.owner.short.smoking.agreeSmoker,
-      he.match.owner.short.pets.agreePet,
-      he.match.owner.short.contract.agreeLong,
-      he.applicants.profile.household,
-      he.applicants.profile.pets,
-      he.applicants.profile.smoker,
-      he.applicants.profile.contract,
-      he.applicants.profile.parking,
-    ]) {
-      expect(text).not.toContain(hidden);
+    // Nothing the card hides: no household, pets, smoking, contract or parking fact, on any card.
+    for (const card of cards()) {
+      const text = card.textContent ?? '';
+      for (const hidden of [
+        he.match.owner.short.smoking.agreeSmoker,
+        he.match.owner.short.pets.agreePet,
+        he.match.owner.short.contract.agreeLong,
+        'לא מעשנים',
+        'עם חיית מחמד',
+        'בלי חיות',
+      ]) {
+        expect(text).not.toContain(hidden);
+      }
     }
 
     // "עוד פרטים" opens RoomDetails with the flat's answers.
@@ -180,21 +186,34 @@ describe('PeoplePage', () => {
     const p1 = person({ display_name: 'P1' });
     const p2 = person({ display_name: 'P2' });
     const liked = { ...p2, liked_by_me: true };
+    const pending = deferred();
     const { api } = renderPage([page([p1, p2]), page([p1, liked]), page([p1, p2])], {
       extra: {
-        [likeRoute('PUT', p2)]: [json({ liked: true, application_id: null })],
+        [likeRoute('PUT', p2)]: [pending.promise],
         [likeRoute('DELETE', p2)]: [empty()],
       },
     });
     await screen.findAllByRole('article');
-    const button = () => within(cardOf('P2')).getByRole('button', { name: /^(אהבתי|ביטול לייק)/ });
+    const button = () => within(cardOf('P2')).getByRole('button', { name: /^אהבתי/ });
     expect(button()).toHaveAttribute('aria-pressed', 'false');
-    expect(button()).toHaveTextContent(he.people.like);
+    expect(button()).toHaveAccessibleName(he.people.like);
+    button().focus();
     fireEvent.click(button());
+    // In flight: aria-disabled (still focusable), a second click is a no-op.
+    await waitFor(() => {
+      expect(button()).toHaveAttribute('aria-disabled', 'true');
+    });
+    expect(button()).toHaveAttribute('aria-busy', 'true');
+    expect(button()).not.toBeDisabled();
+    expect(button()).toHaveFocus();
+    fireEvent.click(button());
+    pending.resolve(json({ liked: true, application_id: null }));
     await waitFor(() => {
       expect(button()).toHaveAttribute('aria-pressed', 'true');
     });
-    expect(button()).toHaveAccessibleName(he.people.unlikeLabel);
+    // The name stays "אהבתי" (the tick is decoration); aria-pressed carries the state.
+    expect(button()).toHaveAccessibleName(he.people.like);
+    expect(button()).toHaveAttribute('aria-disabled', 'false');
     expect(banners()).toHaveLength(0);
     expect(api.calls(likeRoute('PUT', p2))).toHaveLength(1);
     expect(api.calls(MINE).length).toBeGreaterThan(1);
@@ -204,7 +223,7 @@ describe('PeoplePage', () => {
       expect(button()).toHaveAttribute('aria-pressed', 'false');
     });
     expect(api.calls(likeRoute('DELETE', p2))).toHaveLength(1);
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(alerts()).toHaveLength(0);
   });
 
   it('ac4_mutual_banner', async () => {
@@ -226,6 +245,7 @@ describe('PeoplePage', () => {
       return found as HTMLElement;
     });
     expect(banner).toHaveTextContent(he.people.mutual.replace('{{name}}', 'P1'));
+    expect(banner).toHaveFocus();
     expect(within(banner).getByRole('link', { name: he.people.toChat })).toHaveAttribute(
       'href',
       `/chat/${applicationId}`,
@@ -240,31 +260,57 @@ describe('PeoplePage', () => {
   });
 
   it('ac5_like_errors', async () => {
-    const cases: { reply: Response; text: string | RegExp; link?: string }[] = [
+    // The refetch drops the person (an open application, or no longer a candidate): the outcome is
+    // the page's, with the link, and it survives the refetch.
+    const dropped: { reply: Response; unlike?: boolean; link?: string }[] = [
       {
         reply: json({ detail: 'already_applied' }, 409),
-        text: he.people.errors.alreadyApplied,
         link: `/me/listings/${ROOM.id}/applicants`,
       },
+      { reply: json({ detail: 'not_found' }, 404) },
+      { reply: json({ detail: 'not_found' }, 404), unlike: true },
+    ];
+    for (const { reply, unlike = false, link } of dropped) {
+      const p = person({ display_name: 'P1', liked_by_me: unlike });
+      const { api, view } = renderPage([page([p]), page([])], {
+        extra: { [likeRoute(unlike ? 'DELETE' : 'PUT', p)]: [reply] },
+      });
+      await screen.findAllByRole('article');
+      fireEvent.click(likeButton('P1'));
+      await waitFor(() => {
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
+      });
+      const [alert] = alerts();
+      expect(alert).toBeDefined();
+      expect(alert).toHaveFocus();
+      expect(screen.getByRole('alert')).toBe(alert);
+      if (link !== undefined) {
+        expect(alert).toHaveTextContent(he.people.errors.alreadyApplied);
+        expect(
+          within(alert as HTMLElement).getByRole('link', { name: he.people.errors.toApplicants }),
+        ).toHaveAttribute('href', link);
+      } else {
+        expect(alert).toHaveTextContent(he.people.errors.gone);
+      }
+      expect(api.calls(PEOPLE)).toHaveLength(2);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // The card survives these: the alert is inline.
+    const inline: { reply: Response; text: string }[] = [
       { reply: json({ detail: 'rate_limited' }, 429), text: he.people.errors.rateLimited },
-      { reply: json({ detail: 'not_found' }, 404), text: he.people.errors.gone },
       { reply: json({ detail: 'listing_not_live' }, 409), text: he.people.notLive },
       { reply: json({ detail: 'boom' }, 500), text: he.common.error },
     ];
-    for (const { reply, text, link } of cases) {
+    for (const { reply, text } of inline) {
       const p = person({ display_name: 'P1' });
       const { api, view } = renderPage([page([p]), page([p])], {
         extra: { [likeRoute('PUT', p)]: [reply] },
       });
       await screen.findAllByRole('article');
       fireEvent.click(likeButton('P1'));
-      const alert = await within(cardOf('P1')).findByRole('alert');
-      expect(alert).toHaveTextContent(text);
-      if (link !== undefined) {
-        expect(
-          within(alert).getByRole('link', { name: he.people.errors.toApplicants }),
-        ).toHaveAttribute('href', link);
-      }
+      expect(await within(cardOf('P1')).findByRole('alert')).toHaveTextContent(text);
       await waitFor(() => {
         expect(api.calls(PEOPLE)).toHaveLength(2);
       });
@@ -273,20 +319,9 @@ describe('PeoplePage', () => {
       vi.unstubAllGlobals();
     }
 
-    // An unlike answering 404.
-    const liked = person({ display_name: 'P1', liked_by_me: true });
-    let run = renderPage([page([liked]), page([])], {
-      extra: { [likeRoute('DELETE', liked)]: [json({ detail: 'not_found' }, 404)] },
-    });
-    await screen.findAllByRole('article');
-    fireEvent.click(likeButton('P1'));
-    expect(await within(cardOf('P1')).findByRole('alert')).toHaveTextContent(he.people.errors.gone);
-    run.view.unmount();
-    vi.unstubAllGlobals();
-
     // 401: no alert, and the person is forgotten.
     const p = person({ display_name: 'P1' });
-    run = renderPage([page([p])], {
+    const run = renderPage([page([p])], {
       extra: { [likeRoute('PUT', p)]: [json({ detail: 'unauthenticated' }, 401)] },
     });
     await screen.findAllByRole('article');
@@ -294,7 +329,7 @@ describe('PeoplePage', () => {
     await waitFor(() => {
       expect(run.client.getQueryData(ME_KEY)).toBeNull();
     });
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(alerts()).toHaveLength(0);
   });
 
   it('ac6_page_states', async () => {
