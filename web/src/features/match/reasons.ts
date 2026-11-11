@@ -7,7 +7,8 @@
 import type { TFunction } from 'i18next';
 
 import type { ApplicantProfileOut } from '../applicants/api';
-import { compareLifestyle, type LifestyleKey } from '../lifestyle/keys';
+import { compareLifestyle } from '../lifestyle/keys';
+import { lifestyleTopic } from '../lifestyle/topic';
 import type { ListingPublic } from '../listings/api';
 import { formatDate, formatIls, todayInIsrael } from '../listings/format';
 import type { ContractMonths, Household, SeekerProfileOut } from '../profile/api';
@@ -46,19 +47,6 @@ const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
 
 /** At most this many differing topics are named in the lifestyle line. */
 const LIFESTYLE_TOPICS_SHOWN = 3;
-
-/** "ניקיון", as the questionnaire calls the topic. A literal map, so `i18n-check` sees every key. */
-function lifestyleTopic(key: LifestyleKey, t: TFunction): string {
-  return {
-    cleanliness: t('lifestyle.cleanliness.topic'),
-    guests: t('lifestyle.guests.topic'),
-    night: t('lifestyle.night.topic'),
-    social: t('lifestyle.social.topic'),
-    kosher: t('lifestyle.kosher.topic'),
-    shabbat: t('lifestyle.shabbat.topic'),
-    work_from_home: t('lifestyle.work_from_home.topic'),
-  }[key];
-}
 
 const SEEKER: Record<Criterion, Record<ReasonKind, Line>> = {
   budget: {

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ListingPublic } from '../listings/api';
 import { LIFESTYLE_KEYS, type LifestyleAnswers } from '../lifestyle/keys';
+import { lifestyleTopic } from '../lifestyle/topic';
 import { flatmatesText, genderPreferenceLabel } from './flatmates';
 
 // The cards of `ListingFacts`' grid.
@@ -33,7 +34,7 @@ export function RoomFacts({ listing }: { listing: ListingPublic }) {
       : [
           {
             key,
-            topic: t(`lifestyle.${key}.topic`),
+            topic: lifestyleTopic(key, t),
             value: t(`lifestyle.${key}.answer.${String(answer)}`),
           },
         ];
