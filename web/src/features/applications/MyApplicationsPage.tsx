@@ -67,16 +67,25 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
         {application.status === 'declined' && (
           <p className="text-start text-sm text-muted">{t('applications.declinedHint')}</p>
         )}
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-bold text-muted">{t('applications.yourMessage')}</p>
-          {/* Plain text from the seeker: React children only, line breaks kept. */}
+        {application.source === 'like' ? (
           <p
-            data-testid="application-message"
-            className="whitespace-pre-line break-words text-[15px] leading-relaxed"
+            data-testid="application-mutual"
+            className="self-start rounded-full border border-accent-tint bg-accent-tint px-3 py-[6px] text-[13px] font-semibold text-accent-text"
           >
-            {application.message}
+            {t('applications.mutual')}
           </p>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-bold text-muted">{t('applications.yourMessage')}</p>
+            {/* Plain text from the seeker: React children only, line breaks kept. */}
+            <p
+              data-testid="application-message"
+              className="whitespace-pre-line break-words text-[15px] leading-relaxed"
+            >
+              {application.message}
+            </p>
+          </div>
+        )}
         {(isWithdrawable(application.status) || withdraw.isError) && (
           <div className="flex flex-col items-start gap-2 pt-1">
             {application.status === 'shortlisted' && (

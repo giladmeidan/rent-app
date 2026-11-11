@@ -36,7 +36,8 @@ export function useApply(listingId: string) {
       );
       queryClient.setQueryData<ListingDetail>(
         ['listing', listingId],
-        (old) => old && { ...old, applicant_count: old.applicant_count + 1 },
+        // `like: null`: an open application ends the like control (as the API's `like` does).
+        (old) => old && { ...old, applicant_count: old.applicant_count + 1, like: null },
       );
     },
     onError: (error) => {

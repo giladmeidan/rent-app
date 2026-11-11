@@ -26,6 +26,7 @@ import type {
 import { useProfile } from './useProfile';
 import { useSaveProfile } from './useSaveProfile';
 import {
+  ABOUT_ME_MAX,
   BUDGET,
   emptyProfileForm,
   firstInvalid,
@@ -98,7 +99,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
 
   /** Focuses a field's (first) input: by `name`, so a radio group or the areas work too. */
   function focus(name: FieldName) {
-    formRef.current?.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.focus();
+    formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`)?.focus();
   }
 
   function change(patch: Partial<ProfileForm>, field?: FieldName) {
@@ -360,7 +361,12 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
             onChange={(room) => {
               change({ room });
               // Errors are only for a section that is on: none comes back stale on switching on.
-              setErrors((shown) => ({ ...shown, gender: undefined, birth_year: undefined }));
+              setErrors((shown) => ({
+                ...shown,
+                gender: undefined,
+                birth_year: undefined,
+                about_me: undefined,
+              }));
             }}
           />
         </div>
@@ -419,6 +425,42 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
               value={form.lifestyle}
               onChange={(lifestyle) => change({ lifestyle })}
             />
+
+            <div className={card}>
+              <Switch
+                label={t('profile.room.peopleVisible')}
+                checked={form.people_visible}
+                onChange={(people_visible) => change({ people_visible })}
+                describedBy={`${id}-people-hint`}
+              />
+            </div>
+            <p id={`${id}-people-hint`} className="text-start text-sm text-muted">
+              {t('profile.room.peopleVisibleHint')}
+            </p>
+
+            <div className="flex flex-col gap-[6px]">
+              <label htmlFor={fieldId('about_me')} className={label}>
+                {t('profile.room.aboutMe')}
+              </label>
+              <textarea
+                {...a11y('about_me')}
+                aria-describedby={
+                  errors.about_me !== undefined
+                    ? `${fieldId('about_me')}-counter ${errorId('about_me')}`
+                    : `${fieldId('about_me')}-counter`
+                }
+                rows={4}
+                maxLength={ABOUT_ME_MAX}
+                dir="auto"
+                value={form.about_me}
+                onChange={(e) => change({ about_me: e.target.value }, 'about_me')}
+                className={`${input} py-2 text-start`}
+              />
+              <p id={`${fieldId('about_me')}-counter`} className="text-start text-sm text-muted">
+                {t('listings.fields.charsLeft', { count: ABOUT_ME_MAX - form.about_me.length })}
+              </p>
+              {errorText('about_me')}
+            </div>
           </div>
         )}
       </section>

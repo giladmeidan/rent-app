@@ -225,9 +225,18 @@ function Applied({ application }: { application: MyApplicationOut }) {
   return (
     <div className="flex flex-col items-start gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-start text-[15px] font-semibold">
-          {t('applications.applied', { date: appliedOn(application.created_at) })}
-        </p>
+        {application.source === 'like' ? (
+          <p
+            data-testid="application-mutual"
+            className="rounded-full border border-accent-tint bg-accent-tint px-3 py-[6px] text-[13px] font-semibold text-accent-text"
+          >
+            {t('applications.mutual')}
+          </p>
+        ) : (
+          <p className="text-start text-[15px] font-semibold">
+            {t('applications.applied', { date: appliedOn(application.created_at) })}
+          </p>
+        )}
         <ApplicationStatusChip status={application.status} />
       </div>
       {application.status === 'declined' && (

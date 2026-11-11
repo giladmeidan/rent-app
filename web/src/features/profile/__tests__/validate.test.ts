@@ -148,4 +148,38 @@ describe('validate', () => {
       birth_year: { key: 'listings.errors.invalid' },
     });
   });
+
+  it('ac1_about_me', () => {
+    const room: ProfileForm = { ...valid, room: true, gender: 'woman' };
+    const tooLong = { about_me: { key: 'profile.errors.aboutMeTooLong' } };
+    expect(validate({ ...room, about_me: 'א'.repeat(300) }, areas, TODAY)).toEqual({});
+    expect(validate({ ...room, about_me: 'א'.repeat(301) }, areas, TODAY)).toEqual(tooLong);
+    // Spaces around it do not count; a newline does.
+    expect(validate({ ...room, about_me: ` ${'א'.repeat(300)} ` }, areas, TODAY)).toEqual({});
+    expect(validate({ ...room, about_me: `${'א'.repeat(299)}\nא` }, areas, TODAY)).toEqual(tooLong);
+    expect(validate({ ...room, about_me: '!!!' }, areas, TODAY)).toEqual({ about_me: required });
+    expect(validate({ ...room, about_me: '   \n ' }, areas, TODAY)).toEqual({});
+    // Checked only while the room switch is on; after birth_year.
+    expect(validate({ ...valid, about_me: '!!!' }, areas, TODAY)).toEqual({});
+    const both = validate({ ...room, birth_year: 'abcd', about_me: '!!!' }, areas, TODAY);
+    expect(Object.keys(both)).toEqual(['birth_year', 'about_me']);
+
+    const body = (about_me: string, people_visible = true) =>
+      toProfileIn({ ...room, people_visible, about_me }, areas);
+    expect(body('  שלום  ')).toMatchObject({ people_visible: true, about_me: 'שלום' });
+    expect(body('a\r\nb')).toMatchObject({ about_me: 'a\nb' });
+    expect(body('   ')).toMatchObject({ about_me: null });
+    expect(toProfileIn({ ...valid, people_visible: true, about_me: 'שלום' }, areas)).toMatchObject({
+      people_visible: false,
+      about_me: null,
+    });
+    expect(formFromProfile(profile({ people_visible: true, about_me: 'x' }))).toMatchObject({
+      people_visible: true,
+      about_me: 'x',
+    });
+    expect(formFromProfile(profile()).about_me).toBe('');
+    expect(serverFieldErrors([{ loc: ['body', 'about_me'] }])).toEqual({
+      about_me: { key: 'listings.errors.invalid' },
+    });
+  });
 });
