@@ -22,25 +22,25 @@ starts the session on his reply, with `cwd` set to the prepared worktree.
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–5 merged. **Slice 5 (Chat) complete**: `0005a` (PR #18), `0005c` (PR #19), `0005b` (PR #22).
-Slice 6 (Match score): `0006a`–`0006d` merged (PRs #20, #21, #23, #24); `0006f` has a worktree (being built by a
-Slice 6 session); `0006e` and `0006g` are `verified`, not started. Alembic head on `main` is `0008`.
-Spec status on `main` is the source of truth; `git log` beats this file.
+Slices 1–5 merged (Slice 5 Chat: `0005a` PR #18, `0005c` PR #19, `0005b` PR #22). Slice 6 (Match score):
+`0006a`–`0006d` merged (PRs #20, #21, #23, #24); `0006f` is building (`in-progress`); `0006e` and `0006g` are
+`verified`, not started. Alembic head on `main` is `0008`. Slice 7 (Rooms + questionnaire) is not specced; Gilad
+will plan it in his own session. Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-11 (Slice 5 build session, after Slice 5 merged)
+2026-11-11 (Slice 6 orchestrator session)
 
 ## Current Work
-- Slice 5: nothing in flight. All 0005 worktrees, local branches and stacks are removed.
-- Slice 6: run by separate sessions (not this one). `../rent-app-0006f` exists on `spec/0006f-match-web`
-  (stack 5448/6394/8015, holds web port 5173 while it builds), but `0006f` is still `verified` on `main` — the
-  in-progress lock (Next Steps 2) was skipped; check with that session before starting 0006f anywhere else.
-- **CI e2e outage (2026-11-11 ~14:00)**: GitHub runners could not resolve Ubuntu apt mirrors, so `e2e` hit its
-  10-minute timeout inside Playwright's browser-deps install before any test ran. Gilad OK'd merging PR #22
-  (0005b) and PR #24 (0006d) with e2e skipped (local `make e2e` was green). The first post-merge `main` run
-  re-checks e2e; look at it before trusting main.
-- Uncommitted in the main checkout, not from this session: `Makefile`, `infra/docker-compose.yml`,
-  `api/scripts/seed_demo.py` (someone's demo-seed work). Leave them to their owner.
+- **0006f match web**: built by session "Build 0006f match web" in `../rent-app-0006f` on
+  `spec/0006f-match-web` (cut from 0006d's branch at 453348b; stack 5448/6394/8015; holds web port 5173). It was
+  told 0006d is merged and to merge `origin/main` (db13c20) before review and its one push. No PR yet.
+- **CI e2e outage (2026-11-11 ~14:00)**: GitHub runners could not resolve Ubuntu apt mirrors, so `e2e` timed out
+  in Playwright's browser-deps install. Gilad merged PR #22 (0005b), #23 (0006c) and #24 (0006d) with e2e skipped
+  (local `make e2e` green for 0005b/0006d). `main` e2e: green on 0cc352c (0005b), cancelled on 70e937f (0006c),
+  running on 3139ba9 (0006d) when this was written — check it before the next merge or any deploy.
+- Uncommitted in the main checkout, not from the orchestrator: `Makefile`, `infra/docker-compose.yml`,
+  `api/scripts/seed_demo.py` (someone's demo-seed work). The shared `rent-app` stack runs with web published on
+  **127.0.0.1:5180** (not 5173) — apparently from those edits. Leave them to their owner.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -83,7 +83,16 @@ Last updated:
   deposit warning. Review: 0 blockers, 1 major fixed (offline send), 6 minors fixed. **Merged with CI e2e skipped**
   (runner outage, Gilad's word); local e2e green. Slice 5 complete.
 - [x] Slice 6 specced and verified: 0006a–0006g (1539061); Gilad's Slice 6 batch in PRODUCT.md "Matching".
-  Merged so far: 0006a PR #20 (a225239), 0006b PR #21 (ceda6fc), 0006c PR #23 (70e937f), 0006d PR #24 (3139ba9).
+- [x] 0006a Matching inputs API — PR #20 (a225239): `GET`/`PUT /me/profile`, apply needs a profile (409
+  `seeker_profile_required`), listing fields `accepted_households` / `smoking_allowed` / `min_contract_months`,
+  migration `0007`. Review: 0 blockers, 0 majors.
+- [x] 0006b Match score API — PR #21 (ceda6fc): 0–100 score + top-3/top-1 reasons on `GET /listings(/{id})`
+  (`api/app/matching/`), `sort=match` default for seekers with a profile, `Vary: Cookie`. Review: 0/0.
+- [x] 0006c Inbox match API — PR #23 (70e937f): applicant match, reasons and a 7-field housing summary, inbox
+  sorted by match; security blocker (owner bisecting a seeker's budget by editing price) fixed by Gilad's option
+  (a): apply-time snapshot, migration `0008_application_listing_snapshot`. e2e skipped (outage).
+- [x] 0006d Profile web — PR #24 (3139ba9): `/me/profile` form, listing page sends a seeker without a profile there
+  and back before applying. e2e skipped on CI (outage), green locally. The deploy gate after 0006a is cleared.
 - [x] Specs verified (one round each, findings applied): 0003c (8), 0003d (10), 0002e (7), 0002f (6),
   0004a (5), 0004b (8), 0004c (5), 0004d (7).
 - [x] Gilad's decisions written: 0002a batch (c8dd4f8), 0003a 1–7 accepted ("Search" row, 194ba27), 0002d
@@ -94,44 +103,34 @@ Last updated:
 - [x] Shared `rent-app` stack migrated to alembic head `0003` (search on :8000 returns 200).
 
 ## Next Steps
-1. **Check the `main` CI run after 0cc352c / 3139ba9**: e2e was skipped on #22 and #24; if main's e2e fails,
-   fix before the next merge. If the apt outage recurs, a small CI spec could stop Playwright's deps install from
-   eating the 10-minute timeout (cache the deps or raise the step limit).
-2. **Slice 6**: see item 10. Remaining: `0006f` (worktree exists), `0006e` (web, waits for 5173), `0006g` (after
-   0006f; 0006c and 0005b are merged). Before preparing a worktree, set the spec `in-progress` on `main` (commit
-   that file by path, push) — the lock that stops two sessions building the same spec. Stack ports used so far
-   go up to 5448/6394/8015; pick above that.
-3. Merge each PR on Gilad's word after `api`/`web`/`e2e` are green on its head (`--match-head-commit`); mark
-   `done`; remove worktree + branch (rule 10).
-4. If another session commits in the main checkout, push it (`git pull --rebase` first) before branching a
-   worktree from `origin/main`.
-5. **Pre-launch follow-ups from Slice 4** (FOLLOWUPS): the public `GET /listings/{id}` view counter is
-   unthrottled and writes a row per hit; owner PATCH rate limit (Slice 5); 0004d re-fetch on 404/409.
-6. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0008`), then
-   `make dev` with the same ports when 5173 is free.
-7. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3 (pin ~200 m offset;
-   not-found stays in list, off map; house numbers in `street` — recommend a small spec rejecting a trailing
-   number); `0003d` Q1–Q2 (same toggle on desktop now; Protomaps on R2 before launch); `0003b` 1–3; `0002c`
-   photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-8. **Shared main checkout**: several sessions work in `/Users/giladmeidan/rent_app/rent-app`. Commit only your
-   own files by path (`git commit -m … -- <path>`), never `git add -A`, never stash; `git pull --rebase` fails
-   while someone has unstaged edits — use `git fetch` + `git merge --ff-only origin/main` when the incoming
-   files don't overlap. Chain shell steps with `set -e` so a failed step can't run the rest in the wrong folder.
-   Starting a build session from an automated turn (a session's note) is refused by the app: ask Gilad with a
-   button, then start it with `cwd` set to the prepared worktree.
-9. Housekeeping: archive finished build sessions (0001b … 0004d) if Gilad wants; decide on
+1. **Check `main` e2e** on 3139ba9 (0006d) — it also covers 0006c, whose own main run was cancelled. If it fails,
+   fix before the next merge. If the apt outage recurs, a small CI spec could cache Playwright's deps or raise
+   that step's limit.
+2. **0006f**: wait for its PR → merge on Gilad's word after `api`/`web`/`e2e` are green on the head
+   (`gh pr merge N --merge --match-head-commit <sha>`) → set `done` on `main` → remove `../rent-app-0006f`, the
+   local and remote branch (rule 10).
+3. **0006e owner preferences web** (all deps merged): start when 5173 is free (after 0006f's stack is down). Branch
+   from `origin/main`. Before the worktree, set it `in-progress` on `main` (commit that file by path, push) — the
+   lock that stops two sessions building one spec. Model per rule 6; reviewers per the spec's `reviewers:`.
+4. **0006g inbox match web** — ready once 0006f's PR is open (0006c and 0005b merged); branch from 0006f's branch
+   if 0006f is not merged yet. Web: never alongside 0006e (port 5173). It reuses 0006f's `features/match`.
+5. Ports: worktree stacks so far go up to 5448/6394/8015; pick above that. Check every other worktree's `.env`
+   before choosing (a clash with 0005b's 5444 happened once).
+6. **Slice 7 (Rooms + questionnaire)** — Gilad plans it in his own session (`/spec`). The next slice is specced
+   while this one builds (rule 3).
+7. If another session commits in the main checkout, `git fetch` + `git merge --ff-only origin/main` before
+   branching a worktree.
+8. **Pre-launch follow-ups** (FOLLOWUPS, ~120 lines): the public `GET /listings/{id}` view counter is unthrottled;
+   owner `PATCH /listings` rate limit; 0004d re-fetch on 404/409.
+9. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout (main is at `0008`).
+10. **Gilad's open decisions** (builds use the recommendation meanwhile): `0003c` Q1–Q3; `0003d` Q1–Q2; `0003b`
+   1–3; `0002c` photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
+11. **Shared main checkout**: several sessions work in `/Users/giladmeidan/rent_app/rent-app`. Commit only your
+   own files by path (`git commit -m … -- <path>`), never `git add -A`, never stash. Chain shell steps with
+   `set -e`. Starting a session from an automated turn (another session's note) or with a `cwd` is refused by
+   the app: ask Gilad with a button, then start it on his reply with `cwd` set to the prepared worktree.
+12. Housekeeping: archive finished build sessions (0001b … 0006d) if Gilad wants; decide on
    `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; "דירתי" vs "דירה" naming (Slice 9).
-10. **Slice 6 (Match score)** — specs verified, not built; committed as 1539061 with the PRODUCT.md "Matching" row.
-   Build order (Speed rule 2; web specs never alongside each other or `0005b`, port 5173):
-   - `0006a` matching inputs API — ready once pushed (0005a merged); migration `0007` (down `0006`); coder Opus/high.
-   - `0006b` match score API — after 0006a's PR is open. `0006c` inbox match API — after 0006b's PR is open.
-   - `0006d` profile web and `0006e` owner-preferences web — after 0006a's PR is open; **0006d must merge before
-     any deploy after 0006a** (until then a seeker without a profile cannot apply from the web).
-   - `0006f` match web (Opus/high) — after 0006b + 0006d. `0006g` inbox match web — after 0006c, 0006f, 0005b.
-   - e2e OTP budget is 9 of 10 per 15 min: every Slice 6 e2e extends existing tests, no new signups.
-   - Gilad's non-blocking digest calls: (1) weights budget 25 / move-in 20 / area 20 / household 10 / contract
-     10 / parking 5 / smoking 5 / pets 5; (2) owners never see a seeker's budget or areas; (3) owners mostly see
-     budget / move-in / area as top reasons; (4) all Hebrew copy is the orchestrator's. Builds use these meanwhile.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -155,8 +154,8 @@ Last updated:
 ## Important Files
 - `CLAUDE.md` — process, Speed rules 1–10, hard rules. Read first.
 - `specs/PRODUCT.md` — standing decisions incl. "Listings", "Search" and "Trust (MVP)" rows.
-- `specs/FOLLOWUPS.md` — ~49 open deferred minors (7 from 0003b, 3 from 0002d).
-- `specs/0003c-map-api.md`, `specs/0003d-map-web.md`, `specs/0002f-expired-listing-read-only.md` — the queue.
+- `specs/FOLLOWUPS.md` — open deferred minors (append-only; conflicts keep both sides).
+- `specs/0006e-owner-preferences-web.md`, `specs/0006f-match-web.md`, `specs/0006g-inbox-match-web.md` — the queue.
 - `design/README.md` + `design/screens-v1/*.dc.html` — artboards (reference a missing `support.js`).
 
 ## Important Decisions
@@ -182,7 +181,10 @@ Last updated:
   no chat notifications in Slice 5.
 - Matching (Slice 6, Gilad 2026-11-11): see PRODUCT.md "Matching" — a hard-filter miss stays in results with
   score capped at 59; seeker profile = housing preferences only; owner "העדפות" wizard step (smoking and pets are
-  deal-breakers); a seeker needs a profile to apply.
+  deal-breakers); a seeker needs a profile to apply. 0006c (Gilad chose (a)): the owner's inbox match scores
+  budget and area against the listing's price and area **at apply time** (snapshot on `applications`), so an owner
+  cannot recover a seeker's budget by editing the listing; the seeker's own view stays live.
+- Gilad may merge with CI e2e skipped during a runner outage; record it in the `done` commit message.
 - Gilad merges PRs or tells the orchestrator to; the orchestrator merges with `gh pr merge N --merge
   --match-head-commit <full sha>` only after `api`, `web`, `e2e` are green on that head.
 
@@ -228,13 +230,16 @@ unique `DB_PORT`/`REDIS_PORT`/`API_PORT` (earlier specs used 5436–5440 / 6382�
 CORS). Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-11 — Slice 6 orchestrator session: started builds 0006a, 0006b, 0006c, 0006d, 0006f each in its own
+  session; merged #20, #21, #24 on Gilad's word (#23 Gilad merged); Gilad chose the apply-time snapshot for the
+  0006c budget leak (PRODUCT.md dab5e5f); marked 0006a–0006d done; removed merged worktrees and remote branches.
 - 2026-11-11 — Slice 5 build session: 0005a (PR #18), 0005c (PR #19) and 0005b (PR #22, e2e skipped on Gilad's
   word during a runner apt/DNS outage) built and merged — Slice 5 done; all 0005 worktrees and branches removed.
-  In parallel other sessions specced Slice 6 and merged 0006a–0006d.
+  In parallel the Slice 6 orchestrator session merged 0006a–0006d.
 - 2026-11-11 — Slice 6 planning session (parallel to the Slice 5 build session): Gilad decided the four Slice 6
   questions (failing listings stay visible, capped at 59; profile = housing prefs only; owner wizard step with
   smoking + pets deal-breakers; profile required to apply) — written to PRODUCT.md "Matching"; specced
-  0006a–0006g, one verifier round each (87 findings applied), all verified with digests. Not committed.
+  0006a–0006g, one verifier round each (87 findings applied), all verified with digests (1539061).
 - 2026-11-11 (late) — 0004b (PR #16) and 0004d (PR #17, merged on Gilad's standing OK) merged: Slice 4 done;
   Slice 5 specs pushed; all worktrees/branches removed; main in sync.
 - 2026-11-11 — Slice 5 planning session: specced 0005a (chat API), 0005c (SSE events API), 0005b (chat web), one

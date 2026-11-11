@@ -1,7 +1,7 @@
 ---
 id: 0006f
 title: A seeker with a profile sees "התאמה 87%" on search cards and map pins, results sorted by match, and a "ההתאמה שלך" card on the listing page saying what fits and what does not
-status: verified
+status: in-progress
 depends_on: [0006b, 0006d]   # 0006b: match on GET /listings(/{id}) and sort=match; 0006d: useProfile / PROFILE_KEY, the profile page the nudge links to, and the e2e flow AC10 extends
 reviewers: [code, qa, ux]    # ux: new badge, card and nudge on two existing screens vs the artboards; qa: sort / URL rules, cache reset on logout
 estimate: 1 coder run        # at the top of the range; coder on Opus/high (copy logic across eight criteria, a cache-privacy fix)
