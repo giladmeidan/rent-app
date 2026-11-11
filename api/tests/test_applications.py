@@ -227,7 +227,6 @@ def test_ac3_non_public_listing_is_404(
     hidden = [
         make_listing(db_engine, owner_id, gush_dan, status="paused"),
         make_listing(db_engine, owner_id, gush_dan, expires_at=an_hour_ago),
-        make_listing(db_engine, owner_id, gush_dan, listing_type="room"),
         make_listing(db_engine, owner_id, closed_area),
         uuid.uuid4(),
     ]
@@ -502,7 +501,7 @@ def test_ac8_applicant_count_and_view_counter(
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == PUBLIC_KEYS | {"applicant_count"}
+    assert set(body) == PUBLIC_KEYS | {"applicant_count", "room_fit"}
     assert body["applicant_count"] == 3
     assert _view_count(db_engine, listing_a) == 1
     assert client.get(f"/listings/{listing_a}").status_code == 200

@@ -1,19 +1,24 @@
 """Public search and the public listing page (spec 0003a).
 
-"Public" has one definition, `_public_listings()`: a live (active, not yet lapsed) **apartment**
-in an **active** launch area. Rooms stay hidden until Slice 7 adds the gender
-preference (PRODUCT.md "Gender preference — hard filter on ROOM listings"); listings outside an
-active area are hidden (PRODUCT.md "Launch area"). Both public functions below build on it and
-no other code here states any part of it, so search and the listing page can never disagree.
+"Public" has one definition, `_public_listings()`: a live (active, not yet lapsed) listing, an
+apartment or a room (spec 0007b), in an **active** launch area; listings outside an active area are
+hidden (PRODUCT.md "Launch area"). Both public functions below build on it and no other code here
+states any part of it, so search and the listing page can never disagree.
 
 The optional map box (spec 0003c) filters on the listing's **approximate** point, the same point the
 response's `lat` / `lng` show, so it reveals nothing the response does not.
 
-The caller's match (spec 0006b): given the id of a seeker who has a profile, the page statement
-joins that one profile row and adds `matching.score.match_columns`, so the score is computed,
-ordered on and explained in the same statement; it never filters and never changes the count.
-Nothing else here depends on the caller, and a non-public listing is indistinguishable from an
-unknown id (`ListingNotFoundError`, a 404)."""
+The caller's match (spec 0006b): given the id of a seeker who has a profile, the statement joins
+that one profile row and adds `matching.score.match_columns`, so the score is computed, ordered on
+and explained in the same statement. The match never filters and never changes the count.
+
+The room fit (spec 0007b, PRODUCT.md "Rooms"): the same joined select also keeps only rows whose
+`matching.fit.room_fit` is not false, so a room whose gender preference does not fit the seeker is
+missing from their page, their map and their `total` alike. It is the first caller-dependent filter
+and it bites only for a seeker whose profile has a room section, so `total` differs per caller
+(the router's `Vary: Cookie` / `Cache-Control: private` cover it). The listing page never filters on
+the fit: it reports it. A non-public listing is indistinguishable from an unknown id
+(`ListingNotFoundError`, a 404)."""
 
 import uuid
 from typing import Any
@@ -21,6 +26,7 @@ from typing import Any
 from sqlalchemy import Integer, Label, Select, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
+from app.matching.fit import room_fit
 from app.matching.score import explain_row, match_columns
 from app.models import Area, Listing, SeekerProfile
 from app.models.listing import PLAIN_GEOMETRY
@@ -42,7 +48,6 @@ def _public_listings() -> Select[tuple[Listing]]:
         .where(
             Listing.status == "active",
             Listing.expires_at > func.now(),
-            Listing.listing_type == "apartment",
             Area.is_active.is_(True),
         )
     )
@@ -50,6 +55,8 @@ def _public_listings() -> Select[tuple[Listing]]:
 
 def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
     query = _public_listings()
+    if params.listing_type is not None:
+        query = query.where(Listing.listing_type == params.listing_type)
     if params.price_min is not None:
         query = query.where(Listing.price_ils >= params.price_min)
     if params.price_max is not None:
@@ -109,17 +116,18 @@ def _order(sort: SearchSort, score: Label[Any] | None) -> tuple[Any, ...]:
     return newest
 
 
-def _with_match(
-    query: Select[tuple[Listing]], profile_user_id: uuid.UUID
-) -> tuple[Select[Any], Label[Any]]:
-    """`query` joined to the seeker's one profile row, with the match columns added; and the
-    `m_score` column."""
+def _with_profile(query: Select[Any], profile_user_id: uuid.UUID) -> Select[Any]:
+    """`query` joined to the seeker's one profile row (by its primary key). Joined once: the match
+    columns and the room fit both read this row."""
+    return query.join(SeekerProfile, SeekerProfile.user_id == profile_user_id)
+
+
+def _with_match(query: Select[Any]) -> tuple[Select[Any], Label[Any]]:
+    """`query` (already joined to the profile, `_with_profile`) with the match columns added; and
+    the `m_score` column."""
     columns = match_columns(Listing, SeekerProfile)
-    matched = query.join(SeekerProfile, SeekerProfile.user_id == profile_user_id).add_columns(
-        *columns
-    )
     score = next(column for column in columns if column.name == "m_score")
-    return matched, score
+    return query.add_columns(*columns), score
 
 
 def search_listings(
@@ -127,10 +135,16 @@ def search_listings(
 ) -> tuple[list[tuple[Listing, MatchOut | None]], int, SearchSort]:
     """One page of public listings matching `params` with each one's match (`None` without a
     `profile_user_id`), the total matching (ignoring `limit` / `offset`, and never the score), and
-    the sort applied. Exactly two statements: the count, then the page."""
-    filtered = _filtered(params)
+    the sort applied. With a `profile_user_id` the filtered select itself joins the profile and
+    drops the rooms that do not fit it (`room_fit` false), so the count and the page agree.
+    Exactly two statements: the count, then the page."""
+    filtered: Select[Any] = _filtered(params)
+    if profile_user_id is not None:
+        filtered = _with_profile(filtered, profile_user_id).where(
+            room_fit(Listing, SeekerProfile).is_not(False)
+        )
     sort = _effective_sort(params.sort, profile_user_id is not None)
-    # Count over a subquery of the whole filtered select, so the join to `areas` is kept.
+    # Count over a subquery of the whole filtered select, so the joins are kept.
     total = db.execute(
         select(func.count()).select_from(filtered.order_by(None).subquery())
     ).scalar_one()
@@ -139,7 +153,7 @@ def search_listings(
             filtered.order_by(*_order(sort, None)).limit(params.limit).offset(params.offset)
         ).all()
         return [(listing, None) for listing in listings], total, sort
-    matched, score = _with_match(filtered, profile_user_id)
+    matched, score = _with_match(filtered)
     rows = db.execute(
         matched.order_by(*_order(sort, score)).limit(params.limit).offset(params.offset)
     ).all()
@@ -148,24 +162,21 @@ def search_listings(
 
 def get_public_listing_with_match(
     db: Session, listing_id: uuid.UUID, profile_user_id: uuid.UUID | None
-) -> tuple[Listing, MatchOut | None]:
-    """The listing if it is public, with the seeker's match when `profile_user_id` is given. Raises
-    `ListingNotFoundError` for an unknown id and for a paused, expired, room or inactive-area
-    listing alike. One statement."""
+) -> tuple[Listing, MatchOut | None, bool | None]:
+    """The listing if it is public, with the seeker's match and room fit when `profile_user_id` is
+    given (else both None). The fit never filters: the page is public to everyone, and a room that
+    does not fit is returned with `False`. Raises `ListingNotFoundError` for an unknown id and for
+    a paused, expired or inactive-area listing alike. One statement."""
     query = _public_listings().where(Listing.id == listing_id)
     if profile_user_id is None:
         listing = db.scalar(query)
         if listing is None:
             raise ListingNotFoundError
-        return listing, None
-    matched, _ = _with_match(query, profile_user_id)
-    row = db.execute(matched).first()
+        return listing, None, None
+    matched, _ = _with_match(_with_profile(query, profile_user_id))
+    fit_column = room_fit(Listing, SeekerProfile).label("room_fit")
+    row = db.execute(matched.add_columns(fit_column)).first()
     if row is None:
         raise ListingNotFoundError
-    return row[0], explain_row(row)
-
-
-def get_public_listing(db: Session, listing_id: uuid.UUID) -> Listing:
-    """The listing if it is public, without a match (the apply gate). Raises
-    `ListingNotFoundError` as `get_public_listing_with_match`."""
-    return get_public_listing_with_match(db, listing_id, None)[0]
+    fit: bool | None = row.room_fit
+    return row[0], explain_row(row), fit

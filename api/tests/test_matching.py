@@ -462,9 +462,11 @@ def test_ac10_cookie_responses_are_private(
 
 
 def _values(**overrides: Any) -> dict[str, Any]:
-    """One result row's match values: every `m_*` 1, no `f_*`, `m_score` 100; `overrides` win."""
+    """One result row's match values: every base `m_*` 1, `m_lifestyle` None (not scored, as on an
+    apartment: spec 0007g), no `f_*`, `m_score` 100; `overrides` win."""
     values: dict[str, Any] = {
         **{f"m_{c}": Decimal(1) for c in CRITERIA},
+        "m_lifestyle": None,
         **{f"f_{c}": False for c in HARD},
         "m_score": 100,
     }

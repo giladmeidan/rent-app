@@ -1,6 +1,6 @@
 """`seeker_profiles` table (spec 0006a): a seeker's housing preferences, one row per seeker.
 
-Every CHECK and the FK match migrations 0007 and 0009 exactly (autogenerate must see no diff).
+Every CHECK and the FK match migrations 0007, 0009 and 0010 exactly (autogenerate must see no diff).
 Personal data (NF2): read only by its seeker (`GET /me/profile`), by the apply gate (existence
 only) and, from 0006b / 0006c, by the matching queries.
 
@@ -33,6 +33,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
+from app.models._checks import LIFESTYLE_CHECK
 
 
 class SeekerProfile(Base):
@@ -63,7 +64,8 @@ class SeekerProfile(Base):
         CheckConstraint(
             "flatmate_gender IN ('any', 'women', 'men')", name="ck_seeker_profiles_flatmate_gender"
         ),
-        CheckConstraint("jsonb_typeof(lifestyle) = 'object'", name="ck_seeker_profiles_lifestyle"),
+        # Known keys, values 1-3 only (migration 0010).
+        CheckConstraint(LIFESTYLE_CHECK, name="ck_seeker_profiles_lifestyle"),
         CheckConstraint(
             "gender IS NOT NULL OR (birth_year IS NULL AND flatmate_gender = 'any'"
             " AND lifestyle = '{}'::jsonb)",

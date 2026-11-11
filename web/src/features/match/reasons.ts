@@ -115,6 +115,11 @@ const SEEKER: Record<Criterion, Record<ReasonKind, Line>> = {
       l.pets_allowed ? t('match.seeker.pets.agree') : t('match.seeker.pets.agreeNoPets'),
     differ: (_l, _p, t) => t('match.seeker.pets.differ'),
   },
+  // Generic copy until `0007f` words it from the answers.
+  lifestyle: {
+    agree: (_l, _p, t) => t('match.seeker.lifestyle.agree'),
+    differ: (_l, _p, t) => t('match.seeker.lifestyle.differ'),
+  },
 };
 
 const SEEKER_SHORT: Record<Criterion, Record<ReasonKind, Short>> = {
@@ -159,6 +164,11 @@ const SEEKER_SHORT: Record<Criterion, Record<ReasonKind, Short>> = {
     agree: (l, _p, t) =>
       l.pets_allowed ? t('match.short.pets.agree') : t('match.short.pets.agreeNoPets'),
     differ: (_l, _p, t) => t('match.short.pets.differ'),
+  },
+  // No chip until `0007f`.
+  lifestyle: {
+    agree: () => null,
+    differ: () => null,
   },
 };
 
@@ -266,6 +276,11 @@ const OWNER: Record<Criterion, Record<ReasonKind, OwnerLine>> = {
       p.has_pets ? t('match.owner.pets.agreePet') : t('match.owner.pets.agree'),
     differ: (_p, _s, t) => t('match.owner.pets.differ'),
   },
+  // Scored only on an application made to a room (`0007g`).
+  lifestyle: {
+    agree: (_p, _s, t) => t('match.owner.lifestyle.agree'),
+    differ: (_p, _s, t) => t('match.owner.lifestyle.differ'),
+  },
 };
 
 const OWNER_SHORT: Record<Criterion, Record<ReasonKind, OwnerShort>> = {
@@ -305,6 +320,10 @@ const OWNER_SHORT: Record<Criterion, Record<ReasonKind, OwnerShort>> = {
     agree: (p, t) =>
       p.has_pets ? t('match.owner.short.pets.agreePet') : t('match.owner.short.pets.agree'),
     differ: (_p, t) => t('match.owner.short.pets.differ'),
+  },
+  lifestyle: {
+    agree: (_p, t) => t('match.owner.short.lifestyle.agree'),
+    differ: (_p, t) => t('match.owner.short.lifestyle.differ'),
   },
 };
 

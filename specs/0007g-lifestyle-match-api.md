@@ -1,7 +1,7 @@
 ---
 id: 0007g
 title: Room listings score the lifestyle questionnaire — a seeker with a room section sees "lifestyle" among a room's match reasons, and the owner's inbox scores it only on applications made to a room
-status: in-progress
+status: done
 depends_on: [0007b]      # 0007b: applications.listing_type_at_apply (migration 0010) and public rooms; 0007a (via 0007b): the answers columns, `Lifestyle`, `LIFESTYLE_KEYS` (app.schemas.profile)
 reviewers: [code, qa, security, perf]   # perf: a 7-key jsonb expression in the match sort over every filtered row; security: the apartment → room lifestyle probe through the owner's score; qa: the 10-row scoring table, numeric rounding
 estimate: 1 coder run    # small; coder on Opus/high (numeric formula, the inbox probe). Split from the original 0007b at Gilad's word (verifier finding 1)
@@ -277,10 +277,11 @@ together with the `OWNER` entries, by whichever of the two specs merges second.
 - **The two sides diverge after a type switch.** After apartment → room, the owner's score for apartment
   applicants leaves lifestyle out, while the seeker's own live view includes it (AC4). This is the same
   divergence as after a price or area edit (B1).
-- **One bad stored value breaks scoring.** A non-numeric value under a known key makes `m_lifestyle`'s
-  `::numeric` cast fail. It fails for every seeker whose results include that row. `ck_listings_lifestyle` only
-  checks `jsonb_typeof`. Only the API writes rows today, so this is accepted. SQL and seed writers must use
-  `0007a`'s keys and the values 1–3. The untracked `api/scripts/seed_demo.py` is one of those writers.
+- **One bad stored value breaks scoring — closed by `0007b`.** A non-numeric value under a known key would make
+  `m_lifestyle`'s `::numeric` cast fail for every seeker whose results include that row. Migration 0010
+  (`0007b`) tightened `ck_listings_lifestyle` and `ck_seeker_profiles_lifestyle` to the 7 known keys and the
+  numbers 1–3, so no stored row can break the cast (security review round 1 checked this). SQL-written `1.0` /
+  `1e0` still pass the CHECK, so the cast stays `::numeric`, never `::int` (FOLLOWUPS `0007b`).
 - **Overlaps.**
   - `0006f`'s `reasons.ts` is on `main`, so its stub is part of this diff.
   - `0006g` is in review (`spec/0006g-inbox-match-web`). Whichever of `0006g` and this spec merges second adds
@@ -305,6 +306,29 @@ together with the `OWNER` entries, by whichever of the two specs merges second.
              API writes answers (validated 1-3); seed scripts must use the same keys and values.
     Reviewers: code, qa, security, perf   Estimated: 1 coder run (small, Opus/high), 1 review round
     Links: specs/0007g-lifestyle-match-api.md - PRODUCT.md "Rooms", "Matching" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0007g - Lifestyle in the match score (API)   PR OPEN #31 (not merged), code head 49041ce
+    Shipped: a room's match score counts the questionnaire answers the seeker and the flat both gave (weight 20),
+             and "lifestyle" can be the agree/differ reason on search, the listing page and the owner's inbox; the
+             inbox scores it only on applications made to a room. Apartments and seekers without a room section
+             score as before. API, plus generic web copy stubs (0007f replaces the seeker copy).
+    Demo: make dev -> owner PATCHes a room with lifestyle {cleanliness 3, night 1} -> a seeker whose room section
+          has {cleanliness 3, night 3} opens it: 90, differs "lifestyle" -> after they apply, the owner's inbox
+          shows the same; on an apartment application it never does, even after a switch to a room.
+    Tests: +4 unit (AC2), +17 integration (AC1's 15 rows, AC3, AC4), +0 e2e (api 426, web 224)
+    CI: api + web green on 49041ce (run 43075552754: api 94 s, web 102 s, e2e skipped); e2e local while CI e2e is off: 10 of 10, 30.8 s on 49041ce
+    NF2 (5k listings, 2k rooms with 4-7 answers): p95 match 40-54 ms, room-only 24-36, map 20-42, visitor 10-13,
+             all <= 80; p50 +65% / +70% / +40% vs 0007b on the same data; no SubPlan.
+    Findings: 0 blockers, 0 majors; 1 minor fixed (+5 edge rows, one pins the numeric bind: 82.5 -> 83);
+              6 minors to FOLLOWUPS (perf: integer math or bound seeker answers would cut room-page DB time
+              38-64%, base sum evaluated twice, 50k plan goes parallel; security: 2 more owner-side regression
+              tests, keyword-only snapshot args; qa: a room -> apartment test); 5 nits (1 folded, 1 spec line, 3 dropped)
+    Decisions I need from you: none.
+    Changed in PRODUCT.md: "Rooms" now says the questionnaire is soft (weight 20) and can raise or lower a room's
+             score, never filters (2131b96, orchestrator under Gilad's Slice 7 delegation).
+    Next: 0007f (room search web) and 0007c (room inbox) branch from #31.
 
 ## Verifier findings — one round, 7 findings, all applied
 The verifier reviewed the original `0007b`. At Gilad's word that spec was split into `0007b` and this file
