@@ -10,6 +10,8 @@ import { RequireUser } from '../features/auth/RequireUser';
 import { SignupPage } from '../features/auth/SignupPage';
 import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
+import { FlatmatesPage } from '../features/flatmates/FlatmatesPage';
+import { JoinFlatPage } from '../features/flatmates/JoinFlatPage';
 import { MyLikesPage } from '../features/likes/MyLikesPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
@@ -30,12 +32,15 @@ export function AppRoutes() {
         <Route path="search" element={<SearchPage />} />
         {/* Public; the static `listings/new` below outranks `:id`. */}
         <Route path="listings/:id" element={<ListingPage />} />
+        {/* Public (0008e A1): the page takes the token out of the hash before its own login check. */}
+        <Route path="flatmates/join" element={<JoinFlatPage />} />
         <Route element={<RequireOwner />}>
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings" element={<MyListingsPage />} />
           <Route path="me/listings/:id/edit" element={<EditListingPage />} />
           <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
           <Route path="me/listings/:id/people" element={<PeoplePage />} />
+          <Route path="me/listings/:id/flatmates" element={<FlatmatesPage />} />
         </Route>
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />

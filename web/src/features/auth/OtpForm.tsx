@@ -211,8 +211,9 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
       {
         onSuccess: (result) => {
           if (result.kind === 'ok') {
-            // Drop whatever the previous person in this tab left under ['me', …] first.
-            clearSession(queryClient);
+            // Drop whatever the previous person in this tab left under ['me', …] first. A stashed
+            // invite token stays: it is this login's way back to the join page (0008e A1).
+            clearSession(queryClient, { keepInviteToken: true });
             queryClient.setQueryData<UserOut | null>(ME_KEY, result.user);
             // `replace`: Back does not return to /login. `safeNext` again, as defence in depth.
             navigate(safeNext(next), { replace: true });

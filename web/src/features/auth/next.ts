@@ -14,3 +14,12 @@ export function safeNext(raw: string | null): string {
   if (UNSAFE.test(raw)) return '/';
   return raw;
 }
+
+/**
+ * The login page for a logged-out visitor of `pathname + search`, which it returns to after the
+ * login (`?next=`, read back through `safeNext`). Never the hash: a fragment can hold a secret
+ * (the flatmates invite token, 0008e A1) and stays out of every URL the app builds.
+ */
+export function loginWithNext({ pathname, search }: { pathname: string; search: string }): string {
+  return `/login?next=${encodeURIComponent(pathname + search)}`;
+}

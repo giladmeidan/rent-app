@@ -184,3 +184,7 @@ Minor findings deferred by the coder. Format: `- [ ] NNNN · file:line · what �
 - [ ] 0008c · web/src/features/likes/MyLikesPage.tsx · after an unlike the card leaves and focus falls to `<body>`; focus the section `h2` · review round 1 ux minor
 - [ ] 0008c · web/e2e/likes.spec.ts · `israelDay` is copied a fourth time; export it from `helpers.ts` and import it in the e2e specs · review round 1 code minor
 - [ ] 0008c · web/src/features/search/ResultsList.tsx · heart (like) on room cards in /search and the map pins; the spec put it Out (liking is from the listing page and `/me/likes` only)
+
+## 0008e
+- [ ] 0008e · web/src/features/flatmates/JoinFlatPage.tsx · the own, full, declined, applied and invalid states have no way out (only the member state has "לשיחות"); a link out needs a copy decision · review round 1 ux minor
+- [ ] 0008e · api/app/schemas/flatmates.py:23 `InviteTokenIn` · the docstring still says the web reads the token from `/flatmates/join/:token`, which contradicts 0008e A1 (fragment) · for 0008d; review round 1 security nit

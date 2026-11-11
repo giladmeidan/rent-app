@@ -454,14 +454,14 @@ describe('ProfilePage', () => {
     await fillValid();
     save();
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent('/me/profile')}`);
     });
   });
 
   it('ac5_profile_401_on_load_goes_to_login', async () => {
     renderPage({ [PROFILE]: [json({ detail: 'unauthenticated' }, 401)] });
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/login');
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent('/me/profile')}`);
     });
   });
 
