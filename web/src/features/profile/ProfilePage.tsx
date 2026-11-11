@@ -107,7 +107,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
       onSuccess: () => {
         setSaved(true);
         const next = safeNext(params.get('next'));
-        if (next !== '/') void navigate(next);
+        if (next !== '/') void navigate(next, { replace: true });
       },
       onError: (error) => {
         // 401: the hook forgets the session and RequireSeeker leaves the page.
