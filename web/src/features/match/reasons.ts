@@ -7,6 +7,7 @@
 import type { TFunction } from 'i18next';
 
 import type { ApplicantProfileOut } from '../applicants/api';
+import { compareLifestyle, type LifestyleKey } from '../lifestyle/keys';
 import type { ListingPublic } from '../listings/api';
 import { formatDate, formatIls, todayInIsrael } from '../listings/format';
 import type { ContractMonths, Household, SeekerProfileOut } from '../profile/api';
@@ -40,6 +41,24 @@ export function householdName(household: Household, t: TFunction): string {
 
 // "זוג או משפחה", "יחיד/ה, זוג או שותפים": the conjunction comes from the locale, not from code.
 const disjunction = new Intl.ListFormat('he', { type: 'disjunction' });
+// "ניקיון, אורחים ושעות לילה", likewise.
+const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
+
+/** At most this many differing topics are named in the lifestyle line. */
+const LIFESTYLE_TOPICS_SHOWN = 3;
+
+/** "ניקיון", as the questionnaire calls the topic. A literal map, so `i18n-check` sees every key. */
+function lifestyleTopic(key: LifestyleKey, t: TFunction): string {
+  return {
+    cleanliness: t('lifestyle.cleanliness.topic'),
+    guests: t('lifestyle.guests.topic'),
+    night: t('lifestyle.night.topic'),
+    social: t('lifestyle.social.topic'),
+    kosher: t('lifestyle.kosher.topic'),
+    shabbat: t('lifestyle.shabbat.topic'),
+    work_from_home: t('lifestyle.work_from_home.topic'),
+  }[key];
+}
 
 const SEEKER: Record<Criterion, Record<ReasonKind, Line>> = {
   budget: {
@@ -115,10 +134,23 @@ const SEEKER: Record<Criterion, Record<ReasonKind, Line>> = {
       l.pets_allowed ? t('match.seeker.pets.agree') : t('match.seeker.pets.agreeNoPets'),
     differ: (_l, _p, t) => t('match.seeker.pets.differ'),
   },
-  // Generic copy until `0007f` words it from the answers.
+  // Only a room answers the questionnaire (0007g), so apartments never show these. A key one step
+  // apart still agrees, so "0 מתוך 1" is never shown; the profile may have changed since the score.
   lifestyle: {
-    agree: (_l, _p, t) => t('match.seeker.lifestyle.agree'),
-    differ: (_l, _p, t) => t('match.seeker.lifestyle.differ'),
+    agree: (l, p, t) => {
+      const { same, shared } = compareLifestyle(l.lifestyle, p.lifestyle);
+      return same === 0
+        ? t('match.seeker.lifestyle.agree')
+        : t('match.seeker.lifestyle.agreeSame', { same, shared });
+    },
+    differ: (l, p, t) => {
+      const { differing } = compareLifestyle(l.lifestyle, p.lifestyle);
+      if (differing.length === 0) return t('match.short.lifestyle.differ');
+      const topics = differing
+        .slice(0, LIFESTYLE_TOPICS_SHOWN)
+        .map((key) => lifestyleTopic(key, t));
+      return t('match.seeker.lifestyle.differ', { topics: conjunction.format(topics) });
+    },
   },
 };
 
@@ -165,10 +197,9 @@ const SEEKER_SHORT: Record<Criterion, Record<ReasonKind, Short>> = {
       l.pets_allowed ? t('match.short.pets.agree') : t('match.short.pets.agreeNoPets'),
     differ: (_l, _p, t) => t('match.short.pets.differ'),
   },
-  // No chip until `0007f`.
   lifestyle: {
-    agree: () => null,
-    differ: () => null,
+    agree: (_l, _p, t) => t('match.short.lifestyle.agree'),
+    differ: (_l, _p, t) => t('match.short.lifestyle.differ'),
   },
 };
 
