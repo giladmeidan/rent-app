@@ -35,15 +35,21 @@ and delegates. It never writes application code itself. Delegation chain:
    spec-verifier, the coder on auth, money, data or migrations, and the security reviewer; Sonnet/medium for
    ux, qa and perf reviews of small specs, review fixes that are mechanical, and docs. When in doubt, the
    stronger one.
-7. **One push per spec (Gilad, 2026-11-10).** Agents commit locally and run `make lint` / `make test` (and
-   `make e2e` where the spec touches the web) there; the review round runs on the local branch. The spec is
+7. **One push per spec (Gilad, 2026-11-10).** Agents commit locally and run `make lint` / `make test` there; the
+   review round runs on the local branch. **e2e runs locally for now (Gilad, 2026-11-11)**: GitHub runners
+   cannot install Playwright's deps, so CI's `e2e` job is switched off (repo variable `E2E_IN_CI=off`) and every
+   spec that touches the web runs `make e2e` on its final local head and reports the result in its digest. This
+   lasts until Gilad says CI e2e is fixed; then `gh variable delete E2E_IN_CI` and this sentence goes. Only one
+   worktree binds web port 5173 at a time (`lsof -nP -iTCP:5173 -sTCP:LISTEN` before `make dev` / `make e2e`).
+   The spec is
    pushed **once**, when it is finished (build + review fixes), with the PR opened and the `ready-to-merge`
    label added at that push so the full CI runs once. A further push is allowed only to fix a CI failure.
 8. **Light CI on push, full CI before merge.** A push runs only the fast jobs (`api`, `web`: lint, types, unit
    tests, i18n-check; about a minute). The slow `e2e` job runs only when the PR carries the `ready-to-merge`
    label — the spec session adds it at the spec's single push (rule 7) — and on `main`. A PR, or a push to `main`, whose
    changes are only `*.md`, `specs/` or `design/` runs no CI (the filter looks at the whole PR, not one push). Nothing merges unless `api`, `web` and `e2e` are all green on the
-   PR's head commit. Any new slow job (anything over ~1 minute) joins the label-gated tier, not the push tier.
+   PR's head commit (while `E2E_IN_CI=off`, see rule 7: `api` and `web` green in CI and `make e2e` green locally
+   on that head). Any new slow job (anything over ~1 minute) joins the label-gated tier, not the push tier.
 
 9. **Consult Gilad on high-value calls (Gilad, 2026-11-10).** While a spec is being built or reviewed, anything
    that changes what the product does, what it costs, or what a later slice can do is Gilad's choice, not the
