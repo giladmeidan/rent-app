@@ -13,15 +13,21 @@ criterion codes, never a profile value; `null` for everyone but a seeker with a 
 
 Rooms are public (spec 0007b), next to apartments; `SearchParams.listing_type` narrows to one type.
 `ListingPublic` carries the four room fields (`gender_preference`, `flatmates_count`,
-`flatmate_ages`, `lifestyle`; an apartment holds `'any'`, null, `[]` and `{}`).
+`flatmate_ages`, `lifestyle`; an apartment holds `'any'`, null, `[]` and `{}`). The flatmates' ages
+and the questionnaire answers (`SEEKER_ONLY_FIELDS`) go only to a signed-in seeker, with or without
+a profile (Gilad (b), 2026-11-11): a visitor or an owner, the listing's own owner included, gets
+`[]` and `{}`. Both stay required in the schema; only the values are emptied. The owner reads their
+own values through `ListingOut` (`GET /me/listings`). `ListingPublic.from_listing` is the one place
+that applies this.
 `ListingDetail.room_fit` is the caller's own fit to a room: `true` / `false` exactly when the
 listing is a room and the caller is a seeker whose profile has a room section, else `null`. Search
 items do not carry it: a room that does not fit the caller never reaches them."""
 
 import datetime as dt
 import uuid
+from collections.abc import Callable, Mapping
 from decimal import Decimal
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
@@ -98,9 +104,20 @@ class SearchParams(BaseModel):
         return (self.west, self.south, self.east, self.north)
 
 
+# The listing fields only a signed-in seeker sees (Gilad (b), 2026-11-11), each with the empty value
+# everyone else gets. `ListingPublic.from_listing` is the only reader.
+SEEKER_ONLY_FIELDS: Mapping[str, Callable[[], object]] = {
+    "flatmate_ages": list,
+    "lifestyle": dict,
+}
+
+
+# A public listing. Build it with `from_listing`, never `model_validate(<ORM row>)`: only the
+# builder empties `SEEKER_ONLY_FIELDS` for a caller who is not a seeker. (A comment, not a
+# docstring: a docstring would become the OpenAPI description.)
 class ListingPublic(BaseModel):
-    # `match` has a default only so `model_validate(<ORM row>)` works; the key is always sent, so
-    # the response schema lists it as required (nullable).
+    # `match` has a default, but the key is always sent, so the response schema lists it as
+    # required (nullable).
     model_config = ConfigDict(
         from_attributes=True, json_schema_serialization_defaults_required=True
     )
@@ -127,7 +144,8 @@ class ListingPublic(BaseModel):
     accepted_households: HouseholdsOut
     smoking_allowed: bool
     min_contract_months: ContractMonths | None
-    # The room fields (spec 0007b), as stored; `lifestyle` holds only the answered keys.
+    # The room fields (spec 0007b), as stored; `lifestyle` holds only the answered keys. The last
+    # two are `SEEKER_ONLY_FIELDS`: `[]` and `{}` unless the caller is a seeker.
     gender_preference: GenderPreference
     flatmates_count: int | None
     flatmate_ages: list[int]
@@ -135,9 +153,23 @@ class ListingPublic(BaseModel):
     created_at: dt.datetime
     lat: float | None
     lng: float | None
-    # The caller's match (spec 0006b): set exactly when the caller is a seeker with a profile. The
-    # default keeps `model_validate(<ORM row>)` working; the router sets it.
+    # The caller's match (spec 0006b): set exactly when the caller is a seeker with a profile; the
+    # router passes it to `from_listing`.
     match: MatchOut | None = None
+
+    @classmethod
+    def from_listing(
+        cls, listing: Any, *, seeker: bool, match: MatchOut | None, **fields: Any
+    ) -> Self:
+        """The public shape of a listing row for one caller. `seeker`: the caller is signed in
+        as a seeker; otherwise `SEEKER_ONLY_FIELDS` hold their empty values. `match` and
+        `fields` (on `ListingDetail`: `applicant_count`, `room_fit`) are the router's
+        caller-dependent values; every other field is read from `listing`."""
+        given: dict[str, Any] = {"match": match, **fields}
+        if not seeker:
+            given |= {name: empty() for name, empty in SEEKER_ONLY_FIELDS.items()}
+        values = {name: getattr(listing, name) for name in cls.model_fields.keys() - given.keys()}
+        return cls.model_validate({**values, **given})
 
 
 class ListingDetail(ListingPublic):

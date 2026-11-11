@@ -7,8 +7,10 @@ a profile gets `match` on every listing (and search defaults to `sort=match`), e
 `match: null`. For a seeker whose profile has a room section, a cookie also removes the rooms that
 do not fit them from search, the map and `total`, and sets the listing page's `room_fit` (spec
 0007b). That is why every 200 says `Vary: Cookie` and a 200 to a request carrying the session
-cookie is `Cache-Control: private` (0006b): the body may differ per caller. A listing that is not
-public is a 404 `not_found`, the same body as an unknown id."""
+cookie is `Cache-Control: private` (0006b): the body may differ per caller. The cookie also
+decides whether a room's flatmates' ages and questionnaire answers are shown: only a signed-in
+seeker gets them, everyone else `[]` and `{}` (`ListingPublic.from_listing`, Gilad (b),
+2026-11-11). A listing that is not public is a 404 `not_found`, the same body as an unknown id."""
 
 import uuid
 from typing import Annotated, Any
@@ -36,9 +38,14 @@ _DB_DOWN: dict[int | str, dict[str, Any]] = {
 }
 
 
+def _is_seeker(user: User | None) -> bool:
+    """The caller is signed in as a seeker (no statement: `optional_user` loaded the user)."""
+    return user is not None and user.role == "seeker"
+
+
 def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
     """The caller's id when they are a seeker with a housing profile (one PK lookup), else None."""
-    if user is None or user.role != "seeker":
+    if user is None or not _is_seeker(user):
         return None
     return user.id if profiles_service.has_profile(db, user.id) else None
 
@@ -61,9 +68,9 @@ def search_listings(
     response: Response,
 ) -> ListingSearchOut:
     page, total, sort = search_service.search_listings(db, params, _profile_user_id(db, user))
+    seeker = _is_seeker(user)
     items = [
-        ListingPublic.model_validate(listing).model_copy(update={"match": match})
-        for listing, match in page
+        ListingPublic.from_listing(listing, seeker=seeker, match=match) for listing, match in page
     ]
     _private_if_cookie(request, response)
     return ListingSearchOut(items=items, total=total, sort=sort)
@@ -98,9 +105,6 @@ def get_listing(
     count = applications_service.record_view(db, listing.id)
     _private_if_cookie(request, response)
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
-    return ListingDetail(
-        **ListingPublic.model_validate(listing).model_dump(exclude={"match"}),
-        match=match,
-        applicant_count=count,
-        room_fit=room_fit,
+    return ListingDetail.from_listing(
+        listing, seeker=_is_seeker(user), match=match, applicant_count=count, room_fit=room_fit
     )
