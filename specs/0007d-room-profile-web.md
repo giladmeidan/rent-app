@@ -1,7 +1,7 @@
 ---
 id: 0007d
 title: A seeker looking for a room switches on "חיפוש חדר" in /me/profile and fills gender, birth year, flatmates preference and the lifestyle questionnaire
-status: verified
+status: in-review
 depends_on: [0007a]      # GET/PUT /me/profile carry gender, birth_year, flatmate_gender, lifestyle; `make client` before building
 reviewers: [code, qa, ux, security]   # security: collects gender and birth year, writes the privacy copy, adds the ?section=room entry point (a Sonnet pass over the copy, links.ts and the entry point is enough); ux: a new revealed form section and the shared questionnaire UI that 0007e/f/c reuse; qa: the switch-off-clears and the entry point
 estimate: 1 coder run
