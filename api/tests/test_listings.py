@@ -708,16 +708,17 @@ def test_ac1_room_fields_on_create_and_reads(
     assert _room_fields(mine[apartment["id"]]) == ROOM_DEFAULTS
     assert _room_fields(mine[some_ages["id"]]) == _room_fields(some_ages)
 
-    # Rooms stay hidden from the public until 0007b.
+    # Rooms are public from 0007b, with the four room fields and no fit for a visitor.
     client.cookies.clear()
     detail = client.get(f"/listings/{room['id']}")
-    assert detail.status_code == 404
-    assert detail.json() == {"detail": "not_found"}
+    assert detail.status_code == 200
+    assert _room_fields(detail.json()) == expected
+    assert detail.json()["room_fit"] is None
     search = client.get("/listings")
     assert search.status_code == 200
     ids = {item["id"] for item in search.json()["items"]}
-    assert room["id"] not in ids
-    assert some_ages["id"] not in ids
+    assert room["id"] in ids
+    assert some_ages["id"] in ids
     assert apartment["id"] in ids
 
 

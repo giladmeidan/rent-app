@@ -9,7 +9,14 @@ the listing's **approximate** point (the street's point plus a fixed per-listing
 listings whose approximate point is inside it.
 
 `ListingPublic.match` (spec 0006b) is the caller's match score and its explanation: only a score and
-criterion codes, never a profile value; `null` for everyone but a seeker with a profile."""
+criterion codes, never a profile value; `null` for everyone but a seeker with a profile.
+
+Rooms are public (spec 0007b), next to apartments; `SearchParams.listing_type` narrows to one type.
+`ListingPublic` carries the four room fields (`gender_preference`, `flatmates_count`,
+`flatmate_ages`, `lifestyle`; an apartment holds `'any'`, null, `[]` and `{}`).
+`ListingDetail.room_fit` is the caller's own fit to a room: `true` / `false` exactly when the
+listing is a room and the caller is a seeker whose profile has a room section, else `null`. Search
+items do not carry it: a room that does not fit the caller never reaches them."""
 
 import datetime as dt
 import uuid
@@ -20,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_valida
 
 from app.schemas.listing import Furnished, ListingType, Rooms
 from app.schemas.match import MatchOut
-from app.schemas.profile import ContractMonths, HouseholdsOut
+from app.schemas.profile import ContractMonths, GenderPreference, HouseholdsOut, Lifestyle
 
 # `match` (spec 0006b) orders by the caller's match score; without a profile it is `newest`.
 SearchSort = Literal["newest", "price_asc", "price_desc", "match"]
@@ -48,6 +55,8 @@ class SearchParams(BaseModel):
     furnished: bool | None = None
     elevator: bool | None = None
     parking: bool | None = None
+    # Omitted: both types (spec 0007b).
+    listing_type: ListingType | None = None
     # Omitted: `match` for a seeker with a profile, else `newest` (`services/search.py`).
     sort: SearchSort | None = None
     limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = SEARCH_LIMIT_DEFAULT
@@ -118,6 +127,11 @@ class ListingPublic(BaseModel):
     accepted_households: HouseholdsOut
     smoking_allowed: bool
     min_contract_months: ContractMonths | None
+    # The room fields (spec 0007b), as stored; `lifestyle` holds only the answered keys.
+    gender_preference: GenderPreference
+    flatmates_count: int | None
+    flatmate_ages: list[int]
+    lifestyle: Lifestyle
     created_at: dt.datetime
     lat: float | None
     lng: float | None
@@ -128,9 +142,11 @@ class ListingPublic(BaseModel):
 
 class ListingDetail(ListingPublic):
     """The public listing page (spec 0004a): `ListingPublic` plus the exact number of applicants
-    (every application except withdrawn ones; declined ones count, they applied)."""
+    (every application except withdrawn ones; declined ones count, they applied) and the caller's
+    room fit (spec 0007b; see the module docstring). The page is public whatever the fit."""
 
     applicant_count: int
+    room_fit: bool | None
 
 
 class ListingSearchOut(BaseModel):

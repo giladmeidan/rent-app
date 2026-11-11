@@ -38,6 +38,10 @@ PUBLIC_KEYS = {
     "accepted_households",
     "smoking_allowed",
     "min_contract_months",
+    "gender_preference",  # spec 0007b: the four room fields
+    "flatmates_count",
+    "flatmate_ages",
+    "lifestyle",
     "created_at",
     "lat",
     "lng",
@@ -80,7 +84,7 @@ def statements(db_engine: Engine) -> Iterator[list[str]]:
 
 @dataclass
 class World:
-    """AC1's rows: only `a` is public."""
+    """AC1's rows: `a` and `d` are public."""
 
     a: str  # live apartment
     b: str  # paused apartment (owned by `owner_b`)
@@ -117,13 +121,13 @@ def world(client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: En
     )
 
 
-def test_ac1_only_live_apartments_in_active_areas(client: TestClient, world: World) -> None:
+def test_ac1_only_live_listings_in_active_areas(client: TestClient, world: World) -> None:
     anonymous = client.get("/listings")
 
     assert anonymous.status_code == 200
     body = anonymous.json()
-    assert _ids(body) == [world.a]
-    assert body["total"] == 1
+    assert _ids(body) == [world.d, world.a]  # newest first; rooms are public (spec 0007b)
+    assert body["total"] == 2
 
     for caller in (world.seeker, world.owner_b):
         response = caller.get("/listings")
@@ -132,7 +136,7 @@ def test_ac1_only_live_apartments_in_active_areas(client: TestClient, world: Wor
 
 
 def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: World) -> None:
-    item = _search(client)["items"][0]
+    item = next(item for item in _search(client)["items"] if item["id"] == world.a)
 
     assert set(item) == PUBLIC_KEYS
     assert type(item["rooms"]) is float
@@ -159,6 +163,11 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "accepted_households": ["single", "couple", "family", "roommates"],
         "smoking_allowed": True,
         "min_contract_months": None,
+        # The room fields (spec 0007b): an apartment's defaults.
+        "gender_preference": "any",
+        "flatmates_count": None,
+        "flatmate_ages": [],
+        "lifestyle": {},
         "lat": None,  # not located yet (spec 0003c)
         "lng": None,
         "match": None,  # a visitor (spec 0006b)
@@ -167,8 +176,8 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
     response = client.get(f"/listings/{world.a}")
     assert response.status_code == 200
     one = response.json()
-    assert set(one) == PUBLIC_KEYS | {"applicant_count"}  # spec 0004a
-    assert one == {**item, "applicant_count": 0}
+    assert set(one) == PUBLIC_KEYS | {"applicant_count", "room_fit"}  # specs 0004a, 0007b
+    assert one == {**item, "applicant_count": 0, "room_fit": None}
 
 
 def test_ac3_price_and_rooms_ranges(
@@ -296,6 +305,8 @@ _BAD_QUERIES = (
     "offset=10001",
     "available_by=2027-02-30",
     "pets=maybe",
+    "listing_type=house",  # spec 0007b
+    "listing_type=",
 )
 
 
@@ -345,8 +356,9 @@ def test_ac8_search_is_two_statements(
 
 def test_ac9_public_listing_by_id(client: TestClient, world: World) -> None:
     assert client.get(f"/listings/{world.a}").status_code == 200
+    assert client.get(f"/listings/{world.d}").status_code == 200  # a live room (spec 0007b)
 
-    hidden = [world.b, world.c, world.d, world.e, str(uuid.uuid4())]
+    hidden = [world.b, world.c, world.e, str(uuid.uuid4())]
     responses = [client.get(f"/listings/{listing_id}") for listing_id in hidden]
     for response in responses:
         assert response.status_code == 404
