@@ -25,6 +25,7 @@ import {
   progress,
   renderWizard,
   routes,
+  toPreferences,
 } from './wizard';
 
 afterEach(() => {
@@ -33,17 +34,6 @@ afterEach(() => {
 
 const stepItem = (name: string) => screen.getByText(name).closest('li') as HTMLElement;
 const publishButton = () => screen.getByRole('button', { name: he.listings.publish });
-
-/** Renders the wizard, chooses apartment, fills the AC4 values and goes to the preferences. */
-async function toPreferences(client = testQueryClient()) {
-  const view = renderWizard(client);
-  chooseApartmentAndContinue();
-  await areasLoaded();
-  fillValidDetails();
-  fireEvent.click(nextButton());
-  expect(progress()).toHaveAttribute('aria-valuenow', '3');
-  return view;
-}
 
 /** As `toPreferences`, then on to the preview with the preferences untouched. */
 async function toPreview(client = testQueryClient()) {

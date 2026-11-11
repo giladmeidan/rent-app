@@ -44,6 +44,14 @@ function outcome(error: Error): Outcome {
 
 const fieldNames: readonly string[] = FIELD_ORDER;
 
+/** The fields of step 3 (the rest of `FIELD_ORDER` is step 2's). */
+const PREFERENCE_FIELDS: readonly FieldName[] = [
+  'accepted_households',
+  'min_contract_months',
+  'flatmates_count',
+  'flatmate_ages',
+];
+
 /**
  * A 422 list `detail` as field errors: each item whose `loc` is exactly `["body", <field>]` names
  * that field. Only `loc` is read; FastAPI's `msg` is English and never shown. Model-level items
@@ -147,6 +155,9 @@ export function ListingWizard({ listing }: Props) {
   const [serverErrors, setServerErrors] = useState<FieldErrors>({});
   // Validation runs on "next"; after the first attempt also on blur, never on each keystroke.
   const [attempted, setAttempted] = useState(false);
+  // Step 3's "next" was pressed: from then on its errors come back with it after a round trip to
+  // details. Before, a room's empty flatmates count would greet the owner as an error.
+  const [preferencesAttempted, setPreferencesAttempted] = useState(false);
 
   const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
   const create = useCreateListing();
@@ -255,7 +266,7 @@ export function ListingWizard({ listing }: Props) {
         setServerErrors(found);
         focusAfterStep.current = fieldId(first);
         // Details fields come first in FIELD_ORDER: a 422 naming both kinds lands on details.
-        goTo(first === 'accepted_households' || first === 'min_contract_months' ? 3 : 2);
+        goTo(PREFERENCE_FIELDS.includes(first) ? 3 : 2);
       }
     }
   }
@@ -301,9 +312,14 @@ export function ListingWizard({ listing }: Props) {
       if (form.listing_type !== null) goTo(2);
     } else if (step === 2 || step === 3) {
       const found = step === 2 ? validate(current, today) : validatePreferences(current);
-      // A shown households error survives a round trip to details (`found` alone decides the step).
-      setErrors(step === 2 ? { ...found, ...validatePreferences(current) } : found);
+      // A preferences error survives a round trip to details (`found` alone decides the step).
+      setErrors(
+        step === 2
+          ? { ...found, ...(preferencesAttempted ? validatePreferences(current) : {}) }
+          : found,
+      );
       setAttempted(true);
+      if (step === 3) setPreferencesAttempted(true);
       const first = firstInvalid(found);
       if (first === undefined) {
         goTo(step === 2 ? 3 : 4);

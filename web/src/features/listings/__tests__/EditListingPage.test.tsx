@@ -12,6 +12,7 @@ import {
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
+import type { LifestyleKey } from '../../lifestyle/keys';
 import type { ListingOut } from '../api';
 import { formatIls } from '../format';
 import { MY_LISTINGS_KEY } from '../useMyListings';
@@ -42,6 +43,20 @@ const title = () => screen.getByRole('heading', { level: 1, name: he.listings.ed
 const backLink = () => screen.getByRole('link', { name: he.listings.edit.backToMine });
 /** A reply that never arrives (a refetch left in flight). */
 const never = () => deferred().promise;
+
+const r = he.listings.room;
+const g = he.rooms.genderPreference;
+const genderRadio = (name: string) =>
+  within(screen.getByRole('group', { name: r.genderPreference })).getByRole('radio', { name });
+const flatmatesCount = () => field(r.flatmatesCount);
+const ageSlot = (n: number) => field(r.ageOf.replace('{{n}}', String(n)));
+/** The radio of one questionnaire answer, by the question's flat wording. */
+const lifestyleRadio = (key: LifestyleKey, n: '1' | '2' | '3') => {
+  const q = he.lifestyle[key];
+  return within(screen.getByRole('group', { name: q.question.flat })).getByRole('radio', {
+    name: q.answer[n],
+  });
+};
 
 /** The AC3 listing. */
 const stored = (overrides: Partial<ListingOut> = {}) =>
@@ -95,6 +110,17 @@ async function changePriceAndSave(
     expect(opened.api.calls(`PATCH /listings/${a.id}`)).toHaveLength(1);
   });
   return opened;
+}
+
+/** From step 3: on to the preview, save, back on "my listings"; the PATCH bodies sent. */
+async function saveFromPreferences(api: ReturnType<typeof mockApi>, a: ListingOut) {
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '4');
+  fireEvent.click(saveButton());
+  await vi.waitFor(() => {
+    expect(currentPath()).toBe('/me/listings');
+  });
+  return api.calls(`PATCH /listings/${a.id}`).map((c) => c.body);
 }
 
 const beforeUnloadPrevented = () => {
@@ -558,5 +584,175 @@ describe('EditListingPage', () => {
     expect(noSmokers()).toBeChecked();
     expect(minContract()).toHaveDisplayValue(p.contract['36']);
     expect(beforeUnloadPrevented()).toBe(false);
+  });
+
+  it('ac6_room_patch_only_changes', async () => {
+    const room = stored({
+      listing_type: 'room',
+      gender_preference: 'men',
+      flatmates_count: 2,
+      // As the API may order them.
+      flatmate_ages: [30, 27],
+      lifestyle: { guests: 2, night: 1 },
+    });
+    const reply = () => json(room);
+
+    // Opens on the stored values, the ages sorted; untouched, nothing is dirty or sent.
+    let opened = await openEdit(room);
+    expect(beforeUnloadPrevented()).toBe(false);
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(genderRadio(g.men)).toBeChecked();
+    expect(genderRadio(g.any)).not.toBeChecked();
+    expect(flatmatesCount()).toHaveValue('2');
+    expect(ageSlot(1)).toHaveValue('27');
+    expect(ageSlot(2)).toHaveValue('30');
+    expect(lifestyleRadio('guests', '2')).toBeChecked();
+    expect(lifestyleRadio('night', '1')).toBeChecked();
+    expect(lifestyleRadio('cleanliness', '1')).not.toBeChecked();
+    expect(lifestyleRadio('cleanliness', '2')).not.toBeChecked();
+    expect(lifestyleRadio('cleanliness', '3')).not.toBeChecked();
+    expect(beforeUnloadPrevented()).toBe(false);
+    expect(await saveFromPreferences(opened.api, room)).toStrictEqual([]);
+    expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Only the gender.
+    opened = await openEdit(room, [reply]);
+    fireEvent.click(nextButton());
+    fireEvent.click(genderRadio(g.any));
+    expect(beforeUnloadPrevented()).toBe(true);
+    expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
+      { gender_preference: 'any' },
+    ]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Only one age: the whole list, sorted.
+    opened = await openEdit(room, [reply]);
+    fireEvent.click(nextButton());
+    change(r.ageOf.replace('{{n}}', '1'), '28');
+    expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
+      { flatmate_ages: [28, 30] },
+    ]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Only one answer: the whole questionnaire.
+    opened = await openEdit(room, [reply]);
+    fireEvent.click(nextButton());
+    fireEvent.click(lifestyleRadio('guests', '3'));
+    expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
+      { lifestyle: { guests: 3, night: 1 } },
+    ]);
+  });
+
+  it('ac7_legacy_room_needs_count', async () => {
+    // A room from before Slice 7: no count, everything else default. Untouched: not dirty.
+    const legacy = stored({ listing_type: 'room' });
+    expect(legacy.flatmates_count).toBeNull();
+    let opened = await openEdit(legacy);
+    expect(beforeUnloadPrevented()).toBe(false);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    opened = await openEdit(legacy, [
+      () => json({ ...legacy, price_ils: 7500, flatmates_count: 2 }),
+    ]);
+    change(f.price, '7500');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(errorFor(flatmatesCount())).toHaveTextContent(he.listings.errors.required);
+    expect(document.activeElement).toBe(flatmatesCount());
+    expect(opened.api.calls(`PATCH /listings/${legacy.id}`)).toHaveLength(0);
+
+    fireEvent.change(flatmatesCount(), { target: { value: '2' } });
+    expect(flatmatesCount()).toHaveAttribute('aria-invalid', 'false');
+    expect(await saveFromPreferences(opened.api, legacy)).toStrictEqual([
+      { price_ils: 7500, flatmates_count: 2 },
+    ]);
+  });
+
+  it('ac8_switching_type_hides_and_resets', async () => {
+    const back = () => fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    const toPreferencesAs = (label: string) => {
+      back();
+      expect(progress()).toHaveAttribute('aria-valuenow', '1');
+      fireEvent.click(screen.getByLabelText(label));
+      fireEvent.click(nextButton());
+      fireEvent.click(nextButton());
+      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    };
+
+    // Room → apartment: no room block, no room chips, and the PATCH is the type alone.
+    const room = stored({
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 2,
+      flatmate_ages: [27],
+      lifestyle: { cleanliness: 3 },
+    });
+    let opened = await openEdit(room, [
+      () =>
+        json({
+          ...room,
+          listing_type: 'apartment',
+          gender_preference: 'any',
+          flatmates_count: null,
+          flatmate_ages: [],
+          lifestyle: {},
+        }),
+    ]);
+    toPreferencesAs(he.listings.type.apartment);
+    expect(screen.getByRole('heading', { level: 2, name: he.listings.prefs.title })).toBeVisible();
+    expect(screen.queryByRole('region', { name: r.title })).toBeNull();
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(screen.queryByRole('list', { name: r.title })).toBeNull();
+    // Back to a room (from the preview): the stored values are still there.
+    back();
+    back();
+    toPreferencesAs(he.listings.type.room);
+    expect(genderRadio(g.women)).toBeChecked();
+    expect(ageSlot(1)).toHaveValue('27');
+    back();
+    toPreferencesAs(he.listings.type.apartment);
+    expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
+      { listing_type: 'apartment' },
+    ]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Apartment → room: the count is required, then the PATCH carries the type and the choices.
+    const apartment = stored();
+    opened = await openEdit(apartment, [() => json({ ...apartment, listing_type: 'room' })]);
+    toPreferencesAs(he.listings.type.room);
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(errorFor(flatmatesCount())).toHaveTextContent(he.listings.errors.required);
+    fireEvent.click(genderRadio(g.women));
+    fireEvent.change(flatmatesCount(), { target: { value: '2' } });
+    change(r.ageOf.replace('{{n}}', '2'), '29');
+    fireEvent.click(lifestyleRadio('guests', '1'));
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(screen.getByRole('list', { name: r.title })).toBeVisible();
+    fireEvent.click(saveButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(opened.api.calls(`PATCH /listings/${apartment.id}`).map((c) => c.body)).toStrictEqual([
+      {
+        listing_type: 'room',
+        gender_preference: 'women',
+        flatmates_count: 2,
+        flatmate_ages: [29],
+        lifestyle: { guests: 1 },
+      },
+    ]);
   });
 });

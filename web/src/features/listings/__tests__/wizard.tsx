@@ -5,6 +5,7 @@ import { expect, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
 import { renderRoutes, testQueryClient } from '../../auth/__tests__/harness';
+import type { ListingType } from '../api';
 import { EditListingPage } from '../EditListingPage';
 import { addDays, todayInIsrael } from '../format';
 import { MyListingsPage } from '../MyListingsPage';
@@ -27,9 +28,14 @@ export function renderWizard(client = testQueryClient()) {
 export const nextButton = () => screen.getByRole('button', { name: he.listings.next });
 export const progress = () => screen.getByRole('progressbar');
 
-export function chooseApartmentAndContinue() {
-  fireEvent.click(screen.getByLabelText(he.listings.type.apartment));
+/** Step 1: picks the type labelled `label` and goes on to the details. */
+export function chooseTypeAndContinue(label: string) {
+  fireEvent.click(screen.getByLabelText(label));
   fireEvent.click(nextButton());
+}
+
+export function chooseApartmentAndContinue() {
+  chooseTypeAndContinue(he.listings.type.apartment);
 }
 
 export const field = (label: string) => screen.getByLabelText(label);
@@ -74,4 +80,15 @@ export function errorFor(input: HTMLElement): HTMLElement {
     .filter((el): el is HTMLElement => el?.getAttribute('role') === 'alert');
   expect(alerts).toHaveLength(1);
   return alerts[0] as HTMLElement;
+}
+
+/** Renders the wizard, chooses `type`, fills the AC4 values and goes to the preferences. */
+export async function toPreferences(client = testQueryClient(), type: ListingType = 'apartment') {
+  const view = renderWizard(client);
+  chooseTypeAndContinue(he.listings.type[type]);
+  await areasLoaded();
+  fillValidDetails();
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '3');
+  return view;
 }
