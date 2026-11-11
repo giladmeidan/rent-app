@@ -254,3 +254,23 @@ case. Scope, the key table and AC3 are updated.
              409 `declined` shows its own copy, with no "withdraw" hint.
     Reviewers: code, qa, security, ux   Estimated: 1 coder run (Sonnet/medium)
     Links: specs/0008e-flatmates-web.md - PRODUCT.md "Flatmates" - no artboard
+
+Build digest (spec session, after review round 1):
+
+    Spec 0008e - Flatmates web: invite & join   PR OPEN (not merged), code head 65d1922
+    Shipped: a room card's "שותפים בדירה (N)" opens the lister's flatmates page (create, copy, rotate, turn off
+             the once-shown link; remove flatmates); whoever opens /flatmates/join#<token>, logged in or not,
+             sees the flat and its owner, joins and lands on /chat with a confirmation.
+    Demo: make dev -> owner posts a room, /me/listings -> "שותפים בדירה (0)" -> "יצירת קישור הזמנה", copy ->
+          open the link logged out in another browser -> sign up -> "הצטרפות לדירה" -> /chat confirmation.
+    Tests: +7 unit (AC1-AC5, incl. the token kept out of every URL and forgotten on logout), +1 e2e (AC6, two
+           contexts: no page URL after the first load, request URL or Referer holds the token). Local on
+           65d1922: make lint, make i18n-check, make build-web green; make test api 474, web 292; make e2e 13/13
+           in 3 shards (first run on 0008a-0008e together). CI: api + web on the PR head (see the PR).
+    Findings: 1 blocker fixed (the AC6 e2e checked the wrong navigation event - test defect, qa); 1 major
+              fixed (a double click on create rotated the shown link dead - qa, security); 8 minors fixed
+              (logout forgets a stashed token, no preview refetch on focus, 401 reuses clearSession, replace
+              on join, role="alert", decoded/trimmed hash, no flash after disable, focus); 2 follow-ups
+              logged; 9 nits dropped. Amendments A1 (token in the fragment) and A2 (409 declined) built.
+    Changed in PRODUCT.md: nothing (A2 was recorded with 0008d).
+    Decisions I need from you: none. Follow-up with a copy choice: the join page's error states have no link out.
