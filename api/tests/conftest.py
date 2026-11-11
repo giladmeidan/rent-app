@@ -105,13 +105,14 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `room_pairs`, `seeker_profiles`, `messages`, `conversations`,
-    `applications`, `listings`, `sessions`, `users` and `areas` tables."""
+    """Per-test engine on clean `conversation_reads`, `listing_flatmates`, `room_pairs`,
+    `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`, `sessions`, `users`
+    and `areas` tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE room_pairs, seeker_profiles, messages, conversations, applications,"
-                " listings, sessions, users, areas"
+                "TRUNCATE TABLE conversation_reads, listing_flatmates, room_pairs, seeker_profiles,"
+                " messages, conversations, applications, listings, sessions, users, areas"
             )
         )
     yield migrated_db
@@ -335,6 +336,26 @@ def make_pair(
             },
         ).scalar_one()
     return pair_id
+
+
+def make_flatmate(
+    engine: Engine,
+    listing_id: uuid.UUID,
+    user_id: uuid.UUID,
+    *,
+    joined_at: dt.datetime | None = None,
+) -> uuid.UUID:
+    """Insert a `listing_flatmates` row directly (spec 0008d) and return its id (the membership's
+    id). `joined_at` defaults to now(). Bypasses the invite link, the limiter and the join rules."""
+    with engine.begin() as conn:
+        flatmate_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO listing_flatmates (listing_id, user_id, joined_at)"
+                " VALUES (:listing_id, :user_id, coalesce(:joined_at, now())) RETURNING id"
+            ),
+            {"listing_id": listing_id, "user_id": user_id, "joined_at": joined_at},
+        ).scalar_one()
+    return flatmate_id
 
 
 def make_listing(

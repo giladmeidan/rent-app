@@ -363,6 +363,12 @@ def test_ac6_me_listings_is_own_newest_first(
     assert [item["id"] for item in body] == [second["id"], first["id"]]
     assert [item["status"] for item in body] == ["paused", "active"]
     assert [item["liked_me_count"] for item in body] == [0, 0]  # 0008a, in the same statement
+    # 0008d, in the same statement: no flatmates, no invite link.
+    assert [(item["flatmate_count"], item["flatmate_invite_active"]) for item in body] == [
+        (0, False),
+        (0, False),
+    ]
+    assert all("flatmate_invite_hash" not in item for item in body)
     assert len(sent) == 2, sent
     assert sum("FROM listings" in statement for statement in sent) == 1
 
