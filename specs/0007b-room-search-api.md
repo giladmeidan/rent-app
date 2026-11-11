@@ -41,6 +41,11 @@ lifestyle score). PRODUCT.md rows: "Rooms", "Gender preference", "Search", "Appl
     - `GenderPreference` and `Lifestyle` come from `app.schemas.profile` (`0007a`). They are typed exactly as on
       `ListingOut`.
     - None of the four has a default, so OpenAPI marks all four required.
+    - `flatmate_ages` and `lifestyle` are emptied (`[]` / `{}`) for visitors and owners, the listing's own owner
+      included; only a signed-in seeker, with or without a profile, gets the stored values (Gilad (b),
+      2026-11-11). One builder, `ListingPublic.from_listing`, does it for search items, the map and
+      `ListingDetail`, with the seeker-only set in one constant (`SEEKER_ONLY_FIELDS`). The types stay
+      required; `ListingOut` / `MyListingOut` (`GET /me/listings`) are unchanged.
   - `ListingDetail` gains `room_fit: bool | None`. It is required and nullable, and the router always sets it.
     Search items do not carry it, because a misfit room never reaches them.
   - Docstring: rooms are public, plus the four fields and `room_fit`.
@@ -257,10 +262,12 @@ Production has no users yet, and `0007f` follows.
 
   When a visitor, an owner and a seeker with no profile each call `GET /listings`,
   Then each response holds exactly the live room and the apartment, with `total` 2:
-  - The room item's key set is `PUBLIC_KEYS`, with `gender_preference` `"women"`, `flatmates_count` 2,
-    `flatmate_ages` `[27, 30]`, and `lifestyle` exactly `{"night": 3, "kosher": 2}` (answered keys only).
+  - The room item's key set is `PUBLIC_KEYS`, with `gender_preference` `"women"` and `flatmates_count` 2.
+  - For the seeker, `flatmate_ages` is `[27, 30]` and `lifestyle` exactly `{"night": 3, "kosher": 2}`
+    (answered keys only). For the visitor and the owner they are `[]` and `{}` (AC7).
   - The apartment item has `"any"`, `null`, `[]` and `{}`.
-  - `GET /listings/{room}` returns 200 with `room_fit: null` for all three callers.
+  - `GET /listings/{room}` returns 200 with `room_fit: null` for all three callers, and otherwise the same body
+    as that caller's room item.
   - The three hidden rooms return 404 `not_found`, byte-identical to an unknown id.
 
   Test: `api/tests/test_room_search.py::test_ac1_rooms_are_public_with_room_fields`.
@@ -346,6 +353,17 @@ Production has no users yet, and `0007f` follows.
   Tests: `test_room_search.py::test_ac6_listing_type_snapshot_on_apply_and_reapply` and
   `test_migrations.py::test_ac6_application_listing_type_backfill_and_downgrade`. The existing
   `test_ac4_autogenerate_sees_no_diff_with_postgis_extensions` keeps passing.
+- [ ] AC7 Given a public `women` room with `flatmate_ages` `[27, 30]` and `lifestyle={"night": 3, "kosher": 2}`,
+  When each caller below reads the room's item in `GET /listings` and `GET /listings/{room}`:
+  - a visitor, another owner and the room's own owner get `flatmate_ages` `[]` and `lifestyle` `{}`. Every other
+    field (`gender_preference` `"women"`, `flatmates_count` 2, and the rest) is the same as for a seeker without
+    a profile;
+  - a seeker without a profile, a seeker with a profile and no room section, and a seeker woman / any get the
+    stored values.
+
+  The own owner's `GET /me/listings` still shows the stored values (Gilad (b), 2026-11-11).
+
+  Test: `api/tests/test_room_search.py::test_ac7_room_ages_and_answers_only_to_seekers`.
 - [ ] NF1 `make lint` is clean (ruff, mypy --strict, and web eslint / prettier / `tsc`) and `make test` is green
   for api and web, with the amendments in Scope. `make client` regenerates `schema.d.ts` with `SearchParams`'
   `listing_type` query parameter, the four required `ListingPublic` fields and `ListingDetail.room_fit`.
@@ -373,11 +391,13 @@ Production has no users yet, and `0007f` follows.
     `flatmate_gender`.
   - A visitor's or an owner's search response differs from today's only by the four room fields and by the rooms
     now in it.
+  - A room's flatmates' ages and questionnaire answers go only to a signed-in seeker; a visitor or an owner gets
+    `[]` and `{}` (AC7).
 
-  Checks: AC1, AC3, AC6, and the security reviewer.
+  Checks: AC1, AC3, AC6, AC7, and the security reviewer.
 
 ## Tests to write
-`api/tests/test_room_search.py` (new) holds AC1–AC6: integration tests, with dates from UTC `TODAY`.
+`api/tests/test_room_search.py` (new) holds AC1–AC7: integration tests, with dates from UTC `TODAY`.
 `api/tests/test_migrations.py` gains AC6's migration test.
 
 Amendments, as listed under Scope "Tests and fixtures":
@@ -394,6 +414,9 @@ E2E: no new test. `make e2e` runs locally (NF1).
   gender change by either side leaves existing applications in the inbox and in `GET /me/applications`, and the
   owner can decline them. No new state is needed. Consequence (b) under API: a re-POST answers
   `room_gender_mismatch`.
+- **Decided (b)** (Gilad, 2026-11-11): a room's raw flatmates' ages and questionnaire answers were public to
+  visitors (security review round 1, major). Now only signed-in seekers see them; visitors and owners get `[]` /
+  `{}` (AC7). `MyListingOut` is unchanged.
 - **Hidden, not capped.** This is the first caller-dependent filter. `0006b`'s line "`total` can never differ by
   caller" no longer holds for seekers with a room section. Caching is already per caller: every 200 sends
   `Vary: Cookie`, plus `Cache-Control: private` when a cookie is present (`0006b`). `0006b` AC6 keeps passing:
