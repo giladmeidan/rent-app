@@ -1,7 +1,7 @@
 ---
 id: 0008d
 title: A room's lister shares an invite link; whoever opens it joins the flat, and from then on every chat about that room is a group chat of the lister, the flatmates and the candidate, each flatmate seeing messages from the moment they joined
-status: in-progress
+status: done
 depends_on: [0008a]   # migration chain 0011 -> 0012; the mutual-like router publishes to every chat member (people.py, 0008a). 0005a/0005c (done): conversations, messages, read markers, SSE publish
 reviewers: [code, qa, security, perf]   # security: a capability link that grants chat access, history cut at join, membership in every chat statement, apartment applications kept out; perf: the membership EXISTS on the chat list and unread count (0005a's one-statement list); qa: join/leave/remove/rotate against live chats and status changes
 estimate: 1 coder run   # coder Opus/high (chat access control, migration; Speed rule 6)
