@@ -329,10 +329,12 @@ def test_ac4_status_transitions(
         sent = list(statements)
         if code == 200 and not no_op and not measured_ok:
             measured_ok = True
-            assert len(sent) == 2, sent  # the session lookup and the one UPDATE
+            # The session lookup, the one UPDATE, then the chat it opens (spec 0005a).
+            assert len(sent) == 3, sent
             assert "UPDATE applications" in sent[1]
             assert "FROM listings" in sent[1]
             assert "RETURNING" in sent[1]
+            assert "INSERT INTO conversations" in sent[2]
         if code == 409 and not measured_conflict:
             measured_conflict = True
             assert len(sent) == 3, sent  # lookup, UPDATE, then the follow-up SELECT
