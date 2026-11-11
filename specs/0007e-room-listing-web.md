@@ -1,7 +1,7 @@
 ---
 id: 0007e
 title: An owner posting or editing a room says who it is for, how many flatmates live there, their ages and the flat's lifestyle, in the wizard's "העדפות" step
-status: in-review
+status: done
 depends_on: [0007a, 0007d, 0006e]   # 0007a: the four listing fields on POST / PATCH / GET; 0007d: features/lifestyle; 0006e: the four-step wizard and its PreferencesStep
 reviewers: [code, qa, ux]           # ux: a new block in the wizard; qa: the edit diff for an array and an object field
 estimate: 1 coder run
