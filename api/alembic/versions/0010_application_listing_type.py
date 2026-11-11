@@ -11,6 +11,9 @@ object; from here they also require that its keys are among the 7 questionnaire 
 value is the JSON number 1, 2 or 3 (a string, a fraction, null, an array or an object fails). The
 jsonpath is `strict`: in lax mode a filter unwraps an array, so `{"night": [1]}` would pass. The
 key list is frozen here; `app/models/_checks.py` builds the same text from `LIFESTYLE_KEYS`.
+Recreating the CHECKs fails on existing rows written by SQL or seed scripts that hold a key outside
+the 7, or a value outside 1-3, so those rows must be cleaned first; `1.0` counts as 1 (the
+comparison is numeric). No pre-flight query is run.
 
 Revision ID: 0010
 Revises: 0009

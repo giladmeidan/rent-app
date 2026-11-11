@@ -169,6 +169,9 @@ lifestyle score). PRODUCT.md rows: "Rooms", "Gender preference", "Search", "Appl
    `listings.listing_type`.
 3. `alter_column(nullable=False)`.
 4. `create_check_constraint("ck_applications_listing_type_at_apply", …)`.
+5. Tighten `ck_listings_lifestyle` and `ck_seeker_profiles_lifestyle` to the 7 known keys and numeric values
+   1–3, with a strict jsonpath, as drop + create; the downgrade restores the 0009 text. This is the 0007a
+   FOLLOWUPS line, added at the orchestrator's request.
 
 The downgrade drops the constraint, then the column. There is no server default, so a write path that forgets the
 column fails loudly.
@@ -399,8 +402,8 @@ E2E: no new test. `make e2e` runs locally (NF1).
   same 3 cheap reads as the public, unthrottled listing page. The security reviewer to confirm.
 - **One bad stored row breaks public search.** `ListingPublic.lifestyle: Lifestyle` is validated on the way out.
   A row with a key outside `LIFESTYLE_KEYS`, or a value outside 1–3, makes every page that includes that row a
-  500. `ck_listings_lifestyle` checks only `jsonb_typeof`. Only the API writes rows today, so this is accepted.
-  SQL and seed writers must use `0007a`'s keys and values 1–3. The untracked `api/scripts/seed_demo.py` is one
+  500. `ck_listings_lifestyle` checked only `jsonb_typeof`; 0010's CHECKs now refuse such rows (step 5 of
+  the migration). SQL and seed writers must use `0007a`'s keys and values 1–3. The untracked `api/scripts/seed_demo.py` is one
   such writer.
 - **Legacy rooms** (`flatmates_count` NULL, `'any'`) become public, as PRODUCT.md "Rooms" decides. The web shows
   no flatmates line for them (`0007f`).
