@@ -2,12 +2,16 @@ import { api } from '../../api/client';
 import type { components } from '../../api/schema';
 import { ApiError } from '../listings/api';
 
-/** One applicant to the owner's listing (0004c): name, status and message; no email, no id. */
+/** One applicant to the owner's listing (0004c): name, status and message, plus its match and
+ * housing summary (0006c, `null` for an applicant from before Slice 6); no email, no user id. */
 export type ApplicantOut = components['schemas']['ApplicantOut'];
 /** What an owner sees and sets: `withdrawn` applications are never listed. */
 export type ApplicantStatus = ApplicantOut['status'];
+/** The applicant's housing summary (0006c): no budget, no areas. `move_in_date` may be past. */
+export type ApplicantProfileOut = components['schemas']['ApplicantProfileOut'];
 
-/** The applicants of one of the caller's listings, newest first. 404 (not theirs) throws. */
+/** The applicants of one of the caller's listings, in the API's default order (best match first,
+ * 0006c). 404 (not theirs) throws. */
 export async function fetchApplicants(listingId: string): Promise<ApplicantOut[]> {
   const { data, error, response } = await api.GET('/listings/{listing_id}/applications', {
     params: { path: { listing_id: listingId } },

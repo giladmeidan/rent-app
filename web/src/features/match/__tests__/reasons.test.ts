@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import i18n from '../../../app/i18n';
+import type { ApplicantProfileOut } from '../../applicants/api';
+import { applicantProfile } from '../../applicants/__tests__/fixtures';
 import { formatDate, todayInIsrael } from '../../listings/format';
 import type { ListingPublic } from '../../listings/api';
 import type { SeekerProfileOut } from '../../profile/api';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { publicListing } from '../../search/__tests__/fixtures';
-import { seekerReason, seekerShort } from '../reasons';
+import { ownerReason, ownerShort, seekerReason, seekerShort } from '../reasons';
 import type { Criterion, ReasonKind } from '../types';
 
 type Row = {
@@ -299,6 +301,242 @@ const withoutProfile: [Criterion, ReasonKind, Partial<ListingPublic>, string | n
   ['pets', 'differ', {}, 'ללא חיות מחמד'],
 ];
 
+type OwnerRow = {
+  name: string;
+  criterion: Criterion;
+  kind: ReasonKind;
+  profile?: Partial<ApplicantProfileOut>;
+  /** The listing's `parking_spots`. */
+  spots?: number;
+  /** The inbox disclosure's line. */
+  reason: string;
+  /** The inbox card's chip. */
+  short: string;
+};
+
+// The owner's voice (0006g), about the applicant; the rendered Hebrew, as above.
+const ownerRows: OwnerRow[] = [
+  {
+    name: 'budget agree',
+    criterion: 'budget',
+    kind: 'agree',
+    reason: 'התקציב מתאים למחיר',
+    short: 'בתקציב',
+  },
+  {
+    name: 'budget differ',
+    criterion: 'budget',
+    kind: 'differ',
+    reason: 'המחיר מעל התקציב שלהם',
+    short: 'מעל התקציב',
+  },
+  {
+    name: 'move_in agree',
+    criterion: 'move_in',
+    kind: 'agree',
+    profile: { move_in_date: inDays(30) },
+    reason: `תאריך הכניסה מתאים (${formatDate(inDays(30))})`,
+    short: 'כניסה מתאימה',
+  },
+  {
+    name: 'move_in agree, a past stored move-in shown as today',
+    criterion: 'move_in',
+    kind: 'agree',
+    profile: { move_in_date: inDays(-5) },
+    reason: `תאריך הכניסה מתאים (${formatDate(todayInIsrael())})`,
+    short: 'כניסה מתאימה',
+  },
+  {
+    name: 'move_in differ',
+    criterion: 'move_in',
+    kind: 'differ',
+    profile: { move_in_date: inDays(70) },
+    reason: `מבקשים כניסה ב־${formatDate(inDays(70))}`,
+    short: `כניסה ${formatDate(inDays(70))}`,
+  },
+  {
+    name: 'move_in differ, a past stored move-in shown as today',
+    criterion: 'move_in',
+    kind: 'differ',
+    profile: { move_in_date: inDays(-20) },
+    reason: `מבקשים כניסה ב־${formatDate(todayInIsrael())}`,
+    short: `כניסה ${formatDate(todayInIsrael())}`,
+  },
+  {
+    name: 'area agree',
+    criterion: 'area',
+    kind: 'agree',
+    reason: 'מחפשים באזור הזה',
+    short: 'באזור',
+  },
+  {
+    name: 'area differ',
+    criterion: 'area',
+    kind: 'differ',
+    reason: 'מחפשים באזור אחר',
+    short: 'אזור אחר',
+  },
+  {
+    name: 'household agree',
+    criterion: 'household',
+    kind: 'agree',
+    profile: { household: 'couple' },
+    reason: 'זוג — כפי שביקשת',
+    short: 'משק בית מתאים',
+  },
+  {
+    name: 'household differ',
+    criterion: 'household',
+    kind: 'differ',
+    profile: { household: 'roommates' },
+    reason: 'שותפים — לא ברשימה שלך',
+    short: 'משק בית אחר',
+  },
+  {
+    name: 'contract agree, 12 months',
+    criterion: 'contract',
+    kind: 'agree',
+    profile: { contract_months: 12 },
+    reason: 'מחפשים חוזה לשנה',
+    short: 'חוזה מתאים',
+  },
+  {
+    name: 'contract agree, 24 months agreeLong',
+    criterion: 'contract',
+    kind: 'agree',
+    profile: { contract_months: 24 },
+    reason: 'מחפשים חוזה לשנתיים',
+    short: 'חוזה ארוך טווח',
+  },
+  {
+    name: 'contract agree, 36 months agreeLong',
+    criterion: 'contract',
+    kind: 'agree',
+    profile: { contract_months: 36 },
+    reason: 'מחפשים חוזה ל3 שנים ומעלה',
+    short: 'חוזה ארוך טווח',
+  },
+  {
+    name: 'contract differ',
+    criterion: 'contract',
+    kind: 'differ',
+    profile: { contract_months: 6 },
+    reason: 'מחפשים חוזה לחצי שנה בלבד',
+    short: 'חוזה קצר',
+  },
+  {
+    name: 'parking (1 needed, 1 spot) agree',
+    criterion: 'parking',
+    kind: 'agree',
+    profile: { parking_needed: 1 },
+    spots: 1,
+    reason: 'צריכים חניה אחת — יש',
+    short: 'חניה',
+  },
+  {
+    name: 'parking (2 needed, 2 spots) agree',
+    criterion: 'parking',
+    kind: 'agree',
+    profile: { parking_needed: 2 },
+    spots: 2,
+    reason: 'צריכים 2 חניות — יש',
+    short: 'חניה',
+  },
+  {
+    name: 'parking (0 needed, no spot) agreeNone',
+    criterion: 'parking',
+    kind: 'agree',
+    profile: { parking_needed: 0 },
+    spots: 0,
+    reason: 'לא צריכים חניה',
+    short: 'חניה',
+  },
+  {
+    name: 'parking (2 needed, 1 spot) as agree: the differ wording',
+    criterion: 'parking',
+    kind: 'agree',
+    profile: { parking_needed: 2 },
+    spots: 1,
+    reason: 'ביקשו 2 חניות, בדירה יש 1',
+    short: 'חניה',
+  },
+  {
+    name: 'parking (2 needed, 1 spot) differ',
+    criterion: 'parking',
+    kind: 'differ',
+    profile: { parking_needed: 2 },
+    spots: 1,
+    reason: 'ביקשו 2 חניות, בדירה יש 1',
+    short: 'חסרה חניה',
+  },
+  {
+    name: 'parking (1 needed, no spot) differNone',
+    criterion: 'parking',
+    kind: 'differ',
+    profile: { parking_needed: 1 },
+    spots: 0,
+    reason: 'ביקשו חניה אחת, בדירה אין חניה',
+    short: 'חסרה חניה',
+  },
+  {
+    name: 'parking (2 needed, no spot) differNone',
+    criterion: 'parking',
+    kind: 'differ',
+    profile: { parking_needed: 2 },
+    spots: 0,
+    reason: 'ביקשו 2 חניות, בדירה אין חניה',
+    short: 'חסרה חניה',
+  },
+  {
+    name: 'smoking agree, a non-smoker',
+    criterion: 'smoking',
+    kind: 'agree',
+    profile: { smoker: false },
+    reason: 'לא מעשנים',
+    short: 'לא מעשנים',
+  },
+  {
+    name: 'smoking agree, a smoker where smoking is allowed (agreeSmoker)',
+    criterion: 'smoking',
+    kind: 'agree',
+    profile: { smoker: true },
+    reason: 'מעשנים — מותר אצלך',
+    short: 'מעשנים, מותר',
+  },
+  {
+    name: 'smoking differ',
+    criterion: 'smoking',
+    kind: 'differ',
+    profile: { smoker: true },
+    reason: 'מעשנים',
+    short: 'מעשנים',
+  },
+  {
+    name: 'pets agree, no pets',
+    criterion: 'pets',
+    kind: 'agree',
+    profile: { has_pets: false },
+    reason: 'בלי חיות מחמד',
+    short: 'בלי חיות',
+  },
+  {
+    name: 'pets agree, a pet where pets are allowed (agreePet)',
+    criterion: 'pets',
+    kind: 'agree',
+    profile: { has_pets: true },
+    reason: 'עם חיית מחמד — מותר אצלך',
+    short: 'חיית מחמד, מותר',
+  },
+  {
+    name: 'pets differ',
+    criterion: 'pets',
+    kind: 'differ',
+    profile: { has_pets: true },
+    reason: 'עם חיית מחמד',
+    short: 'עם חיית מחמד',
+  },
+];
+
 describe('reasons', () => {
   it.each(rows)('ac2_reason_copy: $name', (row) => {
     const listing = publicListing(row.listing);
@@ -313,4 +551,33 @@ describe('reasons', () => {
       expect(seekerShort(criterion, kind, publicListing(listing), undefined, i18n.t)).toBe(short);
     },
   );
+
+  it.each(ownerRows)('ac6_owner_copy: $name', (row) => {
+    const applicant = applicantProfile(row.profile);
+    expect(ownerReason(row.criterion, row.kind, applicant, row.spots ?? 1, i18n.t)).toBe(
+      row.reason,
+    );
+    expect(ownerShort(row.criterion, row.kind, applicant, i18n.t)).toBe(row.short);
+  });
+
+  it('ac6_owner_copy: every criterion and side has a row', () => {
+    const criteria: Criterion[] = [
+      'budget',
+      'move_in',
+      'area',
+      'household',
+      'contract',
+      'parking',
+      'smoking',
+      'pets',
+    ];
+    for (const criterion of criteria) {
+      for (const kind of ['agree', 'differ'] as const) {
+        expect(
+          ownerRows.some((r) => r.criterion === criterion && r.kind === kind),
+          `${criterion} ${kind}`,
+        ).toBe(true);
+      }
+    }
+  });
 });

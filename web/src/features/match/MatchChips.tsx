@@ -1,11 +1,14 @@
 import { useTranslation } from 'react-i18next';
 
+import type { ApplicantProfileOut } from '../applicants/api';
 import type { ListingPublic } from '../listings/api';
 import type { SeekerProfileOut } from '../profile/api';
-import { seekerShort } from './reasons';
-import type { MatchOut } from './types';
+import { ownerShort, seekerShort } from './reasons';
+import type { Criterion, MatchOut, ReasonKind } from './types';
 
-type Props = {
+/** A search card's chips, about a listing (the seeker's voice, the default). */
+type SeekerProps = {
+  voice?: 'seeker';
   match: MatchOut;
   listing: ListingPublic;
   /** The seeker's profile; `undefined` while it loads or when it failed (the `move_in` differ chip
@@ -13,22 +16,39 @@ type Props = {
   profile: SeekerProfileOut | undefined;
 };
 
+/** An inbox card's chips, about an applicant (the owner's voice). */
+type OwnerProps = {
+  voice: 'owner';
+  match: MatchOut;
+  /** The applicant's housing summary. */
+  profile: ApplicantProfileOut;
+  /** The listing's `parking_spots`. */
+  spots: number;
+};
+
+type Props = SeekerProps | OwnerProps;
+
 const chip = 'rounded-full px-[10px] py-1 text-xs font-semibold';
 const agreeChip = `${chip} bg-accent-tint text-accent-text`;
 const differChip = `${chip} bg-warn text-warn-text`;
 
-/** A search card's two short reasons: the top agreeing criterion (teal) and the differing one
- * (amber). Not interactive. */
-export function MatchChips({ match, listing, profile }: Props) {
+/** A card's two short reasons: the top agreeing criterion (teal) and the differing one (amber).
+ * Not interactive. */
+export function MatchChips(props: Props) {
   const { t } = useTranslation();
-  const chips: { kind: 'agree' | 'differ'; text: string; className: string }[] = [];
+  const short = (criterion: Criterion, kind: ReasonKind) =>
+    props.voice === 'owner'
+      ? ownerShort(criterion, kind, props.profile, t)
+      : seekerShort(criterion, kind, props.listing, props.profile, t);
+  const { match } = props;
+  const chips: { kind: ReasonKind; text: string; className: string }[] = [];
   const top = match.agrees[0];
   if (top !== undefined) {
-    const text = seekerShort(top, 'agree', listing, profile, t);
+    const text = short(top, 'agree');
     if (text !== null) chips.push({ kind: 'agree', text, className: agreeChip });
   }
   if (match.differs !== null) {
-    const text = seekerShort(match.differs, 'differ', listing, profile, t);
+    const text = short(match.differs, 'differ');
     if (text !== null) chips.push({ kind: 'differ', text, className: differChip });
   }
   if (chips.length === 0) return null;

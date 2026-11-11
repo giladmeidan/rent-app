@@ -1,9 +1,12 @@
 // Fixtures for the applicants tests; the fetch mock and render helpers are the auth harness's,
 // `listing()` / `owner` / `seeker` the listings tests'.
-import type { ApplicantOut } from '../api';
+import type { MatchOut } from '../../match/types';
+import { inDays } from '../../profile/__tests__/fixtures';
+import type { ApplicantOut, ApplicantProfileOut } from '../api';
 
 let n = 0;
-/** A submitted applicant as `GET /listings/{id}/applications` returns it, unless overridden. */
+/** A submitted applicant as `GET /listings/{id}/applications` returns it, unless overridden. No
+ * match and no profile (an applicant from before Slice 6) unless given. */
 export function applicant(overrides: Partial<ApplicantOut> = {}): ApplicantOut {
   n += 1;
   return {
@@ -17,4 +20,30 @@ export function applicant(overrides: Partial<ApplicantOut> = {}): ApplicantOut {
     profile: null,
     ...overrides,
   };
+}
+
+/** An applicant's housing summary (0006a's `P` without budget or areas: a couple moving in 30 days
+ * ahead, no pets, non-smoker, 24 months, one parking spot), unless overridden. */
+export function applicantProfile(
+  overrides: Partial<ApplicantProfileOut> = {},
+): ApplicantProfileOut {
+  return {
+    household: 'couple',
+    move_in_date: inDays(30),
+    move_in_flexible: false,
+    has_pets: false,
+    smoker: false,
+    contract_months: 24,
+    parking_needed: 1,
+    ...overrides,
+  };
+}
+
+/** A match as `0006b` explains it: `score`, up to three agreeing criteria and one differing. */
+export function match(
+  score: number,
+  agrees: MatchOut['agrees'] = ['budget', 'move_in', 'area'],
+  differs: MatchOut['differs'] = null,
+): MatchOut {
+  return { score, agrees, differs };
 }
