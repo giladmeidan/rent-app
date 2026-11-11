@@ -1,8 +1,10 @@
 """`applications` table (spec 0004a): a seeker's application to a listing, with a short message.
 
-Every CHECK, the unique constraint, the FKs and the index match migrations 0005, 0008 and 0010
-exactly (autogenerate must see no diff). One row per (listing, seeker), ever: re-applying after a
-withdrawal reopens the same row (`services/applications.py`)."""
+Every CHECK, the unique constraint, the FKs and the index match migrations 0005, 0008, 0010 and
+0011 exactly (autogenerate must see no diff). One row per (listing, seeker), ever: re-applying after
+a withdrawal reopens the same row (`services/applications.py`).
+From 0008a `source` says how it began, `'apply'` (with a message) or `'like'` (a mutual like,
+`services/people.py`, with no message: `ck_applications_message`)."""
 
 import datetime as dt
 import uuid
@@ -26,9 +28,14 @@ from app.models import Base
 class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
+        # A message exactly on an applied row (migration 0011); `IS NOT NULL` keeps a NULL from
+        # passing a CHECK that would evaluate to NULL.
         CheckConstraint(
-            "char_length(message) BETWEEN 1 AND 500", name="ck_applications_message_length"
+            "(source = 'apply' AND message IS NOT NULL AND char_length(message) BETWEEN 1 AND 500)"
+            " OR (source = 'like' AND message IS NULL)",
+            name="ck_applications_message",
         ),
+        CheckConstraint("source IN ('apply', 'like')", name="ck_applications_source"),
         CheckConstraint(
             "status IN ('submitted', 'shortlisted', 'declined', 'withdrawn')",
             name="ck_applications_status",
@@ -51,8 +58,11 @@ class Application(Base):
     seeker_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    # Plain text, stored and returned as sent (after `ApplicationIn`'s rules); never HTML.
-    message: Mapped[str] = mapped_column(Text, nullable=False)
+    # Plain text, stored and returned as sent (after `ApplicationIn`'s rules); never HTML. NULL
+    # exactly when `source = 'like'`.
+    message: Mapped[str | None] = mapped_column(Text)
+    # 'apply' or 'like' (0008a). The server default backfilled 0011 and serves the SQL test helpers.
+    source: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'apply'"))
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'submitted'"))
     # The listing's price and area when the seeker applied (spec 0006c, security B1), set again
     # when a withdrawn application is reopened. The owner's inbox scores the budget and area

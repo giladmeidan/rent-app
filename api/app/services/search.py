@@ -18,8 +18,12 @@ missing from their page, their map and their `total` alike. It is the first call
 and it bites only for a seeker whose profile has a room section, so `total` differs per caller
 (the router's `Vary: Cookie` / `Cache-Control: private` cover it). The listing page never filters on
 the fit: it reports it. A non-public listing is indistinguishable from an unknown id
-(`ListingNotFoundError`, a 404)."""
+(`ListingNotFoundError`, a 404).
 
+The seeker's likes (spec 0008a, `liked_rooms`) are the public rooms they liked or whose lister
+liked them, read here because they build on `_public_listings()`."""
+
+import datetime as dt
 import uuid
 from typing import Any
 
@@ -28,7 +32,7 @@ from sqlalchemy.orm import Session, undefer
 
 from app.matching.fit import room_fit
 from app.matching.score import explain_row, match_columns
-from app.models import Area, Listing, SeekerProfile
+from app.models import Area, Listing, RoomPair, SeekerProfile
 from app.models.listing import PLAIN_GEOMETRY
 from app.schemas.match import MatchOut
 from app.schemas.search import SearchParams, SearchSort
@@ -180,3 +184,35 @@ def get_public_listing_with_match(
         raise ListingNotFoundError
     fit: bool | None = row.room_fit
     return row[0], explain_row(row), fit
+
+
+def liked_rooms(
+    db: Session, seeker_id: uuid.UUID
+) -> list[tuple[Listing, MatchOut, dt.datetime | None, dt.datetime | None]]:
+    """The public rooms with a like between them and `seeker_id` (either side), each with the
+    seeker's match, `lister_liked_at` and `seeker_liked_at`, newest like first. Only rooms (a room
+    switched to an apartment keeps its pairs; `room_fit` is NULL for it), whose fit is not false,
+    that are not the seeker's own and have no non-withdrawn application from them (the
+    application took over). Never names the owner. One statement."""
+    # Imported here: `services/people.py` imports this module.
+    from app.services.people import open_application
+
+    query = (
+        _with_profile(_public_listings(), seeker_id)
+        .join(RoomPair, and_(RoomPair.listing_id == Listing.id, RoomPair.seeker_id == seeker_id))
+        .where(
+            Listing.listing_type == "room",
+            Listing.owner_id != seeker_id,
+            room_fit(Listing, SeekerProfile).is_not(False),
+            or_(RoomPair.lister_liked_at.is_not(None), RoomPair.seeker_liked_at.is_not(None)),
+            ~open_application(Listing.id, seeker_id),
+        )
+    )
+    matched, _ = _with_match(query)
+    newest = func.coalesce(RoomPair.seeker_liked_at, RoomPair.lister_liked_at)
+    rows = db.execute(
+        matched.add_columns(RoomPair.lister_liked_at, RoomPair.seeker_liked_at).order_by(
+            newest.desc(), Listing.id
+        )
+    ).all()
+    return [(row[0], explain_row(row), row.lister_liked_at, row.seeker_liked_at) for row in rows]

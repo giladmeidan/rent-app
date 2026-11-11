@@ -23,6 +23,8 @@ export function profile(overrides: Partial<SeekerProfileOut> = {}): SeekerProfil
     birth_year: null,
     flatmate_gender: 'any',
     lifestyle: {},
+    people_visible: false,
+    about_me: null,
     updated_at: '2026-11-10T10:00:00Z',
     ...overrides,
   };

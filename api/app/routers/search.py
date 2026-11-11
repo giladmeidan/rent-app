@@ -10,7 +10,9 @@ do not fit them from search, the map and `total`, and sets the listing page's `r
 cookie is `Cache-Control: private` (0006b): the body may differ per caller. The cookie also
 decides whether a room's flatmates' ages and questionnaire answers are shown: only a signed-in
 seeker gets them, everyone else `[]` and `{}` (`ListingPublic.from_listing`, Gilad (b),
-2026-11-11). A listing that is not public is a 404 `not_found`, the same body as an unknown id."""
+2026-11-11). A listing that is not public is a 404 `not_found`, the same body as an unknown id. A
+seeker on a room also gets the listing page's `like` (spec 0008a), the likes between them and the
+room."""
 
 import uuid
 from typing import Annotated, Any
@@ -24,6 +26,7 @@ from app.models import User
 from app.schemas.error import ErrorOut
 from app.schemas.search import ListingDetail, ListingPublic, ListingSearchOut, SearchParams
 from app.services import applications as applications_service
+from app.services import people as people_service
 from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
@@ -94,8 +97,9 @@ def get_listing(
     request: Request,
     response: Response,
 ) -> ListingDetail:
-    """A public listing with its applicant count, the caller's match and room fit; counts one view
-    (`listings.view_count`). A 404 counts nothing."""
+    """A public listing with its applicant count, the caller's match, room fit and like state
+    (spec 0008a: a seeker on a room, not their own); counts one view (`listings.view_count`). A
+    404 counts nothing."""
     try:
         listing, match, room_fit = search_service.get_public_listing_with_match(
             db, listing_id, _profile_user_id(db, user)
@@ -103,8 +107,21 @@ def get_listing(
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     count = applications_service.record_view(db, listing.id)
+    like = None
+    if (
+        user is not None
+        and _is_seeker(user)
+        and listing.listing_type == "room"
+        and listing.owner_id != user.id
+    ):
+        like = people_service.like_state(db, user.id, listing.id)
     _private_if_cookie(request, response)
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
-        listing, seeker=_is_seeker(user), match=match, applicant_count=count, room_fit=room_fit
+        listing,
+        seeker=_is_seeker(user),
+        match=match,
+        applicant_count=count,
+        room_fit=room_fit,
+        like=like,
     )

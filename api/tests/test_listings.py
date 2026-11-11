@@ -362,6 +362,7 @@ def test_ac6_me_listings_is_own_newest_first(
     body = response.json()
     assert [item["id"] for item in body] == [second["id"], first["id"]]
     assert [item["status"] for item in body] == ["paused", "active"]
+    assert [item["liked_me_count"] for item in body] == [0, 0]  # 0008a, in the same statement
     assert len(sent) == 2, sent
     assert sum("FROM listings" in statement for statement in sent) == 1
 

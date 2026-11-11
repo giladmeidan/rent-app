@@ -1,6 +1,7 @@
 """Shared text rules for API schemas (specs 0001a, 0002a, 0002d)."""
 
 import unicodedata
+from typing import Any
 
 # Control, format (bidi, zero-width), line/paragraph separators, private use, lone surrogates.
 _INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp", "Co", "Cs"})
@@ -85,3 +86,9 @@ def visible_characters_only(
     if require_visible and not has_visible:
         raise ValueError(f"{field} must contain a visible character".lstrip())
     return value
+
+
+def lf_newlines(value: Any) -> Any:
+    """`\\r\\n` -> `\\n` on a string (a `BeforeValidator`); anything else unchanged. Here, not in
+    `schemas/listing.py`, so `schemas/profile.py` can use it too (listing imports profile)."""
+    return value.replace("\r\n", "\n") if isinstance(value, str) else value
