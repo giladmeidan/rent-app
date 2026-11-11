@@ -1,7 +1,7 @@
 ---
 id: 0007f
 title: A seeker (or a visitor) finds rooms next to apartments in /search with a type filter, reads a room's flatmates and lifestyle on its page, and is told plainly when a room cannot take their application
-status: in-progress
+status: in-review
 depends_on: [0007g, 0007d, 0006f]   # 0007g (implies 0007b): the `lifestyle` criterion, its `Criterion` value and the `reasons.ts` stub; 0007b: rooms public, `listing_type` filter, `room_fit`, the 409s, the room fields; 0007d: `features/lifestyle`, `roomSectionHref`, `rooms.genderPreference.*`, `lifestyle.<key>.topic`; `SeekerProfileOut.birth_year` comes from 0007a; 0006f: the match module this extends (`reasons.ts`, `MatchChips`, `MatchCard`)
 reviewers: [code, qa, ux]           # ux: new filter, new card variant and new page sections vs the artboards; qa: URL rules, apply-gate branches
 estimate: 1 coder run               # top of the range, same size as 0006f; if it overruns, split the listing page + apply gate (AC7-AC10, AC13) into 0007h
@@ -439,3 +439,25 @@ half and AC12. `cardTitle` / `flatmatesText` / `genderPreferenceLabel` stay in 0
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0007f-room-search-web.md - PRODUCT.md "Rooms", "Search" - design/screens-v1/Search.dc.html,
              SearchDesktop.dc.html, Listing.dc.html
+
+    Spec 0007f - Rooms in search and on the listing page (web)   PR OPEN (not merged), code head 8de93b8
+    Shipped: /search shows rooms next to apartments with a "סוג" filter (both types on by default, `listing_type`
+             in the URL, the last box locked with a hint; the map follows it). A room card: "חדר בדירת שותפים"
+             photo pill, "חדר ב־3 חדרים, רחוב …", "2 שותפים (27, 30)", "לנשים בלבד", and a teal "שותפים בגילך"
+             for a seeker within 5 years of every flatmate. The room page adds "על החדר" and "אורח החיים בדירה".
+             Apply: one neutral misfit line when the room cannot take the seeker, or a link to the profile's room
+             section for a gendered room; both 409s swap the controls with no reload. The `lifestyle` match reason
+             is worded. Room privacy (b): visitors and owners see "2 שותפים" and no lifestyle block, no empty headings.
+    Demo: make dev -> an owner posts a women room (2 flatmates, 27 and 30, two answers) -> logged out, /search
+          shows "2 שותפים" and "לנשים בלבד"; uncheck "דירה שלמה" -> rooms only -> as a seeker with no room
+          section, open it: the ages, "אורח החיים בדירה", and "השלמת הפרטים בפרופיל" instead of the apply button.
+    Tests: +17 web test blocks (AC1-AC11, incl. 4 parametrized lifestyle-copy rows), +0 new e2e (AC12/AC13 extend
+           search.spec and applications.spec ac9; no new signup)   (api 432, web 254)
+    CI: api + web on the single push (result on the PR); e2e local while CI e2e is off: 10 of 10, 30.0 s on 8de93b8
+    Findings: 0 blockers, 0 majors (code, qa, ux; qa and ux static while 5173 was held). 6 minors: 3 fixed (one
+              topic helper, listing cache reset on profile save, gate copy names the section), 3 to FOLLOWUPS
+              (type-filter back/forward test, focus after a 409 swap, 0007d's "שעות לילה"/"חברתיות" topic copy); 11 nits dropped
+    Decisions I need from you: none. (Spec updated the same day for your room-privacy option (b).)
+    Changed in PRODUCT.md: nothing
+    Next: 0007e merges second, so it drops RoomPreview's flatmates / "who" chips (the card shows them now). Room
+          titles on the inbox, applications and chat screens are a FOLLOWUPS line (chat needs `listing_type` first).
