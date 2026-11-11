@@ -16,6 +16,7 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
 from app.schemas.listing import Furnished, ListingType, Rooms
+from app.schemas.profile import ContractMonths, HouseholdsOut
 
 SearchSort = Literal["newest", "price_asc", "price_desc"]
 SearchPrice = Annotated[int, Field(ge=0, le=100_000)]
@@ -103,6 +104,10 @@ class ListingPublic(BaseModel):
     arnona_ils: int | None
     vaad_ils: int | None
     description: str | None
+    # Who the listing suits (spec 0006a): public, the seeker sees what the owner is looking for.
+    accepted_households: HouseholdsOut
+    smoking_allowed: bool
+    min_contract_months: ContractMonths | None
     created_at: dt.datetime
     lat: float | None
     lng: float | None

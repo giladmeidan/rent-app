@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { API, postListing, signUp } from './helpers';
+import { API, postListing, putProfile, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
 
@@ -26,6 +26,8 @@ test('ac11_seeker_applies_and_withdraws', async ({ page }) => {
 
   // Signing up from the prompt lands back on the listing.
   await signUp(page, 'seeker', { start: signupHref ?? '', expectUrl: `/listings/${id}` });
+  // Applying needs a housing profile (0006a); the profile screen is 0006d's.
+  await putProfile(page);
 
   // Apply.
   await section.getByRole('button', { name: he.applications.apply }).click();
