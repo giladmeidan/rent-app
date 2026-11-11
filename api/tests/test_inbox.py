@@ -46,6 +46,7 @@ APPLICANT_KEYS = {
     "match",
     "profile",
     "room",  # 0007c
+    "source",  # 0008a
 }
 COUNT_KEYS = {"applicant_count", "new_applicant_count"}
 LISTING_OUT_KEYS = set(ListingOut.model_fields)
@@ -169,6 +170,7 @@ def test_ac1_owner_lists_applicants(
         assert [item["message"] for item in body] == ["Hi from 1", "Hi from 2", "Hi from 3"]
         for item in body:
             assert set(item) == APPLICANT_KEYS
+            assert item["source"] == "apply"  # 0008a
         assert "@example.com" not in response.text
         for seeker_id in (*seekers.values(), stranger):
             assert str(seeker_id) not in response.text
@@ -372,6 +374,7 @@ def test_ac4_status_transitions(
         if code == 200:
             body = response.json()
             assert set(body) == APPLICANT_KEYS
+            assert body["source"] == "apply"  # 0008a
             assert body["id"] == str(application_id)
             assert body["status"] == target
             assert body["applicant_name"] == name
@@ -937,7 +940,15 @@ def test_ac9_owner_match_ignores_price_and_area_edits_after_apply(
     applied = seeker.post(f"/listings/{listing}/applications", json={"message": "Hello there"})
     assert applied.status_code == 201, applied.text
     s1 = applied.json()["id"]
-    assert set(applied.json()) == {"id", "status", "message", "created_at", "updated_at", "listing"}
+    assert set(applied.json()) == {
+        "id",
+        "status",
+        "source",  # 0008a
+        "message",
+        "created_at",
+        "updated_at",
+        "listing",
+    }
     snapshot = "SELECT price_ils_at_apply, area_id_at_apply FROM applications WHERE id = :a"
     with db_engine.connect() as conn:
         assert tuple(conn.execute(text(snapshot), {"a": s1}).one()) == (7000, gush_dan)

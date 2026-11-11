@@ -8,7 +8,9 @@ Rules (PRODUCT.md "Applications"):
   after a **withdrawal** reopens the same row as new (`submitted`, the new message, `created_at`
   now); after `submitted`, `shortlisted` or `declined` it is `AlreadyAppliedError`. Both are one
   `INSERT ... ON CONFLICT DO UPDATE ... WHERE status = 'withdrawn'`, so two concurrent applies
-  yield one application and one `AlreadyAppliedError`.
+  yield one application and one `AlreadyAppliedError`. Applying sets `source = 'apply'`, also on a
+  reopen (spec 0008a); a mutual like reopens a withdrawn row the same way, as a shortlisted
+  `source = 'like'` application without a message (`services/people.py`).
 - Only a public listing (`search.get_public_listing_with_match`, the one visibility rule) can be
   applied to, apartments and rooms alike (spec 0007b), and never the caller's own: both are
   `ListingNotFoundError` (a 404, the same as an unknown id).
@@ -121,6 +123,7 @@ def _upsert(
     stmt = insert(Application).values(
         listing_id=listing.id,
         seeker_id=seeker_id,
+        source="apply",
         message=message,
         price_ils_at_apply=listing.price_ils,
         area_id_at_apply=listing.area_id,
@@ -130,6 +133,7 @@ def _upsert(
         constraint="uq_applications_listing_seeker",
         set_={
             "status": "submitted",
+            "source": "apply",
             "message": stmt.excluded.message,
             "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
             "area_id_at_apply": stmt.excluded.area_id_at_apply,

@@ -1,5 +1,6 @@
 """Seeker housing profile API (spec 0006a): AC1-AC4 and AC10 (AC5, AC6 are in
-`test_applications.py`, AC7, AC8 in `test_listings.py`, AC9 in `test_migrations.py`)."""
+`test_applications.py`, AC7, AC8 in `test_listings.py`, AC9 in `test_migrations.py`). Spec 0008a's
+AC13 (`people_visible`, `about_me`) and the `AboutMe` unit tests are at the end."""
 
 import datetime as dt
 import uuid
@@ -8,8 +9,10 @@ from typing import Any
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Engine, text
 
+from app.schemas.profile import ABOUT_ME_MAX_LENGTH, AboutMe
 from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import Outbox, make_profile, make_seeker, signup
 
@@ -29,6 +32,8 @@ PROFILE_KEYS = {
     "birth_year",
     "flatmate_gender",
     "lifestyle",
+    "people_visible",  # 0008a
+    "about_me",
     "updated_at",
 }
 # The room section of a profile without one (spec 0007a).
@@ -38,6 +43,8 @@ ROOM_OFF: dict[str, Any] = {
     "flatmate_gender": "any",
     "lifestyle": {},
 }
+# People browse off (spec 0008a), as a profile without the two fields stores it.
+PEOPLE_OFF: dict[str, Any] = {"people_visible": False, "about_me": None}
 NOT_FOUND = {"detail": "seeker_profile_not_found"}
 
 
@@ -90,7 +97,11 @@ def test_ac1_seeker_creates_and_reads_profile(seeker: TestClient, gush_dan: uuid
     assert response.status_code == 200, response.text
     saved = response.json()
     assert set(saved) == PROFILE_KEYS
-    assert {k: v for k, v in saved.items() if k != "updated_at"} == {**ROOM_OFF, **body}
+    assert {k: v for k, v in saved.items() if k != "updated_at"} == {
+        **ROOM_OFF,
+        **PEOPLE_OFF,
+        **body,
+    }
     read = seeker.get("/me/profile")
     assert read.status_code == 200
     assert read.json() == saved
@@ -108,7 +119,11 @@ def test_ac2_put_replaces_profile(
     assert second.status_code == 200, second.text
     body = second.json()
     assert (body["budget_max_ils"], body["household"], body["has_pets"]) == (9000, "family", True)
-    assert {k: v for k, v in body.items() if k != "updated_at"} == {**ROOM_OFF, **changed}
+    assert {k: v for k, v in body.items() if k != "updated_at"} == {
+        **ROOM_OFF,
+        **PEOPLE_OFF,
+        **changed,
+    }
     seeker_id = uuid.UUID(seeker.get("/me").json()["id"])
     with db_engine.connect() as conn:
         rows = conn.execute(
@@ -362,3 +377,72 @@ def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
         assert [entry["loc"] for entry in detail] == [["body", "lifestyle"]]
         assert "I am pregnant" not in response.text
     assert _profile_count(db_engine) == 0
+
+
+# --- 0008a: people browse fields (`people_visible`, `about_me`), the room section's too
+
+_ABOUT_ME_BAD = [
+    ("too_long", "x" * 301),
+    ("spaces", "   "),
+    ("empty", ""),
+    ("private_use", "hi  there"),
+    ("no_letter_or_digit", "..."),
+    ("bidi_override", "hi‮there"),
+    ("lone_cr", "line\rline"),
+]
+
+
+@pytest.mark.parametrize(
+    ("value"), [v for _, v in _ABOUT_ME_BAD], ids=[i for i, _ in _ABOUT_ME_BAD]
+)
+def test_about_me_type_rejects(value: str) -> None:
+    with pytest.raises(ValidationError):
+        TypeAdapter(AboutMe).validate_python(value)
+
+
+def test_about_me_type_strips_and_normalises_newlines() -> None:
+    adapter = TypeAdapter(AboutMe)
+    assert adapter.validate_python("  Quiet\r\ntidy  ") == "Quiet\ntidy"
+    assert adapter.validate_python("x" * ABOUT_ME_MAX_LENGTH) == "x" * ABOUT_ME_MAX_LENGTH
+    # 300 after the strip: surrounding spaces do not count.
+    assert adapter.validate_python(f"  {'x' * ABOUT_ME_MAX_LENGTH}  ") == "x" * ABOUT_ME_MAX_LENGTH
+
+
+def _people_row(engine: Engine) -> tuple[Any, ...]:
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT people_visible, about_me FROM seeker_profiles")).one()
+    return tuple(row)
+
+
+def test_ac13_people_fields(seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine) -> None:
+    for change in ({"people_visible": True}, {"about_me": "Hello there"}):
+        response = _put(seeker, {**_p(gush_dan), **change})
+        assert response.status_code == 422, (change, response.text)
+        assert isinstance(response.json()["detail"], list)
+    for _, bad in _ABOUT_ME_BAD:
+        response = _put(seeker, {**_p(gush_dan), **_WOMAN, "about_me": bad})
+        assert response.status_code == 422, (bad, response.text)
+        assert [entry["loc"] for entry in response.json()["detail"]] == [["body", "about_me"]]
+        assert "input" not in response.text
+    assert _profile_count(db_engine) == 0
+
+    body = {**_p(gush_dan), **_WOMAN, "people_visible": True, "about_me": "  Quiet\r\ntidy  "}
+    response = _put(seeker, body)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert (saved["people_visible"], saved["about_me"]) == (True, "Quiet\ntidy")
+    assert _people_row(db_engine) == (True, "Quiet\ntidy")
+    assert seeker.get("/me/profile").json() == saved
+
+    longest = _put(seeker, {**_p(gush_dan), **_WOMAN, "about_me": "x" * 300})
+    assert longest.status_code == 200, longest.text
+    assert longest.json()["about_me"] == "x" * 300
+
+    # PUT replaces: omitting both turns people browse off and clears the text.
+    response = _put(seeker, {**_p(gush_dan), **_WOMAN})
+    assert response.status_code == 200, response.text
+    assert {k: response.json()[k] for k in PEOPLE_OFF} == PEOPLE_OFF
+    assert _people_row(db_engine) == (False, None)
+    assert seeker.get("/me/profile").json() == response.json()
+    explicit = _put(seeker, {**_p(gush_dan), "people_visible": False, "about_me": None})
+    assert explicit.status_code == 200, explicit.text  # off and empty need no room section

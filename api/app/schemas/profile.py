@@ -7,13 +7,26 @@ lists its fields explicitly (NF2): adding a column never adds it to a response.
 
 Spec 0007a adds the types rooms share (`SeekerGender`, `GenderPreference`, `Lifestyle`, the age
 bounds) and the profile's room section: `gender` (None = not looking for a room), an optional
-`birth_year`, `flatmate_gender` and `lifestyle`. Personal data: no message names a sent value."""
+`birth_year`, `flatmate_gender` and `lifestyle`. Personal data: no message names a sent value.
+
+Spec 0008a adds `people_visible` (opt in to room listers' people browse) and `about_me` (plain text,
+1-300 characters) to the room section: neither without a `gender`."""
 
 import datetime as dt
 import uuid
 from typing import Annotated, Literal, Self, get_args
 
-from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
+
+from app.schemas._text import lf_newlines, visible_characters_only
 
 Household = Literal["single", "couple", "family", "roommates"]
 # The canonical order: `accepted_households` is stored and returned in it.
@@ -52,6 +65,8 @@ Lifestyle = Annotated[dict[LifestyleKey, LifestyleAnswer], BeforeValidator(_know
 
 AGE_MIN = 18
 AGE_MAX = 99
+
+ABOUT_ME_MAX_LENGTH = 300  # ck_seeker_profiles_about_me (migration 0011)
 
 MOVE_IN_MAX_DAYS = 365
 AREA_IDS_MAX = 20
@@ -109,6 +124,28 @@ ParkingNeeded = Annotated[int, Field(ge=0, le=2)]
 BirthYear = Annotated[int, AfterValidator(_adult_birth_year)]
 
 
+def _visible_about_me(value: str) -> str:
+    return visible_characters_only(value, allow_newlines=True, field="about_me", require_alnum=True)
+
+
+def _lf_stripped(value: object) -> object:
+    """`\\r\\n` -> `\\n`, then stripped. The strip runs here as well: with a `BeforeValidator` in
+    front, Pydantic applies `StringConstraints`' own `strip_whitespace` only **after** its length
+    checks, so 300 characters inside spaces would be refused."""
+    value = lf_newlines(value)
+    return value.strip() if isinstance(value, str) else value
+
+
+# Stripped on the type (`SeekerProfileIn` strips nothing) before the length check, so "   " is
+# empty; plain text, never HTML.
+AboutMe = Annotated[
+    str,
+    BeforeValidator(_lf_stripped),
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=ABOUT_ME_MAX_LENGTH),
+    AfterValidator(_visible_about_me),
+]
+
+
 class SeekerProfileIn(BaseModel):
     """The whole profile (`PUT` replaces it). Every field without a default is a deliberate answer
     the seeker must give. Every `area_ids` entry must also be an active area (the service)."""
@@ -131,15 +168,23 @@ class SeekerProfileIn(BaseModel):
     birth_year: BirthYear | None = None
     flatmate_gender: GenderPreference = Field(default_factory=lambda: "any")
     lifestyle: Lifestyle = Field(default_factory=dict)
+    # People browse (spec 0008a), also the room section. A factory for the same reason as above.
+    people_visible: bool = Field(default_factory=lambda: False)
+    about_me: AboutMe | None = None
 
     @model_validator(mode="after")
     def _room_section_needs_gender(self) -> Self:
         """As `ck_seeker_profiles_room_section`: no room field without a `gender`."""
         if self.gender is None and (
-            self.birth_year is not None or self.flatmate_gender != "any" or self.lifestyle
+            self.birth_year is not None
+            or self.flatmate_gender != "any"
+            or self.lifestyle
+            or self.people_visible
+            or self.about_me is not None
         ):
             raise ValueError(
-                "birth_year, flatmate_gender and lifestyle need gender (the room section)"
+                "birth_year, flatmate_gender, lifestyle, people_visible and about_me need gender"
+                " (the room section)"
             )
         return self
 
@@ -162,4 +207,6 @@ class SeekerProfileOut(BaseModel):
     birth_year: int | None
     flatmate_gender: GenderPreference
     lifestyle: Lifestyle
+    people_visible: bool
+    about_me: str | None
     updated_at: dt.datetime

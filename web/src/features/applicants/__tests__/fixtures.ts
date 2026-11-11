@@ -12,6 +12,7 @@ export function applicant(overrides: Partial<ApplicantOut> = {}): ApplicantOut {
   return {
     id: `00000000-0000-0000-0000-${String(n).padStart(12, 'b')}`,
     status: 'submitted',
+    source: 'apply',
     message: 'Hi, we are a quiet couple',
     applicant_name: `Applicant ${String(n)}`,
     created_at: '2026-11-10T10:00:00Z',

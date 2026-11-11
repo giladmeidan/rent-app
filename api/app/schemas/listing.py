@@ -21,7 +21,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.schemas._text import visible_characters_only
+from app.schemas._text import lf_newlines, visible_characters_only
 from app.schemas.profile import (
     AGE_MAX,
     AGE_MIN,
@@ -54,8 +54,8 @@ def _not_too_far(value: dt.date) -> dt.date:
     return value
 
 
-def _lf_newlines(value: Any) -> Any:
-    return value.replace("\r\n", "\n") if isinstance(value, str) else value
+# Kept under its old name: `schemas/application.py` and `schemas/chat.py` import it from here.
+_lf_newlines = lf_newlines
 
 
 def _visible_multiline(value: str) -> str:

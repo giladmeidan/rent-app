@@ -31,7 +31,8 @@ from tests.test_search import PUBLIC_KEYS
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
-APPLICATION_KEYS = {"id", "status", "message", "created_at", "updated_at", "listing"}
+# `source` (0008a): "apply" on every application made here.
+APPLICATION_KEYS = {"id", "status", "source", "message", "created_at", "updated_at", "listing"}
 LISTING_SUMMARY_KEYS = {"id", "listing_type", "city", "street", "rooms", "price_ils"}
 OWNER_KEYS = {"owner_id", "display_name", "email"}
 NOT_FOUND = {"detail": "not_found"}
@@ -86,6 +87,7 @@ def _keys(value: Any) -> set[str]:
 
 def _assert_application_shape(item: dict[str, Any]) -> None:
     assert set(item) == APPLICATION_KEYS
+    assert item["source"] == "apply"  # 0008a
     assert set(item["listing"]) == LISTING_SUMMARY_KEYS
     assert not _keys(item) & (OWNER_KEYS | {"seeker_id"})
 
@@ -277,6 +279,7 @@ def test_ac4_one_application_per_seeker_and_listing(
     assert reopened["id"] == first["id"]
     assert reopened["status"] == "submitted"
     assert reopened["message"] == "Second try"
+    assert reopened["source"] == "apply"  # 0008a
     assert dt.datetime.fromisoformat(reopened["created_at"]) > dt.datetime.fromisoformat(
         first["created_at"]
     )
