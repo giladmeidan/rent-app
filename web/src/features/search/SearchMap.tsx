@@ -7,12 +7,17 @@ import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM, roundBbox, type Bbox } from '../../compo
 import { MapCanvas, type Pin } from '../../components/map/MapCanvas';
 import { formatIls, formatRooms, todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
+import { MatchBadge } from '../match/MatchBadge';
+import { MatchChips } from '../match/MatchChips';
+import type { SeekerProfileOut } from '../profile/api';
 import type { Filters } from './filters';
 import { useMapSearch } from './useMapSearch';
 
 type Props = {
   /** The URL's filters, without `view`. */
   filters: Filters;
+  /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
+  profile: SeekerProfileOut | undefined;
   /** Switches to the list view (the fallback when the map cannot be shown). */
   onShowList: () => void;
 };
@@ -25,7 +30,7 @@ const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-
  * The map view of `/search`: the filters' results inside the visible box as price pins. The box is
  * component state by design (spec 0003d amends 0003b NF3); the filters stay in the URL.
  */
-export function SearchMap({ filters, onShowList }: Props) {
+export function SearchMap({ filters, profile, onShowList }: Props) {
   const { t } = useTranslation();
   const [bbox, setBbox] = useState<Bbox>();
   const [selectedId, setSelectedId] = useState<string>();
@@ -40,19 +45,27 @@ export function SearchMap({ filters, onShowList }: Props) {
     const result: Pin[] = [];
     for (const item of data?.items ?? []) {
       if (item.lat === null || item.lng === null) continue;
+      const price = formatIls(item.price_ils);
+      const label = t('search.map.pin', {
+        title: t('listings.card.title', {
+          rooms: formatRooms(item.rooms),
+          street: item.street,
+          city: item.city,
+        }),
+        price,
+      });
       result.push({
         id: item.id,
         lng: item.lng,
         lat: item.lat,
-        text: `${formatIls(item.price_ils)} ${t('listings.units.ils')}`,
-        label: t('search.map.pin', {
-          title: t('listings.card.title', {
-            rooms: formatRooms(item.rooms),
-            street: item.street,
-            city: item.city,
-          }),
-          price: formatIls(item.price_ils),
-        }),
+        text:
+          item.match === null
+            ? `${price} ${t('listings.units.ils')}`
+            : t('search.map.pinTextMatch', { price, score: item.match.score }),
+        label:
+          item.match === null
+            ? label
+            : label + t('search.map.pinMatch', { score: item.match.score }),
       });
     }
     return result;
@@ -112,7 +125,16 @@ export function SearchMap({ filters, onShowList }: Props) {
       {below}
       {selected !== undefined && (
         <div ref={cardRef}>
-          <ListingCard listing={selected} today={todayInIsrael()} to={`/listings/${selected.id}`} />
+          <ListingCard
+            listing={selected}
+            today={todayInIsrael()}
+            to={`/listings/${selected.id}`}
+            badge={selected.match && <MatchBadge score={selected.match.score} />}
+          >
+            {selected.match && (
+              <MatchChips match={selected.match} listing={selected} profile={profile} />
+            )}
+          </ListingCard>
         </div>
       )}
     </div>

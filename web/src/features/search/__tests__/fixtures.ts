@@ -45,11 +45,14 @@ export function listingDetail(overrides: Partial<ListingDetail> = {}): ListingDe
 /** `count` fresh listings. */
 export const listings = (count: number) => Array.from({ length: count }, () => publicListing());
 
-export const page = (items: ListingPublic[], total = items.length): ListingSearchOut => ({
-  items,
-  total,
-  sort: 'newest',
-});
+export type SearchSort = ListingSearchOut['sort'];
+
+/** One `GET /listings` answer; `sort` is the order the API applied (0006b). */
+export const page = (
+  items: ListingPublic[],
+  total = items.length,
+  sort: SearchSort = 'newest',
+): ListingSearchOut => ({ items, total, sort });
 
 /** A request's query as sorted `[key, value]` pairs (a set comparison that still sees repeats). */
 export function query(request: Request): [string, string][] {

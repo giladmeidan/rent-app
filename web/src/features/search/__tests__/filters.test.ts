@@ -31,6 +31,7 @@ describe('filters', () => {
         { furnished: true, elevator: true, parking: true },
         3,
       ],
+      ['sort=match', { sort: 'match' }, 0],
       ['sort=price_asc', { sort: 'price_asc' }, 0],
       ['sort=price_desc', { sort: 'price_desc' }, 0],
       [
@@ -62,7 +63,7 @@ describe('filters', () => {
       'price_max=abc',
       'rooms_min=2.3',
       'pets=maybe',
-      'sort=match',
+      'sort=foo',
       'available_by=2027-02-30',
       'colour=red',
       'price_max=-1',
@@ -87,7 +88,7 @@ describe('filters', () => {
     }
     // AC2's mixed URL keeps nothing.
     expect(
-      parse('price_max=abc&rooms_min=2.3&pets=maybe&sort=match&available_by=2027-02-30&colour=red'),
+      parse('price_max=abc&rooms_min=2.3&pets=maybe&sort=foo&available_by=2027-02-30&colour=red'),
     ).toEqual({});
 
     // A min above its max drops the max.
@@ -97,9 +98,9 @@ describe('filters', () => {
       'price_min=9000',
     );
 
-    // `newest` parses, but as the default it is omitted on output.
+    // `newest` parses and, as an explicit choice (0006f), stays on output.
     expect(parse('sort=newest')).toEqual({ sort: 'newest' });
-    expect(toSearchParams(parse('sort=newest&pets=true')).toString()).toBe('pets=true');
+    expect(toSearchParams(parse('sort=newest&pets=true')).toString()).toBe('pets=true&sort=newest');
 
     // Output order is canonical, whatever the input order; empty and undefined values are omitted.
     expect(toSearchParams(parse('sort=price_asc&pets=true&price_max=8000')).toString()).toBe(

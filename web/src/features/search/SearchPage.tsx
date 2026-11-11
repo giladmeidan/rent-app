@@ -2,8 +2,11 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
+import { useMe } from '../auth/useMe';
+import { ProfileNudge } from '../match/ProfileNudge';
+import { useProfile } from '../profile/useProfile';
 import { FiltersForm, type FormFilters } from './FiltersForm';
-import { DEFAULT_SORT, countActive, parseFilters, toSearchParams, type Sort } from './filters';
+import { countActive, parseFilters, toSearchParams, type Sort } from './filters';
 import { ResultsList } from './ResultsList';
 import { SearchMap } from './SearchMap';
 import { SortSelect } from './SortSelect';
@@ -25,6 +28,18 @@ export function SearchPage() {
   const active = countActive(filters);
   // The map view sends its own query; the list's key never holds `view`.
   const search = useSearch(filtersWithoutView, view !== 'map');
+  // A visitor or an owner never requests the profile; it words the match chips and decides the
+  // sort select until the API has answered.
+  const me = useMe();
+  const profile = useProfile(me.data?.role === 'seeker').data ?? undefined;
+  const hasProfile = profile !== undefined;
+  // The API picks the order from the cookie on the search itself, so its answer decides; before
+  // it, the URL's sort, where `match` without a profile is `newest`, as the API will answer.
+  const sortValue: Sort =
+    search.data?.pages[0]?.sort ??
+    (filters.sort === 'match' && !hasProfile
+      ? 'newest'
+      : (filters.sort ?? (hasProfile ? 'match' : 'newest')));
   const [open, setOpen] = useState(false);
   const panelId = useId();
 
@@ -65,7 +80,11 @@ export function SearchPage() {
           {active > 0 ? t('search.filtersActive', { count: active }) : t('search.filters')}
         </button>
         <ViewToggle view={view ?? 'list'} onChange={switchView} />
-        <SortSelect value={filters.sort ?? DEFAULT_SORT} onChange={sort} />
+        <SortSelect
+          value={sortValue}
+          withMatch={hasProfile || sortValue === 'match'}
+          onChange={sort}
+        />
       </div>
 
       <div id={panelId} hidden={!open}>
@@ -77,10 +96,16 @@ export function SearchPage() {
         />
       </div>
 
+      <ProfileNudge />
+
       {view === 'map' ? (
-        <SearchMap filters={filtersWithoutView} onShowList={() => switchView('list')} />
+        <SearchMap
+          filters={filtersWithoutView}
+          profile={profile}
+          onShowList={() => switchView('list')}
+        />
       ) : (
-        <ResultsList search={search} hasFilters={active > 0} onClear={clear} />
+        <ResultsList search={search} profile={profile} hasFilters={active > 0} onClear={clear} />
       )}
     </section>
   );
