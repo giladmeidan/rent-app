@@ -307,6 +307,31 @@ together with the `OWNER` entries, by whichever of the two specs merges second.
     Reviewers: code, qa, security, perf   Estimated: 1 coder run (small, Opus/high), 1 review round
     Links: specs/0007g-lifestyle-match-api.md - PRODUCT.md "Rooms", "Matching" - no artboard
 
+Build digest (spec session, after review round 1):
+
+    Spec 0007g - Lifestyle in the match score (API)   PR OPEN #31 (not merged), code head 49041ce
+    Shipped: a room's match score counts the questionnaire answers the seeker and the flat both gave (weight 20),
+             and "lifestyle" can be the agree/differ reason on search, the listing page and the owner's inbox; the
+             inbox scores it only on applications made to a room. Apartments and seekers without a room section
+             score as before. API, plus generic web copy stubs (0007f replaces the seeker copy).
+    Demo: make dev -> owner PATCHes a room with lifestyle {cleanliness 3, night 1} -> a seeker whose room section
+          has {cleanliness 3, night 3} opens it: 90, differs "lifestyle" -> after they apply, the owner's inbox
+          shows the same; on an apartment application it never does, even after a switch to a room.
+    Tests: +4 unit (AC2), +17 integration (AC1's 15 rows, AC3, AC4), +0 e2e (api 426, web 224)
+    CI: api + web green on 49041ce (run 43075552754: api 94 s, web 102 s, e2e skipped); e2e local while CI e2e is off: 10 of 10, 30.8 s on 49041ce
+    NF2 (5k listings, 2k rooms with 4-7 answers): p95 match 40-54 ms, room-only 24-36, map 20-42, visitor 10-13,
+             all <= 80; p50 +65% / +70% / +40% vs 0007b on the same data; no SubPlan.
+    Findings: 0 blockers, 0 majors; 1 minor fixed (+5 edge rows, one pins the numeric bind: 82.5 -> 83);
+              6 minors to FOLLOWUPS (perf: integer math or bound seeker answers would cut room-page DB time
+              38-64%, base sum evaluated twice, 50k plan goes parallel; security: 2 more owner-side regression
+              tests, keyword-only snapshot args; qa: a room -> apartment test); 5 nits (1 folded, 1 spec line, 3 dropped)
+    Decisions I need from you: 1. PRODUCT.md "Rooms" says the questionnaire "only lowers" a room's score; the
+             shipped formula can raise a fully agreeing room a couple of points (90 -> 92). Reword to "soft,
+             weight 20, can raise or lower, never filters"? (recommend: yes - a cap means owners who answer can
+             only lose rank)
+    Changed in PRODUCT.md: nothing (pending decision 1)
+    Next: 0007f (room search web) and 0007c (room inbox) branch from #31.
+
 ## Verifier findings — one round, 7 findings, all applied
 The verifier reviewed the original `0007b`. At Gilad's word that spec was split into `0007b` and this file
 (finding 1). This record keeps the parts that apply here; `0007b` keeps the rest. The verdict was **would reject
