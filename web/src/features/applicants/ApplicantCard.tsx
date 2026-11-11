@@ -181,7 +181,7 @@ export function ApplicantCard({ listingId, applicant, headingId, spots, onSettle
                 strokeWidth="2.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={open ? 'rotate-180' : undefined}
+                className={`transition-transform motion-reduce:transition-none${open ? ' rotate-180' : ''}`}
               >
                 <path d="M6 9l6 6 6-6" />
               </svg>
