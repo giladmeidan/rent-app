@@ -9,19 +9,25 @@ no other code here states any part of it, so search and the listing page can nev
 The optional map box (spec 0003c) filters on the listing's **approximate** point, the same point the
 response's `lat` / `lng` show, so it reveals nothing the response does not.
 
-Nothing here reads the caller's session: a cookie changes nothing, and a non-public listing is
-indistinguishable from an unknown id (`ListingNotFoundError`, a 404)."""
+The caller's match (spec 0006b): given the id of a seeker who has a profile, the page statement
+joins that one profile row and adds `matching.score.match_columns`, so the score is computed,
+ordered on and explained in the same statement; it never filters and never changes the count.
+Nothing else here depends on the caller, and a non-public listing is indistinguishable from an
+unknown id (`ListingNotFoundError`, a 404)."""
 
+import typing
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import Integer, Select, and_, cast, func, or_, select
+from sqlalchemy import Integer, Label, Row, Select, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
-from app.models import Area, Listing
+from app.matching.score import explain, match_columns
+from app.models import Area, Listing, SeekerProfile
 from app.models.listing import PLAIN_GEOMETRY
-from app.schemas.search import SearchParams
+from app.schemas.match import MatchOut
+from app.schemas.search import SearchParams, SearchSort
 from app.services.listings import ListingNotFoundError
 
 # A flexible-entry listing ("גמיש ±2 שבועות") counts as available this many days earlier.
@@ -82,34 +88,91 @@ def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
     return query
 
 
-def _order(params: SearchParams) -> tuple[Any, ...]:
-    """Deterministic for paging: every sort ends on `created_at DESC, id`."""
+def _effective_sort(requested: SearchSort | None, with_profile: bool) -> SearchSort:
+    """`requested`, else `match` with a profile and `newest` without; `match` without a profile is
+    `newest` (a shared `?sort=match` link still works for a visitor)."""
+    if requested is None:
+        return "match" if with_profile else "newest"
+    if requested == "match" and not with_profile:
+        return "newest"
+    return requested
+
+
+def _order(sort: SearchSort, score: Label[Any] | None) -> tuple[Any, ...]:
+    """Deterministic for paging: every sort ends on `created_at DESC, id`. `match` needs the
+    statement's `m_score` column (`score`)."""
     newest = (Listing.created_at.desc(), Listing.id)
-    if params.sort == "price_asc":
+    if sort == "price_asc":
         return (Listing.price_ils.asc(), *newest)
-    if params.sort == "price_desc":
+    if sort == "price_desc":
         return (Listing.price_ils.desc(), *newest)
+    if sort == "match" and score is not None:
+        return (score.desc(), *newest)
     return newest
 
 
-def search_listings(db: Session, params: SearchParams) -> tuple[Sequence[Listing], int]:
-    """One page of public listings matching `params`, and the total matching (ignoring
-    `limit` / `offset`). Exactly two statements: the count, then the page."""
+def _with_match(
+    query: Select[tuple[Listing]], profile_user_id: uuid.UUID
+) -> tuple[Select[Any], Label[Any]]:
+    """`query` joined to the seeker's one profile row, with the match columns added; and the
+    `m_score` column."""
+    columns = match_columns(Listing, SeekerProfile)
+    matched = query.join(SeekerProfile, SeekerProfile.user_id == profile_user_id).add_columns(
+        *columns
+    )
+    score = next(column for column in columns if column.name == "m_score")
+    return matched, score
+
+
+def _explain(row: Row[Any]) -> MatchOut:
+    """`explain` on one page row's columns (`row._mapping`, keyed by the match columns' labels)."""
+    return explain(typing.cast(Mapping[str, Any], row._mapping))
+
+
+def search_listings(
+    db: Session, params: SearchParams, profile_user_id: uuid.UUID | None = None
+) -> tuple[list[tuple[Listing, MatchOut | None]], int, SearchSort]:
+    """One page of public listings matching `params` with each one's match (`None` without a
+    `profile_user_id`), the total matching (ignoring `limit` / `offset`, and never the score), and
+    the sort applied. Exactly two statements: the count, then the page."""
     filtered = _filtered(params)
+    sort = _effective_sort(params.sort, profile_user_id is not None)
     # Count over a subquery of the whole filtered select, so the join to `areas` is kept.
     total = db.execute(
         select(func.count()).select_from(filtered.order_by(None).subquery())
     ).scalar_one()
-    page = db.scalars(
-        filtered.order_by(*_order(params)).limit(params.limit).offset(params.offset)
+    if profile_user_id is None:
+        listings = db.scalars(
+            filtered.order_by(*_order(sort, None)).limit(params.limit).offset(params.offset)
+        ).all()
+        return [(listing, None) for listing in listings], total, sort
+    matched, score = _with_match(filtered, profile_user_id)
+    rows = db.execute(
+        matched.order_by(*_order(sort, score)).limit(params.limit).offset(params.offset)
     ).all()
-    return page, total
+    return [(row[0], _explain(row)) for row in rows], total, sort
+
+
+def get_public_listing_with_match(
+    db: Session, listing_id: uuid.UUID, profile_user_id: uuid.UUID | None
+) -> tuple[Listing, MatchOut | None]:
+    """The listing if it is public, with the seeker's match when `profile_user_id` is given. Raises
+    `ListingNotFoundError` for an unknown id and for a paused, expired, room or inactive-area
+    listing alike. One statement."""
+    query = _public_listings().where(Listing.id == listing_id)
+    if profile_user_id is None:
+        listing = db.scalar(query)
+        if listing is None:
+            raise ListingNotFoundError
+        return listing, None
+    matched, _ = _with_match(query, profile_user_id)
+    row = db.execute(matched).first()
+    if row is None:
+        raise ListingNotFoundError
+    return row[0], _explain(row)
 
 
 def get_public_listing(db: Session, listing_id: uuid.UUID) -> Listing:
-    """The listing if it is public. Raises `ListingNotFoundError` for an unknown id and for a
-    paused, expired, room or inactive-area listing alike."""
-    listing = db.scalar(_public_listings().where(Listing.id == listing_id))
-    if listing is None:
-        raise ListingNotFoundError
-    return listing
+    """The listing if it is public, without a match (the apply gate). Raises
+    `ListingNotFoundError` as `get_public_listing_with_match`."""
+    return get_public_listing_with_match(db, listing_id, None)[0]
