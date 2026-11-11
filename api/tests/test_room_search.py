@@ -1,4 +1,4 @@
-"""Rooms in search, on the map, on their page and in apply (spec 0007b): AC1-AC6 (AC2's 422 half
+"""Rooms in search, on the map, on their page and in apply (spec 0007b): AC1-AC7 (AC2's 422 half
 is also in `test_search.py::test_ac7_validation_rejects_bad_params`, AC6's migration half is
 `test_migrations.py::test_ac6_application_listing_type_backfill_and_downgrade`).
 
@@ -143,6 +143,12 @@ def test_ac1_rooms_are_public_with_room_fields(
         "seeker without a profile": signup(client, outbox, "seeker@example.com", "seeker"),
         "visitor": client,
     }
+    # Decision (b) (AC7): the ages and answers go only to a signed-in seeker.
+    ages_and_answers = {
+        "owner": ([], {}),
+        "seeker without a profile": ([27, 30], {"night": 3, "kosher": 2}),
+        "visitor": ([], {}),
+    }
 
     unknown = client.get(f"/listings/{uuid.uuid4()}")
     assert unknown.status_code == 404
@@ -156,8 +162,8 @@ def test_ac1_rooms_are_public_with_room_fields(
         assert items[room]["listing_type"] == "room"
         assert items[room]["gender_preference"] == "women"
         assert items[room]["flatmates_count"] == 2
-        assert items[room]["flatmate_ages"] == [27, 30]
-        assert items[room]["lifestyle"] == {"night": 3, "kosher": 2}  # answered keys only
+        # Answered keys only, for the seeker.
+        assert (items[room]["flatmate_ages"], items[room]["lifestyle"]) == ages_and_answers[name]
         assert set(items[apartment]) == PUBLIC_KEYS, name
         assert (
             items[apartment]["gender_preference"],
@@ -570,3 +576,58 @@ def test_ac5_repost_after_gender_change_is_room_gender_mismatch(
     assert reopened.status_code == 201, reopened.text
     assert reopened.json()["id"] == first.json()["id"]
     assert row() == ("submitted", "room")
+
+
+def test_ac7_room_ages_and_answers_only_to_seekers(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    room_owner = signup(client, outbox, "room-owner@example.com", "owner")
+    ages, answers = [27, 30], {"night": 3, "kosher": 2}
+    room = _r0(
+        db_engine,
+        _user_id(room_owner),
+        gush_dan,
+        gender_preference="women",
+        flatmate_ages=ages,
+        lifestyle=answers,
+    )
+    seekers = {
+        "seeker without a profile": signup(client, outbox, "seeker@example.com", "seeker"),
+        "seeker without a room section": _seeker(
+            client, outbox, db_engine, gush_dan, email="seeker2@example.com"
+        ),
+        "seeker woman / any": _seeker(
+            client,
+            outbox,
+            db_engine,
+            gush_dan,
+            email="seeker3@example.com",
+            gender="woman",
+            flatmate_gender="any",
+        ),
+    }
+    others = {
+        "visitor": client,
+        "another owner": signup(client, outbox, "owner2@example.com", "owner"),
+        "the room's own owner": room_owner,
+    }
+
+    def reads(caller: TestClient) -> tuple[dict[str, Any], dict[str, Any]]:
+        items = {item["id"]: item for item in _search(caller)["items"]}
+        return items[room], _detail(caller, room)
+
+    for name, caller in seekers.items():
+        for body in reads(caller):
+            assert (body["flatmate_ages"], body["lifestyle"]) == (ages, answers), name
+            assert (body["gender_preference"], body["flatmates_count"]) == ("women", 2), name
+
+    # Compared with a seeker who has no match or fit: only the ages and answers differ.
+    seeker_reads = reads(seekers["seeker without a profile"])
+    for name, caller in others.items():
+        for body, seeker_body in zip(reads(caller), seeker_reads, strict=True):
+            assert (body["flatmate_ages"], body["lifestyle"]) == ([], {}), name
+            assert (body["gender_preference"], body["flatmates_count"]) == ("women", 2), name
+            assert {**body, "flatmate_ages": ages, "lifestyle": answers} == seeker_body, name
+
+    mine = {item["id"]: item for item in room_owner.get("/me/listings").json()}
+    assert (mine[room]["flatmate_ages"], mine[room]["lifestyle"]) == (ages, answers)

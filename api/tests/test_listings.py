@@ -708,11 +708,12 @@ def test_ac1_room_fields_on_create_and_reads(
     assert _room_fields(mine[apartment["id"]]) == ROOM_DEFAULTS
     assert _room_fields(mine[some_ages["id"]]) == _room_fields(some_ages)
 
-    # Rooms are public from 0007b, with the four room fields and no fit for a visitor.
+    # Rooms are public from 0007b, with the four room fields and no fit for a visitor; the ages
+    # and answers go only to a signed-in seeker (0007b AC7).
     client.cookies.clear()
     detail = client.get(f"/listings/{room['id']}")
     assert detail.status_code == 200
-    assert _room_fields(detail.json()) == expected
+    assert _room_fields(detail.json()) == ("women", 2, [], {})
     assert detail.json()["room_fit"] is None
     search = client.get("/listings")
     assert search.status_code == 200
