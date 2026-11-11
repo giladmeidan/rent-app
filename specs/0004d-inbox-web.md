@@ -1,7 +1,7 @@
 ---
 id: 0004d
 title: An owner opens the applicants of a listing from "my listings", reads each applicant's name and message, filters by status, and shortlists, un-shortlists or declines them
-status: in-review
+status: done
 depends_on: [0004b, 0004c]   # 0004c: the API; 0004b: the e2e helpers (signUp, postListing), ApplicationStatusChip and the he.json `applications.*` block this spec sits next to
 reviewers: [code, qa, ux]    # ux: a new screen from the Inbox artboards and a changed card; no security: no new endpoint, ownership and PII exposure are 0004c's (security-reviewed there), messages render as text (NF2)
 estimate: 1 coder run
