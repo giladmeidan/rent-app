@@ -9,21 +9,29 @@ Owner side (spec 0004c): the two inbox endpoints require an **owner** session (`
 401 `unauthenticated`, 403 `owner_only` for a seeker. Another owner's listing, an application of a
 different listing and a withdrawn application are a 404 `not_found`, identical to an unknown id.
 
+Each applicant carries their current `match` and housing `profile` (spec 0006c); the list is sorted
+by match by default (`?sort=newest` for the 0004c order), applicants without a profile last.
+
 Every successful owner status change and seeker withdraw publishes a `status` chat event to the
 owner and the seeker after the commit (spec 0005c): it may open or close the application's chat."""
 
+import typing
 import uuid
+from collections.abc import Mapping
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
 from app.auth import current_owner, current_seeker
 from app.db import get_session
+from app.matching.score import explain
 from app.models import Application, Listing, User
 from app.redis_client import RedisClient, get_redis
 from app.schemas.application import (
     ApplicantOut,
+    ApplicantProfileOut,
     ApplicantStatusIn,
     ApplicationIn,
     ApplicationListingOut,
@@ -140,14 +148,33 @@ def withdraw(
     return _out(application, listing)
 
 
-def _applicant_out(application: Application, applicant_name: str) -> ApplicantOut:
+def _applicant_out(row: Row[Any]) -> ApplicantOut:
+    """One `services.applications._applicants` row as the owner sees it. `match` and `profile`
+    only when the applicant has a profile (`household` is NOT NULL in `seeker_profiles`): without
+    one the match columns are meaningless (spec 0006c)."""
+    application: Application = row.Application
+    has_profile = row.household is not None
     return ApplicantOut(
         id=application.id,
         status=application.status,  # never `withdrawn`: filtered out by the service
         message=application.message,
-        applicant_name=applicant_name,
+        applicant_name=row.display_name,
         created_at=application.created_at,
         updated_at=application.updated_at,
+        match=explain(typing.cast(Mapping[str, Any], row._mapping)) if has_profile else None,
+        profile=(
+            ApplicantProfileOut(
+                household=row.household,
+                move_in_date=row.move_in_date,
+                move_in_flexible=row.move_in_flexible,
+                has_pets=row.has_pets,
+                smoker=row.smoker,
+                contract_months=row.contract_months,
+                parking_needed=row.parking_needed,
+            )
+            if has_profile
+            else None
+        ),
     )
 
 
@@ -159,12 +186,17 @@ def _applicant_out(application: Application, applicant_name: str) -> ApplicantOu
         404: {"model": ErrorOut, "description": "not_found: unknown id or another owner's"},
     },
 )
-def list_applicants(listing_id: uuid.UUID, owner: OwnerDep, db: DbDep) -> list[ApplicantOut]:
+def list_applicants(
+    listing_id: uuid.UUID,
+    owner: OwnerDep,
+    db: DbDep,
+    sort: Annotated[applications_service.ApplicantSort, Query()] = "match",
+) -> list[ApplicantOut]:
     try:
-        rows = applications_service.list_applicants(db, owner, listing_id)
+        rows = applications_service.list_applicants(db, owner, listing_id, sort)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
-    return [_applicant_out(application, name) for application, name in rows]
+    return [_applicant_out(row) for row in rows]
 
 
 @router.patch(
@@ -189,12 +221,13 @@ def set_applicant_status(
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> ApplicantOut:
     try:
-        application, name = applications_service.set_applicant_status(
+        row = applications_service.set_applicant_status(
             db, owner, listing_id, application_id, body.status
         )
     except (ListingNotFoundError, applications_service.ApplicationNotFoundError):
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.InvalidTransitionError:
         raise HTTPException(status_code=409, detail="invalid_transition") from None
+    application: Application = row.Application
     chat_events.publish(r, [owner.id, application.seeker_id], application.id, "status")
-    return _applicant_out(application, name)
+    return _applicant_out(row)

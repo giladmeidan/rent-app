@@ -6,7 +6,12 @@ Both response shapes list their fields explicitly (NF3): `ApplicationListingOut`
 owner's identity is not shown to applicants until chat opens). `ApplicantOut` (the owner's view,
 0004c) carries only the seeker's `display_name` and message: no `seeker_id`, email or any other user
 column (NF2). The message is plain text: stored and returned as validated, never processed as
-HTML."""
+HTML.
+
+From 0006c the owner's view also carries the applicant's current `match` and `ApplicantProfileOut`,
+seven housing-profile fields listed explicitly: never the seeker's `budget_max_ils` or `area_ids`
+(PRODUCT.md "Matching"; only the criterion codes `budget` / `area` in `match` say whether they
+fit)."""
 
 import datetime as dt
 import uuid
@@ -24,6 +29,8 @@ from pydantic import (
 
 from app.schemas._text import visible_characters_only
 from app.schemas.listing import ListingType, _lf_newlines
+from app.schemas.match import MatchOut
+from app.schemas.profile import ContractMonths, Household
 
 ApplicationStatus = Literal["submitted", "shortlisted", "declined", "withdrawn"]
 # What an owner sees and may set: a withdrawn application is invisible to the owner (0004c).
@@ -77,9 +84,25 @@ class MyApplicationOut(BaseModel):
     listing: ApplicationListingOut
 
 
+class ApplicantProfileOut(BaseModel):
+    """The applicant's housing summary, as the owner sees it (0006c). Fields listed explicitly:
+    no `budget_max_ils`, no `area_ids`. `move_in_date` is as stored and may be in the past (the
+    match treats a past date as "now")."""
+
+    household: Household
+    move_in_date: dt.date
+    move_in_flexible: bool
+    has_pets: bool
+    smoker: bool
+    contract_months: ContractMonths
+    parking_needed: int
+
+
 class ApplicantOut(BaseModel):
     """One applicant to the caller's listing, as the owner sees it (0004c). Fields listed
-    explicitly (NF2): the seeker is known only by `applicant_name` (their `display_name`)."""
+    explicitly (NF2): the seeker is known only by `applicant_name` (their `display_name`). `match`
+    and `profile` (0006c) are both null for an applicant without a housing profile (before
+    Slice 6)."""
 
     id: uuid.UUID
     status: ApplicantStatus
@@ -87,6 +110,8 @@ class ApplicantOut(BaseModel):
     applicant_name: str
     created_at: dt.datetime
     updated_at: dt.datetime
+    match: MatchOut | None
+    profile: ApplicantProfileOut | None
 
 
 class ApplicantStatusIn(BaseModel):

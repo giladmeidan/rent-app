@@ -36,7 +36,16 @@ CONVERSATION_KEYS = {
 }
 THREAD_KEYS = {"id", "listing", "other_name", "can_send", "messages", "truncated"}
 MESSAGE_KEYS = {"id", "body", "mine", "created_at"}
-APPLICANT_KEYS = {"id", "status", "message", "applicant_name", "created_at", "updated_at"}
+APPLICANT_KEYS = {
+    "id",
+    "status",
+    "message",
+    "applicant_name",
+    "created_at",
+    "updated_at",
+    "match",
+    "profile",
+}
 LISTING_SUMMARY_KEYS = set(ApplicationListingOut.model_fields)
 USER_KEYS = {"owner_id", "seeker_id", "sender_id", "user_id", "email"}
 NOT_FOUND = {"detail": "not_found"}
@@ -239,7 +248,7 @@ def test_ac1_shortlist_opens_one_conversation(
     sent = list(statements)
     assert response.status_code == 200, response.text
     assert set(response.json()) == APPLICANT_KEYS
-    assert len(sent) == 3, sent  # the session lookup, the UPDATE, the INSERT
+    assert len(sent) == 4, sent  # the session lookup, the UPDATE, the INSERT, the response row
     assert "UPDATE applications" in sent[1]
     assert "INSERT INTO conversations" in sent[2]
     assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 1
@@ -252,7 +261,7 @@ def test_ac1_shortlist_opens_one_conversation(
     sent = list(statements)
     assert response.status_code == 200, response.text
     assert set(response.json()) == APPLICANT_KEYS
-    assert len(sent) == 2, sent  # an un-shortlist inserts nothing
+    assert len(sent) == 3, sent  # an un-shortlist inserts nothing
     for status in ("shortlisted", "shortlisted"):  # a re-shortlist, then the same status again
         response = _set_status(owner, listing_a, submitted, status)
         assert response.status_code == 200, response.text
@@ -265,7 +274,7 @@ def test_ac1_shortlist_opens_one_conversation(
     sent = list(statements)
     assert response.status_code == 200, response.text
     assert set(response.json()) == APPLICANT_KEYS
-    assert len(sent) == 2, sent
+    assert len(sent) == 3, sent
     assert _conversation_row(db_engine, declined) is None
     assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 1
 
