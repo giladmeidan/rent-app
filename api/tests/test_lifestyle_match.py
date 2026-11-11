@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from app.matching.score import explain
+from app.schemas.profile import LIFESTYLE_KEYS
 from tests.conftest import Outbox, make_owner
 from tests.test_matching import TOP3, _area, _day, _l0, _match, _search, _seeker, _values
 
@@ -31,6 +32,8 @@ def north(db_engine: Engine, gush_dan: uuid.UUID) -> uuid.UUID:
 
 ROOM: dict[str, Any] = {"listing_type": "room", "flatmates_count": 2}
 FULL_AGREE = {"guests": 2, "social": 3}
+ALL_ONE = dict.fromkeys(LIFESTYLE_KEYS, 1)
+ALL_THREE = dict.fromkeys(LIFESTYLE_KEYS, 3)
 
 
 def _room(**lifestyle: int) -> dict[str, Any]:
@@ -91,6 +94,32 @@ LIFESTYLE_ROWS: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
         {**_room(cleanliness=3, guests=1, night=1), "available_from": _day(37)},
         {**_woman(cleanliness=3, guests=2, night=2), "parking_needed": 2},
         _match(87, ["budget", "area", "move_in"], "lifestyle"),
+    ),
+    # t 0, 0, 0, 0.5 -> m 0.125: 80 + 2.5 = 82.5 rounds half up to 83 (a float bind gives 82).
+    "11_half_way_rounds_up": (
+        _room(cleanliness=1, guests=1, night=1, social=1),
+        _woman(cleanliness=3, guests=3, night=3, social=2),
+        _match(83, TOP3, "lifestyle"),
+    ),
+    # The seeker's room section has no answers: m NULL.
+    "12_seeker_has_no_answers": (_room(night=1), _woman(), _match(100, TOP3, None)),
+    # The denominator counts shared keys only: 1 shared of 7, agreed -> m 1.
+    "13_shared_keys_only": (
+        _room(**ALL_ONE),
+        _woman(night=1),
+        _match(100, ["budget", "lifestyle", "move_in"], None),
+    ),
+    # All 7 shared, maximum disagreement: m 0 -> 80.
+    "14_all_keys_max_disagreement": (
+        _room(**ALL_ONE),
+        _woman(**ALL_THREE),
+        _match(80, TOP3, "lifestyle"),
+    ),
+    # All 7 shared: two agree, five at the far end: m 2/7 -> 80 + 5.71 = 85.71.
+    "15_all_keys_mixed": (
+        _room(**ALL_ONE),
+        _woman(**{**ALL_THREE, "cleanliness": 1, "guests": 1}),
+        _match(86, TOP3, "lifestyle"),
     ),
 }
 
