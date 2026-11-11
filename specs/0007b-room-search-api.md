@@ -462,24 +462,25 @@ E2E: no new test. `make e2e` runs locally (NF1).
     Reviewers: code, qa, security, perf   Estimated: 1 coder run (Opus/high), 1 review round
     Links: specs/0007b-room-search-api.md - PRODUCT.md "Rooms", "Gender preference", "Search" - no artboard
 
-    Spec 0007b - Rooms in search, map, listing page and apply (API)   PR OPEN #29 (not merged), code head c7f666a
+    Spec 0007b - Rooms in search, map, listing page and apply (API)   PR OPEN #29 (not merged), code head ee78420
     Shipped (API): rooms show next to apartments in search, map and their page (4 room fields, listing_type
              filter); a room whose gender rule doesn't fit a seeker's room section is hidden from them (room_fit:
-             false on its page) and refused on apply (409, no rate budget); applications snapshot
-             listing_type_at_apply (migration 0010, also tightens the lifestyle CHECKs to 7 keys, values 1-3).
-    Demo: make dev-api -> GET /listings?listing_type=room as a visitor (all rooms) -> as a seeker woman/any (men-only
-          rooms gone, total drops) -> POST /listings/{men room}/applications -> 409 room_gender_mismatch.
-    Tests: +0 unit, +21 integration (AC1-AC6; AC3 x13 callers; gate own/hidden; re-POST after gender change;
-           migration), +0 web, +0 e2e (api 405, web 214)
-    CI: api 1m45s + web 1m34s green on c7f666a (run 43070705965); e2e local while CI e2e is off: 10 of 10, 33.1 s
+             false on its page) and refused on apply (409, no rate budget); a room's flatmates' ages and answers go
+             only to signed-in seekers (Gilad (b)); applications snapshot listing_type_at_apply (migration 0010,
+             which also tightens the lifestyle CHECKs to 7 keys, values 1-3).
+    Demo: make dev-api -> GET /listings?listing_type=room as a visitor (all rooms, ages [] / answers {}) -> as a
+          seeker woman/any (men-only rooms gone, ages shown) -> POST /listings/{men room}/applications -> 409.
+    Tests: +0 unit, +22 integration (AC1-AC7; AC3 x13 callers; gate own/hidden; re-POST after gender change;
+           migration), +0 web, +0 e2e (api 406, web 224 with 0007d merged in)
+    CI: api 1m45s + web 1m34s green on c7f666a; the final head's run is in the PR. e2e local (CI e2e off) on ee78420:
+        10 of 10, 27.5 s (a first run under load timed out once on the map's OSM attribution; rerun clean)
     NF2 (5k listings, 2k rooms; p95 <= 80 ms): seeker match 35-43 ms, rooms 20-22, map 18-21, visitor 13-15; no index
     Findings: 0 blockers; 3 majors: 2 fixed (tests for "gate skipped on own/hidden listing" and "re-POST after a
-              gender change"), 1 to you (below); 8 minors: 4 fixed, 2 to FOLLOWUPS (jsonpath 1.0 cast note for
-              0007g/0007c; 50k perf numbers), 2 no action; 6 nits dropped. FOLLOWUPS 0007a lifestyle-CHECK line:
-              done by 0010 (left unticked, the file is append-only)
-    Decisions I need from you: 1. A room's raw flatmate_ages and lifestyle answers (incl. kosher/Shabbat) are
-             public to anonymous visitors. (a) keep, 0007e wizard tells the owner (shipped default); (b) signed-in
-             seekers only; (c) derived values only (re-specs 0007f/0007g). Recommend: (a), revisit before launch.
+              gender change"), 1 decided by you, (b), and done (AC7); 8 minors: 4 fixed, 2 to FOLLOWUPS (jsonpath
+              1.0 cast note for 0007g/0007c; 50k perf numbers), 2 no action; 6 nits dropped. FOLLOWUPS 0007a
+              lifestyle-CHECK line: done by 0010 (left unticked, the file is append-only)
+    Decisions I need from you: none. Gilad chose (b) (2026-11-11): flatmate_ages / lifestyle on public listing
+             responses only to signed-in seekers; visitors and owners get [] / {}; GET /me/listings unchanged.
     Changed in PRODUCT.md: nothing here; "Search"/"Listings" "rooms hidden until Slice 7" go stale on merge.
     Next: 0007g (lifestyle match) and 0007c (room inbox) build on listing_type_at_apply; 0007f on the 4 fields + room_fit.
 
