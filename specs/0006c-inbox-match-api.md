@@ -1,7 +1,7 @@
 ---
 id: 0006c
 title: An owner sees each applicant's match score, its top-3 / top-1 explanation and a short housing summary, with the inbox sorted by match
-status: in-review
+status: done
 depends_on: [0006b, 0005a]   # 0006b: matching/score.py; 0005a: edits set_applicant_status (open-on-shortlist) in the same file
 reviewers: [code, qa, security]   # security: a seeker's housing preferences shown to an owner they applied to (PII), explicit field lists; qa: ordering, nulls for pre-Slice-6 applicants; no perf: per-listing set, PK joins, 3 statements pinned by AC4 — the hot path is 0006b's
 estimate: 1 coder run
