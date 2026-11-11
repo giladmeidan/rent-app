@@ -1,7 +1,7 @@
 ---
 id: 0007g
 title: Room listings score the lifestyle questionnaire — a seeker with a room section sees "lifestyle" among a room's match reasons, and the owner's inbox scores it only on applications made to a room
-status: verified
+status: in-progress
 depends_on: [0007b]      # 0007b: applications.listing_type_at_apply (migration 0010) and public rooms; 0007a (via 0007b): the answers columns, `Lifestyle`, `LIFESTYLE_KEYS` (app.schemas.profile)
 reviewers: [code, qa, security, perf]   # perf: a 7-key jsonb expression in the match sort over every filtered row; security: the apartment → room lifestyle probe through the owner's score; qa: the 10-row scoring table, numeric rounding
 estimate: 1 coder run    # small; coder on Opus/high (numeric formula, the inbox probe). Split from the original 0007b at Gilad's word (verifier finding 1)
