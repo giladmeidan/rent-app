@@ -14,6 +14,7 @@ import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
 import { NewListingPage } from '../features/listings/NewListingPage';
+import { ProfilePage } from '../features/profile/ProfilePage';
 import { SearchPage } from '../features/search/SearchPage';
 import { Layout } from './Layout';
 
@@ -35,6 +36,7 @@ export function AppRoutes() {
         </Route>
         <Route element={<RequireSeeker />}>
           <Route path="me/applications" element={<MyApplicationsPage />} />
+          <Route path="me/profile" element={<ProfilePage />} />
         </Route>
         <Route element={<RequireUser />}>
           <Route path="chat" element={<ChatListPage />} />

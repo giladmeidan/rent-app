@@ -1,7 +1,7 @@
 ---
 id: 0006d
 title: A seeker fills or edits a short housing profile at /me/profile, and the listing page sends a seeker without one there (and back) before applying
-status: verified
+status: in-review
 depends_on: [0006a]      # GET/PUT /me/profile and the 409 seeker_profile_required on apply
 reviewers: [code, qa, ux]   # ux: a new form screen with no artboard of its own; qa: the apply gate's states. No security: no new trust boundary, safeNext reused (AC6), the profile cache key is under ['me', …] so logout clears it
 estimate: 1 coder run
@@ -351,3 +351,16 @@ handling here: its UTC date bounds (finding 6) and its e2e profile `PUT` in `app
              0005b on AuthMenu/routes - mitigation: never built together (port 5173); second rebases.
     Reviewers: code, qa, ux   Estimated: 1 coder run, 1 review round
     Links: specs/0006d-profile-web.md - PRODUCT.md "Matching" - design/screens-v1/Main.dc.html (copy), CreateListing.dc.html (anatomy)
+
+    Spec 0006d - Profile web: /me/profile and the apply gate   PR open, ready-to-merge (not merged)
+    Shipped: a seeker fills or edits a housing profile at /me/profile (header "הפרופיל שלי"); on a listing a
+             seeker without one sees "מילוי פרופיל" instead of apply, saves, and lands back on the listing.
+    Demo (make dev): 1. new seeker opens a listing -> profile line + "מילוי פרופיל"  2. fill, save -> back on
+             the listing with the apply button  3. header "הפרופיל שלי" reopens the form prefilled
+    Tests: +14 unit (web), +0 integration, e2e ac11 extended to ac9_fill_profile_apply_withdraw (no new signup)
+             Local: api 335, web 118, e2e 10/10, lint + i18n clean (after merging main d9c017d: 0005b, 0006c)
+    Findings: 0 blockers, 0 majors; 9 minors: 1 fixed (navigate replace after ?next), 7 follow-ups logged,
+             1 dup merged; 10 nits dropped
+    Changed in PRODUCT.md: nothing
+    Next spec I propose: 0006e - owner preferences web, then 0006f - match web (uses useProfile / PROFILE_KEY)
+             (needs your decisions: none new)

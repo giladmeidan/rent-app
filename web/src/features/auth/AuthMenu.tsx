@@ -54,12 +54,20 @@ export function AuthMenu() {
           {t('header.myListings')}
         </Link>
       ) : (
-        <Link
-          to="/me/applications"
-          className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
-        >
-          {t('header.myApplications')}
-        </Link>
+        <>
+          <Link
+            to="/me/applications"
+            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+          >
+            {t('header.myApplications')}
+          </Link>
+          <Link
+            to="/me/profile"
+            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+          >
+            {t('header.myProfile')}
+          </Link>
+        </>
       )}
       <span className="truncate text-[15px] font-semibold max-sm:hidden">
         {t('header.greeting', { name: me.data.display_name })}

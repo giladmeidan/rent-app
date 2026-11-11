@@ -6,9 +6,11 @@ import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import { ApiError, type ListingDetail } from '../listings/api';
+import { useProfile } from '../profile/useProfile';
 import { hasStatus, type MyApplicationOut } from './api';
 import { ApplicationStatusChip } from './ApplicationStatusChip';
 import { appliedOn } from './format';
+import { ProfileGate } from './ProfileGate';
 import { loginPath, useApply } from './useApply';
 import { useMyApplications } from './useMyApplications';
 
@@ -76,7 +78,8 @@ function ApplyForm({ apply }: { apply: Apply }) {
         inFlight.current = false;
       },
       onError: (error) => {
-        // 401 (log in and come back) and 409 `already_applied` (refetch) are the hook's.
+        // 401 (log in and come back) and both 409s, `already_applied` and
+        // `seeker_profile_required` (refetch), are the hook's.
         if (hasStatus(error, 401) || hasStatus(error, 409)) return;
         // 404 removes the form; every other error keeps it, with focus back on the text.
         if (hasStatus(error, 404)) {
@@ -247,8 +250,9 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   const headingId = useId();
   const me = useMe();
   const isSeeker = me.data?.role === 'seeker';
-  // A visitor or an owner never requests the seeker's list.
+  // A visitor or an owner never requests the seeker's list or profile.
   const mine = useMyApplications(isSeeker);
+  const profile = useProfile(isSeeker);
   const apply = useApply(listing.id);
 
   const count = listing.applicant_count;
@@ -276,42 +280,52 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     </div>
   );
 
+  const skeleton = (
+    <div aria-busy="true" aria-label={t('common.loading')}>
+      <Skeleton className="h-[52px] w-full" />
+    </div>
+  );
+  const application = mine.data?.find((a) => a.listing.id === listing.id);
+  const live = application !== undefined && application.status !== 'withdrawn';
+
   let controls;
   if (me.isPending || (isSeeker && mine.isPending)) {
-    controls = (
-      <div aria-busy="true" aria-label={t('common.loading')}>
-        <Skeleton className="h-[52px] w-full" />
-      </div>
-    );
+    controls = skeleton;
   } else if (
     me.data === null ||
     (me.isError && me.data === undefined) ||
-    hasStatus(mine.error, 401)
+    hasStatus(mine.error, 401) ||
+    hasStatus(profile.error, 401)
   ) {
     // A failed first /me renders the logged-out state, as the header does; a failed background
-    // refetch keeps the cached person (and an open form). A 401 on the list clears the session
-    // (useMyApplications), which lands here too.
+    // refetch keeps the cached person (and an open form). A 401 on the list or the profile clears
+    // the session (useMyApplications, useProfile), which lands here too.
     controls = visitor;
   } else if (!isSeeker) {
     controls = null;
   } else if (mine.isError && mine.data === undefined) {
     // Only when nothing is cached: a failed background refetch keeps the list and the draft.
     controls = <ErrorState onRetry={() => void mine.refetch()} />;
+  } else if (live) {
+    // An application to this listing never waits for the profile.
+    controls = (
+      <div className="flex flex-col items-start gap-2">
+        {apply.isSuccess && (
+          <p role="status" className="text-start text-[15px] font-bold text-accent-text">
+            {t('applications.sent')}
+          </p>
+        )}
+        <Applied application={application} />
+      </div>
+    );
+  } else if (profile.isPending) {
+    controls = skeleton;
+  } else if (profile.isError && profile.data === undefined) {
+    controls = <ErrorState onRetry={() => void profile.refetch()} />;
+  } else if (profile.data === null) {
+    controls = <ProfileGate listingId={listing.id} />;
   } else {
-    const application = mine.data?.find((a) => a.listing.id === listing.id);
-    controls =
-      application === undefined || application.status === 'withdrawn' ? (
-        <ApplyForm apply={apply} />
-      ) : (
-        <div className="flex flex-col items-start gap-2">
-          {apply.isSuccess && (
-            <p role="status" className="text-start text-[15px] font-bold text-accent-text">
-              {t('applications.sent')}
-            </p>
-          )}
-          <Applied application={application} />
-        </div>
-      );
+    controls = <ApplyForm apply={apply} />;
   }
 
   return (
