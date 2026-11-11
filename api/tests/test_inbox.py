@@ -48,7 +48,7 @@ APPLICANT_KEYS = {
     "room",  # 0007c
     "source",  # 0008a
 }
-COUNT_KEYS = {"applicant_count", "new_applicant_count"}
+COUNT_KEYS = {"applicant_count", "new_applicant_count", "liked_me_count"}  # 0008a
 LISTING_OUT_KEYS = set(ListingOut.model_fields)
 NOT_FOUND = {"detail": "not_found"}
 INVALID_TRANSITION = {"detail": "invalid_transition"}

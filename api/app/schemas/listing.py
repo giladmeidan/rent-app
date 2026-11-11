@@ -268,9 +268,13 @@ class ListingOut(BaseModel):
 
 class MyListingOut(ListingOut):
     """One of the caller's own listings on `GET /me/listings` (0004c): `ListingOut` plus its
-    applicant count (every application but withdrawn ones) and new-applicant count (`submitted`).
+    applicant count (every application but withdrawn ones), new-applicant count (`submitted`) and,
+    from 0008a, liked-me count.
     No `view_count`: owners do not see it (Gilad, 2026-11-10). `POST` / `PATCH /listings` keep
     returning `ListingOut`."""
 
     applicant_count: int
     new_applicant_count: int
+    # Seekers who liked this room and are waiting for a like back (0008a, a "pending seeker like":
+    # no non-withdrawn application yet); 0 for an apartment. Not re-checked for fit or opt-in.
+    liked_me_count: int

@@ -174,9 +174,10 @@ def test_ac1_rooms_are_public_with_room_fields(
 
         page = _detail(caller, room)
         assert page["room_fit"] is None, name
-        assert {k: v for k, v in page.items() if k not in {"applicant_count", "room_fit"}} == (
-            items[room]
-        )
+        no_like = {"liked_by_me": False, "liked_me": False}  # 0008a: a seeker on a room only
+        assert page["like"] == (no_like if name == "seeker without a profile" else None), name
+        detail_only = {"applicant_count", "room_fit", "like"}  # `like`: 0008a
+        assert {k: v for k, v in page.items() if k not in detail_only} == items[room]
 
         for listing_id in hidden:
             response = caller.get(f"/listings/{listing_id}")
@@ -614,7 +615,9 @@ def test_ac7_room_ages_and_answers_only_to_seekers(
 
     def reads(caller: TestClient) -> tuple[dict[str, Any], dict[str, Any]]:
         items = {item["id"]: item for item in _search(caller)["items"]}
-        return items[room], _detail(caller, room)
+        # `like` (0008a) is per caller, not a seeker-only field: `test_people.py` AC12.
+        detail = {k: v for k, v in _detail(caller, room).items() if k != "like"}
+        return items[room], detail
 
     for name, caller in seekers.items():
         for body in reads(caller):

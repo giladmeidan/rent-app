@@ -504,7 +504,7 @@ def test_ac8_applicant_count_and_view_counter(
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == PUBLIC_KEYS | {"applicant_count", "room_fit"}
+    assert set(body) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like"}  # `like`: 0008a
     assert body["applicant_count"] == 3
     assert _view_count(db_engine, listing_a) == 1
     assert client.get(f"/listings/{listing_a}").status_code == 200
