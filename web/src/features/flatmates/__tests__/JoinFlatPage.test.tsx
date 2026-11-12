@@ -503,6 +503,7 @@ describe('JoinFlatPage', () => {
         if (el.getAttribute('href')?.includes(T) === true) leaks.push(`${where}: href`);
       }
       if (document.body.innerHTML.includes(T)) leaks.push(`${where}: markup`);
+      if (document.title.includes(T)) leaks.push(`${where}: title`);
     };
     const observer = new MutationObserver(() => check('a mutation'));
     observer.observe(document.body, {

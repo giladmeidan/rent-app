@@ -72,7 +72,7 @@ function FlatRow({
       padding="md"
       className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between"
     >
-      <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1 lg:flex-1">
         <span id={titleId} dir="auto" className="text-h3">
           {cardTitle(t, flat.listing)}
         </span>
