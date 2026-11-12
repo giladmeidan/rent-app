@@ -1,7 +1,7 @@
 ---
 id: 0009o
 title: "My listings" shows the owner's cards in a responsive grid, each with its status, its expiry date and its actions on the 0009d kit, in the Inbox artboards' language, with every behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): Button, Badge, PageContainer, PageHeader, the restyled Skeleton / EmptyState / ErrorState, the page-width table and the colour swap. Independent of 0009k: the second to merge rebases listings.spec.ts, he.json, pageWidths.test.ts and ListingWizard.test.tsx
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/medium). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Sonnet/medium: one page, one small component, mechanical; split from 0009k by its verifier
@@ -204,3 +204,11 @@ FOLLOWUPS claimed (line numbers as of 8c3c480): 84. Line 34 is 0009h's; 52 is 00
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009o — "my listings" on the kit, in a responsive grid   PR open, not merged
+Shipped: `/me/listings` is a `wide` page with a `PageHeader` (h1, "N מתוך 3 מודעות פעילות", primary "מודעה חדשה"); its cards are `ListingCard` (0009i's, unforked), 1 column on a phone, 2 from 768 px, 3 from 1280 px. Each card's owner block: the status pill (`Badge` accent / neutral / warning), "בתוקף עד {date}" or "פג תוקף ב־{date}" (Q2), small ghost pause / resume and edit buttons, and a bordered row of secondary link buttons (applicants, people, flatmates) with their "new" / "liked" `Badge tone="accent"` inside the link. After a publish: a bordered card with the 96 px celebrate mascot and `listings.mine.published` (read once, always-mounted `role="status"`); empty: `EmptyState pose="sleep"` with "פרסום דירה" to `/listings/new`; one turtle per screen. A failed background refetch keeps the loaded cards (FOLLOWUPS 84, closed). Controls, names, order, requests and errors are unchanged. Demo: open "my listings" at 390 and 1440 → pause a live listing → publish a new one from the wizard (celebrate line).
+Tests: +4 unit (`MyListingsPage.test.tsx::ac1_owner_block`, `ac2_cached_list_survives_failed_refetch`, `ac7_published_celebrates`, `ac8_empty_sleeps`); assertion updates only elsewhere (`min-h-tap`, "no badge" via `queryByText`, badge classes → the accent tone, `ListingWizard.test.tsx` publish case); `pageWidths` row → `wide`. E2E: `listings.spec.ts::ac12_owner_edits_listing` gains step "0009o my listings at 1440 and 390" (no new sign-up; `test.slow()` already there from 0009k). 14 screenshots in `web/screens/0009o/` (7 states × 390 / 1440): loading, error, empty, five-cards, saved, cap-error, published.
+Findings (ux only, quick route; one round): 0 blockers, 0 majors, 2 minors, 3 nits. Both minors logged in FOLLOWUPS (two actions to `/listings/new` on the empty state, as the spec asks; the default `Skeleton` bars are much shorter than a card). Nits dropped. The build did not change behaviour, so no reviewers were added.
+Spec text vs main: the kit has no `new` Badge tone, so the "new" / "liked" badges use `accent` (the kit's "new" badge) and expired uses the kit's existing `warning` tone (Badge.tsx untouched); 0009c's `Loading` / `usePageTitle` and 0009t's saved line were already on main and are kept; there are 4 new keys (`expiresOn`, `expiredOn`, `published`, `emptyAction`); the screens have 7 states, not 6 (the amendment's "after a publish").
+AC5 arbitrary-value grep over `MyListingsPage.tsx StatusBadge.tsx`: nothing. Raw-HTML grep (`dangerouslySetInnerHTML|innerHTML|linkify`) over the diff: nothing.
+Checks on the final head (main at 0009j + 0009p + 0009u merged): make lint / test (api 476, web 534) / i18n-check / build-web green; `make screens` green for this spec (on the coder head). No local e2e (Gilad 2026-11-12): e2e is CI's. Changed in PRODUCT.md: nothing.

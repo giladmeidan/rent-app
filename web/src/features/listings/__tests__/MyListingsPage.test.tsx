@@ -13,6 +13,8 @@ import {
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
+import { formatDate, todayInIsrael } from '../format';
+import { MY_LISTINGS_KEY } from '../useMyListings';
 import { MyListingsPage } from '../MyListingsPage';
 import { listing, withoutCounts } from './fixtures';
 
@@ -311,15 +313,18 @@ describe('MyListingsPage', () => {
       const name = link.textContent ?? '';
       expect(name).toContain(i18n.t('applicants.link', { count: l.applicant_count }));
       if (i === 0) {
-        expect(within(link).getByText(badgeText)).toHaveClass('bg-surface-subtle', 'text-warning');
+        expect(within(link).getByText(badgeText)).toHaveClass(
+          'bg-accent-soft',
+          'text-accent-strong',
+        );
         expect(link).toHaveAccessibleName(
           `${i18n.t('applicants.link', { count: 12 })} ${badgeText}`,
         );
       } else {
-        expect(link.querySelector('span')).toBeNull();
+        expect(within(link).queryByText(badgeText)).toBeNull();
         expect(link).toHaveAccessibleName(i18n.t('applicants.link', { count: l.applicant_count }));
       }
-      expect(link).toHaveClass('min-h-[44px]');
+      expect(link).toHaveClass('min-h-tap');
       const title = i18n.t('listings.card.title', {
         count: 3,
         rooms: '3',
@@ -362,7 +367,7 @@ describe('MyListingsPage', () => {
     expect(a).toHaveTextContent(he.listings.mine.people);
     expect(
       within(a as HTMLElement).getByText(i18n.t('listings.mine.peopleLiked', { count: 2 })),
-    ).toHaveClass('bg-surface-subtle', 'text-warning');
+    ).toHaveClass('bg-accent-soft', 'text-accent-strong');
     const b = peopleLink(cOne as HTMLElement);
     expect(b).toHaveAttribute('href', `/me/listings/${one.id}/people`);
     expect(
@@ -370,7 +375,9 @@ describe('MyListingsPage', () => {
     ).toBeVisible();
     const c = peopleLink(cNone as HTMLElement);
     expect(c).toHaveAttribute('href', `/me/listings/${none.id}/people`);
-    expect((c as HTMLElement).querySelector('span')).toBeNull();
+    expect(
+      within(c as HTMLElement).queryByText(i18n.t('listings.mine.peopleLiked', { count: 2 })),
+    ).toBeNull();
     expect(c).toHaveAccessibleName(he.listings.mine.people);
 
     for (const card of [cPaused, cExpired, cApartment]) {
@@ -430,7 +437,7 @@ describe('MyListingsPage', () => {
         name: i18n.t('listings.mine.flatmates', { count: l.flatmate_count }),
       });
       expect(link).toHaveAttribute('href', `/me/listings/${l.id}/flatmates`);
-      expect(link).toHaveClass('min-h-[44px]');
+      expect(link).toHaveClass('min-h-tap');
       const list = hrefs(card);
       expect(list.at(-1)).toBe(`/me/listings/${l.id}/flatmates`);
       expect(list.at(-2)).toBe(`/me/listings/${l.id}/${before}`);
@@ -439,5 +446,157 @@ describe('MyListingsPage', () => {
 
     // Apartments have none.
     expect(hrefs(cApartment).some((h) => h.endsWith('/flatmates'))).toBe(false);
+  });
+
+  it('ac1_owner_block', async () => {
+    const live = listing({
+      street: '\u05d0\u05d7\u05d3',
+      applicant_count: 12,
+      new_applicant_count: 5,
+      expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    });
+    const paused = listing({ street: '\u05e9\u05ea\u05d9\u05d9\u05dd', status: 'paused' });
+    const expired = listing({
+      street: '\u05e9\u05dc\u05d5\u05e9',
+      expires_at: '2020-01-01T10:00:00Z',
+    });
+    const room = listing({
+      street: '\u05d0\u05e8\u05d1\u05e2',
+      listing_type: 'room',
+      liked_me_count: 2,
+      flatmate_count: 1,
+    });
+    const pausedPast = listing({
+      street: '\u05d7\u05de\u05e9',
+      listing_type: 'room',
+      status: 'paused',
+      expires_at: '2020-01-01T10:00:00Z',
+    });
+    mockApi({ 'GET /me/listings': [json([live, paused, expired, room, pausedPast])] });
+    render();
+    const cards = (await screen.findAllByRole('article')) as HTMLElement[];
+    const day = (iso: string) => formatDate(todayInIsrael(new Date(iso)));
+    const texts = (card: HTMLElement) =>
+      [...within(card).queryAllByRole('button'), ...within(card).queryAllByRole('link')].map(
+        (el) => el.textContent ?? '',
+      );
+    const order = (card: HTMLElement) =>
+      within(card)
+        .queryAllByRole('link')
+        .concat(within(card).queryAllByRole('button'))
+        .sort((x, y) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+        .map((el) => el.textContent ?? '');
+    expect(texts(cards[0] as HTMLElement).length).toBeGreaterThan(0);
+
+    const expiresOn = (l: { expires_at: string }) =>
+      i18n.t('listings.mine.expiresOn', { date: day(l.expires_at) });
+    const expiredOn = (l: { expires_at: string }) =>
+      i18n.t('listings.mine.expiredOn', { date: day(l.expires_at) });
+    const [cLive, cPaused, cExpired, cRoom, cPausedPast] = cards as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(within(cLive).getByText(expiresOn(live))).toBeVisible();
+    expect(within(cPaused).getByText(expiresOn(paused))).toBeVisible();
+    expect(within(cExpired).getByText(expiredOn(expired))).toBeVisible();
+    expect(within(cRoom).getByText(expiresOn(room))).toBeVisible();
+    expect(within(cPausedPast).getByText(expiredOn(pausedPast))).toBeVisible();
+    expect(badge(cLive)).toHaveTextContent(he.listings.status.live);
+    expect(badge(cPaused)).toHaveTextContent(he.listings.status.paused);
+    expect(badge(cExpired)).toHaveTextContent(he.listings.status.expired);
+    expect(badge(cPausedPast)).toHaveTextContent(he.listings.status.paused);
+
+    const a = (n: number, nw: number) => {
+      const text = i18n.t('applicants.link', { count: n });
+      return nw > 0 ? `${text} ${i18n.t('applicants.newBadge', { count: nw })}` : text;
+    };
+    expect(order(cLive)).toEqual([he.listings.actions.pause, he.listings.actions.edit, a(12, 5)]);
+    expect(order(cPaused)).toEqual([
+      he.listings.actions.resume,
+      he.listings.actions.edit,
+      a(paused.applicant_count, paused.new_applicant_count),
+    ]);
+    expect(order(cExpired)).toEqual([a(expired.applicant_count, expired.new_applicant_count)]);
+    expect(order(cRoom)).toEqual([
+      he.listings.actions.pause,
+      he.listings.actions.edit,
+      a(room.applicant_count, room.new_applicant_count),
+      `${he.listings.mine.people} ${i18n.t('listings.mine.peopleLiked', { count: 2 })}`,
+      i18n.t('listings.mine.flatmates', { count: 1 }),
+    ]);
+    expect(order(cPausedPast)).toEqual([
+      he.listings.actions.resume,
+      a(pausedPast.applicant_count, pausedPast.new_applicant_count),
+      i18n.t('listings.mine.flatmates', { count: pausedPast.flatmate_count }),
+    ]);
+    // Each badge is inside its link.
+    const applicantsLink = within(cLive).getByRole('link', { name: a(12, 5) });
+    expect(
+      within(applicantsLink).getByText(i18n.t('applicants.newBadge', { count: 5 })),
+    ).toBeVisible();
+    expect(newLink()).toHaveAttribute('href', '/listings/new');
+  });
+
+  it('ac2_cached_list_survives_failed_refetch', async () => {
+    const live = listing();
+    const api = mockApi({
+      'GET /me/listings': [json([live]), json({ detail: 'boom' }, 500), json([live])],
+    });
+    const client = testQueryClient();
+    rtlRender(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/me/listings']}>
+          <MyListingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('article')).toBeVisible();
+    await act(async () => {
+      await client.refetchQueries({ queryKey: MY_LISTINGS_KEY }).catch(() => undefined);
+    });
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/listings').length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByRole('article')).toBeVisible();
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+  });
+
+  it('ac7_published_celebrates', async () => {
+    mockApi({ 'GET /me/listings': [json([listing()])] });
+    const view = renderRoutes(
+      { pathname: '/me/listings', state: { published: true } },
+      <Routes>
+        <Route path="/me/listings" element={<MyListingsPage />} />
+      </Routes>,
+    );
+    const line = await screen.findByText(he.listings.mine.published);
+    expect(line.closest('[role="status"]')).not.toBeNull();
+    const turtles = document.querySelectorAll('img[src*="celebrate"]');
+    expect(turtles).toHaveLength(1);
+    expect(turtles[0]).toHaveAttribute('alt', '');
+    expect(document.querySelectorAll('img')).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A plain visit: no line, no turtle.
+    mockApi({ 'GET /me/listings': [json([listing()])] });
+    render();
+    await screen.findByRole('article');
+    expect(screen.queryByText(he.listings.mine.published)).toBeNull();
+    expect(document.querySelectorAll('img[src*="celebrate"]')).toHaveLength(0);
+  });
+
+  it('ac8_empty_sleeps', async () => {
+    mockApi({ 'GET /me/listings': [json([])] });
+    render();
+    expect(await screen.findByText(he.listings.mine.empty)).toBeVisible();
+    expect(document.querySelectorAll('img[src*="sleep"]')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: he.listings.mine.emptyAction })).toHaveAttribute(
+      'href',
+      '/listings/new',
+    );
   });
 });

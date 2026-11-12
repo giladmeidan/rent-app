@@ -293,4 +293,33 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     expect(844 - (button.y + button.height)).toBeLessThanOrEqual(40);
     expect(button.y + button.height).toBeLessThanOrEqual(844);
   });
+
+  // Spec 0009o AC4, on the same owner, who holds the apartment and the room by now.
+  await test.step('0009o my listings at 1440 and 390', async () => {
+    const articles = page.getByRole('article');
+    const boxes = async () => {
+      await expect(articles).toHaveCount(2);
+      const first = await articles.nth(0).boundingBox();
+      const second = await articles.nth(1).boundingBox();
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      return {
+        first: first as { x: number; y: number; width: number; height: number },
+        second: second as { x: number; y: number; width: number; height: number },
+      };
+    };
+
+    // 1440: two columns, the cards share a top edge.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/me/listings');
+    let { first, second } = await boxes();
+    expect(Math.abs(first.y - second.y)).toBeLessThanOrEqual(2);
+    expect(first.x).not.toBe(second.x);
+
+    // 390: one column, the second card below the first.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    ({ first, second } = await boxes());
+    expect(second.y).toBeGreaterThan(first.y + first.height - 1);
+  });
 });

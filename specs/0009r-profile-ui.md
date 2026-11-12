@@ -1,7 +1,7 @@
 ---
 id: 0009r
 title: The seeker profile is grouped into sections, with a sticky save bar above the tab bar and, on a desktop, a section index beside the form on the listing wizard's two tracks, built from the 0009d kit and tokens, with every behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Field + TextInput / Textarea, PageContainer, PageHeader), the token scale, the restyled ChoiceGroup (with its `choiceSegment` export) / Switch / Skeleton / EmptyState / ErrorState, the full-width shell, the page roots and `pageWidths.test.ts`. Not 0009m: the auth half shares only he.json with this spec
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Opus/medium (~3 h): no auth, money or data; one large source file (ProfilePage.tsx), index.css, three test files, the screenshot harness if 0009l / 0009k / 0009m have not added it
@@ -487,3 +487,12 @@ None is count-dependent.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009r — the seeker profile in sections, with a sticky save bar and a desktop section index, on the kit   PR open, not merged
+Shipped: `/me/profile` is grouped into "מה מחפשים", "משק הבית והעדפות" and "חדר בדירת שותפים" (plus the questionnaire and "הצגה לבעלי חדרים" while the room switch is on). The save button sits in a sticky bar that holds the saved / failed states; on a phone it rides just above the tab bar. From 1024 px it uses 0009k's two tracks: a sticky section index (plain `#` links, 3 or 5) beside a ≤ 42 rem form. Areas are `choiceSegment` chips with 0009k's check mark while checked. State, validation, request bodies, focus moves, `?next` and `?section=room` are unchanged. Demo: `make dev` → a seeker's `/me/profile` at 1440 (index links jump, the bar sticks) → at 390 (the bar above the tab bar) → room switch on (the index grows to 5).
+Tests: +4 unit (`ac1_sections_index_and_field_order`, `ac2_save_bar`, `ac3_load_errors_retry`, `ac4_area_check_mark`). AC5's two assertion edits: `ProfilePage.test.tsx:331` (move-in) and `:672` (birth year), `toHaveAttribute('aria-invalid', 'false')` → `not.toHaveAttribute('aria-invalid', 'true')`; no other existing assertion changed. +1 e2e step `0009r profile layout` in `applications.spec.ts::ac9_fill_profile_apply_withdraw` (CI only; the existing axe call there already covers the room-on profile). 20 screenshots in `web/screens/0009r/` (p1–p10 × mobile / desktop, AC8).
+Findings (ux only, quick route; one round): 0 blockers, 0 majors, 2 minors, both spec-intended and kept (a move-in error now reads above 0009f's date read-back, because `Field` puts its error under the input; the saved line sits before the button in the bar). 3 nits dropped. No behaviour change found, so no extra reviewers.
+Kit: one fallback, the local sticky save bar (kit gap #2). `Field` builds its own hint / error ids (birth year, about-me); `DateReadback` joins the move-in input via `withReadback`; 0009t's saved line kept as main has it (rendered while saved, focused on an in-page save).
+AC7: the hex grep prints nothing; the class-token grep prints only `max-lg:bottom-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom,0px))]` (:572) and `lg:grid-cols-[18rem_minmax(0,42rem)]` (:658). No `dangerouslySetInnerHTML` / `innerHTML` / linkify in the diff. `index.css`: the scroll-padding rule in 0009a's merged form (`@media not all and (min-width: 1024px)`, `:root:has(…):has(…)`, `scroll-padding-block-end`, + 118 px).
+Keyboard check: at 390 px a Tab-focused about-me stays clear of the bar (textarea bottom 617 px, bar top 671 px); an on-screen keyboard cannot be emulated here.
+Checks on the final head (main at 0009j + 0009p merged): make lint / test (api 476, web 529) / i18n-check / build-web green; e2e runs in CI only (Gilad 2026-11-12). FOLLOWUPS: the 0006d profile load-error-test line (was 118) ticked. Changed in PRODUCT.md: nothing.

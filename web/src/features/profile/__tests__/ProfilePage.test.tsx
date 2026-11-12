@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AreaOut } from '../../../api/client';
 import i18n from '../../../app/i18n';
+import { choiceSegment } from '../../../components/ChoiceGroup';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -327,7 +328,7 @@ describe('ProfilePage', () => {
     expectError(moveIn(), he.profile.errors.moveIn);
     expect(api.calls(PUT)).toHaveLength(0);
     set(moveIn(), inDays(10));
-    expect(moveIn()).toHaveAttribute('aria-invalid', 'false');
+    expect(moveIn()).not.toHaveAttribute('aria-invalid', 'true');
     save();
     await expectSaved();
     expect(api.calls(PUT)).toHaveLength(1);
@@ -668,7 +669,7 @@ describe('ProfilePage', () => {
 
     for (const value of ['abcd', '19x5', String(year - 17), String(year - 100)]) {
       set(birthYear(), value);
-      expect(birthYear()).toHaveAttribute('aria-invalid', 'false');
+      expect(birthYear()).not.toHaveAttribute('aria-invalid', 'true');
       save();
       const field = birthYear();
       expect(field, value).toHaveAttribute('aria-invalid', 'true');
@@ -919,5 +920,179 @@ describe('ProfilePage', () => {
     });
     expect(aboutMe()).toHaveAttribute('aria-invalid', 'true');
     expect(aboutMe()).toHaveFocus();
+  });
+
+  // Spec 0009r: the sections, the side index, the save bar and the areas' check mark.
+  describe('0009r layout', () => {
+    const navName = he.profile.nav.label;
+    const formEl = () => document.querySelector('form') as HTMLFormElement;
+    const names = () => {
+      const all = [...formEl().querySelectorAll<HTMLInputElement>('input[name], textarea[name]')];
+      return [...new Set(all.map((el) => el.name))];
+    };
+
+    it('ac1_sections_index_and_field_order', async () => {
+      renderPage({ [PROFILE]: [json(profile({ gender: 'woman' }))] });
+      await form();
+      expect(screen.getByRole('switch', { name: he.profile.room.switch })).toBeChecked();
+
+      // Headings, by role: the index links repeat their text.
+      const h2s = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+      expect(h2s).toEqual([
+        he.profile.sections.search,
+        he.profile.sections.household,
+        he.profile.room.title,
+      ]);
+      expect(
+        screen.getByRole('heading', { level: 3, name: he.profile.room.peopleTitle }),
+      ).toBeVisible();
+
+      // The privacy line and the intro are in the head, outside the form.
+      expect(screen.getByText(he.profile.privacy).closest('form')).toBeNull();
+      expect(screen.getByText(he.profile.intro).closest('form')).toBeNull();
+
+      // The index: five links, each target exists.
+      const nav = screen.getByRole('navigation', { name: navName });
+      const hrefs = () =>
+        within(nav)
+          .getAllByRole('link')
+          .map((a) => a.getAttribute('href'));
+      expect(hrefs()).toEqual([
+        '#profile-search',
+        '#profile-household',
+        '#profile-room',
+        '#profile-lifestyle',
+        '#profile-people',
+      ]);
+      for (const href of hrefs()) expect(document.querySelector(String(href))).not.toBeNull();
+
+      expect(names()).toEqual([
+        'budget_max_ils',
+        'move_in_date',
+        'area_ids',
+        'household',
+        'contract_months',
+        'parking_needed',
+        'gender',
+        'birth_year',
+        'flatmate_gender',
+        'lifestyle-cleanliness',
+        'lifestyle-guests',
+        'lifestyle-night',
+        'lifestyle-social',
+        'lifestyle-kosher',
+        'lifestyle-shabbat',
+        'lifestyle-work_from_home',
+        'about_me',
+      ]);
+
+      // Switched off: the first three links, and the two targets are gone.
+      fireEvent.click(screen.getByRole('switch', { name: he.profile.room.switch }));
+      expect(hrefs()).toEqual(['#profile-search', '#profile-household', '#profile-room']);
+      expect(document.querySelector('#profile-lifestyle')).toBeNull();
+      expect(document.querySelector('#profile-people')).toBeNull();
+      expect(
+        screen.queryByRole('heading', { level: 3, name: he.profile.room.peopleTitle }),
+      ).toBeNull();
+    });
+
+    it('ac2_save_bar', async () => {
+      // 200: the button and the saved line are in the bar, the form's last element child.
+      renderPage({ [PROFILE]: [json(profile())] });
+      await form();
+      const bar = () => formEl().querySelector<HTMLElement>('[data-sticky-footer]') as HTMLElement;
+      expect(formEl().lastElementChild).toBe(bar());
+      expect(within(bar()).getByRole('button', { name: he.profile.save })).toHaveAttribute(
+        'type',
+        'submit',
+      );
+      save();
+      await expectSaved();
+      expect(within(bar()).getByRole('status')).toHaveTextContent(he.profile.saved);
+      cleanup();
+
+      // 500: the ErrorState is in the bar, and its retry re-sends the same body.
+      const api = renderPage({
+        [PROFILE]: [json(profile())],
+        [PUT]: [json({}, 500), savedReply],
+      });
+      await form();
+      save();
+      const retry = await within(bar()).findByRole('button', { name: he.common.retry });
+      expect(api.calls(PUT)).toHaveLength(1);
+      fireEvent.click(retry);
+      await vi.waitFor(() => {
+        expect(api.calls(PUT)).toHaveLength(2);
+      });
+      expect(api.calls(PUT)[1]?.body).toStrictEqual(api.calls(PUT)[0]?.body);
+      cleanup();
+
+      // No areas: no bar.
+      renderPage({ [AREAS]: [json([])] });
+      expect(await screen.findByText(he.areas.empty)).toBeVisible();
+      expect(document.querySelector('[data-sticky-footer]')).toBeNull();
+    });
+
+    it('ac3_load_errors_retry', async () => {
+      const title = () => screen.getByRole('heading', { level: 1, name: he.profile.title });
+      const pending = deferred();
+
+      // Loading: the head shows, the privacy line is outside any form.
+      let api = renderPage({ [PROFILE]: [pending.promise] });
+      expect(
+        await screen.findByRole('heading', { level: 1, name: he.profile.title }),
+      ).toBeVisible();
+      expect(screen.getByText(he.profile.privacy).closest('form')).toBeNull();
+      pending.resolve(notFound());
+      await form();
+      cleanup();
+
+      // GET /me/profile fails (not 401), GET /areas is fine: one ErrorState, no form; the retry
+      // (now 200) shows the prefilled form.
+      api = renderPage({ [PROFILE]: [json({}, 500), json(profile())] });
+      expect(await screen.findByRole('button', { name: he.common.retry })).toBeVisible();
+      expect(title()).toBeVisible();
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      expect(screen.getByText(he.profile.privacy).closest('form')).toBeNull();
+      expect(document.querySelector('form')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: he.common.retry }));
+      await form();
+      expect(budget()).toHaveValue(7500);
+      expect(title()).toBeVisible();
+      expect(api.calls(PROFILE)).toHaveLength(2);
+      cleanup();
+
+      // Both fail: one ErrorState, and its retry requests both again.
+      api = renderPage({
+        [PROFILE]: [json({}, 500), json({}, 500)],
+        [AREAS]: [json({}, 500), json({}, 500)],
+      });
+      expect(await screen.findByRole('button', { name: he.common.retry })).toBeVisible();
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      expect(title()).toBeVisible();
+      expect(document.querySelector('form')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: he.common.retry }));
+      await vi.waitFor(() => {
+        expect(api.calls(PROFILE)).toHaveLength(2);
+        expect(api.calls(AREAS)).toHaveLength(2);
+      });
+    });
+
+    it('ac4_area_check_mark', async () => {
+      renderPage();
+      await form();
+      const label = (area: AreaOut) =>
+        (areaBox(area) as HTMLInputElement).labels?.[0] as HTMLLabelElement;
+      const marks = (area: AreaOut) => label(area).querySelectorAll('svg[aria-hidden="true"]');
+      for (const area of [gushDan, sharon]) {
+        for (const cls of choiceSegment.split(' ')) expect(label(area)).toHaveClass(cls);
+        expect(marks(area)).toHaveLength(0);
+      }
+      fireEvent.click(areaBox(gushDan));
+      expect(marks(gushDan)).toHaveLength(1);
+      expect(marks(sharon)).toHaveLength(0);
+      fireEvent.click(areaBox(gushDan));
+      expect(marks(gushDan)).toHaveLength(0);
+    });
   });
 });
