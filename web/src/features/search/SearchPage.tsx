@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
@@ -50,12 +50,36 @@ export function SearchPage() {
   const titleId = useId();
   // From `lg` up the panel is always open beside the results, and the toggle is gone.
   const isDesktop = useIsDesktop();
+  // Focus after an action that removes the control used (spec 0009t): a filter Apply or Clear that
+  // changed the URL remounts the form (its `key`), so focus goes to the results count line; "show
+  // the list" on a failed map removes its button, so focus goes to the pressed list button.
+  const countRef = useRef<HTMLParagraphElement>(null);
+  const listButtonRef = useRef<HTMLButtonElement>(null);
+  const focusCount = useRef(false);
+  const focusListButton = useRef(false);
+  const query = searchParams.toString();
 
+  useEffect(() => {
+    if (focusCount.current) {
+      focusCount.current = false;
+      countRef.current?.focus();
+    }
+    if (focusListButton.current && view !== 'map') {
+      focusListButton.current = false;
+      listButtonRef.current?.focus();
+    }
+  }, [query, view]);
+
+  /** Goes to `next`; when that changes the URL, focus moves to the count line after it. */
+  const setFilters = (next: URLSearchParams) => {
+    if (next.toString() !== query) focusCount.current = true;
+    setSearchParams(next);
+  };
   const apply = (values: FormFilters) => {
-    setSearchParams(toSearchParams({ ...parseFilters(searchParams), ...values }));
+    setFilters(toSearchParams({ ...parseFilters(searchParams), ...values }));
   };
   // Clear keeps the view: it is not a filter.
-  const clear = () => setSearchParams(view === 'map' ? { view: 'map' } : {});
+  const clear = () => setFilters(new URLSearchParams(view === 'map' ? { view: 'map' } : {}));
   const sort = (value: Sort) => setSearchParams(toSearchParams({ ...filters, sort: value }));
   const switchView = (next: View) =>
     setSearchParams(toSearchParams({ ...filters, view: next === 'map' ? 'map' : undefined }));
@@ -116,7 +140,11 @@ export function SearchPage() {
                 withMatch={hasProfile || sortValue === 'match'}
                 onChange={sort}
               />
-              <ViewToggle view={view ?? 'list'} onChange={switchView} />
+              <ViewToggle
+                view={view ?? 'list'}
+                onChange={switchView}
+                listButtonRef={listButtonRef}
+              />
             </div>
           </div>
 
@@ -126,7 +154,11 @@ export function SearchPage() {
             <SearchMap
               filters={filtersWithoutView}
               profile={profile}
-              onShowList={() => switchView('list')}
+              countRef={countRef}
+              onShowList={() => {
+                focusListButton.current = true;
+                switchView('list');
+              }}
             />
           ) : (
             <ResultsList
@@ -134,6 +166,7 @@ export function SearchPage() {
               profile={profile}
               hasFilters={active > 0}
               onClear={clear}
+              countRef={countRef}
             />
           )}
         </div>

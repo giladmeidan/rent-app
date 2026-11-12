@@ -262,4 +262,40 @@ describe('OtpForm', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('ac4_resend_announced_and_focused', async () => {
+    mockApi({ 'POST /auth/otp/request': [empty(204), empty(204)] });
+    renderAt('/login', <OtpForm withProfile={false} />);
+    /** The form's own status line (the harness's location probe is an <output>). */
+    const status = () => document.querySelector('p[role="status"]');
+
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+
+    // The verify step mounts the status line empty; the countdown itself is not announced.
+    expect(status()).not.toBeNull();
+    expect(status()).toHaveTextContent('');
+    await advance(10_000);
+    expect(status()).toHaveTextContent('');
+
+    // The cooldown ends: "you can resend".
+    await advance(20_000);
+    expect(status()).toHaveTextContent(he.auth.resendReady);
+
+    // A resend 200: "code resent", focus on the code input, the resend button cooling down.
+    const resend = screen.getByRole('button', { name: he.auth.resend });
+    act(() => resend.focus());
+    fireEvent.click(resend);
+    await flush();
+    expect(status()).toHaveTextContent(he.auth.codeResent);
+    expect(document.activeElement).toBe(screen.getByLabelText(he.auth.code.label));
+    expect(screen.getByRole('button', { name: resendIn(30) })).toBeDisabled();
+
+    // That cooldown ends too.
+    await advance(30_000);
+    expect(status()).toHaveTextContent(he.auth.resendReady);
+  });
 });

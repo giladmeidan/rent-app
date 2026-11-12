@@ -45,8 +45,32 @@ function isMessageError(detail: unknown): boolean {
 
 type Apply = ReturnType<typeof useApply>;
 
-/** The empty state: the apply button, and the message form it discloses. */
-function ApplyForm({ apply }: { apply: Apply }) {
+/** What the section shows below its count line. */
+type Branch =
+  | 'loading'
+  | 'visitor'
+  | 'none'
+  | 'error'
+  | 'applied'
+  | 'misfit'
+  | 'roomGate'
+  | 'profileGate'
+  | 'form';
+/** The branches that take focus when they replace the form after a submit. */
+const FOCUSED_BRANCHES = new Set<Branch>(['applied', 'misfit', 'roomGate', 'profileGate']);
+
+/**
+ * The empty state: the apply button, and the message form it discloses. `onSubmitted(true)` runs
+ * before every request, so the section can move focus to whatever replaces the form (spec 0009t);
+ * `onSubmitted(false)` after an answer that keeps the form, so a later swap takes no focus.
+ */
+function ApplyForm({
+  apply,
+  onSubmitted,
+}: {
+  apply: Apply;
+  onSubmitted: (submitted: boolean) => void;
+}) {
   const { t } = useTranslation();
   const id = useId();
   const formId = `${id}-form`;
@@ -65,6 +89,7 @@ function ApplyForm({ apply }: { apply: Apply }) {
   const [unavailable, setUnavailable] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const unavailableRef = useRef<HTMLParagraphElement>(null);
   // Same-tick guard: a double click sends one request (every attempt counts toward the limit).
   const inFlight = useRef(false);
   const lastBody = useRef('');
@@ -73,11 +98,17 @@ function ApplyForm({ apply }: { apply: Apply }) {
     if (open) fieldRef.current?.focus();
   }, [open]);
 
+  // A 404 replaces the form with its alert: focus follows.
+  useEffect(() => {
+    if (unavailable) unavailableRef.current?.focus();
+  }, [unavailable]);
+
   function send(body: string) {
     if (inFlight.current) return;
     inFlight.current = true;
     lastBody.current = body;
     setServerErr(null);
+    onSubmitted(true);
     apply.mutate(body, {
       onSettled: () => {
         inFlight.current = false;
@@ -87,6 +118,7 @@ function ApplyForm({ apply }: { apply: Apply }) {
         // and a room's `seeker_gender_required` / `room_gender_mismatch`) are the hook's: the
         // controls it swaps in are the feedback.
         if (hasStatus(error, 401) || hasStatus(error, 409)) return;
+        onSubmitted(false);
         // 404 removes the form; every other error keeps it, with focus back on the text.
         if (hasStatus(error, 404)) {
           setUnavailable(true);
@@ -130,7 +162,12 @@ function ApplyForm({ apply }: { apply: Apply }) {
 
   if (unavailable) {
     return (
-      <p role="alert" className={fieldError}>
+      <p
+        ref={unavailableRef}
+        tabIndex={-1}
+        role="alert"
+        className={`${fieldError} focus:outline-none`}
+      >
         {t('applications.errors.unavailable')}
       </p>
     );
@@ -205,7 +242,13 @@ function ApplyForm({ apply }: { apply: Apply }) {
           )}
           {serverErr === 'failed' && (
             <div id={serverErrorId}>
-              <ErrorState onRetry={() => send(lastBody.current)} />
+              <ErrorState
+                onRetry={() => {
+                  // The box unmounts at once: focus waits in the text, not on <body>.
+                  fieldRef.current?.focus();
+                  send(lastBody.current);
+                }}
+              />
             </div>
           )}
           <div className="flex flex-wrap gap-[10px] pt-2">
@@ -236,12 +279,13 @@ function Applied({ application }: { application: MyApplicationOut }) {
         {application.source === 'like' ? (
           <p
             data-testid="application-mutual"
-            className="rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong"
+            tabIndex={-1}
+            className="rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong focus:outline-none"
           >
             {t('applications.mutual')}
           </p>
         ) : (
-          <p className="text-start text-[15px] font-semibold">
+          <p tabIndex={-1} className="text-start text-[15px] font-semibold focus:outline-none">
             {t('applications.applied', { date: appliedOn(application.created_at) })}
           </p>
         )}
@@ -277,6 +321,10 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   const mine = useMyApplications(isSeeker);
   const profile = useProfile(isSeeker);
   const apply = useApply(listing.id);
+  // A submit in this tab (spec 0009t): set by the form before each request, it lives here because
+  // every swapping 409 unmounts the form. The branch that replaces the form then takes focus.
+  const submitted = useRef(false);
+  const controlsRef = useRef<HTMLDivElement>(null);
 
   const countLine = isOwner
     ? t('applications.countOwner', { count: listing.applicant_count })
@@ -308,7 +356,9 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   const live = application !== undefined && application.status !== 'withdrawn';
 
   let controls;
+  let branch: Branch;
   if (me.isPending || (isSeeker && mine.isPending)) {
+    branch = 'loading';
     controls = skeleton;
   } else if (
     me.data === null ||
@@ -319,18 +369,26 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     // A failed first /me renders the logged-out state, as the header does; a failed background
     // refetch keeps the cached person (and an open form). A 401 on the list or the profile clears
     // the session (useMyApplications, useProfile), which lands here too.
+    branch = 'visitor';
     controls = visitor;
   } else if (!isSeeker) {
+    branch = 'none';
     controls = null;
   } else if (mine.isError && mine.data === undefined) {
     // Only when nothing is cached: a failed background refetch keeps the list and the draft.
+    branch = 'error';
     controls = <ErrorState onRetry={() => void mine.refetch()} />;
   } else if (live) {
+    branch = 'applied';
     // An application to this listing never waits for the profile.
     controls = (
       <div className="flex flex-col items-start gap-2">
         {apply.isSuccess && (
-          <p role="status" className="text-start text-[15px] font-bold text-accent-strong">
+          <p
+            role="status"
+            tabIndex={-1}
+            className="text-start text-[15px] font-bold text-accent-strong focus:outline-none"
+          >
             {t('applications.sent')}
           </p>
         )}
@@ -340,10 +398,17 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   } else if (listing.room_fit === false) {
     // The API's answer for this seeker; it needs no profile request. No link: the cause may be
     // the room's preference or the seeker's own, and the line nudges no one to change either.
-    controls = <p className="text-start text-[15px]">{t('rooms.apply.misfit')}</p>;
+    branch = 'misfit';
+    controls = (
+      <p tabIndex={-1} className="text-start text-[15px] focus:outline-none">
+        {t('rooms.apply.misfit')}
+      </p>
+    );
   } else if (profile.isPending) {
+    branch = 'loading';
     controls = skeleton;
   } else if (profile.isError && profile.data === undefined) {
+    branch = 'error';
     controls = <ErrorState onRetry={() => void profile.refetch()} />;
   } else if (
     listing.listing_type === 'room' &&
@@ -351,12 +416,31 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     (profile.data === null || profile.data.gender === null)
   ) {
     // Before `ProfileGate`: the room section's page also creates the housing profile.
+    branch = 'roomGate';
     controls = <RoomGate listing={listing} />;
   } else if (profile.data === null) {
+    branch = 'profileGate';
     controls = <ProfileGate listingId={listing.id} />;
   } else {
-    controls = <ApplyForm apply={apply} />;
+    branch = 'form';
+    controls = (
+      <ApplyForm
+        apply={apply}
+        onSubmitted={(value) => {
+          submitted.current = value;
+        }}
+      />
+    );
   }
+
+  // After a submit, the first line of the branch that replaced the form takes focus: the sent
+  // line (201), the misfit line, a gate's paragraph, or the applied block (409s). A branch shown
+  // without a submit in this tab (on mount, after a reload or a push) takes none.
+  useEffect(() => {
+    if (!submitted.current || branch === 'form') return;
+    submitted.current = false;
+    if (FOCUSED_BRANCHES.has(branch)) controlsRef.current?.querySelector('p')?.focus();
+  }, [branch]);
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
@@ -364,7 +448,9 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
         {isOwner ? t('applications.headingOwner') : t('applications.heading')}
       </h2>
       <p className="text-start text-[15px] text-ink-muted">{countLine}</p>
-      {controls}
+      <div ref={controlsRef} className="contents">
+        {controls}
+      </div>
     </section>
   );
 }

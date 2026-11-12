@@ -193,6 +193,47 @@ describe('JoinFlatPage', () => {
     reset(view);
   });
 
+  it('ac3_focus_after_final_error', async () => {
+    // A final 4xx removes the join button: its failure line takes focus.
+    for (const [reply, text] of [
+      [err(404, 'not_found'), he.flatmates.join.invalid],
+      [err(409, 'flatmates_full'), he.flatmates.join.full],
+    ] as const) {
+      const { view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [reply] });
+      const button = await cta();
+      act(() => button.focus());
+      fireEvent.click(button);
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(text);
+      await waitFor(() => {
+        expect(alert).toHaveFocus();
+      });
+      reset(view);
+    }
+
+    // An unknown 409 ("other") has no line: focus falls back to <main>.
+    mockApi({
+      'GET /me': [json(seeker)],
+      [PREVIEW]: [json(P)],
+      [JOIN]: [err(409, 'something_new')],
+    });
+    renderRoutes(
+      `/flatmates/join#${T}`,
+      <main id="main" tabIndex={-1}>
+        {routes}
+      </main>,
+    );
+    const button = await cta();
+    act(() => button.focus());
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: he.flatmates.join.cta })).toBeNull();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('main')).toHaveFocus();
+    });
+  });
+
   it('ac9_final_states_have_a_way_out', async () => {
     // "למודעות שלי", "למועמדויות שלי", "לחיפוש דירות וחדרים"
     const toMyListings = '\u05dc\u05de\u05d5\u05d3\u05e2\u05d5\u05ea \u05e9\u05dc\u05d9';

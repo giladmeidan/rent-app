@@ -89,6 +89,26 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   await expect(pin).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(he.search.map.unavailable)).toHaveCount(0);
 
+  await test.step('ac6_one_map_landmark', async () => {
+    // One landmark: the wrapper's region; MapLibre's canvas region is now an `application`.
+    await expect(page.getByRole('region', { name: he.search.map.label, exact: true })).toHaveCount(
+      1,
+    );
+    await expect(page.getByRole('region', { name: he.map.title, exact: true })).toHaveCount(0);
+    const canvas = region.locator('canvas.maplibregl-canvas');
+    await expect(canvas).toHaveAttribute('role', 'application');
+    await expect(canvas).toHaveAttribute('tabindex', '0');
+    await expect(canvas).toHaveAttribute('aria-label', he.map.title);
+    // The "updating" pill (drawn once the map has loaded) is gone with the busy state.
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    await expect(page.getByTestId('map-updating')).toHaveCount(0);
+    // Only the pins are exempt from target-size (WCAG 2.5.8 "essential": they sit at their
+    // listings' true positions; accepted by Gilad 2026-11-12); the rest of the page is checked.
+    await expectNoAxeViolations(page, '/search?view=map (with pins)', {
+      markerTargetSizeExempt: true,
+    });
+  });
+
   // Its pin opens its card (pressed from the keyboard: pins may overlap among 50).
   await pin.press('Enter');
   const card = page.getByRole('article').filter({ hasText: street });
@@ -98,7 +118,15 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   // The card's title opens the listing page, with its approximate-area map.
   await card.getByRole('link').click();
   await expect(page).toHaveURL(`/listings/${id}`);
-  await expect(page.getByRole('region', { name: he.listing.mapLabel })).toBeVisible();
+  const small = page.getByRole('region', { name: he.listing.mapLabel });
+  await expect(small).toBeVisible();
+  // The small static map is hidden from assistive tech and never focusable (spec 0009t AC6).
+  await expect(small).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  const smallCanvas = small.locator('canvas.maplibregl-canvas');
+  await expect(smallCanvas).toHaveAttribute('aria-hidden', 'true');
+  await expect(smallCanvas).toHaveAttribute('tabindex', '-1');
+  await expect(smallCanvas).not.toHaveAttribute('role', /.*/);
+  await expect(smallCanvas).not.toHaveAttribute('aria-label', /.*/);
   await expectNoAxeViolations(page, 'listing page (visitor)');
 
   // Back on the map view, a reload keeps it.

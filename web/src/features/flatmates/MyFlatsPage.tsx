@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -17,17 +17,34 @@ const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const action = `inline-flex min-h-[44px] items-center justify-center self-start rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
-function FlatRow({ flat }: { flat: MyFlatOut }) {
+function FlatRow({ flat, onLeft }: { flat: MyFlatOut; onLeft: () => void }) {
   const { t } = useTranslation();
   const leave = useLeaveFlat();
   const titleId = useId();
   // Same-tick guard: a double click sends one DELETE.
   const inFlight = useRef(false);
+  // A row that unmounts after a leave that did not fail was dropped by the leave's refetch: it
+  // reports it, so the page can move focus (spec 0009t).
+  const leaving = useRef(false);
+  const onLeftRef = useRef(onLeft);
+  useEffect(() => {
+    onLeftRef.current = onLeft;
+  });
+  useLayoutEffect(
+    () => () => {
+      if (leaving.current) onLeftRef.current();
+    },
+    [],
+  );
 
   function onLeave() {
     if (inFlight.current || !window.confirm(t('flatmates.mine.leaveConfirm'))) return;
     inFlight.current = true;
+    leaving.current = true;
     leave.mutate(flat.listing.id, {
+      onError: () => {
+        leaving.current = false;
+      },
       onSettled: () => {
         inFlight.current = false;
       },
@@ -69,6 +86,12 @@ export function MyFlatsPage() {
   const { t } = useTranslation();
   const flats = useMyFlats();
   usePageTitle(t('flatmates.mine.title'));
+  // After a leave removes its row (and button), focus goes to the page's <h1>.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [left, setLeft] = useState(0);
+  useEffect(() => {
+    if (left > 0) headingRef.current?.focus();
+  }, [left]);
 
   let body;
   if (flats.data === undefined) {
@@ -85,7 +108,7 @@ export function MyFlatsPage() {
     body = (
       <ul className="flex flex-col gap-3">
         {flats.data.map((flat) => (
-          <FlatRow key={flat.listing.id} flat={flat} />
+          <FlatRow key={flat.listing.id} flat={flat} onLeft={() => setLeft((n) => n + 1)} />
         ))}
       </ul>
     );
@@ -99,7 +122,13 @@ export function MyFlatsPage() {
       >
         {t('flatmates.mine.back')}
       </Link>
-      <h1 className="text-start text-2xl font-extrabold">{t('flatmates.mine.title')}</h1>
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-start text-2xl font-extrabold focus:outline-none"
+      >
+        {t('flatmates.mine.title')}
+      </h1>
       {body}
     </PageContainer>
   );

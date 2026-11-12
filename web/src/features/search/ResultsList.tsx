@@ -1,4 +1,5 @@
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
@@ -22,10 +23,12 @@ type Props = {
   onClear: () => void;
   /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
   profile: SeekerProfileOut | undefined;
+  /** The count line, focused by the page after a filter change (spec 0009t). */
+  countRef?: Ref<HTMLParagraphElement>;
 };
 
 /** The count line (always mounted, so its first announcement is heard) and the result states. */
-export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
+export function ResultsList({ search, hasFilters, onClear, profile, countRef }: Props) {
   const { t } = useTranslation();
   const { data } = search;
 
@@ -114,7 +117,12 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p aria-live="polite" className="min-h-6 text-label lg:text-h3">
+      <p
+        ref={countRef}
+        tabIndex={-1}
+        aria-live="polite"
+        className="min-h-6 text-label focus:outline-none lg:text-h3"
+      >
         {count}
         {sortedByMatch && <span className="text-ink-muted">{t('search.sortedByMatch')}</span>}
       </p>

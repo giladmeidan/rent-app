@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -267,6 +267,56 @@ describe('SearchPage', () => {
     fireEvent.click(feature(he.search.feature.pets));
     apply();
     expect(currentPath()).toBe('/search?pets=true&sort=price_asc');
+  });
+
+  it('ac3_focus_after_apply_and_clear', async () => {
+    // An Apply that changes the URL remounts the form (its key), so focus moves to the count line.
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    let view = render('/search');
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
+    openPanel();
+    fireEvent.change(priceTo(), { target: { value: '8000' } });
+    let applyButton = screen.getByRole('button', { name: he.search.apply });
+    act(() => applyButton.focus());
+    apply();
+    expect(currentPath()).toBe('/search?price_max=8000');
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+    expect(applyButton).not.toBeInTheDocument();
+
+    // Apply with unchanged filters: the URL and the form stay, and so does focus on Apply.
+    applyButton = screen.getByRole('button', { name: he.search.apply });
+    act(() => applyButton.focus());
+    apply();
+    expect(currentPath()).toBe('/search?price_max=8000');
+    await settle();
+    expect(applyButton).toBeInTheDocument();
+    expect(applyButton).toHaveFocus();
+
+    // Clear: the count line again.
+    const clearButton = screen.getByRole('button', { name: he.search.clear });
+    act(() => clearButton.focus());
+    fireEvent.click(clearButton);
+    expect(currentPath()).toBe('/search');
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The empty state's Clear does the same.
+    mockApi({ [SEARCH]: [json(page([])), json(page([publicListing()]))] });
+    view = render('/search?pets=true');
+    await screen.findByText(he.search.empty);
+    const emptyClear = screen.getByRole('button', { name: he.search.clear });
+    act(() => emptyClear.focus());
+    fireEvent.click(emptyClear);
+    expect(currentPath()).toBe('/search');
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+    expect(await screen.findByText(i18n.t('search.count', { count: 1 }))).toBe(liveRegion());
   });
 
   it('ac4_result_states', async () => {

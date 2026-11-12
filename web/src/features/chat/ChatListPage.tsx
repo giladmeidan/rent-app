@@ -113,6 +113,13 @@ export function ChatListPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [joined] = useState(() => isJoined(location.state));
+  // The line mounts empty and its text lands a frame later, so it is announced (spec 0009t).
+  const [joinedText, setJoinedText] = useState(false);
+  useEffect(() => {
+    if (!joined) return;
+    const frame = requestAnimationFrame(() => setJoinedText(true));
+    return () => cancelAnimationFrame(frame);
+  }, [joined]);
 
   useEffect(() => {
     if (isJoined(location.state)) {
@@ -164,7 +171,7 @@ export function ChatListPage() {
       </div>
       {joined && (
         <p role="status" className="text-start text-sm font-semibold text-accent-strong">
-          {t('flatmates.join.done')}
+          {joinedText ? t('flatmates.join.done') : ''}
         </p>
       )}
       {body}

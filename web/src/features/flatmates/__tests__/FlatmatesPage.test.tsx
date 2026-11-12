@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -192,6 +192,32 @@ describe('FlatmatesPage', () => {
       expect(screen.getByRole('button', { name: he.flatmates.invite.rotate })).toBeEnabled();
     });
     expect(screen.getByRole('alert')).toHaveTextContent(he.common.error);
+  });
+
+  it('ac3_focus_after_remove', async () => {
+    // The removed row takes its button away: focus goes to the list's <h2>.
+    const dana = flatmate({ display_name: 'דנה' });
+    const yoni = flatmate({ display_name: 'יוני' });
+    renderPage({
+      list: [json([dana, yoni]), json([yoni])],
+      extra: { [removeRoute(dana)]: [empty()] },
+    });
+    const list = await screen.findByRole('list', { name: he.flatmates.list.title });
+    const remove = within(within(list).getAllByRole('listitem')[0] as HTMLElement).getByRole(
+      'button',
+      { name: he.flatmates.list.remove },
+    );
+    confirmSpy().mockReturnValue(true);
+    act(() => remove.focus());
+    fireEvent.click(remove);
+    await waitFor(() => {
+      expect(screen.queryByText('דנה')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { level: 2, name: he.flatmates.list.title }),
+      ).toHaveFocus();
+    });
   });
 
   it('ac2_list_remove_and_states', async () => {

@@ -1,7 +1,7 @@
 ---
 id: 0009t
 title: After an action removes the control a person used, focus lands on what replaced it — apply, withdraw, unlike, remove, leave, a filter change, a closing chat, a resend or a successful retry; saved, joined and resend lines are announced; and the search map is one labelled landmark with its loading, empty and error states in view
-status: in-progress
+status: done
 depends_on: [0009c]   # 0009c: components/Loading.tsx, ErrorState's `page` prop, RouteFocus and #main (the focus fallback), the accent focus-ring rule and the axe e2e helper, whose map-landmark exemption this spec removes
 reviewers: [code, qa, ux]   # ux: focus targets, announcements, map states; qa: keyboard and screen-reader flows at 390 px, the map e2e. No security: chat only mounts its log earlier and focuses the closed note (message bodies stay text nodes), and OtpForm gains a status line and a focus call (request and verify untouched). No perf: no query change
 estimate: 1 coder run   # coder Opus/high: many small focus targets whose timing is easy to get wrong (Speed rule 6). Verifier: upper end (~3.5 h); if a split is ever needed, Scope 3 + AC5 + AC6 (the map) is the seam
@@ -364,7 +364,22 @@ RTL: the pill is centred (`inset-x-0 mx-auto`). Every class is logical. Touch ta
 - Brand amendment (2026-11-12): token names, the pill's classes and the focus-ring rule follow
   `specs/0009-brand-amendment.md`. This was applied as a spec edit, without re-running the verifier. The new
   keys already follow the brand voice (no slash forms, impersonal).
-- No open product questions.
+- **Map pins and axe `target-size` (accepted by Gilad 2026-11-12): WCAG 2.5.8's "essential" exception.** Pins sit
+  at their listings' true positions, so close listings overlap (reproduced at the build: 12 e2e listings in
+  גבעתיים land within ~200x150 px at the Gush Dan zoom; the 73x44 px pin buttons cut neighbours to 23x12 and
+  21x27 px). The page-wide `disableRules: ['target-size']` on the `/search?view=map` scans (`a11y.spec.ts`,
+  `map.spec.ts::ac8`) is gone: `expectNoAxeViolations(page, …, { markerTargetSizeExempt: true })` scans the page
+  without `.maplibregl-marker` with every rule, and the markers alone with every rule but `target-size`.
+  Clustering overlapping pins (option (a)) is in `specs/FOLLOWUPS.md` for when real listing density is known.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+    Spec 0009t — focus after actions, announcements, one map landmark   PR #49 (open, ready-to-merge; orchestrator merges)
+    Shipped: when an action removes the button you used (apply, withdraw, unlike, remove, leave, filter Apply/Clear, chat closing, OTP resend, retry), focus lands on what replaced it; "saved", "joined" and "code resent" lines are read out; the search map is one labelled landmark with its empty, error and "updating" states above the map.
+    Demo: make dev → /search?view=map, change a filter and press Apply (focus on the count line, the "התוצאות מתעדכנות…" pill over the map) → open a listing and apply (focus on "המועמדות נשלחה") → /login, resend the code (focus back on the code box).
+    Tests: +19 unit (vitest, one per AC/negative case), +1 e2e step (ac6_one_map_landmark in map.spec ac8), 0 new sign-ups. Local: lint, test (api 476, web 421), i18n-check, build-web green; map + a11y e2e 6/6; full make e2e left to CI (Mac under load).
+    Findings: 0 blockers, 0 majors, 6 minors (4 fixed, 2 logged to FOLLOWUPS), 9 nits dropped. Reviewers: code, qa (browser at 390/1280 px), ux — all approve.
+    Decision taken: map pins exempt from axe target-size only (WCAG 2.5.8 "essential"), accepted by Gilad 2026-11-12; clustering pins logged as a follow-up.
+    Changed in PRODUCT.md: nothing here (the pin decision is in PRODUCT.md on main, 48dc6cb).
+    Closes FOLLOWUPS 23, 52, 55, 73, 74, 75, 76, 123, 149, 184. Unblocks: 0009g.

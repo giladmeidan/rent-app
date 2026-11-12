@@ -1,7 +1,9 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
+import { Link, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
+import { RouteFocus } from '../../../app/RouteFocus';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -14,6 +16,7 @@ import {
 } from '../../auth/__tests__/harness';
 import type { LifestyleKey } from '../../lifestyle/keys';
 import type { ListingOut } from '../api';
+import { EditListingPage } from '../EditListingPage';
 import { formatIls } from '../format';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner } from './fixtures';
@@ -293,7 +296,8 @@ describe('EditListingPage', () => {
     });
     expect(screen.queryAllByTestId('skeleton')).toHaveLength(0);
     expect(screen.getByRole('article')).toHaveTextContent(formatIls(7500));
-    expect(screen.getByText(he.listings.edit.saved)).toHaveAttribute('role', 'status');
+    // The line is filled a frame after "my listings" mounts (spec 0009t).
+    expect(await screen.findByText(he.listings.edit.saved)).toHaveAttribute('role', 'status');
     expect(client.getQueryState(['listing', a.id])?.isInvalidated).toBe(true);
     expect(api.calls(`PATCH /listings/${a.id}`)).toHaveLength(1);
   });
@@ -424,6 +428,52 @@ describe('EditListingPage', () => {
     });
     const bodies = opened.api.calls(`PATCH /listings/${a.id}`).map((c) => c.body);
     expect(bodies).toStrictEqual([{ price_ils: 7500 }, { price_ils: 7500 }]);
+  });
+
+  it('ac2_not_found_takes_focus', async () => {
+    // An in-app navigation to an id not in my listings: the not-found <h1> takes focus after
+    // RouteFocus has focused <main>.
+    const a = stored();
+    mockApi({
+      'GET /me': [() => json(owner)],
+      'GET /areas': [() => json([gushDan])],
+      'GET /me/listings': [() => json([a])],
+    });
+    const client = testQueryClient();
+    client.setQueryData(MY_LISTINGS_KEY, [a]);
+    const view = renderRoutes(
+      '/start',
+      <main id="main" tabIndex={-1}>
+        <RouteFocus />
+        <Routes>
+          <Route path="/start" element={<Link to={editPath('missing')}>go</Link>} />
+          <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
+        </Routes>
+      </main>,
+      client,
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'go' }));
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: he.listings.edit.notFound,
+    });
+    await vi.waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A save answering PATCH 404: the wizard drops the listing, and the heading takes focus.
+    const b = stored();
+    const opened = await changePriceAndSave(b, [json({ detail: 'not_found' }, 404)]);
+    const notFound = await screen.findByRole('heading', {
+      level: 1,
+      name: he.listings.edit.notFound,
+    });
+    await vi.waitFor(() => {
+      expect(notFound).toHaveFocus();
+    });
+    opened.view.unmount();
   });
 
   it('ac2_past_expiry_listing_is_read_only', async () => {

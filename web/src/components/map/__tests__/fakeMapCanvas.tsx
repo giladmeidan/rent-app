@@ -53,6 +53,7 @@ export function MapCanvas(props: Props) {
           {pin.text}
         </button>
       ))}
+      {props.overlay}
     </div>
   );
 }

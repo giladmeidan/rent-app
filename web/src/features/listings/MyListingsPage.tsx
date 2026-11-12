@@ -1,6 +1,6 @@
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
@@ -21,7 +21,23 @@ const focusRing =
 const fieldError = 'text-sm font-semibold text-danger';
 const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
-function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date; today: string }) {
+/** Set by the edit wizard's save (`navigate(…, { state: { saved: true } })`). */
+function isSaved(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && 'saved' in state && state.saved === true;
+}
+
+function ListingRow({
+  listing,
+  now,
+  today,
+  onChanged,
+}: {
+  listing: MyListingOut;
+  now: Date;
+  today: string;
+  /** A pause or resume succeeded. */
+  onChanged: () => void;
+}) {
   const { t } = useTranslation();
   const patch = usePatchListing(listing.id);
   const state = listingState(listing, now);
@@ -44,7 +60,7 @@ function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date;
             {next !== null && (
               <button
                 type="button"
-                onClick={() => patch.mutate({ status: next })}
+                onClick={() => patch.mutate({ status: next }, { onSuccess: onChanged })}
                 disabled={patch.isPending}
                 aria-busy={patch.isPending}
                 aria-describedby={titleId}
@@ -126,10 +142,25 @@ export function MyListingsPage() {
   usePageTitle(t('listings.mine.title'));
   const listings = useMyListings();
   const location = useLocation();
-  // Set by the edit wizard's save (`navigate(…, { state: { saved: true } })`).
-  const state: unknown = location.state;
-  const saved =
-    typeof state === 'object' && state !== null && 'saved' in state && state.saved === true;
+  const navigate = useNavigate();
+  // "Saved" is read once from the history entry, which is then cleared, so a reload or Back does
+  // not show it again (spec 0009t). The status line is always mounted, empty, and its text lands a
+  // frame later, so it is announced; a pause or resume clears it.
+  const [savedOnArrival] = useState(() => isSaved(location.state));
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (isSaved(location.state)) {
+      void navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!savedOnArrival) return;
+    const frame = requestAnimationFrame(() => setSaved(true));
+    return () => cancelAnimationFrame(frame);
+  }, [savedOnArrival]);
+
   const now = new Date();
   const today = todayInIsrael(now);
 
@@ -152,7 +183,13 @@ export function MyListingsPage() {
     body = (
       <ul className="flex flex-col gap-4">
         {listings.data.map((listing) => (
-          <ListingRow key={listing.id} listing={listing} now={now} today={today} />
+          <ListingRow
+            key={listing.id}
+            listing={listing}
+            now={now}
+            today={today}
+            onChanged={() => setSaved(false)}
+          />
         ))}
       </ul>
     );
@@ -177,11 +214,10 @@ export function MyListingsPage() {
             {t('listings.mine.count', { live, cap: LISTING_CAP })}
           </p>
         )}
-        {saved && (
-          <p role="status" className="text-sm font-semibold text-accent-strong">
-            {t('listings.edit.saved')}
-          </p>
-        )}
+        {/* Visually hidden while empty (out of the flow, so no gap), never unmounted. */}
+        <p role="status" className={saved ? 'text-sm font-semibold text-accent-strong' : 'sr-only'}>
+          {saved ? t('listings.edit.saved') : ''}
+        </p>
       </div>
       {body}
     </PageContainer>
