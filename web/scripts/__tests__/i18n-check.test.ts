@@ -94,4 +94,107 @@ describe('i18n-check', () => {
     expect(output).not.toContain('B.tsx:2:');
     expect(output).toContain('B.tsx:3:');
   });
+  it('ac1_plural_family_needs_every_he_form', () => {
+    const run = (x: Record<string, unknown>) =>
+      runOn({ 'locales/he.json': JSON.stringify({ areas: { heading: 'h' }, ...x }) });
+
+    let { status, output } = run({ x_one: 'a', x_other: 'b' });
+    expect(status).toBe(1);
+    expect(output).toContain("locales/he.json: plural 'x' is missing the form 'x_two'");
+
+    ({ status, output } = run({ x_one: 'a', x_two: 'b', x_other: 'c' }));
+    expect(output).toContain('i18n-check: ok');
+    expect(status).toBe(0);
+    ({ status } = run({ x_zero: 'z', x_one: 'a', x_two: 'b', x_other: 'c' }));
+    expect(status).toBe(0);
+
+    ({ status, output } = run({ x_one: 'a', x_two: 'b', x_many: 'm', x_other: 'c' }));
+    expect(status).toBe(1);
+    expect(output).toContain("'x_many': he never selects it");
+
+    ({ status, output } = run({ x: 's', x_one: 'a', x_two: 'b', x_other: 'c' }));
+    expect(status).toBe(1);
+    expect(output).toContain("plural 'x' also exists as a string");
+    // The forms sit inside `n`, next to an object `n.x`.
+    ({ status, output } = run({
+      n: { x: { y: 'o' }, x_one: 'a', x_two: 'b', x_other: 'c' },
+    }));
+    expect(status).toBe(1);
+    expect(output).toContain("plural 'n.x' also exists as an object");
+  });
+
+  it('ac1_plural_call_needs_count', () => {
+    const he = JSON.stringify({ x_one: 'a', x_two: 'b', x_other: 'c', plain: 'p' });
+    const run = (call: string) =>
+      runOn({
+        'locales/he.json': he,
+        'P.tsx': `export const P = ({ n, count, opts, rest }) => <p>{${call}}</p>;\n`,
+      });
+
+    for (const call of ["t('x')", "t('x', { other: 1 })"]) {
+      const { status, output } = run(call);
+      expect(status, call).toBe(1);
+      expect(output, call).toContain("P.tsx:1: plural key 'x' called without count");
+    }
+    for (const call of [
+      "t('x', { count: n })",
+      "t('x', { count })",
+      "t('x', opts)",
+      "t('x', { ...rest })",
+      "t('plain', { count })",
+    ]) {
+      const { status, output } = run(call);
+      expect(output, call).toContain('i18n-check: ok');
+      expect(status, call).toBe(0);
+    }
+    const { status, output } = run("t('missing', { count })");
+    expect(status).toBe(1);
+    expect(output).toContain("P.tsx:1: missing key 'missing'");
+  });
+
+  it('ac1_ts_files_checked_for_keys', () => {
+    let { status, output } = runOn({ 'a.ts': "export const a = t('does.not.exist');\n" });
+    expect(status).toBe(1);
+    expect(output).toContain("a.ts:1: missing key 'does.not.exist'");
+
+    ({ status, output } = runOn({ 'a.ts': "export const a = '\u05e9\u05dc\u05d5\u05dd';\n" }));
+    expect(output).toContain('i18n-check: ok');
+    expect(status).toBe(0);
+
+    ({ status, output } = runOn({
+      'types.d.ts': "declare const x: string;\nexport const a = t('does.not.exist');\n",
+    }));
+    expect(output).toContain('i18n-check: ok');
+    expect(status).toBe(0);
+  });
+
+  it('ac1_later_arguments_and_conditional_keys', () => {
+    let { status, output } = runOn({
+      'D.tsx':
+        "export const D = () => <p>{t('areas.heading', { defaultValue: 'two words' })}</p>;\n",
+    });
+    expect(status).toBe(1);
+    expect(output).toContain('D.tsx:1: hardcoded text "two words"');
+
+    ({ status, output } = runOn({
+      'E.tsx': "export const E = ({ c }) => <p>{t(c ? 'areas.heading' : 'nope')}</p>;\n",
+    }));
+    expect(status).toBe(1);
+    expect(output).toContain("E.tsx:1: missing key 'nope'");
+    expect(output).not.toContain("'areas.heading'");
+
+    ({ status, output } = runOn({
+      'F.tsx': [
+        'export const F = () => (',
+        '  <>',
+        "    <p>don't stop</p>",
+        '    <p>(beta) version</p>',
+        '  </>',
+        ');',
+      ].join('\n'),
+    }));
+    expect(status).toBe(1);
+    expect(output).toContain('F.tsx:3:');
+    expect(output).toContain('F.tsx:4:');
+  });
 });
