@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import he from '../../locales/he.json';
@@ -20,5 +21,47 @@ describe('ErrorState', () => {
     render(<ErrorState onRetry={onRetry} />);
     expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.getByText(he.common.error).tagName).toBe('P');
+  });
+
+  it('ac2_retry_success_keeps_focus_in_main', async () => {
+    // A box inside <main id="main">: the retry is focused and clicked, and the retry's success
+    // unmounts the box. Focus lands on <main>, not <body>.
+    function Page() {
+      const [failed, setFailed] = useState(true);
+      return (
+        <main id="main" tabIndex={-1}>
+          <input aria-label="field" />
+          {failed && <ErrorState onRetry={() => setFailed(false)} />}
+        </main>
+      );
+    }
+    const view = render(<Page />);
+    const retry = screen.getByRole('button', { name: he.common.retry });
+    act(() => retry.focus());
+    expect(retry).toHaveFocus();
+    fireEvent.click(retry);
+    expect(screen.queryByRole('alert')).toBeNull();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('main')).toHaveFocus();
+    });
+    view.unmount();
+
+    // A box that unmounts while focus is in another field leaves focus there.
+    function Typing() {
+      const [failed, setFailed] = useState(true);
+      return (
+        <main id="main" tabIndex={-1}>
+          <input aria-label="field" onChange={() => setFailed(false)} />
+          {failed && <ErrorState onRetry={() => undefined} />}
+        </main>
+      );
+    }
+    render(<Typing />);
+    const field = screen.getByRole('textbox', { name: 'field' });
+    act(() => field.focus());
+    fireEvent.change(field, { target: { value: 'x' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    expect(field).toHaveFocus();
   });
 });
