@@ -99,6 +99,8 @@ jobs:
         run: make test-web
       - name: Build (tsc + vite build, PWA manifest and service worker)
         run: make build-web
+      - name: Build check (manifest, icons, head tags, service-worker policy)
+        run: make build-check
 
   e2e:
     # Repo variable E2E_IN_CI=off switches this job off while GitHub runners can't install Playwright deps

@@ -11,8 +11,8 @@
 // wrapped in brackets, `(beta)`). For the Latin check, JSX attribute values are ignored except
 // title, placeholder, aria-label and alt; Hebrew fails in any attribute. The key of a t() call is
 // not copy, but its later arguments are visited, so `t('k', { defaultValue: 'two words' })` is a
-// hit. Only .tsx is scanned for copy, so the other allowed literals (web/public/
-// manifest.webmanifest and vite.config.ts, which holds the PWA manifest name) are never read.
+// hit. Only .tsx is scanned, so non-.tsx files (vite.config.ts and the *.config.ts files beside
+// it, which read the product name from he.json) are never read.
 //
 // Keys (.tsx and .ts): a literal key, or each literal branch of a conditional key
 // (`t(c ? 'a.b' : 'c.d')`), must be a string leaf of he.json or the base of a plural family.

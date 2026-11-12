@@ -27,7 +27,7 @@ export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web screens
+.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -140,6 +140,26 @@ screens: web/node_modules/.modules.yaml
 ## build-web: production build (tsc --noEmit, vite build with the PWA manifest and service worker) into web/dist
 build-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts
 	$(PNPM) build
+
+## build-check: check web/dist against itself (manifest, icons, head tags, service-worker policy). Run
+## `make build-web` first; it does not depend on it, so CI builds once (spec 0009e)
+build-check:
+	cd web && node scripts/build-check.mjs dist
+
+## icons: render web/icons/*.svg into web/public/icons/*.png and web/public/favicon.svg with Playwright's
+## Chromium. The outputs are committed; CI never regenerates them
+icons: web/node_modules/.modules.yaml
+	$(PNPM) exec playwright install chromium
+	$(PNPM) exec node scripts/make-icons.mjs
+
+## preview-web: serve web/dist (the built app and its service worker) on port 4173, not the pinned 5173
+preview-web: web/node_modules/.modules.yaml
+	@test -d web/dist || { echo "run make build-web first" >&2; exit 1; }
+	$(PNPM) exec vite preview --port 4173 --strictPort
+
+## audit-web: pnpm audit of the web's production dependencies (the build-time plugins are dev-only)
+audit-web: web/node_modules/.modules.yaml
+	$(PNPM) audit --prod
 
 # pnpm install whenever the manifest or lockfile is newer than the last install. The stamp is pnpm's
 # own .modules.yaml, not the directory: compose's anonymous volume leaves an empty web/node_modules.
