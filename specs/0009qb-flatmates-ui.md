@@ -445,3 +445,12 @@ Hebrew test strings use `\uXXXX` escapes or `he.json` lookups, as the listings f
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009qb — flatmates screens (invite + members, join, my flats) in the kit   PR open, not merged
+Shipped: `/me/listings/:id/flatmates` puts the invite link and the members side by side at ≥ 1024 px (stacked, invite first, on a phone) with initial avatars; `/flatmates/join` is one centred 480 px invitation card with the `hello` / `celebrate` mascot; `/me/flats` is Inbox-style cards with "יציאה מהדירה" at the inline end. Rotate / disable / remove / leave use the kit's in-app dialog (`useConfirm`) instead of `window.confirm`. Demo: owner → /me/listings → שותפים → create link → remove a member; seeker → open the link → join → /me/flats → leave.
+Tests: +7 unit (AC1–AC5; existing flatmates tests now answer the dialog), 2 e2e `test.step`s in `flatmates.spec.ts::ac6` (AC6, no new sign-up) + ac5's remove through the dialog, 40 screenshots in `web/screens/0009qb/` (20 states × 390 / 1440, AC7).
+Findings (code, qa, ux, security; one round): 0 blockers, 0 majors. 2 one-line minors fixed (my-flats text column `lg:flex-1` so a long title can't push the button to its own line; AC5 also checks `document.title`). 4 follow-ups logged (mixed-script name alignment; a confirm can outlive its remounted caller, not exploitable, same as with `window.confirm`; AC5 could watch `<head>`; slash-form confirm copy, 0009b's). 11 nits dropped.
+Security (AC5): token handling in `JoinFlatPage.tsx` is byte-identical to main (only JSX / classes); the reviewer mutation-tested `ac5_token_never_rendered` (4 injected leaks, all caught). No `dangerouslySetInnerHTML` / `innerHTML` / linkify in app code (the only `innerHTML` is the AC5 test reading markup).
+AC8 greps over the three pages: grep 1 prints nothing; grep 2 prints `FlatmatesPage.tsx:94 text-warning`, the brand token §1 requires; the spec's regex `\b(bg|text)-warn` lacks a trailing `\b` (spec defect, no code change). Only arbitrary value: `[overflow-wrap:anywhere]` (exceptions table).
+Coder choices kept: 0009f's join way-out links are now `Button variant="secondary" to=…` (kit-only; keys and targets unchanged); flatmates loading has no back link, as on main.
+Checks on the final head (main + 0009a merged): make lint / test (api 476, web 456) / i18n-check / build-web green; local `flatmates.spec.ts` e2e green; full local make e2e green on the coder's head before the 0009a merge. CI e2e is the gate. Changed in PRODUCT.md: nothing.
