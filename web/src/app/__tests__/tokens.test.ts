@@ -58,7 +58,14 @@ describe('tailwind.config.ts', () => {
       mascot: { blush: '#BFD3FA', shade: '#DDE4F1' },
     });
     expect(extend.fontFamily).toEqual({
-      display: ['Fredoka', '"Rubik Variable"', 'Rubik', 'system-ui', 'sans-serif'],
+      display: [
+        '"Fredoka Variable"',
+        'Fredoka',
+        '"Rubik Variable"',
+        'Rubik',
+        'system-ui',
+        'sans-serif',
+      ],
       sans: ['"Rubik Variable"', 'Rubik', 'system-ui', 'sans-serif'],
     });
     expect(extend.fontSize).toEqual({

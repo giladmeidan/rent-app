@@ -22,7 +22,14 @@ export default {
         mascot: { blush: '#BFD3FA', shade: '#DDE4F1' },
       },
       fontFamily: {
-        display: ['Fredoka', '"Rubik Variable"', 'Rubik', 'system-ui', 'sans-serif'],
+        display: [
+          '"Fredoka Variable"',
+          'Fredoka',
+          '"Rubik Variable"',
+          'Rubik',
+          'system-ui',
+          'sans-serif',
+        ],
         sans: ['"Rubik Variable"', 'Rubik', 'system-ui', 'sans-serif'],
       },
       // Fredoka (font-display) goes only with display / h1 / h2; it never goes below 24px.
