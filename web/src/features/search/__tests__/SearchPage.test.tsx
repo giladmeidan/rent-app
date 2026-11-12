@@ -134,7 +134,7 @@ describe('SearchPage', () => {
     // Apply: the URL gets the filters (a new history entry) and a new request is sent.
     let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
     let view = render('/search');
-    await screen.findByText(he.search.countOne);
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
     openPanel();
     fireEvent.change(priceTo(), { target: { value: '8000' } });
     fireEvent.click(feature(he.search.feature.pets));
@@ -284,7 +284,7 @@ describe('SearchPage', () => {
     // One result.
     mockApi({ [SEARCH]: [json(page([publicListing()]))] });
     view = render('/search');
-    expect(await screen.findByText(he.search.countOne)).toBeVisible();
+    expect(await screen.findByText(i18n.t('search.count', { count: 1 }))).toBeVisible();
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -296,12 +296,13 @@ describe('SearchPage', () => {
     ];
     mockApi({ [SEARCH]: [json(page(three, 3))] });
     render('/search');
-    expect((await screen.findByText('3 דירות')).closest('[aria-live="polite"]')).not.toBeNull();
+    expect((await screen.findByText('3 מודעות')).closest('[aria-live="polite"]')).not.toBeNull();
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(3);
     cards.forEach((card, i) => {
       const item = at(three, i);
       const title = i18n.t('listings.card.title', {
+        count: 3,
         rooms: '3',
         street: item.street,
         city: item.city,
@@ -314,6 +315,21 @@ describe('SearchPage', () => {
     // A title opens the listing.
     fireEvent.click(within(at(cards, 1)).getByRole('link'));
     expect(currentPath()).toBe(`/listings/${at(three, 1).id}`);
+  });
+
+  it('ac3_result_count_forms', async () => {
+    const forms: [number, string][] = [
+      [1, '\u05de\u05d5\u05d3\u05e2\u05d4 \u05d0\u05d7\u05ea'],
+      [2, '2 \u05de\u05d5\u05d3\u05e2\u05d5\u05ea'],
+      [12, '12 \u05de\u05d5\u05d3\u05e2\u05d5\u05ea'],
+    ];
+    for (const [total, text] of forms) {
+      mockApi({ [SEARCH]: [json(page([publicListing()], total))] });
+      const view = render('/search');
+      expect(await screen.findByText(text)).toBeVisible();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('ac5_load_more', async () => {
@@ -420,7 +436,7 @@ describe('SearchPage', () => {
     // Once the profile has resolved, the move-in chip has its direction.
     expect(await screen.findByText('כניסה מאוחרת מדי')).toBeVisible();
     expect(api.calls(PROFILE)).toHaveLength(1);
-    expect(liveRegion()?.textContent).toBe('2 דירות · ממוינות לפי התאמה');
+    expect(liveRegion()?.textContent).toBe('2 מודעות · לפי התאמה');
     let [first, second] = screen.getAllByRole('article');
     if (first === undefined || second === undefined) throw new Error('two cards expected');
     expect(within(first).getByText('התאמה 100%')).toBeVisible();
@@ -525,7 +541,7 @@ describe('SearchPage', () => {
         [SEARCH]: [json(page([publicListing()], 1, 'match'))],
       });
       view = render('/search');
-      await screen.findByText(he.search.countOne);
+      await screen.findByText(i18n.t('search.count', { count: 1 }));
       await vi.waitFor(() => {
         expect(api.calls(PROFILE)).toHaveLength(1);
       });
@@ -542,12 +558,12 @@ describe('SearchPage', () => {
       [SEARCH]: [json(page([publicListing()], 1, 'newest'))],
     });
     render('/search?sort=match');
-    await screen.findByText(he.search.countOne);
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
     expect(query(sent(api, 0))).toEqual(expected({ sort: 'match', limit: '20', offset: '0' }));
     expect(select()).toHaveValue('newest');
     expect(options()).toEqual(withoutMatch);
-    expect(liveRegion()?.textContent).toBe(he.search.countOne);
-    expect(liveRegion()).not.toHaveTextContent('ממוינות לפי התאמה');
+    expect(liveRegion()?.textContent).toBe(i18n.t('search.count', { count: 1 }));
+    expect(liveRegion()).not.toHaveTextContent('לפי התאמה');
   });
 
   it('ac7_profile_nudge', async () => {
@@ -574,7 +590,7 @@ describe('SearchPage', () => {
       [SEARCH]: [json(page([publicListing()]))],
     });
     view = render('/search');
-    await screen.findByText(he.search.countOne);
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
     await vi.waitFor(() => {
       expect(api.calls(PROFILE)).toHaveLength(1);
     });
@@ -608,7 +624,7 @@ describe('SearchPage', () => {
     // Both on by default, and nothing is sent for them.
     let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
     let view = render('/search');
-    await screen.findByText(he.search.countOne);
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
     openPanel();
     expect(apartmentBox()).toBeChecked();
     expect(roomBox()).toBeChecked();

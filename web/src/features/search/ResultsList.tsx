@@ -49,8 +49,8 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
     );
   } else {
     const total = data.pages[data.pages.length - 1]?.total ?? 0;
-    count = total === 1 ? t('search.countOne') : t('search.count', { count: total });
-    // Not on "0 דירות": nothing is sorted.
+    count = t('search.count', { count: total });
+    // Not on "0 מודעות": nothing is sorted.
     sortedByMatch = data.pages[0]?.sort === 'match' && total > 0;
     if (total === 0) {
       body = (

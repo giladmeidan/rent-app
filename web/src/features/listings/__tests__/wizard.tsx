@@ -53,8 +53,8 @@ export async function areasLoaded() {
 
 export const IN_30_DAYS = addDays(todayInIsrael(), 30);
 
-/** The AC4 values. */
-export function fillValidDetails() {
+/** The AC4 values. A room's furnished choice reads the room forms (spec 0009b). */
+export function fillValidDetails(type: ListingType = 'apartment') {
   const f = he.listings.fields;
   change(f.city, 'גבעתיים');
   change(f.street, 'כצנלסון');
@@ -66,7 +66,11 @@ export function fillValidDetails() {
   change(f.availableFrom, IN_30_DAYS);
   fireEvent.click(screen.getByRole('switch', { name: f.elevator }));
   change(f.parking, '1');
-  fireEvent.click(screen.getByLabelText(he.listings.furnished.partial));
+  fireEvent.click(
+    screen.getByLabelText(
+      (type === 'room' ? he.listings.furnishedRoom : he.listings.furnished).partial,
+    ),
+  );
   fireEvent.click(screen.getByRole('switch', { name: f.pets }));
   change(f.description, 'דירה מוארת');
 }
@@ -87,7 +91,7 @@ export async function toPreferences(client = testQueryClient(), type: ListingTyp
   const view = renderWizard(client);
   chooseTypeAndContinue(he.listings.type[type]);
   await areasLoaded();
-  fillValidDetails();
+  fillValidDetails(type);
   fireEvent.click(nextButton());
   expect(progress()).toHaveAttribute('aria-valuenow', '3');
   return view;

@@ -58,6 +58,7 @@ function to(listingId: string, overrides: Partial<MyApplicationOut> = {}): MyApp
 
 const titleOf = (app: MyApplicationOut) =>
   i18n.t('listings.card.title', {
+    count: app.listing.rooms,
     rooms: String(app.listing.rooms),
     street: app.listing.street,
     city: app.listing.city,
@@ -164,6 +165,25 @@ describe('MyApplicationsPage', () => {
         expect(withdraw).toBeNull();
       }
     });
+  });
+
+  it('ac4_room_title', async () => {
+    const app = application();
+    const room = {
+      ...app,
+      listing: {
+        ...app.listing,
+        listing_type: 'room' as const,
+        rooms: 4,
+        street: '\u05d4\u05e8\u05e6\u05dc',
+      },
+    };
+    renderPage([json([room])]);
+    expect(
+      await screen.findByRole('link', {
+        name: '\u05d7\u05d3\u05e8 \u05d1\u05be4 \u05d7\u05d3\u05e8\u05d9\u05dd, \u05e8\u05d7\u05d5\u05d1 \u05d4\u05e8\u05e6\u05dc, \u05e8\u05de\u05ea \u05d2\u05df',
+      }),
+    ).toBeVisible();
   });
 
   it('ac8_withdraw', async () => {

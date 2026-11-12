@@ -5,7 +5,8 @@ import { Link } from 'react-router';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
-import { formatIls, formatRooms } from '../listings/format';
+import { cardTitle } from '../listings/cardTitle';
+import { formatIls } from '../listings/format';
 import { hasStatus, type MyApplicationOut } from './api';
 import { ApplicationStatusChip } from './ApplicationStatusChip';
 import { appliedOn, isWithdrawable } from './format';
@@ -54,11 +55,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             to={`/listings/${listing.id}`}
             className={`inline-flex min-h-[44px] items-center rounded text-accent-text underline underline-offset-4 ${focusRing}`}
           >
-            {t('listings.card.title', {
-              rooms: formatRooms(listing.rooms),
-              street: listing.street,
-              city: listing.city,
-            })}
+            {cardTitle(t, listing)}
           </Link>
         </h2>
         <p className="text-start text-sm text-muted">

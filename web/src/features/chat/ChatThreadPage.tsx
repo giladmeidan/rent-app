@@ -6,7 +6,8 @@ import { hasStatus } from '../applications/api';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { formatDay } from '../flatmates/format';
-import { formatIls, formatRooms } from '../listings/format';
+import { cardTitle } from '../listings/cardTitle';
+import { formatIls } from '../listings/format';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
 import { formatMessageTime } from './format';
@@ -124,12 +125,7 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
       {group && <MemberLine members={thread.members} />}
       <p className="flex flex-wrap items-center gap-x-2 text-start text-sm text-muted">
         <span>
-          {t('listings.card.title', {
-            rooms: formatRooms(listing.rooms),
-            street: listing.street,
-            city: listing.city,
-          })}{' '}
-          · {formatIls(listing.price_ils)} {t('listings.units.ils')}
+          {cardTitle(t, listing)} · {formatIls(listing.price_ils)} {t('listings.units.ils')}
         </span>
         <Link
           to={owner ? `/me/listings/${listing.id}/applicants` : `/listings/${listing.id}`}

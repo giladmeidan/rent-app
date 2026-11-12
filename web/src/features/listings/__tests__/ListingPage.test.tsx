@@ -103,7 +103,7 @@ describe('ListingPage', () => {
     expect(screen.getByText(`95 ${he.listings.units.sqm}`)).toBeVisible();
     const pairs = facts();
     expect(pairs[he.listings.fields.elevator]).toBe(he.listing.yes);
-    expect(pairs[he.listings.fields.parking]).toBe(he.listing.parkingOne);
+    expect(pairs[he.listings.fields.parking]).toBe(i18n.t('listing.parking', { count: 1 }));
     expect(pairs[he.listings.fields.furnished]).toBe(he.listings.furnished.partial);
     expect(pairs[he.listings.fields.pets]).toBe(he.listing.allowed);
     expect(pairs[he.listings.fields.arnona]).toContain('480');
@@ -180,6 +180,36 @@ describe('ListingPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('כצנלסון');
     expect(api.calls(`GET /listings/${katznelson.id}`)).toHaveLength(2);
+  });
+
+  it('ac3_facts_parking_forms', async () => {
+    for (const [parking_spots, text] of [
+      [1, '\u05de\u05e7\u05d5\u05dd \u05d0\u05d7\u05d3'],
+      [2, '2 \u05de\u05e7\u05d5\u05de\u05d5\u05ea'],
+      [0, '\u05d0\u05d9\u05df'],
+    ] as const) {
+      const l = listingDetail({ parking_spots });
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        [`GET /listings/${l.id}`]: [json(l)],
+      });
+      const view = render(l.id);
+      await screen.findByRole('heading', { level: 1 });
+      expect(facts()[he.listings.fields.parking]).toBe(text);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac4_room_facts_furnished', async () => {
+    const l = listingDetail({ listing_type: 'room', furnished: 'full' });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${l.id}`]: [json(l)],
+    });
+    render(l.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(facts()[he.listings.fields.furnished]).toBe('\u05de\u05e8\u05d5\u05d4\u05d8');
   });
 
   it('ac6_listing_page_approximate_map', async () => {
@@ -738,7 +768,7 @@ describe('ListingPage', () => {
       });
       expect(screen.getAllByText(he.applications.mutual).length).toBeGreaterThan(0);
       expect(screen.queryByText(/הגשת מועמדות ב־/)).toBeNull();
-      expect(screen.getByText(he.applications.count.one)).toBeVisible();
+      expect(screen.getByText(i18n.t('applications.count', { count: 1 }))).toBeVisible();
       expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
     });
 
