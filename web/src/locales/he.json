@@ -240,7 +240,11 @@
       "peopleLiked_one": "אדם אחד אהב את החדר",
       "peopleLiked_two": "2 אהבו את החדר",
       "peopleLiked_other": "{{count}} אהבו את החדר",
-      "flatmates": "שותפים בדירה ({{count}})"
+      "flatmates": "שותפים בדירה ({{count}})",
+      "expiresOn": "בתוקף עד {{date}}",
+      "expiredOn": "פג תוקף ב־{{date}}",
+      "published": "המודעה באוויר! מועמדויות חדשות יופיעו כאן.",
+      "emptyAction": "פרסום דירה"
     },
     "status": {
       "live": "פעילה",
