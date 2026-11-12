@@ -23,13 +23,13 @@ const PAGES: Record<string, { file: string; width: Width }> = {
   EditListingPage: { file: 'features/listings/EditListingPage.tsx', width: 'narrow' },
   ApplicantsPage: { file: 'features/applicants/ApplicantsPage.tsx', width: 'default' },
   PeoplePage: { file: 'features/people/PeoplePage.tsx', width: 'default' },
-  FlatmatesPage: { file: 'features/flatmates/FlatmatesPage.tsx', width: 'narrow' },
+  FlatmatesPage: { file: 'features/flatmates/FlatmatesPage.tsx', width: 'default' },
   MyApplicationsPage: { file: 'features/applications/MyApplicationsPage.tsx', width: 'default' },
   MyLikesPage: { file: 'features/likes/MyLikesPage.tsx', width: 'wide' },
   ProfilePage: { file: 'features/profile/ProfilePage.tsx', width: 'narrow' },
   ChatListPage: { file: 'features/chat/ChatListPage.tsx', width: 'default' },
   ChatThreadPage: { file: 'features/chat/ChatThreadPage.tsx', width: 'default' },
-  MyFlatsPage: { file: 'features/flatmates/MyFlatsPage.tsx', width: 'narrow' },
+  MyFlatsPage: { file: 'features/flatmates/MyFlatsPage.tsx', width: 'default' },
   KitPreview: { file: 'app/KitPreview.tsx', width: 'wide' },
 };
 

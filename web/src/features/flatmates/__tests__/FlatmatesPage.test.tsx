@@ -55,7 +55,18 @@ function reset(view: { unmount: () => void }) {
   vi.unstubAllGlobals();
 }
 
+/** The kit's confirm dialog (0009qb): `window.confirm` is never called, so every test spies on it. */
 const confirmSpy = () => vi.spyOn(window, 'confirm');
+const noDialog = () =>
+  waitFor(() => {
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+/** Answers the open dialog named `title` with its `choice` button, and waits for it to close. */
+async function answer(title: string, choice: string) {
+  const box = await screen.findByRole('dialog', { name: title });
+  fireEvent.click(within(box).getByRole('button', { name: choice }));
+  await noDialog();
+}
 const writeText = vi.fn<(text: string) => Promise<void>>();
 
 beforeEach(() => {
@@ -101,7 +112,7 @@ describe('FlatmatesPage', () => {
     expect(input).toHaveFocus();
     expect(input).toHaveAttribute('readonly');
     expect(input).toHaveAttribute('dir', 'ltr');
-    expect(input).toHaveClass('text-start');
+    expect(input.closest('.text-start')).not.toBeNull();
     expect(screen.getByText(he.flatmates.invite.onceWarning)).toBeVisible();
     expect(api.calls(CREATE)).toHaveLength(1);
     // "My listings" refetched (the link is active now); the shown link stays.
@@ -139,29 +150,35 @@ describe('FlatmatesPage', () => {
     expect(screen.queryByRole('button', { name: he.flatmates.invite.create })).toBeNull();
 
     // Confirm declined: nothing is sent.
-    const confirm = confirmSpy().mockReturnValue(false);
+    const confirm = confirmSpy();
     fireEvent.click(button(he.flatmates.invite.rotate));
-    expect(confirm).toHaveBeenLastCalledWith(he.flatmates.invite.rotateConfirm);
+    await answer(he.flatmates.invite.rotateConfirm, he.common.cancel);
     fireEvent.click(button(he.flatmates.invite.disable));
-    expect(confirm).toHaveBeenLastCalledWith(he.flatmates.invite.disableConfirm);
+    await answer(he.flatmates.invite.disableConfirm, he.common.cancel);
     expect(api.calls(CREATE)).toHaveLength(0);
     expect(api.calls(DISABLE)).toHaveLength(0);
 
     // Confirmed rotate: the POST, then the new link shows.
-    confirm.mockReturnValue(true);
     fireEvent.click(button(he.flatmates.invite.rotate));
+    await answer(he.flatmates.invite.rotateConfirm, he.flatmates.invite.rotate);
     expect(await screen.findByRole('textbox')).toHaveValue(linkOf('T2'));
     expect(api.calls(CREATE)).toHaveLength(1);
 
-    // Confirmed disable (two clicks, one DELETE): the shown link goes, straight to the "create"
-    // state with no "active" flash, and the focus moves to the heading.
-    fireEvent.click(button(he.flatmates.invite.disable));
-    fireEvent.click(button(he.flatmates.invite.disable));
+    // Confirmed disable (two clicks, one dialog, one DELETE): the shown link goes, straight to the
+    // "create" state with no "active" flash, and the focus moves to the heading.
+    const disable = button(he.flatmates.invite.disable);
+    fireEvent.click(disable);
+    fireEvent.click(disable);
+    expect(await screen.findAllByRole('dialog')).toHaveLength(1);
+    await answer(he.flatmates.invite.disableConfirm, he.flatmates.invite.disable);
     expect(await screen.findByRole('button', { name: he.flatmates.invite.create })).toBeVisible();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByText(he.flatmates.invite.active)).toBeNull();
     expect(api.calls(DISABLE)).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 1, name: he.flatmates.title })).toHaveFocus();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: he.flatmates.title })).toHaveFocus();
+    });
+    expect(confirm).not.toHaveBeenCalled();
     reset(view);
 
     // A 500 on create: `common.error` inline, as an alert.
@@ -184,10 +201,14 @@ describe('FlatmatesPage', () => {
       extra: { [CREATE]: [json({ detail: 'boom' }, 500)], [DISABLE]: [json({}, 500)] },
     }));
     await screen.findByText(he.flatmates.invite.active);
-    confirmSpy().mockReturnValue(true);
     fireEvent.click(button(he.flatmates.invite.disable));
+    await answer(he.flatmates.invite.disableConfirm, he.flatmates.invite.disable);
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: he.flatmates.invite.rotate })).toBeEnabled();
+    });
     fireEvent.click(button(he.flatmates.invite.rotate));
+    await answer(he.flatmates.invite.rotateConfirm, he.flatmates.invite.rotate);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: he.flatmates.invite.rotate })).toBeEnabled();
     });
@@ -207,9 +228,9 @@ describe('FlatmatesPage', () => {
       'button',
       { name: he.flatmates.list.remove },
     );
-    confirmSpy().mockReturnValue(true);
     act(() => remove.focus());
     fireEvent.click(remove);
+    await answer(i18n.t('flatmates.list.removeConfirm', { name: 'דנה' }), he.flatmates.list.remove);
     await waitFor(() => {
       expect(screen.queryByText('דנה')).toBeNull();
     });
@@ -249,15 +270,18 @@ describe('FlatmatesPage', () => {
       name: he.flatmates.list.remove,
     });
     expect(removeDana).toHaveAccessibleDescription('דנה');
-    const confirm = confirmSpy().mockReturnValue(false);
+    const confirm = confirmSpy();
+    const removeTitle = i18n.t('flatmates.list.removeConfirm', { name: 'דנה' });
     fireEvent.click(removeDana);
-    expect(confirm).toHaveBeenCalledWith(i18n.t('flatmates.list.removeConfirm', { name: 'דנה' }));
+    await answer(removeTitle, he.common.cancel);
     expect(api.calls(removeRoute(dana))).toHaveLength(0);
 
-    // Confirmed (two clicks in one tick, one DELETE): then the list and "my listings" refetch.
-    confirm.mockReturnValue(true);
+    // Confirmed (two clicks in one tick, one dialog, one DELETE): then the list and "my listings"
+    // refetch.
     fireEvent.click(removeDana);
     fireEvent.click(removeDana);
+    expect(await screen.findAllByRole('dialog')).toHaveLength(1);
+    await answer(removeTitle, he.flatmates.list.remove);
     await waitFor(() => {
       expect(screen.queryByText('דנה')).toBeNull();
     });
@@ -265,6 +289,7 @@ describe('FlatmatesPage', () => {
     expect(api.calls(LIST)).toHaveLength(2);
     expect(api.calls(MINE)).toHaveLength(2);
     expect(screen.getByText('יוני')).toBeVisible();
+    expect(confirm).not.toHaveBeenCalled();
     reset(view);
 
     // A failed removal: `common.error` inline; the row stays.
@@ -272,8 +297,11 @@ describe('FlatmatesPage', () => {
       list: [json([yoni])],
       extra: { [removeRoute(yoni)]: [json({ detail: 'boom' }, 500)] },
     }));
-    confirmSpy().mockReturnValue(true);
     fireEvent.click(await screen.findByRole('button', { name: he.flatmates.list.remove }));
+    await answer(
+      i18n.t('flatmates.list.removeConfirm', { name: 'יוני' }),
+      he.flatmates.list.remove,
+    );
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
     expect(screen.getByText('יוני')).toBeVisible();
     reset(view);
@@ -354,5 +382,135 @@ describe('FlatmatesPage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(title()).toBeVisible();
     reset(view);
+  });
+
+  it('ac1_layout', async () => {
+    // The header: the back link, the <h1> and the room's title as the subtitle.
+    const dana = flatmate({ display_name: 'דנה' });
+    const yoni = flatmate({ display_name: 'Yoni' });
+    const { view } = renderPage({
+      list: [json([dana, yoni])],
+      extra: { [CREATE]: [json({ token: 'T' }, 201)] },
+    });
+    const h1 = await heading();
+    expect(screen.getByRole('link', { name: he.flatmates.back })).toHaveAttribute(
+      'href',
+      '/me/listings',
+    );
+    expect(screen.getAllByRole('heading', { level: 1 })).toEqual([h1]);
+    expect(screen.getByText(cardTitle(i18n.t, ROOM)).tagName).toBe('P');
+    // The page is the default (720px) column.
+    expect(h1.closest('section')).toHaveClass('max-w-page');
+
+    // The invite column's <h2>, before the members' <h2> in DOM order (the invite first on a phone).
+    // A string name matches the whole name (the hint and the create button also contain it).
+    const inviteTitle = screen.getByRole('heading', { level: 2, name: he.flatmates.invite.title });
+    const listTitle = screen.getByRole('heading', { level: 2, name: he.flatmates.list.title });
+    expect(
+      inviteTitle.compareDocumentPosition(listTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // After create: the URL in an LTR read-only textbox whose box carries `text-start`.
+    fireEvent.click(button(he.flatmates.invite.create));
+    const input = await screen.findByRole('textbox', { name: he.flatmates.invite.linkLabel });
+    expect(input).toHaveValue(linkOf('T'));
+    expect(input).toHaveAttribute('dir', 'ltr');
+    expect(input.closest('.text-start')).not.toBeNull();
+    expect(button(he.flatmates.invite.copy)).toBeVisible();
+
+    // Each member row: an aria-hidden initial, and "remove" described by the name.
+    const rows = within(screen.getByRole('list', { name: he.flatmates.list.title })).getAllByRole(
+      'listitem',
+    );
+    expect(rows).toHaveLength(2);
+    for (const [row, name, initial] of [
+      [rows[0], 'דנה', 'ד'],
+      [rows[1], 'Yoni', 'Y'],
+    ] as const) {
+      const item = row as HTMLElement;
+      const avatar = within(item).getByText(initial, { exact: true });
+      expect(avatar).toHaveAttribute('aria-hidden', 'true');
+      expect(within(item).getByText(name)).toHaveAttribute('dir', 'auto');
+      expect(
+        within(item).getByRole('button', { name: he.flatmates.list.remove }),
+      ).toHaveAccessibleDescription(name);
+    }
+    reset(view);
+  });
+
+  it('ac2_confirm_dialogs', async () => {
+    const confirm = confirmSpy();
+    const dana = flatmate({ display_name: 'דנה' });
+    const { api } = renderPage({
+      mine: [json([ACTIVE]), json([ACTIVE]), json([ROOM]), json([ROOM])],
+      list: [json([dana]), json([])],
+      extra: {
+        [CREATE]: [json({ token: 'T2' }, 201)],
+        [DISABLE]: [empty()],
+        [removeRoute(dana)]: [empty()],
+      },
+    });
+    await screen.findByText(he.flatmates.invite.active);
+    const dialogFor = (title: string) => screen.findByRole('dialog', { name: title });
+
+    // Rotate: a dialog named by the confirm sentence, its confirm button the action's label (the
+    // primary tone). Cancel sends nothing and returns focus to the opener.
+    const rotate = button(he.flatmates.invite.rotate);
+    act(() => rotate.focus());
+    fireEvent.click(rotate);
+    let box = await dialogFor(he.flatmates.invite.rotateConfirm);
+    expect(within(box).getByRole('button', { name: he.flatmates.invite.rotate })).toHaveClass(
+      'bg-ink',
+    );
+    fireEvent.click(within(box).getByRole('button', { name: he.common.cancel }));
+    await noDialog();
+    expect(rotate).toHaveFocus();
+    expect(api.calls(CREATE)).toHaveLength(0);
+    // Confirm: exactly one POST.
+    fireEvent.click(rotate);
+    await answer(he.flatmates.invite.rotateConfirm, he.flatmates.invite.rotate);
+    expect(await screen.findByRole('textbox')).toHaveValue(linkOf('T2'));
+    expect(api.calls(CREATE)).toHaveLength(1);
+
+    // Disable: the danger tone; cancel, then confirm (one DELETE).
+    const disable = button(he.flatmates.invite.disable);
+    act(() => disable.focus());
+    fireEvent.click(disable);
+    box = await dialogFor(he.flatmates.invite.disableConfirm);
+    expect(within(box).getByRole('button', { name: he.flatmates.invite.disable })).toHaveClass(
+      'bg-danger',
+    );
+    fireEvent.click(within(box).getByRole('button', { name: he.common.cancel }));
+    await noDialog();
+    expect(disable).toHaveFocus();
+    expect(api.calls(DISABLE)).toHaveLength(0);
+    fireEvent.click(disable);
+    await answer(he.flatmates.invite.disableConfirm, he.flatmates.invite.disable);
+    await screen.findByRole('button', { name: he.flatmates.invite.create });
+    expect(api.calls(DISABLE)).toHaveLength(1);
+
+    // Remove: a double click opens one dialog; cancel returns focus; confirm sends one DELETE.
+    const removeTitle = i18n.t('flatmates.list.removeConfirm', { name: 'דנה' });
+    const row = screen.getByRole('listitem');
+    const remove = within(row).getByRole('button', { name: he.flatmates.list.remove });
+    act(() => remove.focus());
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    expect(await screen.findAllByRole('dialog')).toHaveLength(1);
+    box = await dialogFor(removeTitle);
+    expect(within(box).getByRole('button', { name: he.flatmates.list.remove })).toHaveClass(
+      'bg-danger',
+    );
+    fireEvent.click(within(box).getByRole('button', { name: he.common.cancel }));
+    await noDialog();
+    expect(remove).toHaveFocus();
+    expect(api.calls(removeRoute(dana))).toHaveLength(0);
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    await answer(removeTitle, he.flatmates.list.remove);
+    expect(await screen.findByText(he.flatmates.list.empty)).toBeVisible();
+    expect(api.calls(removeRoute(dana))).toHaveLength(1);
+
+    expect(confirm).not.toHaveBeenCalled();
   });
 });
