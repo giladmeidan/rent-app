@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { useOnline } from '../../components/useOnline';
 import { hasStatus } from '../applications/api';
 import { ApplicationStatusChip } from '../applications/ApplicationStatusChip';
 import { appliedOn } from '../applications/format';
@@ -65,6 +66,7 @@ export function ApplicantCard({
   onSettled,
 }: Props) {
   const { t } = useTranslation();
+  const online = useOnline();
   const [open, setOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const panelId = `${headingId}-why`;
@@ -291,7 +293,7 @@ export function ApplicantCard({
             )}
             {showError && (
               <p role="alert" className={fieldError}>
-                {t('common.error')}
+                {online ? t('applicants.errors.actionFailed') : t('common.offline')}
               </p>
             )}
           </div>
