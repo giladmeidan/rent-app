@@ -1,7 +1,7 @@
 ---
 id: 0009o
 title: "My listings" shows the owner's cards in a responsive grid, each with its status, its expiry date and its actions on the 0009d kit, in the Inbox artboards' language, with every behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): Button, Badge, PageContainer, PageHeader, the restyled Skeleton / EmptyState / ErrorState, the page-width table and the colour swap. Independent of 0009k: the second to merge rebases listings.spec.ts, he.json, pageWidths.test.ts and ListingWizard.test.tsx
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/medium). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Sonnet/medium: one page, one small component, mechanical; split from 0009k by its verifier
