@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useSearchParams } from 'react-router';
 
 import type { Role } from '../../api/client';
+import { usePageTitle } from '../../app/usePageTitle';
 import { safeNext } from './next';
 import { OtpForm } from './OtpForm';
 import { useMe } from './useMe';
@@ -12,6 +13,7 @@ function roleFromQuery(value: string | null): Role | null {
 
 export function SignupPage() {
   const { t } = useTranslation();
+  usePageTitle(t('auth.signup.title'));
   const me = useMe();
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));

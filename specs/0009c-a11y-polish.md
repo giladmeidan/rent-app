@@ -389,4 +389,12 @@ logical, with no `left`/`right`. Touch targets ≥ 44 px.
 - No open product questions.
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0009c — accessibility baseline   BUILT (PR open, not merged)
+Shipped: a skip link on the first Tab; every in-app navigation starts at the top with focus on `<main>`; tab titles name the page; one `<h1>` per page state; loading blocks say "טוען…"; accent focus rings; 44 px input rows; reduced motion; the like toggle named by its text; axe WCAG 2.2 A/AA + best-practice in e2e.
+Demo: `make dev` → /search, press Tab then Enter (skip link to main) → click "כניסה": the page opens at the top and the tab reads "כניסה · …".
+Tests: +14 unit, +3 e2e (a11y.spec: ac5 public pages, ac6 keyboard, ac7 reduced motion), +20 axe checks inside existing e2e tests, 0 new sign-ups (shards 8 / 6 / 4).
+Gates on the final head: make lint, test (api 475, web 361), i18n-check, build-web green; local `make e2e` 3 shards green (7/7, 6/6, 6/6) on WEB_PORT 5192.
+Findings (code, qa, ux; one round): 0 blockers; 1 major fixed (ac6's scroll assertion passed without the feature); 4 minors fixed (route pages own their titles, the attribution exclude scoped to color-contrast, `/flatmates/join` waits to settle, a RouteFocus comment); 4 follow-ups logged (Loading live region → 0009t, like toggle state named twice → 0009q, wizard field partly under the footer → 0009k, map pin overlap → 0009t).
+axe: one rule skipped, `target-size` on the `/search?view=map` check only (neighbouring 44 px pins overlap, WCAG 2.5.8; owner 0009t, pin clustering is a design call). No colour fix; no other rule disabled; the only exclude is MapLibre's attribution, for color-contrast.
+Merged after 0009d: the retry button (now the kit's primary `Button`) and the skip link and map pin rings use the kit's `focusRing` and tokens. FOLLOWUPS 15 is ticked at merge.
+Changed in PRODUCT.md: nothing.

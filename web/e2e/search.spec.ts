@@ -93,7 +93,7 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   await page.getByRole('button', { name: he.search.apply }).click();
   await expect(page).toHaveURL('/search?price_max=5000');
   // Wait for the filtered results (the count line fills in once they land), then look.
-  await expect(page.getByRole('list', { name: he.common.loading })).toHaveCount(0);
+  await expect(page.getByText(he.common.loading)).toHaveCount(0);
   await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
   await expect(card).toHaveCount(0);
 
@@ -136,7 +136,7 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
       .uncheck();
     await page.getByRole('button', { name: he.search.apply }).click();
     await expect(page).toHaveURL('/search?listing_type=room');
-    await expect(page.getByRole('list', { name: he.common.loading })).toHaveCount(0);
+    await expect(page.getByText(he.common.loading)).toHaveCount(0);
     await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
     await expect(roomCard).toHaveCount(1);
     await expect(card).toHaveCount(0);

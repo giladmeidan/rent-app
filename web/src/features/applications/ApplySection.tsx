@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import { ApiError, type ListingDetail } from '../listings/api';
@@ -288,9 +289,9 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   );
 
   const skeleton = (
-    <div aria-busy="true" aria-label={t('common.loading')}>
+    <Loading>
       <Skeleton className="h-[52px] w-full" />
-    </div>
+    </Loading>
   );
   const application = mine.data?.find((a) => a.listing.id === listing.id);
   const live = application !== undefined && application.status !== 'withdrawn';

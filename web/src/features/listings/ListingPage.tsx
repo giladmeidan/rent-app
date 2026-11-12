@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
@@ -33,25 +35,35 @@ export function ListingPage() {
   const [mutualId, setMutualId] = useState<string | null>(null);
   // The banner is a seeker's: a logout (or another account) never inherits it.
   const isSeeker = useMe().data?.role === 'seeker';
+  const error = listing.error;
+  // 404: not live or unknown; 422: a malformed id. Neither has anything to retry.
+  const notFound = error instanceof ApiError && (error.status === 404 || error.status === 422);
+  // The tab is named after the page's <h1>; while loading, the app alone.
+  usePageTitle(
+    listing.isSuccess
+      ? cardTitle(t, listing.data)
+      : listing.isError
+        ? t(notFound ? 'listing.notFound' : 'common.error')
+        : undefined,
+  );
 
   let body;
   if (listing.isPending) {
     body = (
-      <div aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-        <Skeleton className="h-[200px] w-full" />
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-6 w-3/4" />
-        <Skeleton className="h-24 w-full" />
-      </div>
+      <Loading>
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-[200px] w-full" />
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </Loading>
     );
   } else if (listing.isError) {
-    const error = listing.error;
-    // 404: not live or unknown; 422: a malformed id. Neither has anything to retry.
-    const notFound = error instanceof ApiError && (error.status === 404 || error.status === 422);
     body = notFound ? (
       <h1 className="text-start text-2xl font-extrabold">{t('listing.notFound')}</h1>
     ) : (
-      <ErrorState onRetry={() => void listing.refetch()} />
+      <ErrorState page onRetry={() => void listing.refetch()} />
     );
   } else {
     const l = listing.data;

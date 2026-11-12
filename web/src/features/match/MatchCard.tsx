@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import type { ListingPublic } from '../listings/api';
@@ -47,16 +48,13 @@ export function MatchCard({ match, listing }: Props) {
   // `isLoading`, not `isPending`: a disabled query (the session just ended) stays pending forever.
   if (profile.isLoading) {
     lines = (
-      <div
-        role="status"
-        aria-busy="true"
-        aria-label={t('common.loading')}
-        className="flex flex-col gap-2"
-      >
-        <Skeleton className="h-6 w-3/4" />
-        <Skeleton className="h-6 w-2/3" />
-        <Skeleton className="h-6 w-1/2" />
-      </div>
+      <Loading>
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-6 w-2/3" />
+          <Skeleton className="h-6 w-1/2" />
+        </div>
+      </Loading>
     );
   } else if (profile.data !== undefined && profile.data !== null) {
     const p = profile.data;

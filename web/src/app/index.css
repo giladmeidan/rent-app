@@ -6,6 +6,32 @@ body {
   @apply bg-bg font-sans text-ink;
 }
 
+/* A fallback ring for anything without its own (MapLibre's controls included); component classes
+   still win (spec 0009c). */
+@layer base {
+  :focus-visible {
+    outline: 2px solid theme('colors.accent.DEFAULT');
+    outline-offset: 2px;
+  }
+}
+
+/* A field focused by Tab never sits under the listing wizard's sticky footer (WCAG 2.4.11). */
+html:has([data-sticky-footer]) {
+  scroll-padding-bottom: 96px;
+}
+
+/* Animations and transitions stop for people who asked the system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* MapLibre's controls (spec 0003d). The attribution is Latin text: in RTL it would read
    "OpenStreetMap contributors ©". */
 .maplibregl-map .maplibregl-ctrl-attrib-inner {

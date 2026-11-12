@@ -2,6 +2,7 @@ import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { focusRing } from '../focusRing';
 import { Skeleton } from '../Skeleton';
 import { MAP_MAX_ZOOM, MAP_STYLE_URL, mapLocale, type Bbox } from './config';
 
@@ -45,8 +46,7 @@ const chip =
 const chipIdle = `${chip} border-[#D6D3D1] bg-white text-ink`;
 const chipSelected = `${chip} border-white bg-accent text-white`;
 // The button is the >= 44 px hit area around the smaller chip.
-const pinButton =
-  'flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent';
+const pinButton = `flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 ${focusRing}`;
 
 type MarkerEntry = { marker: Marker; button: HTMLButtonElement; chip: HTMLSpanElement };
 
