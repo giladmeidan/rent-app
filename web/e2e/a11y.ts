@@ -10,13 +10,19 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-prac
  * `disableRules` line names the rule, the reason and that spec (spec 0009c).
  */
 export async function expectNoAxeViolations(page: Page, label: string): Promise<void> {
-  const results = await new AxeBuilder({ page })
+  // Every rule but color-contrast, on the whole page (MapLibre's attribution included).
+  const main = await new AxeBuilder({ page })
     .withTags(TAGS)
-    // MapLibre's attribution sits over the map tiles, whose colours axe cannot know
-    // (color-contrast); the only exclude allowed (spec 0009c).
+    // Checked by the run below, which may skip the attribution (not disabled).
+    .disableRules(['color-contrast'])
+    .analyze();
+  // color-contrast alone, without MapLibre's attribution: it sits over the map tiles, whose
+  // colours axe cannot know. The only exclude allowed (spec 0009c Scope 7).
+  const contrast = await new AxeBuilder({ page })
+    .withRules(['color-contrast'])
     .exclude('.maplibregl-ctrl-attrib')
     .analyze();
-  const violations = results.violations.map((violation) => {
+  const violations = [...main.violations, ...contrast.violations].map((violation) => {
     const targets = violation.nodes
       .slice(0, 3)
       .map((node) => node.target.map(String).join(' '))

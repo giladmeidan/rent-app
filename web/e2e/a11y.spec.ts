@@ -42,6 +42,7 @@ test('ac5_public_pages_pass_axe', async ({ page }) => {
   // The join page without a token: its "invalid link" state.
   await page.goto('/flatmates/join');
   await expect(page.getByText(he.flatmates.join.invalid)).toBeVisible();
+  await settled(page);
   await expectNoAxeViolations(page, '/flatmates/join');
 
   // An unknown listing: the not-found page.
@@ -76,8 +77,14 @@ test('ac6_skip_link_and_route_focus', async ({ page }) => {
   await expect(main).toBeFocused();
   await expect(page).toHaveURL('/search');
 
-  // An in-app navigation starts the new page at the top, with focus on <main> and its title.
-  await page.getByRole('banner').getByRole('link', { name: he.header.login }).click();
+  // An in-app navigation starts the new page at the top, with focus on <main> and its title. The
+  // page is scrolled away from the header first, and the link is clicked from script: Playwright's
+  // own click would scroll the link (at the top) into view and hide a missing scroll reset.
+  await page.evaluate(() => window.scrollTo(0, 99999));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const login = page.getByRole('banner').getByRole('link', { name: he.header.login });
+  await expect(login).toHaveAttribute('href', '/login');
+  await login.evaluate((link: HTMLAnchorElement) => link.click());
   await expect(page).toHaveURL('/login');
   await expect(page.getByRole('heading', { level: 1, name: he.auth.login.title })).toBeVisible();
   await expect(main).toBeFocused();
