@@ -1,7 +1,7 @@
 ---
 id: 0009qa
 title: A seeker's "my applications" and "likes" look like the artboards' cards on a phone and use the width on a desktop — a 720 px list of Inbox-style application cards, and a grid of liked rooms with search's match badge
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Badge, Tag, PageContainer, PageHeader), the tokens, the page roots and the pageWidths table this spec edits. Branch from 0009h's PR once it is open
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Sonnet/high: styling and layout only, no auth / money / data; Opus if the run overflows
