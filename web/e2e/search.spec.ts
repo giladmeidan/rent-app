@@ -199,4 +199,51 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     await expect(page).toHaveURL('/search');
     await expect(card).toHaveCount(1);
   });
+
+  await test.step('0009j desktop: the room page keeps its privacy in the two-column layout', async () => {
+    // The viewport is still 1440x900 from the step above. The same visitor, no sign-up.
+    await page.goto(`/listings/${roomId}`);
+    await expect(page.getByTestId('room-facts')).toBeVisible();
+    await expect(page.getByText('27, 30')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: he.lifestyle.title.flat })).toHaveCount(0);
+  });
+
+  // 0009j AC6, as the same visitor (no sign-up; kept out of applications.spec.ts's long ac9): a
+  // visitor's apply region holds the count and the log-in prompt, and the phone bar is offered.
+  await test.step('0009j the listing page on a desktop and a phone', async () => {
+    const apply = page.getByRole('region', { name: he.applications.heading });
+    const bar = page.getByTestId('apply-bar');
+    const overflow = () =>
+      page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+    // A desktop (still 1440x900, on the room's page): the action column is beside the title (left
+    // of it, in RTL), and stays in view.
+    await expect(apply.getByRole('link', { name: he.header.login })).toBeVisible();
+    const h1 = await page.getByRole('heading', { level: 1 }).boundingBox();
+    const beside = await apply.boundingBox();
+    expect(h1).not.toBeNull();
+    expect(beside).not.toBeNull();
+    expect((beside?.x ?? 0) + (beside?.width ?? 0)).toBeLessThanOrEqual((h1?.x ?? 0) + 1);
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    const sticky = await apply.boundingBox();
+    expect(sticky).not.toBeNull();
+    expect((sticky?.y ?? 900) < 900 && (sticky?.y ?? 0) + (sticky?.height ?? 0) > 0).toBe(true);
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await expect(bar).toHaveCount(0);
+
+    // A phone: the bar jumps to the section and focuses its heading, then goes away.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/listings/${roomId}`);
+    await expect(bar).toBeVisible();
+    await bar.getByRole('button', { name: he.applications.apply }).click();
+    const heading = apply.getByRole('heading', { level: 2, name: he.applications.heading });
+    await expect(heading).toBeFocused();
+    const shown = await apply.boundingBox();
+    expect(shown).not.toBeNull();
+    expect((shown?.y ?? 844) < 844 && (shown?.y ?? 0) + (shown?.height ?? 0) > 0).toBe(true);
+    await expect(bar).toHaveCount(0);
+    expect(await overflow()).toBeLessThanOrEqual(0);
+  });
 });

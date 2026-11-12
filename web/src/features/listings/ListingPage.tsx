@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { BackLink } from '../../components/PageHeader';
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
@@ -17,6 +19,7 @@ import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
 import { RoomFacts } from '../rooms/RoomFacts';
 import { ApiError } from './api';
+import { ApplyBar } from './ApplyBar';
 import { cardTitle } from './cardTitle';
 import { entryFact, floorFact, sizeFact } from './facts';
 import { formatIls, todayInIsrael } from './format';
@@ -24,8 +27,8 @@ import { ListingFacts } from './ListingFacts';
 import { OwnerPreferences } from './OwnerPreferences';
 import { usePublicListing } from './usePublicListing';
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+// The main column and the 24 rem action column, from `lg`: no scale step is a fixed 24 rem.
+const TWO_COLUMNS = 'lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-x-10';
 
 /** `/listings/:id`, public: Listing.dc.html without the parts later slices own. */
 export function ListingPage() {
@@ -36,6 +39,9 @@ export function ListingPage() {
   const [mapFailed, setMapFailed] = useState(false);
   // Set by a like that made the pair mutual; it replaces the control and outlives the cache writes.
   const [mutualId, setMutualId] = useState<string | null>(null);
+  // The phone's apply bar watches the action column and moves focus to the apply section's <h2>.
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const applyHeadingRef = useRef<HTMLHeadingElement>(null);
   // The banner is a seeker's: a logout (or another account) never inherits it.
   const isSeeker = useMe().data?.role === 'seeker';
   const error = listing.error;
@@ -54,18 +60,21 @@ export function ListingPage() {
   if (listing.isPending) {
     body = (
       <Loading>
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-[200px] w-full" />
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-6 w-3/4" />
-          <Skeleton className="h-24 w-full" />
+        <div className={`flex flex-col gap-3 ${TWO_COLUMNS}`}>
+          <Skeleton className="-mx-4 h-40 md:-mx-6 lg:col-span-2 lg:mx-0 lg:h-64 lg:rounded-lg" />
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+          <Skeleton className="hidden h-48 w-full lg:block" />
         </div>
       </Loading>
     );
   } else if (listing.isError) {
     body = notFound ? (
       <div className="flex flex-col items-start gap-4">
-        <h1 className="text-start text-2xl font-extrabold">{t('listing.notFound')}</h1>
+        <h1 className="text-start font-display text-h2">{t('listing.notFound')}</h1>
         <Button variant="primary" to="/search">
           {t('listing.toSearch')}
         </Button>
@@ -79,9 +88,9 @@ export function ListingPage() {
     if (l.entry_flexible) facts.push(t('listings.fields.entryFlexible'));
 
     body = (
-      <article className="flex flex-col gap-5">
-        {/* The neutral photo placeholder of the card (photos are 0002c). */}
-        <div className="flex h-[200px] items-center justify-center rounded-2xl bg-surface-subtle">
+      <article className={`flex flex-col gap-5 lg:gap-y-6 ${TWO_COLUMNS}`}>
+        {/* The neutral photo placeholder of the card, edge to edge on a phone (photos are 0002c). */}
+        <div className="-mx-4 flex h-40 items-center justify-center bg-surface-subtle md:-mx-6 lg:col-span-2 lg:mx-0 lg:h-64 lg:rounded-lg">
           <svg
             aria-hidden="true"
             width="48"
@@ -100,106 +109,105 @@ export function ListingPage() {
           </svg>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[30px] font-extrabold tracking-[-0.3px]">
-              <span>
-                {formatIls(l.price_ils)} {t('listings.units.ils')}
-              </span>{' '}
-              <span className="text-sm font-medium tracking-normal text-ink-muted">
-                {t('listings.units.perMonth')}
-              </span>
+        <div data-testid="listing-main" className="flex min-w-0 flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-h2 font-bold">
+                <span>
+                  {formatIls(l.price_ils)} {t('listings.units.ils')}
+                </span>{' '}
+                <span className="text-body-sm font-normal text-ink-muted">
+                  {t('listings.units.perMonth')}
+                </span>
+              </p>
+              {l.match !== null && <MatchBadge score={l.match.score} />}
+            </div>
+            <h1 className="break-words font-display text-h2 lg:text-h1">{cardTitle(t, l)}</h1>
+            <p className="flex flex-wrap gap-x-2.5 text-body-sm text-ink-muted">
+              {facts.map((fact, i) => (
+                <span key={fact} className="flex gap-x-2.5">
+                  {i > 0 && <span aria-hidden="true">·</span>}
+                  <span>{fact}</span>
+                </span>
+              ))}
             </p>
-            {l.match !== null && <MatchBadge score={l.match.score} />}
           </div>
-          <h1 className="break-words text-xl font-bold leading-snug">{cardTitle(t, l)}</h1>
-          <p className="flex flex-wrap gap-x-[10px] text-sm text-ink-muted">
-            {facts.map((fact, i) => (
-              <span key={fact} className="flex gap-x-[10px]">
-                {i > 0 && <span aria-hidden="true">·</span>}
-                <span>{fact}</span>
-              </span>
-            ))}
-          </p>
+
+          <ListingFacts listing={l} />
+
+          {l.listing_type === 'room' && <RoomFacts listing={l} />}
+
+          {l.description !== null && (
+            <section className="flex flex-col gap-2">
+              <h2 className="text-h3 font-semibold">{t('listings.fields.description')}</h2>
+              <p
+                data-testid="listing-description"
+                className="max-w-prose whitespace-pre-line break-words text-body text-ink"
+              >
+                {l.description}
+              </p>
+            </section>
+          )}
+
+          <section className="flex flex-col gap-2">
+            <h2 className="text-h3 font-semibold">{t('listing.location')}</h2>
+            {l.lat !== null && l.lng !== null && !mapFailed && (
+              <MapCanvas
+                label={t('listing.mapLabel')}
+                center={[l.lng, l.lat]}
+                zoom={14}
+                interactive={false}
+                approximate
+                onError={() => setMapFailed(true)}
+                className="h-40 rounded-lg border border-border lg:h-60"
+              />
+            )}
+            <p className="text-body font-medium">
+              {t('listing.address', { street: l.street, city: l.city })}
+            </p>
+            <p className="text-body-sm text-ink-muted">{t('listing.locationHint')}</p>
+          </section>
+
+          <OwnerPreferences listing={l} />
+
+          {/* Nothing for `match: null`: the apply section already invites a seeker without a
+              profile to fill one. */}
+          {l.match !== null && <MatchCard match={l.match} listing={l} />}
         </div>
 
-        <ListingFacts listing={l} />
-
-        {l.listing_type === 'room' && <RoomFacts listing={l} />}
-
-        {l.description !== null && (
-          <section className="flex flex-col gap-2">
-            <h2 className="text-[17px] font-extrabold">{t('listings.fields.description')}</h2>
-            <p
-              data-testid="listing-description"
-              className="whitespace-pre-line break-words text-[15px] leading-relaxed text-ink-muted"
-            >
-              {l.description}
-            </p>
-          </section>
-        )}
-
-        <section className="flex flex-col gap-2">
-          <h2 className="text-[17px] font-extrabold">{t('listing.location')}</h2>
-          {l.lat !== null && l.lng !== null && !mapFailed && (
-            <MapCanvas
-              label={t('listing.mapLabel')}
-              center={[l.lng, l.lat]}
-              zoom={14}
-              interactive={false}
-              approximate
-              onError={() => setMapFailed(true)}
-              className="h-[150px] rounded-2xl border border-border"
-            />
+        <div
+          ref={actionsRef}
+          data-testid="listing-actions"
+          // The action column stays in view while reading; `p-1` keeps focus rings inside its
+          // scroll box (`-m-1` keeps the cards flush with the band's edge), and the max height
+          // (viewport minus top and bottom 1.5 rem) lets it scroll when the open apply form is
+          // taller than the screen.
+          className="flex flex-col gap-5 lg:sticky lg:top-6 lg:-m-1 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:p-1"
+        >
+          {mutualId !== null && isSeeker ? (
+            <MutualBanner applicationId={mutualId} />
+          ) : (
+            l.like !== null &&
+            l.room_fit !== false && (
+              <LikeRoomButton listingId={l.id} like={l.like} onMutual={setMutualId} showHint />
+            )
           )}
-          <p className="text-[15px] font-semibold">
-            {t('listing.address', { street: l.street, city: l.city })}
-          </p>
-          <p className="text-sm text-ink-muted">{t('listing.locationHint')}</p>
-        </section>
 
-        <OwnerPreferences listing={l} />
-
-        {/* Nothing for `match: null`: the apply section already invites a seeker without a
-            profile to fill one. */}
-        {l.match !== null && <MatchCard match={l.match} listing={l} />}
-
-        {mutualId !== null && isSeeker ? (
-          <MutualBanner applicationId={mutualId} />
-        ) : (
-          l.like !== null &&
-          l.room_fit !== false && (
-            <LikeRoomButton listingId={l.id} like={l.like} onMutual={setMutualId} showHint />
-          )
-        )}
-
-        <ApplySection listing={l} />
+          <Card padding="md">
+            <ApplySection listing={l} headingRef={applyHeadingRef} />
+          </Card>
+        </div>
       </article>
     );
   }
 
   return (
-    <PageContainer className="flex flex-col gap-4">
-      <Link
-        to="/search"
-        className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
-      >
-        <svg
-          aria-hidden="true"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M9 6l6 6-6 6" />
-        </svg>
-        {t('listing.backToSearch')}
-      </Link>
+    <PageContainer width="wide" className="flex flex-col gap-4">
+      <BackLink to="/search" label={t('listing.backToSearch')} />
       {body}
+      {listing.isSuccess && (
+        <ApplyBar listing={listing.data} target={actionsRef} headingRef={applyHeadingRef} />
+      )}
     </PageContainer>
   );
 }
