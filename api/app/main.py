@@ -101,6 +101,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept-Language"],
+        expose_headers=["Retry-After"],
     )
     app.add_exception_handler(RequestValidationError, _request_invalid)
     app.add_exception_handler(OperationalError, _database_unavailable)

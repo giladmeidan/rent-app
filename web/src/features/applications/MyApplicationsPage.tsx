@@ -8,6 +8,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
+import { useOnline } from '../../components/useOnline';
+import { ApiError } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { hasStatus, type MyApplicationOut } from './api';
@@ -23,6 +25,7 @@ const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px
 
 function ApplicationCard({ application }: { application: MyApplicationOut }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const withdraw = useWithdraw(application.id);
   const titleId = useId();
   const { listing } = application;
@@ -113,7 +116,13 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             {/* A 401 clears the session and RequireSeeker leaves the page. */}
             {withdraw.isError && !hasStatus(withdraw.error, 401) && (
               <p role="alert" className={fieldError}>
-                {t('common.error')}
+                {withdraw.error instanceof ApiError &&
+                withdraw.error.status === 409 &&
+                withdraw.error.detail === 'not_withdrawable'
+                  ? t('applications.errors.notWithdrawable')
+                  : online
+                    ? t('common.error')
+                    : t('common.offline')}
               </p>
             )}
           </div>

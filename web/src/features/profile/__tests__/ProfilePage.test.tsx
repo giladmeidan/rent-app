@@ -113,21 +113,19 @@ const AC2_BODY = {
   about_me: null,
 };
 
-/** The text of the element(s) `el`'s `aria-describedby` names. */
-function description(el: HTMLElement): string {
-  return (el.getAttribute('aria-describedby') ?? '')
-    .split(' ')
-    .filter((id) => id !== '')
-    .map((id) => document.getElementById(id)?.textContent ?? '')
-    .join(' ');
-}
+/** "התאריך שנבחר: …", a date input's read-back (0009f). */
+const readbackText = new RegExp(`^${he.common.dateChosen.replace('{{date}}', '')}`);
 
-/** `el` is invalid, described by `message` in a `role="alert"`, and (when `focused`) focused. */
+/** `el` is invalid, described by `message` in a `role="alert"`, and (when `focused`) focused.
+ * A date input may also list its read-back (0009f), which is the only other id allowed. */
 function expectError(el: HTMLElement, message: string, focused = true) {
   expect(el).toHaveAttribute('aria-invalid', 'true');
-  expect(description(el)).toBe(message);
-  const id = el.getAttribute('aria-describedby') ?? '';
+  const [id = '', ...rest] = (el.getAttribute('aria-describedby') ?? '').split(' ');
   expect(document.getElementById(id)).toHaveAttribute('role', 'alert');
+  expect(document.getElementById(id)?.textContent).toBe(message);
+  for (const other of rest) {
+    expect(document.getElementById(other)?.textContent).toMatch(readbackText);
+  }
   if (focused) expect(el).toHaveFocus();
 }
 
@@ -263,6 +261,38 @@ describe('ProfilePage', () => {
         about_me: null,
       },
     ]);
+  });
+
+  it('ac3_move_in_read_back', async () => {
+    // "התאריך שנבחר: 12 בנובמבר 2026"
+    const chosen =
+      '\u05d4\u05ea\u05d0\u05e8\u05d9\u05da \u05e9\u05e0\u05d1\u05d7\u05e8: 12 \u05d1\u05e0\u05d5\u05d1\u05de\u05d1\u05e8 2026';
+    const ids = () => (moveIn().getAttribute('aria-describedby') ?? '').split(' ');
+    renderPage({ [PROFILE]: [json(profile({ move_in_date: '2026-11-12' }))] });
+    await form();
+    expect(moveIn()).toHaveValue('2026-11-12');
+    const readback = screen.getByText(chosen);
+    expect(ids()).toEqual([readback.id]);
+    // Under the input.
+    expect(
+      moveIn().compareDocumentPosition(readback) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // A cleared date: no read-back and no idref to it; the required error keeps its id.
+    set(moveIn(), '');
+    expect(screen.queryByText(chosen)).toBeNull();
+    save();
+    expectError(moveIn(), required);
+    expect(ids()).toHaveLength(1);
+    cleanup();
+
+    // A stored past date: the error and the read-back are both listed.
+    renderPage({ [PROFILE]: [json(profile({ move_in_date: inDays(-3) }))] });
+    await form();
+    save();
+    expectError(moveIn(), he.profile.errors.moveIn);
+    expect(ids()).toHaveLength(2);
+    expect(document.getElementById(ids()[1] ?? '')?.textContent).toMatch(readbackText);
   });
 
   it('ac3_past_stored_date_fails_until_changed', async () => {

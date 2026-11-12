@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
+import { retryAfterText } from '../../components/retryAfter';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import { ApiError, type ListingDetail } from '../listings/api';
@@ -59,6 +60,8 @@ function ApplyForm({ apply }: { apply: Apply }) {
   const [message, setMessage] = useState('');
   const [fieldErr, setFieldErr] = useState<'required' | 'invalid' | null>(null);
   const [serverErr, setServerErr] = useState<'rateLimited' | 'failed' | null>(null);
+  // A 429's `Retry-After`, in seconds, when the API sent one.
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
@@ -89,8 +92,10 @@ function ApplyForm({ apply }: { apply: Apply }) {
           setUnavailable(true);
           return;
         }
-        if (hasStatus(error, 429)) setServerErr('rateLimited');
-        else if (
+        if (hasStatus(error, 429)) {
+          setRetryAfter(error instanceof ApiError ? error.retryAfter : null);
+          setServerErr('rateLimited');
+        } else if (
           error instanceof ApiError &&
           error.status === 422 &&
           isMessageError(error.detail)
@@ -193,7 +198,9 @@ function ApplyForm({ apply }: { apply: Apply }) {
           )}
           {serverErr === 'rateLimited' && (
             <p id={serverErrorId} role="alert" className={fieldError}>
-              {t('applications.errors.rateLimited')}
+              {retryAfter !== null
+                ? t('applications.errors.rateLimitedIn', { when: retryAfterText(t, retryAfter) })
+                : t('applications.errors.rateLimited')}
             </p>
           )}
           {serverErr === 'failed' && (
@@ -264,12 +271,16 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   const headingId = useId();
   const me = useMe();
   const isSeeker = me.data?.role === 'seeker';
+  // The API does not say whose listing this is, and no owner can apply anywhere.
+  const isOwner = me.data?.role === 'owner';
   // A visitor or an owner never requests the seeker's list or profile.
   const mine = useMyApplications(isSeeker);
   const profile = useProfile(isSeeker);
   const apply = useApply(listing.id);
 
-  const countLine = t('applications.count', { count: listing.applicant_count });
+  const countLine = isOwner
+    ? t('applications.countOwner', { count: listing.applicant_count })
+    : t('applications.count', { count: listing.applicant_count });
 
   const visitor = (
     <div className="flex flex-col items-start gap-3">
@@ -350,7 +361,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <h2 id={headingId} className="text-[17px] font-extrabold">
-        {t('applications.heading')}
+        {isOwner ? t('applications.headingOwner') : t('applications.heading')}
       </h2>
       <p className="text-start text-[15px] text-ink-muted">{countLine}</p>
       {controls}

@@ -453,6 +453,50 @@ describe('ApplicantsPage', () => {
     });
   });
 
+  it('ac6_action_error_copy', async () => {
+    // "השינוי לא נשמר. אפשר לנסות שוב."
+    const failed =
+      '\u05d4\u05e9\u05d9\u05e0\u05d5\u05d9 \u05dc\u05d0 \u05e0\u05e9\u05de\u05e8. \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e0\u05e1\u05d5\u05ea \u05e9\u05d5\u05d1.';
+    const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
+    const shortlistP = () =>
+      fireEvent.click(
+        within(cardOf(MICHAL)).getByRole('button', { name: he.applicants.actions.shortlist }),
+      );
+
+    // A 500.
+    let { api, view } = renderPage([json([P])], {
+      extra: { [patchRoute(P)]: [json({ detail: 'boom' }, 500)] },
+    });
+    await screen.findByRole('article');
+    shortlistP();
+    expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(failed);
+    reset(view);
+
+    // Offline: the offline line instead.
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    ({ view } = renderPage([json([P])], { extra: { [patchRoute(P)]: [networkError] } }));
+    await screen.findByRole('article');
+    shortlistP();
+    expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(he.common.offline);
+    onLine.mockRestore();
+    reset(view);
+
+    // A 409: the refetched status next to the same line.
+    ({ api, view } = renderPage([json([P]), json([{ ...P, status: 'declined' }])], {
+      extra: { [patchRoute(P)]: [json({ detail: 'invalid_transition' }, 409)] },
+    }));
+    await screen.findByRole('article');
+    shortlistP();
+    await vi.waitFor(() => {
+      expect(api.calls(APPS)).toHaveLength(2);
+    });
+    expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(failed);
+    await vi.waitFor(() => {
+      expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.declined);
+    });
+    reset(view);
+  });
+
   it('ac6_action_errors', async () => {
     const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
     const Q = applicant({ status: 'shortlisted' });
@@ -500,7 +544,9 @@ describe('ApplicantsPage', () => {
     await vi.waitFor(() => {
       expect(api.calls(APPS)).toHaveLength(2);
     });
-    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(
+      he.applicants.errors.actionFailed,
+    );
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.declined);
     expect(screen.queryByText(he.applicants.errors.gone)).toBeNull();
     await vi.waitFor(() => {
@@ -538,7 +584,9 @@ describe('ApplicantsPage', () => {
     ({ view } = renderPage([json([P])], { extra: { [patchRoute(P)]: [networkError] } }));
     await screen.findByRole('article');
     shortlistP();
-    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(
+      he.applicants.errors.actionFailed,
+    );
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.submitted);
     for (const button of within(cardOf(MICHAL)).getAllByRole('button')) {
       expect(button).toBeEnabled();

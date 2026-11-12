@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { DateReadback, withReadback } from '../../components/DateReadback';
 import { formatRooms } from '../listings/format';
 import {
   FEATURES,
@@ -300,10 +301,15 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
           id={fieldId('available_by')}
           type="date"
           value={values.available_by}
-          aria-describedby={`${fieldId('available_by')}-hint`}
+          aria-describedby={withReadback(
+            `${fieldId('available_by')}-hint`,
+            `${fieldId('available_by')}-chosen`,
+            values.available_by,
+          )}
           onChange={(e) => set({ available_by: e.target.value })}
           className={control}
         />
+        <DateReadback id={`${fieldId('available_by')}-chosen`} value={values.available_by} />
         <p id={`${fieldId('available_by')}-hint`} className="text-xs text-ink-muted">
           {t('search.availableByHint')}
         </p>

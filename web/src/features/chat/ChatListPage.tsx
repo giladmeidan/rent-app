@@ -134,11 +134,10 @@ export function ChatListPage() {
       </Loading>
     );
   } else if (conversations.data.length === 0) {
-    body = (
-      <EmptyState
-        message={me.data?.role === 'owner' ? t('chat.list.emptyOwner') : t('chat.list.emptySeeker')}
-      />
-    );
+    // A flatmate somewhere (owner or seeker) gets the flat's line, once the flats are in.
+    let empty = me.data?.role === 'owner' ? t('chat.list.emptyOwner') : t('chat.list.emptySeeker');
+    if (flats.data !== undefined && flats.data.length > 0) empty = t('chat.list.emptyFlatmate');
+    body = <EmptyState message={empty} />;
   } else {
     // A failed background refetch keeps the list on the page.
     body = (

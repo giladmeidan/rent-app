@@ -504,7 +504,7 @@ const ownerRows: OwnerRow[] = [
     profile: { parking_needed: 0 },
     spots: 0,
     reason: 'לא צריכים חניה',
-    short: 'חניה',
+    short: 'חניה לא נדרשת',
   },
   {
     name: 'parking (2 needed, 1 spot) as agree: the differ wording',
@@ -513,7 +513,7 @@ const ownerRows: OwnerRow[] = [
     profile: { parking_needed: 2 },
     spots: 1,
     reason: 'ביקשו 2 חניות, בדירה יש מקום אחד',
-    short: 'חניה',
+    short: 'חניה חלקית',
   },
   {
     name: 'parking (2 needed, 1 spot) differ',
@@ -619,7 +619,7 @@ describe('reasons', () => {
     expect(ownerReason(row.criterion, row.kind, applicant, row.spots ?? 1, i18n.t)).toBe(
       row.reason,
     );
-    expect(ownerShort(row.criterion, row.kind, applicant, i18n.t)).toBe(row.short);
+    expect(ownerShort(row.criterion, row.kind, applicant, row.spots ?? 1, i18n.t)).toBe(row.short);
   });
 
   it('ac3_owner_parking_shortfall_one_spot', () => {
@@ -630,6 +630,21 @@ describe('reasons', () => {
         '\u05d1\u05d9\u05e7\u05e9\u05d5 2 \u05d7\u05e0\u05d9\u05d5\u05ea, \u05d1\u05d3\u05d9\u05e8\u05d4 \u05d9\u05e9 \u05de\u05e7\u05d5\u05dd \u05d0\u05d7\u05d3',
       );
     }
+  });
+
+  it('ac7_owner_parking_chip', () => {
+    const chip = (needed: number, spots: number, kind: ReasonKind) =>
+      ownerShort('parking', kind, applicantProfile({ parking_needed: needed }), spots, i18n.t);
+    // "חניה לא נדרשת"
+    expect(chip(0, 0, 'agree')).toBe(
+      '\u05d7\u05e0\u05d9\u05d4 \u05dc\u05d0 \u05e0\u05d3\u05e8\u05e9\u05ea',
+    );
+    // "חניה חלקית": two asked and one spot, the 0.5 agree
+    expect(chip(2, 1, 'agree')).toBe('\u05d7\u05e0\u05d9\u05d4 \u05d7\u05dc\u05e7\u05d9\u05ea');
+    // "חניה"
+    expect(chip(1, 1, 'agree')).toBe('\u05d7\u05e0\u05d9\u05d4');
+    // "חסרה חניה"
+    expect(chip(2, 1, 'differ')).toBe('\u05d7\u05e1\u05e8\u05d4 \u05d7\u05e0\u05d9\u05d4');
   });
 
   it('ac6_owner_copy: every criterion and side has a row', () => {
@@ -684,21 +699,57 @@ describe('people reasons', () => {
     for (const criterion of criteria) {
       for (const kind of ['agree', 'differ'] as const) {
         const line = personReason(criterion, kind, person, i18n.t);
-        expect(personShort(criterion, kind, person, i18n.t)).toBe(line);
+        expect(personShort(criterion, kind, person, i18n.t)).not.toBe(line);
         expect(line).not.toBe('');
         expect(line).not.toContain('people.');
         expect(line).not.toContain('match.');
         for (const text of forbidden) expect(line, `${criterion} ${kind}`).not.toContain(text);
       }
     }
-    expect(personReason('smoking', 'differ', person, i18n.t)).toBe('עישון: לא מתאים');
-    expect(personReason('pets', 'agree', person, i18n.t)).toBe('חיות מחמד: מתאים');
+    expect(personReason('smoking', 'differ', person, i18n.t)).toBe(
+      'הם לא מתאימים לכללי העישון בדירה',
+    );
+    expect(personReason('pets', 'agree', person, i18n.t)).toBe('הם מתאימים לכללי חיות המחמד בדירה');
     // A stored move-in that has passed means today, as everywhere.
     expect(personReason('move_in', 'agree', { move_in_date: inDays(-5) }, i18n.t)).toBe(
       i18n.t('match.owner.move_in.agree', { date: formatDate(todayInIsrael()) }),
     );
     expect(personReason('move_in', 'differ', person, i18n.t)).toBe(
       i18n.t('match.owner.move_in.differ', { date: formatDate(inDays(30)) }),
+    );
+  });
+
+  it('ac8_person_reason_is_a_sentence', () => {
+    const person = { move_in_date: inDays(30) };
+    const all: Criterion[] = [
+      'budget',
+      'move_in',
+      'area',
+      'household',
+      'contract',
+      'parking',
+      'smoking',
+      'pets',
+      'lifestyle',
+    ];
+    for (const criterion of all) {
+      for (const kind of ['agree', 'differ'] as const) {
+        expect(personReason(criterion, kind, person, i18n.t), `${criterion} ${kind}`).not.toBe(
+          personShort(criterion, kind, person, i18n.t),
+        );
+      }
+    }
+    const own = ['household', 'contract', 'parking', 'smoking', 'pets'] as const;
+    for (const criterion of own) {
+      for (const kind of ['agree', 'differ'] as const) {
+        expect(personReason(criterion, kind, person, i18n.t)).toBe(
+          he.people.reason[criterion][kind],
+        );
+      }
+    }
+    // The move-in chip is the owner's short one now.
+    expect(personShort('move_in', 'agree', person, i18n.t)).toBe(
+      he.match.owner.short.move_in.agree,
     );
   });
 });

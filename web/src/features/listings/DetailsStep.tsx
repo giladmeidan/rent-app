@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { AreaOut } from '../../api/client';
 import { ChoiceGroup } from '../../components/ChoiceGroup';
+import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Switch } from '../../components/Switch';
@@ -296,6 +297,11 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
         </label>
         <input
           {...a11y('available_from')}
+          aria-describedby={withReadback(
+            a11y('available_from')['aria-describedby'],
+            `${fieldId('available_from')}-chosen`,
+            form.available_from,
+          )}
           type="date"
           min={today}
           max={addDays(today, AVAILABLE_FROM_MAX_DAYS)}
@@ -303,6 +309,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
           onChange={(e) => onChange({ available_from: e.target.value })}
           className={input}
         />
+        <DateReadback id={`${fieldId('available_from')}-chosen`} value={form.available_from} />
         {errorText('available_from')}
       </div>
 

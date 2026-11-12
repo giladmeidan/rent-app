@@ -33,3 +33,20 @@ test('ac7_signup_via_outbox_and_logout', async ({ page }) => {
   await expect(header.getByRole('link', { name: he.header.login })).toBeVisible();
   await expect(header.getByText(he.header.greeting.replace('{{name}}', name))).toHaveCount(0);
 });
+
+test('ac1_offline_request_fails_fast', async ({ page, context }) => {
+  // 0009f Q9: offline, sending the code fails at once with the offline line (no paused request).
+  const email = uniqueEmail();
+  await page.goto('/login');
+  await page.getByLabel(he.auth.email.label).fill(email);
+  await context.setOffline(true);
+  await page.getByRole('button', { name: he.auth.sendCode }).click();
+  await expect(page.getByRole('alert')).toContainText(he.common.offline.split('.')[0] ?? '', {
+    timeout: 5_000,
+  });
+
+  // Back online, the retry sends the code and step 2 opens.
+  await context.setOffline(false);
+  await page.getByRole('button', { name: he.common.retry }).click();
+  await expect(page.getByLabel(he.auth.code.label)).toBeVisible();
+});
