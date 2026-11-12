@@ -7,11 +7,13 @@ import type { ApplicationStatus } from './api';
 type Props =
   { viewer?: 'seeker'; status: ApplicationStatus } | { viewer: 'owner'; status: ApplicantStatus };
 
-const seekerTone: Record<ApplicationStatus, string> = {
-  submitted: 'bg-accent-soft text-accent-strong',
-  shortlisted: 'bg-accent text-on-ink',
-  declined: 'bg-border text-ink-muted',
-  withdrawn: 'bg-border text-ink-muted',
+// The seeker's badges. The brand allows one accent-filled element per screen, so none is solid;
+// the words carry each status.
+const seekerTone: Record<ApplicationStatus, BadgeTone> = {
+  submitted: 'neutral',
+  shortlisted: 'accent',
+  declined: 'neutral',
+  withdrawn: 'neutral',
 };
 
 // The owner's badges (brand: colour only repeats the words). "New" draws the eye, as the artboard's
@@ -23,7 +25,7 @@ const ownerTone: Record<ApplicantStatus, BadgeTone> = {
 };
 
 /** One pill per application status (`StatusBadge`'s anatomy), in the seeker's or the owner's words.
- * The owner's is the kit's `Badge`; the seeker's is unchanged. */
+ * Both are the kit's `Badge`. */
 export function ApplicationStatusChip(props: Props) {
   const { t } = useTranslation();
   if (props.viewer === 'owner') {
@@ -45,11 +47,13 @@ export function ApplicationStatusChip(props: Props) {
     withdrawn: t('applications.status.withdrawn'),
   };
   return (
-    <span
+    <Badge
+      tone={seekerTone[props.status]}
+      size="md"
       data-testid="application-status"
-      className={`shrink-0 rounded-full px-3 py-[5px] text-[13px] font-bold ${seekerTone[props.status]}`}
+      className="shrink-0"
     >
       {labels[props.status]}
-    </span>
+    </Badge>
   );
 }

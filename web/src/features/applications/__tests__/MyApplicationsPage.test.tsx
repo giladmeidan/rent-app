@@ -151,7 +151,7 @@ describe('MyApplicationsPage', () => {
       expect(link).toHaveTextContent(titleOf(app));
       expect(link).toHaveAttribute('href', `/listings/${app.listing.id}`);
       // A 44 px target that reads as a link.
-      expect(link).toHaveClass('inline-flex', 'min-h-[44px]', 'underline', 'text-accent-strong');
+      expect(link).toHaveClass('inline-flex', 'min-h-tap', 'underline', 'text-accent');
       expect(card.getByText(/6,000[\s‎‏]*₪/)).toBeVisible();
       expect(card.getByTestId('application-status')).toHaveTextContent(
         he.applications.status[app.status as 'submitted'],
@@ -416,5 +416,115 @@ describe('MyApplicationsPage', () => {
     expect(within(second).getByTestId('application-message')).toHaveTextContent(
       applied.message ?? '',
     );
+  });
+
+  it('ac1_cards_kit_layout', async () => {
+    const message = 'line one\nline two\nline three';
+    const submitted = to('L1', { status: 'submitted', message });
+    const shortlisted = to('L2', { status: 'shortlisted' });
+    const declined = to('L3', { status: 'declined' });
+    const withdrawn = to('L4', { status: 'withdrawn' });
+    const mutual = to('L5', { source: 'like', message: null, status: 'shortlisted' });
+    const apps = [submitted, shortlisted, declined, withdrawn, mutual];
+    renderPage([json(apps)]);
+    await screen.findAllByRole('article');
+    expect(cards()).toHaveLength(5);
+
+    const tones = {
+      submitted: ['bg-surface-subtle', 'text-ink-muted'],
+      shortlisted: ['bg-accent-soft', 'text-accent-strong'],
+      declined: ['bg-surface-subtle', 'text-ink-muted'],
+      withdrawn: ['bg-surface-subtle', 'text-ink-muted'],
+    } as const;
+    apps.forEach((app, i) => {
+      const card = cards()[i] as HTMLElement;
+      const inside = within(card);
+      expect(card).toHaveClass('rounded-lg');
+      // Ended applications are the muted card; the others the default one.
+      if (app.status === 'declined' || app.status === 'withdrawn') {
+        expect(card).toHaveClass('bg-surface-subtle');
+        expect(card).not.toHaveClass('border');
+      } else {
+        expect(card).toHaveClass('bg-surface', 'border', 'border-border');
+      }
+      const badge = inside.getByTestId('application-status');
+      expect(badge).toHaveTextContent(he.applications.status[app.status as 'submitted']);
+      expect(badge).toHaveClass('rounded-full', ...tones[app.status as keyof typeof tones]);
+      expect(badge).not.toHaveClass('bg-accent');
+      // The chat link is only on the shortlisted cards, described by the title.
+      const chat = inside.queryByRole('link', { name: he.applications.chat });
+      if (app.status === 'shortlisted') {
+        expect(chat).toHaveAttribute('href', `/chat/${app.id}`);
+        const heading = inside.getByRole('heading', { level: 2 });
+        expect(chat?.getAttribute('aria-describedby')).toBe(heading.id);
+      } else {
+        expect(chat).toBeNull();
+      }
+      const link = within(inside.getByRole('heading', { level: 2 })).getByRole('link');
+      expect(link).toHaveClass('min-h-tap', 'underline');
+    });
+
+    // The message keeps its line breaks and renders as text.
+    const body = within(cards()[0] as HTMLElement).getByTestId('application-message');
+    expect(body.textContent).toBe(message);
+    expect(body).toHaveClass('whitespace-pre-line', 'bg-surface-subtle');
+    expect(body.children).toHaveLength(0);
+    // On a muted card the message box is `surface`.
+    expect(within(cards()[2] as HTMLElement).getByTestId('application-message')).toHaveClass(
+      'bg-surface',
+    );
+    // The mutual card shows its tag and no message.
+    const last = within(cards()[4] as HTMLElement);
+    expect(last.getByTestId('application-mutual')).toHaveTextContent(he.applications.mutual);
+    expect(last.queryByTestId('application-message')).toBeNull();
+    // Only the shortlisted cards have a chat link.
+    expect(screen.getAllByRole('link', { name: he.applications.chat })).toHaveLength(2);
+  });
+
+  it('ac2_empty_action_and_errors', async () => {
+    // Empty: the way to search sits inside the EmptyState's card.
+    let { view } = renderPage([json([])]);
+    const message = await screen.findByText(he.applications.mine.empty);
+    const search = screen.getByRole('link', { name: he.applications.mine.search });
+    expect(search).toHaveAttribute('href', '/search');
+    expect(search.parentElement).toBe(message.parentElement);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A withdraw answering 500 shows the card's alert.
+    const app = to('L1', { status: 'submitted' });
+    ({ view } = renderPage([json([app])], {
+      [withdrawRoute(app)]: [json({ detail: 'boom' }, 500)],
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
+    const alert = await within(cards()[0] as HTMLElement).findByRole('alert');
+    expect(alert).toHaveTextContent(he.common.error);
+    expect(alert).toHaveClass('text-danger');
+    view.unmount();
+  });
+
+  it('ac4_sleep_mascot_and_tones', async () => {
+    // Empty: the sleep mascot.
+    let { view } = renderPage([json([])]);
+    await screen.findByText(he.applications.mine.empty);
+    const images = document.querySelectorAll('img');
+    expect(images).toHaveLength(1);
+    expect(((images[0] as HTMLImageElement).getAttribute('src') ?? '').split('/').pop()).toBe(
+      'homie-turtle-sleep.svg',
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No status badge is solid, whatever the status.
+    const statuses = ['submitted', 'shortlisted', 'declined', 'withdrawn'] as const;
+    ({ view } = renderPage([json(statuses.map((status, i) => to(`L${String(i)}`, { status })))]));
+    await screen.findAllByRole('article');
+    const badges = screen.getAllByTestId('application-status');
+    expect(badges).toHaveLength(4);
+    for (const badge of badges) {
+      expect(badge).not.toHaveClass('bg-accent');
+      expect(badge).not.toHaveClass('tabular-nums');
+    }
+    view.unmount();
   });
 });
