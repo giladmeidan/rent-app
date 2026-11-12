@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.conftest import REPO_ROOT
 
-_KEYS = ("DB_PORT", "WEB_ORIGIN", "REDIS_PORT", "API_PORT", "DATABASE_URL")
+_KEYS = ("DB_PORT", "WEB_PORT", "WEB_ORIGIN", "REDIS_PORT", "API_PORT", "DATABASE_URL")
 
 
 def _make_show(tmp_path: Path, dotenv: bytes) -> subprocess.CompletedProcess[str]:

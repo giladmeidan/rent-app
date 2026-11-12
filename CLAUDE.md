@@ -19,8 +19,7 @@ and delegates. It never writes application code itself. Delegation chain:
    or a go-ahead between specs. Gilad approves spec digests in batches. A spec is **ready to build** when it is
    `verified` and every spec in its `depends_on` is merged or open as a PR. The orchestrator starts a build
    session for **every** ready spec at once, not one at a time (Gilad, 2026-11-10); the only serialisation is
-   `depends_on`. Exception: the Vite dev server is pinned to port 5173 on this Mac, so two **web** specs do not
-   build at the same time locally — an API spec and a web spec, or two API specs, do.
+   `depends_on`. Each worktree has its own `WEB_PORT` in its `.env` (default 5173), so web specs build in parallel too.
 3. **Parallel.** Specs with no `depends_on` between them build at the same time, each in its own worktree
    (`../rent-app-NNNN`) with its own `.env` (`COMPOSE_PROJECT_NAME=rent-app-NNNN` and its own `DB_PORT`,
    `REDIS_PORT`, `API_PORT`). A web half starts from the API half's branch as soon as that PR is open and
@@ -39,8 +38,8 @@ and delegates. It never writes application code itself. Delegation chain:
    review round runs on the local branch. **e2e runs locally for now (Gilad, 2026-11-11)**: GitHub runners
    cannot install Playwright's deps, so CI's `e2e` job is switched off (repo variable `E2E_IN_CI=off`) and every
    spec that touches the web runs `make e2e` on its final local head and reports the result in its digest. This
-   lasts until Gilad says CI e2e is fixed; then `gh variable delete E2E_IN_CI` and this sentence goes. Only one
-   worktree binds web port 5173 at a time (`lsof -nP -iTCP:5173 -sTCP:LISTEN` before `make dev` / `make e2e`).
+   lasts until Gilad says CI e2e is fixed; then `gh variable delete E2E_IN_CI` and this sentence goes. Each
+   worktree sets its own `WEB_PORT` (`WEB_ORIGIN` follows it); check `lsof -nP -iTCP:$WEB_PORT -sTCP:LISTEN` is empty before `make dev` / `make e2e`.
    The spec is
    pushed **once**, when it is finished (build + review fixes), with the PR opened and the `ready-to-merge`
    label added at that push so the full CI runs once. A further push is allowed only to fix a CI failure.
