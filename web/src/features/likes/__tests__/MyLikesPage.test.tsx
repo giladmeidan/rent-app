@@ -281,4 +281,74 @@ describe('MyLikesPage', () => {
     expect(mascots()).toHaveLength(1);
     expect(section(he.likes.mine).querySelectorAll('img[src*="homie-turtle"]')).toHaveLength(1);
   });
+
+  it('ac10_vanished_card_is_explained', async () => {
+    const mineHeading = () => screen.getByRole('heading', { level: 2, name: he.likes.mine });
+    const h1 = async () => screen.findByRole('heading', { level: 1, name: he.likes.title });
+    const after = (a: Node, b: Node) =>
+      expect(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // An unlike answering 404: the refetch drops the card, and one focused line under the <h1>
+    // says why (the button shows no alert of its own).
+    const a = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([], [a])), json(myLikes([], []))],
+      [`DELETE /listings/${a.listing.id}/like`]: [json({ detail: 'not_found' }, 404)],
+    });
+    const mine = within(await screen.findByRole('region', { name: he.likes.mine }));
+    let button = mine.getByRole('button', { name: he.likes.liked });
+    act(() => button.focus());
+    fireEvent.click(button);
+    expect(await screen.findByText(he.likes.mineEmpty)).toBeVisible();
+    expect(screen.getAllByText(he.likes.errors.gone)).toHaveLength(1);
+    let line = screen.getByRole('alert');
+    expect(line).toHaveTextContent(he.likes.errors.gone);
+    expect(line).toHaveFocus();
+    after(await h1(), line);
+    after(line, section(he.likes.likedMe));
+    unmount();
+    vi.unstubAllGlobals();
+
+    // A like answering 409 `already_applied`: the line, with the way to "my applications".
+    const b = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([b], [])), json(myLikes([], []))],
+      [`PUT /listings/${b.listing.id}/like`]: [json({ detail: 'already_applied' }, 409)],
+    });
+    const likedMe = within(await screen.findByRole('region', { name: he.likes.likedMe }));
+    button = likedMe.getByRole('button', { name: he.likes.like });
+    act(() => button.focus());
+    fireEvent.click(button);
+    expect(await screen.findByText(he.likes.errors.alreadyApplied)).toBeVisible();
+    line = screen.getByRole('alert');
+    expect(line).toHaveFocus();
+    expect(within(line).getByRole('link', { name: he.applications.viewMine })).toHaveAttribute(
+      'href',
+      '/me/applications',
+    );
+    after(await h1(), line);
+    expect(await screen.findByText(he.likes.likedMeEmpty)).toBeVisible();
+    expect(line).toHaveFocus();
+    unmount();
+    vi.unstubAllGlobals();
+
+    // A successful unlike focuses the "mine" heading (spec 0009t), never this line.
+    const c = likedRoom();
+    const d = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([], [c, d])), json(myLikes([], [d]))],
+      [`DELETE /listings/${c.listing.id}/like`]: [empty()],
+    });
+    button = within(
+      within(await screen.findByRole('region', { name: he.likes.mine })).getAllByRole(
+        'article',
+      )[0] as HTMLElement,
+    ).getByRole('button', { name: he.likes.liked });
+    act(() => button.focus());
+    fireEvent.click(button);
+    await vi.waitFor(() => {
+      expect(mineHeading()).toHaveFocus();
+    });
+    expect(screen.getByRole('alert')).toBeEmptyDOMElement();
+  });
 });
