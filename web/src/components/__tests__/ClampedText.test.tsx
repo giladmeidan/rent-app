@@ -92,4 +92,41 @@ describe('ClampedText', () => {
     );
     expect(screen.queryByRole('button')).toBeNull();
   });
+  it('clamps_and_toggles', () => {
+    // The chat's member line (spec 0009s): two lines, its role and name on the paragraph.
+    stubHeights(60, 32);
+    const { unmount } = render(
+      <ClampedText
+        lines={2}
+        id="members"
+        textProps={{ role: 'group', 'aria-label': 'members', className: 'text-caption' }}
+      >
+        {'a · b · c · d · e · f'}
+      </ClampedText>,
+    );
+    const line = screen.getByRole('group', { name: 'members' });
+    expect(line.tagName).toBe('P');
+    expect(line.id).toBe('members');
+    expect(line).toHaveClass('text-caption');
+    expect(line.textContent).toBe('a · b · c · d · e · f');
+    const block = line.firstElementChild as HTMLElement;
+    expect(block).toHaveClass('line-clamp-2');
+    const toggle = screen.getByRole('button', { name: he.common.showMore });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', 'members');
+    expect(line.contains(toggle)).toBe(false);
+    fireEvent.click(toggle);
+    expect(block).not.toHaveClass('line-clamp-2');
+    expect(screen.getByRole('button', { name: he.common.showLess })).toBe(toggle);
+    unmount();
+
+    // Equal heights: no button.
+    stubHeights(32, 32);
+    render(
+      <ClampedText lines={2} id="fits" textProps={{ role: 'group', 'aria-label': 'members' }}>
+        {'a · b'}
+      </ClampedText>,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+  });
 });
