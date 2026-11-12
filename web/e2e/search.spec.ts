@@ -16,6 +16,9 @@ function israelDay(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+// The phone layout (spec 0009i AC7): the filters toggle this test clicks exists below 1024px only.
+test.use({ viewport: { width: 390, height: 844 } });
+
 test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   const email = uniqueEmail();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -86,6 +89,20 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   await expect(card).toHaveCount(1);
   await expect(card.getByText(PRICE)).toBeVisible();
 
+  // 0009i AC7: with filters set and the panel open, nothing overflows the 390px screen (the
+  // toolbar of tags, sort and toggle is the risk).
+  await test.step('0009i phone: no horizontal overflow with filters and the panel open', async () => {
+    await page.goto('/search?price_max=8000&rooms_min=3&pets=true');
+    await page.getByRole('button', { name: /^מסננים/ }).click();
+    await expect(page.getByRole('list', { name: he.search.tags.label })).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.goto('/search');
+    await expect(card).toHaveCount(1);
+  });
+
   // Up to 5,000 ₪: the 7,200 ₪ listing is filtered out.
   await page.getByRole('button', { name: he.search.filters, exact: true }).click();
   const price = page.getByRole('group', { name: he.search.price });
@@ -150,5 +167,36 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     await expect(facts).toContainText(he.rooms.facts.flatmates);
     await expect(page.getByText(he.lifestyle.title.flat)).toHaveCount(0);
     await expect(page.getByText('27, 30')).toHaveCount(0);
+  });
+
+  await test.step('0009i desktop: filters panel beside a grid of row cards', async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/search');
+    await expect(card).toHaveCount(1);
+    const panel = page.getByRole('region', { name: he.search.filters });
+    await expect(panel).toBeVisible();
+    // No toggle button on a desktop.
+    await expect(page.getByRole('button', { name: he.search.filters, exact: true })).toHaveCount(0);
+    await expect(card).toHaveAttribute('data-layout', 'row');
+    // RTL: the panel is at the inline start, to the right of the card, with no overlap.
+    const panelBox = await panel.boundingBox();
+    const cardBox = await card.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+    expect((panelBox?.x ?? 0) >= (cardBox?.x ?? 0) + (cardBox?.width ?? 0) - 1).toBe(true);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    await panel.getByRole('group', { name: he.search.price }).getByLabel(he.search.to).fill('5000');
+    await panel.getByRole('button', { name: he.search.apply }).click();
+    await expect(page).toHaveURL('/search?price_max=5000');
+    await expect(page.getByText(he.common.loading)).toHaveCount(0);
+    await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
+    await expect(card).toHaveCount(0);
+    await panel.getByRole('button', { name: he.search.clear }).click();
+    await expect(page).toHaveURL('/search');
+    await expect(card).toHaveCount(1);
   });
 });
