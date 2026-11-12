@@ -1,7 +1,7 @@
 ---
 id: 0009k
 title: The listing wizard (new and edit) looks like CreateListing.dc.html on a phone and gets a designed desktop layout, built from the 0009d kit and tokens, with every behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Tag, Field + TextInput/Textarea/Select, PageContainer, PageHeader + BackLink, useConfirm), the token scale, the restyled ChoiceGroup / Switch / Skeleton / EmptyState / ErrorState, the full-width shell, the page-width table and the colour swap in every listings file
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Opus/medium: no auth, money or data, but ~11 source files and ~6 test files must stay green
