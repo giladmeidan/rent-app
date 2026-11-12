@@ -26,6 +26,7 @@
 //   P2 t('base') of a family needs a count: no second argument, or an object literal second argument
 //      with neither a `count` property nor a spread, is an error. A non-literal argument passes.
 //   P3 t('plain', { count }) on a plain string key passes.
+//   P4 Plural and key checks also run on .ts files (copy is still only checked in .tsx).
 //
 // A line directly below a comment containing `i18n-ignore-next-line` is skipped. Prints
 // file:line per hit; exits 1 on any.
@@ -163,7 +164,8 @@ function passesCount(options) {
       ts.isSpreadAssignment(p) ||
       ((ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) &&
         p.name !== undefined &&
-        p.name.getText() === 'count'),
+        (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
+        p.name.text === 'count'),
   );
 }
 
@@ -185,7 +187,9 @@ function checkFile(path) {
     hits.push(`${relative(process.cwd(), path)}:${line + 1}: ${message}`);
   };
 
+  const skip = new Set();
   const visit = (node) => {
+    if (skip.has(node)) return;
     if (isTranslateCall(node) && node.arguments.length > 0) {
       const [first, options] = node.arguments;
       const keys = literalKeys(first);
@@ -194,9 +198,10 @@ function checkFile(path) {
         else if (families.has(key.text) && !passesCount(options))
           report(key, `plural key '${key.text}' called without count`);
       }
-      // The keys themselves are not copy; a conditional's test and every later argument are.
-      if (keys.length === 0) visit(first);
-      else if (ts.isConditionalExpression(first)) visit(first.condition);
+      // The literal keys themselves are not copy; everything else in the key argument and every
+      // later argument is.
+      keys.forEach((key) => skip.add(key));
+      visit(first);
       node.arguments.slice(1).forEach(visit);
       return;
     }

@@ -13,7 +13,7 @@ type Flatmates = {
   flatmate_ages?: readonly number[] | undefined;
 };
 
-/** "2 שותפים (27, 30)", "שותף/ה אחד/ת", "2 שותפים", and "2 שותפים (30, ?)" when fewer ages than
+/** "2 שותפים (27, 30)", "אדם אחד בדירה", "2 שותפים", and "2 שותפים (30, ?)" when fewer ages than
  * flatmates are given (spec 0009b); `null` when the count is not known. Ages keep the API's order. */
 export function flatmatesText(t: TFunction, { flatmates_count, flatmate_ages }: Flatmates) {
   if (flatmates_count === null || flatmates_count === undefined) return null;

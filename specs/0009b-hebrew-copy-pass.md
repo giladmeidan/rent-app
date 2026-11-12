@@ -420,7 +420,7 @@ second source to keep in step with Gilad's edits, so there is none.
   different marker is a table edit.
 - **Proposed `PRODUCT.md` row** (orchestrator to add once Q1–Q5 are answered). Topic **Copy**: "Decided
   2026-11-?? (Slice 9, Gilad): Hebrew copy follows 0009b's conventions:
-  - slash forms for one addressed person ("את/ה", "מחפש/ת"), plural imperatives for instructions, and the
+  - no slash forms (brand voice): the plural, an infinitive or a noun, plural imperatives for instructions, and the
     other side in the plural ("בעלי הדירה");
   - counts through i18next plural forms (one / two / other, plus zero where 0 reads differently), enforced
     by `make i18n-check`;

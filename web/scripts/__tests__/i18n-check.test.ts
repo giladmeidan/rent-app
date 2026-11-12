@@ -142,6 +142,7 @@ describe('i18n-check', () => {
       "t('x', opts)",
       "t('x', { ...rest })",
       "t('plain', { count })",
+      "t('x', { 'count': n })",
     ]) {
       const { status, output } = run(call);
       expect(output, call).toContain('i18n-check: ok');
@@ -182,6 +183,18 @@ describe('i18n-check', () => {
     expect(status).toBe(1);
     expect(output).toContain("E.tsx:1: missing key 'nope'");
     expect(output).not.toContain("'areas.heading'");
+
+    ({ status, output } = runOn({
+      'G.tsx': "export const G = ({ c }) => <p>{t((c ? 'areas.heading' : 'nope'))}</p>;\n",
+    }));
+    expect(status).toBe(1);
+    expect(output).toContain("G.tsx:1: missing key 'nope'");
+
+    ({ status, output } = runOn({
+      'H.tsx': "export const H = ({ c }) => <p>{t(c ? 'areas.heading' : f('two words'))}</p>;\n",
+    }));
+    expect(status).toBe(1);
+    expect(output).toContain('H.tsx:1: hardcoded text "two words"');
 
     ({ status, output } = runOn({
       'F.tsx': [

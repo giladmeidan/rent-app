@@ -111,7 +111,7 @@ client: web/node_modules/.modules.yaml
 web/src/api/schema.d.ts:
 	$(MAKE) client
 
-## i18n-check: fail on hardcoded Hebrew/English in web/src/**/*.tsx or t() keys missing from he.json
+## i18n-check: fail on hardcoded Hebrew/English in web/src/**/*.tsx, and on t() keys missing from he.json or plural misuse in .tsx and .ts (P4)
 i18n-check: web/node_modules/.modules.yaml
 	$(PNPM) exec node scripts/i18n-check.mjs
 
