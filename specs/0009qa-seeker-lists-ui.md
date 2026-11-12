@@ -409,3 +409,10 @@ Hebrew test strings use `\uXXXX` escapes or `he.json` lookups, as the listings f
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009qa — seeker lists (my applications, likes) in the kit   PR open, not merged
+Shipped: `/me/applications` is one 720 px column of Inbox-style kit cards (price + status badge, title link, message box, ink chat / secondary withdraw); `/me/likes` is a wide grid (1/2/3 columns) of 0009i's listing cards with the match badge, chips and "your age" chip (FOLLOWUPS 183 — the one visible content addition), and the mutual banner is an accent-soft notice with an ink button. Demo: sign in as a seeker → /me/applications → /me/likes.
+Tests: +6 unit (AC1–AC4, `Tag` attribute forwarding), +2 e2e steps in `likes.spec.ts::ac9` (AC5, no new sign-up), 22 screenshots in `web/screens/0009qa/` (AC6). `EmptyState action` came from 0009i (it merged first); `Badge` forwarding was already on main.
+Findings (ux, one round): 0 blockers, 0 majors, 2 minors fixed in one line — the spec's flagged risk: a muted ended card hid the neutral chip and put the accent title off `surface`, so every card is now `default` (the spec's own fallback); 3 nits dropped. No follow-ups.
+Checks on the final head: make lint / test (443 web) / i18n-check / build-web / screens green; local make e2e green on the coder's head (pre-0009i merge), CI e2e is the gate. AC7 greps print nothing (only `[overflow-wrap:anywhere]`, in the exceptions table); no `dangerouslySetInnerHTML` / `innerHTML` / linkify in the diff.
+Behaviour: unchanged (ux reviewer checked every role / aria / id / testid / ref / focus / inFlight guard against main), so no extra reviewers. Changed in PRODUCT.md: nothing.
