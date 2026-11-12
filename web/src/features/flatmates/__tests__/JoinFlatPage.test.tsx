@@ -401,4 +401,166 @@ describe('JoinFlatPage', () => {
     expect(readInviteToken()).toBeNull();
     expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
+
+  it('ac3_states_layout', async () => {
+    // Every state: one <h1>, in the narrow (480px) column.
+    const frame = () => {
+      const h1s = screen.getAllByRole('heading', { level: 1 });
+      expect(h1s).toHaveLength(1);
+      expect(h1s[0]).toHaveTextContent(he.flatmates.join.title);
+      expect(h1s[0]?.closest('section')).toHaveClass('max-w-narrow');
+    };
+
+    // Loading (the session check pending).
+    const me = deferred();
+    let { view } = renderJoin({ 'GET /me': [me.promise] });
+    await waitFor(() => {
+      expect(screen.getByText(he.common.loading).closest('[aria-busy="true"]')).not.toBeNull();
+    });
+    frame();
+    reset(view);
+
+    // The preview: the room's title, who invites, a full-width join button, the hello mascot.
+    ({ view } = renderJoin({ [PREVIEW]: [json(P)] }));
+    const button = await cta();
+    frame();
+    expect(screen.getByText(cardTitle(i18n.t, P.listing))).toBeVisible();
+    expect(screen.getByText(i18n.t('flatmates.join.invitedBy', { owner: 'רוני' }))).toHaveAttribute(
+      'dir',
+      'auto',
+    );
+    expect(button).toHaveClass('w-full');
+    const hello = document.querySelector('section img');
+    expect(hello).toHaveAttribute('alt', '');
+    expect(hello?.getAttribute('src')).toContain('hello');
+    reset(view);
+
+    // Member: the message and "to the chats" to /chat, the celebrating mascot.
+    ({ view } = renderJoin({ [PREVIEW]: [json(invitePreview({ member: true }))] }));
+    expect(await screen.findByText(he.flatmates.join.member)).toBeVisible();
+    frame();
+    expect(screen.getByRole('link', { name: he.flatmates.join.toChats })).toHaveAttribute(
+      'href',
+      '/chat',
+    );
+    expect(document.querySelector('section img')?.getAttribute('src')).toContain('celebrate');
+    reset(view);
+
+    // No token: the invalid alert, no mascot (a failure is not an empty state).
+    ({ view } = renderJoin({}, '/flatmates/join'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.flatmates.join.invalid);
+    frame();
+    expect(document.querySelector('section img')).toBeNull();
+    reset(view);
+
+    // The preview's final answers and its rate limit.
+    for (const [reply, text] of [
+      [err(404, 'not_found'), he.flatmates.join.invalid],
+      [err(409, 'own_listing'), he.flatmates.join.own],
+      [err(429, 'rate_limited'), he.flatmates.join.rateLimited],
+    ] as const) {
+      ({ view } = renderJoin({ [PREVIEW]: [reply] }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(text);
+      frame();
+      reset(view);
+    }
+
+    // The join's final answers and its rate limit: the alert under the card's title.
+    for (const [reply, text] of [
+      [err(404, 'not_found'), he.flatmates.join.invalid],
+      [err(409, 'own_listing'), he.flatmates.join.own],
+      [err(409, 'already_applied'), he.flatmates.join.applied],
+      [err(409, 'declined'), he.flatmates.join.declined],
+      [err(409, 'flatmates_full'), he.flatmates.join.full],
+      [err(429, 'rate_limited'), he.flatmates.join.rateLimited],
+    ] as const) {
+      ({ view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [reply] }));
+      fireEvent.click(await cta());
+      expect(await screen.findByRole('alert')).toHaveTextContent(text);
+      frame();
+      reset(view);
+    }
+
+    // `other` (a 5xx), on the preview and on the join: ErrorState.
+    ({ view } = renderJoin({ [PREVIEW]: [err(500, 'boom')] }));
+    expect(await screen.findByRole('button', { name: he.common.retry })).toBeVisible();
+    frame();
+    reset(view);
+    ({ view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [err(500, 'boom')] }));
+    fireEvent.click(await cta());
+    expect(await screen.findByRole('button', { name: he.common.retry })).toBeVisible();
+    frame();
+    reset(view);
+  });
+
+  it('ac5_token_never_rendered', async () => {
+    // The token must never reach the page: not its text, not an `href`, not any attribute. Every
+    // DOM mutation is checked as well as each named checkpoint.
+    const leaks: string[] = [];
+    const check = (where: string) => {
+      if (document.body.textContent?.includes(T) === true) leaks.push(`${where}: text`);
+      for (const el of document.querySelectorAll('[href]')) {
+        if (el.getAttribute('href')?.includes(T) === true) leaks.push(`${where}: href`);
+      }
+      if (document.body.innerHTML.includes(T)) leaks.push(`${where}: markup`);
+    };
+    const observer = new MutationObserver(() => check('a mutation'));
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    window.history.replaceState(null, '', `/flatmates/join#${T}`);
+    const me = deferred();
+    const api = mockApi({
+      'GET /me': [me.promise],
+      [PREVIEW]: [json(P)],
+      [JOIN]: [err(429, 'rate_limited'), err(409, 'flatmates_full')],
+    });
+    const view = render(
+      <QueryClientProvider client={testQueryClient()}>
+        <BrowserRouter>{routes}</BrowserRouter>
+      </QueryClientProvider>,
+    );
+    check('the first render');
+
+    // The hash effect: the hash is gone from the URL.
+    await waitFor(() => {
+      expect(window.location.hash).toBe('');
+    });
+    expect(window.location.pathname).toBe('/flatmates/join');
+    check('after the hash effect');
+
+    // The preview.
+    me.resolve(json(seeker));
+    const button = await cta();
+    check('the preview');
+
+    // A 429 join: the alert and the button.
+    fireEvent.click(button);
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.flatmates.join.rateLimited);
+    await waitFor(() => {
+      expect(button).toBeEnabled();
+    });
+    check('after a 429 join');
+
+    // A final 409 join.
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(he.flatmates.join.full);
+    });
+    check('after a final 409 join');
+
+    // The token went in the POST bodies only.
+    expect(api.calls(PREVIEW)[0]?.body).toEqual({ token: T });
+    expect(api.calls(JOIN).map((call) => call.body)).toEqual([{ token: T }, { token: T }]);
+    for (const call of api.fetchMock.mock.calls) {
+      expect(call[0].url).not.toContain(T);
+    }
+    observer.disconnect();
+    expect(leaks).toEqual([]);
+    view.unmount();
+  });
 });
