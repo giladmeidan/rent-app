@@ -28,7 +28,7 @@ const PAGES: Record<string, { file: string; width: Width }> = {
   ProfilePage: { file: 'features/profile/ProfilePage.tsx', width: 'narrow' },
   ChatListPage: { file: 'features/chat/ChatListPage.tsx', width: 'default' },
   ChatThreadPage: { file: 'features/chat/ChatThreadPage.tsx', width: 'default' },
-  MyFlatsPage: { file: 'features/flatmates/MyFlatsPage.tsx', width: 'narrow' },
+  MyFlatsPage: { file: 'features/flatmates/MyFlatsPage.tsx', width: 'default' },
   KitPreview: { file: 'app/KitPreview.tsx', width: 'wide' },
 };
 
