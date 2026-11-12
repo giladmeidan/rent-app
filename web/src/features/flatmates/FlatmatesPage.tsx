@@ -1,13 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { useConfirm, type ConfirmFn } from '../../components/Dialog';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Field } from '../../components/Field';
 import { Loading } from '../../components/Loading';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { TextInput } from '../../components/TextInput';
 import { cardTitle } from '../listings/cardTitle';
 import { useMyListings } from '../listings/useMyListings';
 import {
@@ -19,25 +25,8 @@ import {
 } from './api';
 import { formatDay } from './format';
 
-const section = 'flex flex-col gap-4';
-const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[48px] items-center justify-center self-start rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
-const action = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
-const fieldError = 'text-sm font-semibold text-danger';
-
-function Back() {
-  const { t } = useTranslation();
-  return (
-    <Link
-      to="/me/listings"
-      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
-    >
-      {t('flatmates.back')}
-    </Link>
-  );
-}
+const section = 'flex flex-col gap-5';
+const fieldError = 'text-body-sm font-semibold text-danger';
 
 /** The link, shown once after a create or rotate: a read-only LTR input and "copy". Keyed by
  * the token, so a rotate starts with "copied" off. It mounts only after a create or rotate in
@@ -65,31 +54,50 @@ function InviteUrl({ url }: { url: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={inputId} className="sr-only">
-        {t('flatmates.invite.linkLabel')}
-      </label>
-      <div className="flex flex-col gap-2 min-[400px]:flex-row">
-        <input
-          ref={inputRef}
+    <div className="flex flex-col gap-3">
+      {/* Full width below `lg`, a half-width column at `lg`: side by side only when there is room. */}
+      <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+        <Field
           id={inputId}
-          type="text"
-          readOnly
-          dir="ltr"
-          value={url}
-          onFocus={(event) => event.currentTarget.select()}
-          className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-sm text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft"
-        />
-        <button type="button" onClick={() => void copy()} className={action}>
+          label={t('flatmates.invite.linkLabel')}
+          labelHidden
+          className="min-w-0 sm:flex-1 lg:flex-none"
+        >
+          {/* `text-start` is on the box; the `<input>` is `dir="ltr"`, so its `start` is the left. */}
+          <TextInput
+            ref={inputRef}
+            type="text"
+            readOnly
+            dir="ltr"
+            value={url}
+            onFocus={(event) => event.currentTarget.select()}
+            className="text-start"
+          />
+        </Field>
+        <Button variant="secondary" onClick={() => void copy()}>
           {t('flatmates.invite.copy')}
-        </button>
+        </Button>
       </div>
-      <p role="status" className="text-sm font-semibold text-accent-strong">
+      <p role="status" className="text-body-sm font-medium text-success">
         {copied ? t('flatmates.invite.copied') : ''}
       </p>
-      <p className="rounded-xl bg-surface-subtle px-3 py-2 text-start text-sm font-semibold text-warning">
-        {t('flatmates.invite.onceWarning')}
-      </p>
+      <div className="flex items-start gap-2 rounded-md border border-border bg-surface-subtle px-3 py-2 text-body-sm text-ink">
+        <svg
+          aria-hidden="true"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          className="mt-0.5 shrink-0 text-warning"
+        >
+          <path d="M12 6v7" />
+          <path d="M12 17.5h.01" />
+        </svg>
+        <p>{t('flatmates.invite.onceWarning')}</p>
+      </div>
     </div>
   );
 }
@@ -99,10 +107,13 @@ function InviteUrl({ url }: { url: string }) {
 function InviteBlock({
   listingId,
   active,
+  confirm,
   onDisabled,
 }: {
   listingId: string;
   active: boolean;
+  /** The page's `useConfirm()`: its dialog outlives this block's remount after a removal. */
+  confirm: ConfirmFn;
   onDisabled: () => void;
 }) {
   const { t } = useTranslation();
@@ -112,12 +123,19 @@ function InviteBlock({
   const [failed, setFailed] = useState(false);
   const busy = create.isPending || disable.isPending;
   // Same-tick guard: `busy` is render state, so a fast double click would send two POSTs, and the
-  // second would rotate away the link just shown.
+  // second would rotate away the link just shown. Re-checked after the confirm's await.
   const inFlight = useRef(false);
 
-  function onCreate(confirmText?: string) {
+  async function onCreate(rotate = false) {
     if (inFlight.current) return;
-    if (confirmText !== undefined && !window.confirm(confirmText)) return;
+    if (rotate) {
+      const ok = await confirm({
+        title: t('flatmates.invite.rotateConfirm'),
+        confirmLabel: t('flatmates.invite.rotate'),
+        tone: 'primary',
+      });
+      if (!ok || inFlight.current) return;
+    }
     inFlight.current = true;
     setFailed(false);
     create.mutate(undefined, {
@@ -129,8 +147,14 @@ function InviteBlock({
     });
   }
 
-  function onDisable() {
-    if (inFlight.current || !window.confirm(t('flatmates.invite.disableConfirm'))) return;
+  async function onDisable() {
+    if (inFlight.current) return;
+    const ok = await confirm({
+      title: t('flatmates.invite.disableConfirm'),
+      confirmLabel: t('flatmates.invite.disable'),
+      tone: 'danger',
+    });
+    if (!ok || inFlight.current) return;
     inFlight.current = true;
     setFailed(false);
     disable.mutate(undefined, {
@@ -147,45 +171,46 @@ function InviteBlock({
 
   const shown = token !== null;
   return (
-    <div className={card}>
+    <Card padding="md" className="flex flex-col gap-3">
       {shown && <InviteUrl key={token} url={`${window.location.origin}/flatmates/join#${token}`} />}
       {!shown && !active && (
         <>
-          <p className="text-start text-[15px]">{t('flatmates.invite.hint')}</p>
-          <button
-            type="button"
-            onClick={() => onCreate()}
+          <p className="text-body">{t('flatmates.invite.hint')}</p>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => void onCreate()}
             disabled={busy}
             aria-busy={create.isPending}
-            className={primary}
+            className="self-start"
           >
             {t('flatmates.invite.create')}
-          </button>
+          </Button>
         </>
       )}
       {!shown && active && (
-        <p className="text-start text-[15px] font-semibold">{t('flatmates.invite.active')}</p>
+        <p className="text-body font-semibold">{t('flatmates.invite.active')}</p>
       )}
       {(shown || active) && (
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => onCreate(t('flatmates.invite.rotateConfirm'))}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void onCreate(true)}
             disabled={busy}
             aria-busy={create.isPending}
-            className={action}
           >
             {t('flatmates.invite.rotate')}
-          </button>
-          <button
-            type="button"
-            onClick={onDisable}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void onDisable()}
             disabled={busy}
             aria-busy={disable.isPending}
-            className={action}
           >
             {t('flatmates.invite.disable')}
-          </button>
+          </Button>
         </div>
       )}
       {failed && (
@@ -193,17 +218,19 @@ function InviteBlock({
           {t('common.error')}
         </p>
       )}
-    </div>
+    </Card>
   );
 }
 
 function FlatmateRow({
   listingId,
   flatmate,
+  confirm,
   onRemoved,
 }: {
   listingId: string;
   flatmate: FlatmateOut;
+  confirm: ConfirmFn;
   onRemoved: () => void;
 }) {
   const { t } = useTranslation();
@@ -213,9 +240,14 @@ function FlatmateRow({
   // Same-tick guard, as the invite block's.
   const inFlight = useRef(false);
 
-  function onRemove() {
+  async function onRemove() {
     if (inFlight.current) return;
-    if (!window.confirm(t('flatmates.list.removeConfirm', { name }))) return;
+    const ok = await confirm({
+      title: t('flatmates.list.removeConfirm', { name }),
+      confirmLabel: t('flatmates.list.remove'),
+      tone: 'danger',
+    });
+    if (!ok || inFlight.current) return;
     inFlight.current = true;
     remove.mutate(flatmate.id, {
       onSuccess: onRemoved,
@@ -226,33 +258,33 @@ function FlatmateRow({
   }
 
   return (
-    <li className="flex flex-col gap-2 border-t border-border pt-3 first:border-t-0 first:pt-0">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-col">
-          <span
-            id={nameId}
-            dir="auto"
-            className="min-w-0 break-words text-start text-[17px] font-bold"
-          >
-            {name}
-          </span>
-          <span className="text-start text-sm text-ink-muted">
-            {t('flatmates.list.joinedAt', { date: formatDay(flatmate.joined_at) })}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={remove.isPending}
-          aria-busy={remove.isPending}
-          aria-describedby={nameId}
-          className={action}
-        >
-          {t('flatmates.list.remove')}
-        </button>
+    <li className="flex flex-wrap items-center gap-3 border-t border-border pt-3 first:border-t-0 first:pt-0">
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-accent-soft text-body font-semibold text-accent-strong"
+      >
+        {Array.from(name)[0] ?? ''}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span id={nameId} dir="auto" className="text-h3 [overflow-wrap:anywhere]">
+          {name}
+        </span>
+        <span className="text-caption text-ink-muted">
+          {t('flatmates.list.joinedAt', { date: formatDay(flatmate.joined_at) })}
+        </span>
       </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => void onRemove()}
+        disabled={remove.isPending}
+        aria-busy={remove.isPending}
+        aria-describedby={nameId}
+      >
+        {t('flatmates.list.remove')}
+      </Button>
       {remove.isError && (
-        <p role="alert" className={fieldError}>
+        <p role="alert" className={`basis-full ${fieldError}`}>
           {t('common.error')}
         </p>
       )}
@@ -267,12 +299,15 @@ function FlatmateRow({
  */
 export function FlatmatesPage() {
   const { t } = useTranslation();
+  // One dialog for the page: the invite block's and the rows' confirms (0009qb).
+  const [confirm, dialog] = useConfirm();
   const { id = '' } = useParams();
   const listings = useMyListings();
   const listing = listings.data?.find((l) => l.id === id);
   const isRoom = listing?.listing_type === 'room';
   const flatmates = useFlatmates(id, isRoom);
   const listTitleId = useId();
+  const inviteTitleId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   // A removal turns the link off (0008d): the invite block remounts and drops a shown link.
   const [removals, setRemovals] = useState(0);
@@ -283,14 +318,14 @@ export function FlatmatesPage() {
   }, [removals]);
   const notFound = listings.data !== undefined && (listing === undefined || !isRoom);
   usePageTitle(t(notFound ? 'flatmates.notFound' : 'flatmates.title'));
+  const back = { to: '/me/listings', label: t('flatmates.back') };
 
   // Loading and a failed list keep the page's <h1>: its text needs no data.
   if (listings.data === undefined) {
-    const title = <h1 className="text-start text-2xl font-extrabold">{t('flatmates.title')}</h1>;
     if (listings.isPending) {
       return (
-        <PageContainer as="section" width="narrow" className={section}>
-          {title}
+        <PageContainer as="section" width="default" className={section}>
+          <PageHeader title={t('flatmates.title')} />
           <Loading>
             <Skeleton />
           </Loading>
@@ -298,9 +333,8 @@ export function FlatmatesPage() {
       );
     }
     return (
-      <PageContainer as="section" width="narrow" className={section}>
-        <Back />
-        {title}
+      <PageContainer as="section" width="default" className={section}>
+        <PageHeader back={back} title={t('flatmates.title')} />
         <ErrorState onRetry={() => void listings.refetch()} />
       </PageContainer>
     );
@@ -308,9 +342,8 @@ export function FlatmatesPage() {
 
   if (listing === undefined || !isRoom) {
     return (
-      <PageContainer as="section" width="narrow" className={section}>
-        <Back />
-        <h1 className="text-start text-2xl font-extrabold">{t('flatmates.notFound')}</h1>
+      <PageContainer as="section" width="default" className={section}>
+        <PageHeader back={back} title={t('flatmates.notFound')} />
       </PageContainer>
     );
   }
@@ -325,50 +358,60 @@ export function FlatmatesPage() {
       </Loading>
     );
   } else if (flatmates.data.length === 0) {
-    list = <EmptyState message={t('flatmates.list.empty')} />;
+    list = <EmptyState pose="sleep" message={t('flatmates.list.empty')} />;
   } else {
     list = (
-      <ul aria-labelledby={listTitleId} className={card}>
-        {flatmates.data.map((flatmate) => (
-          <FlatmateRow
-            key={flatmate.id}
-            listingId={listing.id}
-            flatmate={flatmate}
-            onRemoved={() => setRemovals((n) => n + 1)}
-          />
-        ))}
-      </ul>
+      <Card padding="md">
+        <ul aria-labelledby={listTitleId} className="flex flex-col gap-3">
+          {flatmates.data.map((flatmate) => (
+            <FlatmateRow
+              key={flatmate.id}
+              listingId={listing.id}
+              flatmate={flatmate}
+              confirm={confirm}
+              onRemoved={() => setRemovals((n) => n + 1)}
+            />
+          ))}
+        </ul>
+      </Card>
     );
   }
 
   return (
-    <PageContainer as="section" width="narrow" className={section}>
-      <Back />
-      <div className="flex flex-col gap-1">
-        <h1
-          ref={headingRef}
-          tabIndex={-1}
-          className="text-start text-2xl font-extrabold focus:outline-none"
-        >
-          {t('flatmates.title')}
-        </h1>
-        <p className="text-start font-bold">{cardTitle(t, listing)}</p>
-      </div>
-      <InviteBlock
-        key={removals}
-        listingId={listing.id}
-        active={listing.flatmate_invite_active}
-        onDisabled={() => headingRef.current?.focus()}
+    <PageContainer as="section" width="default" className={section}>
+      <PageHeader
+        back={back}
+        title={t('flatmates.title')}
+        titleRef={headingRef}
+        subtitle={cardTitle(t, listing)}
       />
-      <h2
-        ref={listTitleRef}
-        id={listTitleId}
-        tabIndex={-1}
-        className="text-start text-lg font-bold focus:outline-none"
-      >
-        {t('flatmates.list.title')}
-      </h2>
-      {list}
+      {/* Stacked on a phone (the invite first); side by side from `lg`. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+        <div className="flex min-w-0 flex-col gap-3">
+          <h2 id={inviteTitleId} className="text-h3">
+            {t('flatmates.invite.title')}
+          </h2>
+          <InviteBlock
+            key={removals}
+            listingId={listing.id}
+            active={listing.flatmate_invite_active}
+            confirm={confirm}
+            onDisabled={() => headingRef.current?.focus()}
+          />
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
+          <h2
+            ref={listTitleRef}
+            id={listTitleId}
+            tabIndex={-1}
+            className="text-h3 focus:outline-none"
+          >
+            {t('flatmates.list.title')}
+          </h2>
+          {list}
+        </div>
+      </div>
+      {dialog}
     </PageContainer>
   );
 }

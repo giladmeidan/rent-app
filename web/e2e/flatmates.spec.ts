@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext } from '@playwright/test';
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
@@ -13,6 +13,14 @@ import {
 } from './helpers';
 
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
+
+/** A locator's box and the page's layout width (`clientWidth` excludes a scrollbar). */
+async function layoutOf(page: Page, locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  return { box: box as NonNullable<typeof box>, clientWidth };
+}
 
 /** Every request URL the context sends, without the fragment (which no browser sends), and every
  * `Referer` it sends. */
@@ -92,6 +100,18 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   await expect(
     flatmatePage.getByRole('heading', { level: 1, name: he.flatmates.join.title }),
   ).toBeVisible();
+  await test.step('0009qb join at 1440', async () => {
+    // A centred 480px card: the full-width join button is at most 480px wide, centred.
+    const join = flatmatePage.getByRole('button', { name: he.flatmates.join.cta });
+    await expect(join).toBeVisible();
+    await flatmatePage.setViewportSize({ width: 1440, height: 900 });
+    await expect(async () => {
+      const { box, clientWidth } = await layoutOf(flatmatePage, join);
+      expect(box.width).toBeLessThanOrEqual(480);
+      expect(Math.abs(box.x + box.width / 2 - clientWidth / 2)).toBeLessThanOrEqual(2);
+    }).toPass();
+    await flatmatePage.setViewportSize({ width: 1280, height: 720 });
+  });
   await flatmatePage.getByRole('button', { name: he.flatmates.join.cta }).click();
   await expect(flatmatePage).toHaveURL('/chat');
   await expect(flatmatePage.getByText(he.flatmates.join.done)).toBeVisible();
@@ -99,6 +119,32 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   // O's flatmates page lists F.
   await page.reload();
   await expect(page.getByText(FLATMATE)).toBeVisible();
+  await test.step('0009qb flatmates at 1440 and 390', async () => {
+    // `exact`: the hint and the create button also contain "קישור הזמנה".
+    const inviteTitle = page.getByRole('heading', {
+      level: 2,
+      name: he.flatmates.invite.title,
+      exact: true,
+    });
+    const membersTitle = page.getByRole('heading', { level: 2, name: he.flatmates.list.title });
+    // Desktop: the invite and the members side by side, the invite at the start (RTL: right).
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(async () => {
+      const invite = await layoutOf(page, inviteTitle);
+      const members = await layoutOf(page, membersTitle);
+      expect(Math.abs(invite.box.y - members.box.y)).toBeLessThanOrEqual(2);
+      expect(invite.box.x).toBeGreaterThan(members.box.x);
+    }).toPass();
+    // Phone: stacked, the members below the invite card.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const inviteCard = inviteTitle.locator('xpath=following-sibling::*[1]');
+    await expect(async () => {
+      const card = await layoutOf(page, inviteCard);
+      const members = await layoutOf(page, membersTitle);
+      expect(members.box.y).toBeGreaterThan(card.box.y + card.box.height);
+    }).toPass();
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
 
   // After F's first load the page URL never held the token, and no request URL or Referer did.
   // The first load may report `#T` more than once: check from the first URL without it.
@@ -195,8 +241,9 @@ test('ac5_group_chat_flow', async ({ page, browser }) => {
   await page.goto(`/me/listings/${roomId}/flatmates`);
   await expect(page.getByRole('button', { name: he.flatmates.list.remove })).toBeVisible();
   await expectNoAxeViolations(page, '/me/listings/:id/flatmates');
-  page.once('dialog', (dialog) => void dialog.accept());
+  // The kit's confirm dialog (0009qb), not a native one.
   await page.getByRole('button', { name: he.flatmates.list.remove }).click();
+  await page.getByRole('dialog').getByRole('button', { name: he.flatmates.list.remove }).click();
   await expect(page.getByText(he.flatmates.list.empty)).toBeVisible();
   await flatmatePage.getByLabel(he.chat.composer.label).fill(AFTER);
   await flatmatePage.getByRole('button', { name: he.chat.composer.send }).click();
