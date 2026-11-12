@@ -1,5 +1,6 @@
-// The visual check for the owner's applicant inbox (spec 0009l, AC10): one screenshot per state at
-// each project's size, in web/screens/0009l/. Every API request is answered here, so it needs only
+// The visual check for the owner's applicant inbox (specs 0009l AC10 and 0009u AC7): one screenshot
+// per state at each project's size, in web/screens/0009u/. The `d-*` states are the desktop layout
+// (0009u) and run in the desktop project only; the 390 set shows the phone layout is unchanged. Every API request is answered here, so it needs only
 // the vite server: no sign-up, no OTP. An unmatched request fails the run.
 import { expect, test, type Page, type Route } from '@playwright/test';
 
@@ -242,6 +243,8 @@ type State = {
   path: string;
   /** What to wait for, and do, before the shot. */
   act: (page: Page) => Promise<void>;
+  /** The one project that runs it (the phone's disclosures do not exist on the desktop card). */
+  only?: 'mobile' | 'desktop';
 };
 
 const STATES: State[] = [
@@ -314,6 +317,7 @@ const STATES: State[] = [
   },
   {
     name: 'disclosures-open',
+    only: 'mobile',
     setup: { listings: [ROOM], list: [roomApplicant] },
     path: inbox(ROOM),
     act: async (page) => {
@@ -359,6 +363,7 @@ const STATES: State[] = [
   },
   {
     name: 'long-message',
+    only: 'mobile',
     setup: { list: [applicant({ applicant_name: 'דנה ושי', message: LONG_MESSAGE })] },
     path: inbox(APARTMENT),
     act: async (page) => {
@@ -367,6 +372,7 @@ const STATES: State[] = [
   },
   {
     name: 'long-message-open',
+    only: 'mobile',
     setup: { list: [applicant({ applicant_name: 'דנה ושי', message: LONG_MESSAGE })] },
     path: inbox(APARTMENT),
     act: async (page) => {
@@ -389,17 +395,140 @@ const STATES: State[] = [
   },
 ];
 
-for (const state of STATES) {
+// --- the desktop states (0009u) -------------------------------------------------------------------
+
+const pane = (page: Page) => page.getByRole('complementary', { name: he.applicants.pane.label });
+const select = (page: Page, name: string) =>
+  page.getByRole('button', { name, exact: true }).click();
+
+// The loading, error, not-found and empty states are the phone's, captured at the desktop size.
+const SHARED = ['applicants-loading', 'applicants-error', 'not-found', 'empty'];
+const DESKTOP: State[] = [
+  {
+    name: 'd-all',
+    only: 'desktop',
+    setup: { list: five },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await expect(page.getByRole('article')).toHaveCount(5);
+      await expect(pane(page)).toBeVisible();
+    },
+  },
+  {
+    name: 'd-selected-shortlisted',
+    only: 'desktop',
+    setup: { list: five },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await select(page, 'עומר לוי');
+      await expect(pane(page).getByRole('link', { name: he.applicants.pane.chat })).toBeVisible();
+    },
+  },
+  {
+    name: 'd-selected-noscore',
+    only: 'desktop',
+    setup: { list: five },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await select(page, 'אלון בר');
+      await expect(pane(page).getByRole('heading', { level: 2, name: 'אלון בר' })).toBeVisible();
+      await expect(pane(page).getByText(he.match.noScore)).toBeVisible();
+    },
+  },
+  {
+    name: 'd-room',
+    only: 'desktop',
+    setup: { listings: [ROOM], list: [roomApplicant] },
+    path: inbox(ROOM),
+    act: async (page) => {
+      await pane(page).getByRole('button', { name: he.applicants.more }).click();
+      await expect(pane(page).getByRole('button', { name: he.applicants.more })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    },
+  },
+  {
+    name: 'd-mutual',
+    only: 'desktop',
+    setup: { list: five },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await select(page, 'רוני ושי מזרחי־כהן');
+      await expect(pane(page).getByTestId('pane-mutual')).toBeVisible();
+      await expect(pane(page).getByTestId('pane-message')).toHaveCount(0);
+    },
+  },
+  {
+    name: 'd-long-message',
+    only: 'desktop',
+    setup: { list: [applicant({ applicant_name: 'דנה ושי', message: LONG_MESSAGE })] },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await expect(pane(page).getByTestId('pane-message')).toBeVisible();
+      // The pane scrolls inside itself when it is taller than the viewport: show the end.
+      await pane(page).evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    },
+  },
+  {
+    name: 'd-filter-empty',
+    only: 'desktop',
+    setup: { list: five.filter((a) => a.status !== 'declined') },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await tab(page, 'נדחו').click();
+      await expect(page.getByText(he.applicants.emptyFilter)).toBeVisible();
+      await expect(page.getByRole('complementary')).toHaveCount(0);
+    },
+  },
+  {
+    name: 'd-decline-dialog',
+    only: 'desktop',
+    setup: { list: five },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await page
+        .getByRole('article')
+        .first()
+        .getByRole('button', { name: he.applicants.actions.decline })
+        .click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+    },
+  },
+  ...STATES.filter((state) => SHARED.includes(state.name)).map((state): State => ({
+    ...state,
+    name: `d-${state.name.replace('applicants-', '')}`,
+    only: 'desktop',
+  })),
+  {
+    // One grid column next to the pane: a desktop project resized to the narrowest desktop width.
+    name: 'd-1024',
+    only: 'desktop',
+    setup: { list: five },
+    path: inbox(APARTMENT),
+    act: async (page) => {
+      await page.setViewportSize({ width: 1024, height: 768 });
+      await expect(page.getByRole('article')).toHaveCount(5);
+      await expect(pane(page)).toBeVisible();
+    },
+  },
+];
+
+for (const state of [...STATES, ...DESKTOP]) {
   test(state.name, async ({ page }, testInfo) => {
+    test.skip(
+      state.only !== undefined && state.only !== testInfo.project.name,
+      `${state.name} is a ${state.only ?? ''} state`,
+    );
     const unmatched = await mockApi(page, state.setup);
     await page.goto(state.path);
     await state.act(page);
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({
       // A modal is fixed to the viewport, so a full-page capture would misplace it and its backdrop.
-      fullPage: state.name !== 'decline-dialog',
+      fullPage: !state.name.endsWith('decline-dialog'),
       animations: 'disabled',
-      path: `screens/0009l/${state.name}-${testInfo.project.name}.png`,
+      path: `screens/0009u/${state.name}-${testInfo.project.name}.png`,
     });
     expect(unmatched, 'unmatched API requests').toEqual([]);
   });
