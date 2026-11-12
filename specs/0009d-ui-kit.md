@@ -1,7 +1,7 @@
 ---
 id: 0009d
 title: Screens can be built from the homie brand tokens (design/brand/tokens.json) and a shared UI kit (Button, Card, Tag, Badge, Field with TextInput / Textarea / Select, PageContainer, PageHeader, Tabs, Dialog, Logo, Mascot), shown on a dev-only /dev/kit page
-status: in-progress
+status: done
 depends_on: []
 reviewers: [code, qa, ux]   # ux: the kit against design/brand and the artboards' anatomy on /dev/kit; qa: keyboard, focus and RTL behaviour of Tabs / Dialog / Field; no security (no data, no endpoint); no perf (no query)
 estimate: 1 coder run (upper end, ~4 h)   # coder Opus/high: every Slice 9b screen builds on this kit, and Tabs / Dialog carry the a11y risk. If the run overflows, the coder stops and reports; it never trims an AC
