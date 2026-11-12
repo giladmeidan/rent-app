@@ -464,8 +464,11 @@ describe('SearchPage', () => {
     expect(within(second).getByText('התאמה 59%')).toBeVisible();
     expect(chips(second)).toEqual(['בתקציב', 'כניסה מאוחרת מדי']);
     // The differing chip is amber, the agreeing one the accent tint.
-    expect(within(second).getByText('כניסה מאוחרת מדי')).toHaveClass('bg-warn', 'text-warn-text');
-    expect(within(second).getByText('בתקציב')).toHaveClass('bg-accent-tint');
+    expect(within(second).getByText('כניסה מאוחרת מדי')).toHaveClass(
+      'bg-surface-subtle',
+      'text-warning',
+    );
+    expect(within(second).getByText('בתקציב')).toHaveClass('bg-accent-soft');
     // The listing's own chips are a separate list.
     expect(within(first).getByTestId('listing-chips')).not.toHaveTextContent('בתקציב');
     view.unmount();
@@ -739,8 +742,8 @@ describe('SearchPage', () => {
     expect(await screen.findByText(he.rooms.card.similarAge)).toBeVisible();
     expect(listChips('חדר')[0]).toBe(he.rooms.card.similarAge);
     expect(within(cardOf('חדר')).getByText(he.rooms.card.similarAge)).toHaveClass(
-      'bg-accent-tint',
-      'text-accent-text',
+      'bg-accent-soft',
+      'text-accent-strong',
     );
     expect(listChips('דירה')).not.toContain(he.rooms.card.similarAge);
     expect(screen.getAllByText(he.rooms.card.similarAge)).toHaveLength(1);
@@ -826,13 +829,15 @@ describe('SearchPage', () => {
     // The room cards keep 0006f's badge and chips; the lifestyle chips are worded.
     expect(within(first).getByText(he.listings.card.room)).toBeVisible();
     expect(matchChips(first)).toEqual([he.match.short.lifestyle.agree]);
-    expect(within(first).getByText(he.match.short.lifestyle.agree)).toHaveClass('bg-accent-tint');
+    expect(within(first).getByText(he.match.short.lifestyle.agree)).toHaveClass('bg-accent-soft');
     expect(within(second).getByText('התאמה 59%')).toBeVisible();
     expect(matchChips(second)).toEqual([
       he.match.short.budget.agree,
       he.match.short.lifestyle.differ,
     ]);
-    expect(within(second).getByText(he.match.short.lifestyle.differ)).toHaveClass('bg-warn');
+    expect(within(second).getByText(he.match.short.lifestyle.differ)).toHaveClass(
+      'bg-surface-subtle',
+    );
     expect(within(third).getByText('התאמה 100%')).toBeVisible();
     expect(matchChips(third)).toEqual([he.match.short.budget.agree]);
     expect(within(third).queryByText(he.listings.card.room)).toBeNull();

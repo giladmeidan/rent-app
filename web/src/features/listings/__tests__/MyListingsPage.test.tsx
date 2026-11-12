@@ -225,7 +225,7 @@ describe('MyListingsPage', () => {
       const name = link.textContent ?? '';
       expect(name).toContain(i18n.t('applicants.link', { count: l.applicant_count }));
       if (i === 0) {
-        expect(within(link).getByText(badgeText)).toHaveClass('bg-warn', 'text-warn-text');
+        expect(within(link).getByText(badgeText)).toHaveClass('bg-surface-subtle', 'text-warning');
         expect(link).toHaveAccessibleName(
           `${i18n.t('applicants.link', { count: 12 })} ${badgeText}`,
         );
@@ -276,7 +276,7 @@ describe('MyListingsPage', () => {
     expect(a).toHaveTextContent(he.listings.mine.people);
     expect(
       within(a as HTMLElement).getByText(i18n.t('listings.mine.peopleLiked', { count: 2 })),
-    ).toHaveClass('bg-warn', 'text-warn-text');
+    ).toHaveClass('bg-surface-subtle', 'text-warning');
     const b = peopleLink(cOne as HTMLElement);
     expect(b).toHaveAttribute('href', `/me/listings/${one.id}/people`);
     expect(

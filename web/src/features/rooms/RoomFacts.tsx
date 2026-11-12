@@ -8,7 +8,7 @@ import { flatmatesText, genderPreferenceLabel } from './flatmates';
 
 // The cards of `ListingFacts`' grid.
 const factCard =
-  'flex flex-col items-center gap-[6px] rounded-[14px] border border-line bg-white px-[10px] py-3 text-center';
+  'flex flex-col items-center gap-[6px] rounded-[14px] border border-border bg-surface px-[10px] py-3 text-center';
 
 /**
  * A room's "על החדר" on its listing page: who it is for, its flatmates and, when the room's side
@@ -48,7 +48,7 @@ export function RoomFacts({ listing }: { listing: ListingPublic }) {
       <dl data-testid="room-facts" className="grid grid-cols-2 gap-[10px] sm:grid-cols-3">
         {rows.map((row) => (
           <div key={row.label} className={factCard}>
-            <dt className="text-xs text-muted">{row.label}</dt>
+            <dt className="text-xs text-ink-muted">{row.label}</dt>
             <dd className="text-sm font-bold">{row.value}</dd>
           </div>
         ))}
@@ -58,14 +58,14 @@ export function RoomFacts({ listing }: { listing: ListingPublic }) {
           <h3 className="pt-1 text-[15px] font-bold">{t('lifestyle.title.flat')}</h3>
           <dl
             data-testid="room-lifestyle"
-            className="flex flex-col divide-y divide-line rounded-[14px] border border-line bg-white"
+            className="flex flex-col divide-y divide-border rounded-[14px] border border-border bg-surface"
           >
             {answered.map((row) => (
               <div
                 key={row.key}
                 className="flex items-center justify-between gap-3 px-[14px] py-[10px]"
               >
-                <dt className="text-sm text-muted">{row.topic}</dt>
+                <dt className="text-sm text-ink-muted">{row.topic}</dt>
                 <dd className="text-sm font-bold">{row.value}</dd>
               </div>
             ))}

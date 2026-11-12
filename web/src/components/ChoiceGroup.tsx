@@ -1,5 +1,7 @@
 import { useId } from 'react';
 
+import { cx } from './cx';
+
 export type ChoiceOption<T extends string | number> = { value: T; label: string };
 
 type Props<T extends string | number> = {
@@ -12,6 +14,17 @@ type Props<T extends string | number> = {
   /** A message shown after the options (`role="alert"`); every radio is then marked invalid. */
   error?: string;
 };
+
+/**
+ * The classes of a ChoiceGroup option's label (the segment), for a look-alike control: it must
+ * follow a `peer` input, like here.
+ */
+export const choiceSegment = cx(
+  'flex min-h-tap flex-1 cursor-pointer items-center justify-center rounded-md border border-border-strong bg-surface px-3 text-center text-body font-medium text-ink',
+  'peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong',
+  'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent',
+  'peer-aria-[invalid=true]:border-danger',
+);
 
 /**
  * Native radios in a fieldset, styled as the segmented buttons of CreateListing.dc.html. Arrow keys
@@ -30,7 +43,7 @@ export function ChoiceGroup<T extends string | number>({
 
   return (
     <fieldset className="flex flex-col">
-      <legend className="mb-2 text-sm font-bold">{legend}</legend>
+      <legend className="mb-2 text-label text-ink">{legend}</legend>
       <div className="flex gap-2">
         {options.map((option) => (
           <div key={option.value} className="flex flex-1">
@@ -45,17 +58,14 @@ export function ChoiceGroup<T extends string | number>({
               aria-describedby={error !== undefined ? errorId : undefined}
               className="peer sr-only"
             />
-            <label
-              htmlFor={`${id}-${String(option.value)}`}
-              className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-tint peer-checked:font-bold peer-checked:text-accent-text peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-aria-[invalid=true]:border-[#B91C1C]"
-            >
+            <label htmlFor={`${id}-${String(option.value)}`} className={choiceSegment}>
               {option.label}
             </label>
           </div>
         ))}
       </div>
       {error !== undefined && (
-        <p id={errorId} role="alert" className="mt-[6px] text-sm font-semibold text-[#B91C1C]">
+        <p id={errorId} role="alert" className="mt-1.5 text-body-sm text-danger">
           {error}
         </p>
       )}

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  @apply bg-bg font-sans text-ink;
+  @apply bg-surface font-sans text-ink;
 }
 
 /* A fallback ring for anything without its own (MapLibre's controls included); component classes

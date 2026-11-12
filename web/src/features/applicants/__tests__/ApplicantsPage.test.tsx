@@ -811,8 +811,8 @@ describe('ApplicantsPage', () => {
     for (const li of items) {
       expect(li.querySelector('[aria-hidden="true"]')).not.toBeNull();
     }
-    expect(items[0]?.querySelector('.bg-accent-tint')).not.toBeNull();
-    expect(items[3]?.querySelector('.bg-warn')).not.toBeNull();
+    expect(items[0]?.querySelector('.bg-accent-soft')).not.toBeNull();
+    expect(items[3]?.querySelector('.text-warning')).not.toBeNull();
 
     // The six profile rows, with A's values.
     const terms = within(panel)
@@ -996,7 +996,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
 
     // The owner-voice lifestyle reason (0007g's copy) reaches a room applicant's card.
     const chips = within(within(cardOf('L')).getByTestId('match-chips')).getAllByRole('listitem');
-    const amber = chips.filter((chip) => chip.className.includes('bg-warn'));
+    const amber = chips.filter((chip) => chip.className.includes('text-warning'));
     expect(amber.map((chip) => chip.textContent)).toEqual([he.match.owner.short.lifestyle.differ]);
     fireEvent.click(whyOf('L'));
     expect(within(panelOf('L')).getByText(he.match.owner.lifestyle.differ)).toBeVisible();
@@ -1093,12 +1093,12 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(within(cleanliness).getByText(theirs('cleanliness', 3))).toBeVisible();
     expect(within(cleanliness).getByText(flat('cleanliness', 1))).toBeVisible();
     expect(within(cleanliness).getByText(he.applicants.room.differs)).toBeVisible();
-    expect(cleanliness.querySelector('.bg-warn[aria-hidden="true"]')).not.toBeNull();
+    expect(cleanliness.querySelector('[aria-hidden="true"] .text-warning')).not.toBeNull();
 
     expect(within(guests).getByText(theirs('guests', 2))).toBeVisible();
     expect(within(guests).getByText(flat('guests', 2))).toBeVisible();
     expect(within(guests).queryByText(he.applicants.room.differs)).toBeNull();
-    expect(guests.querySelector('.bg-warn')).toBeNull();
+    expect(guests.querySelector('.text-warning')).toBeNull();
 
     expect(within(night).getByText(theirs('night', 1))).toBeVisible();
     expect(night.textContent).not.toContain('בדירה');
@@ -1134,7 +1134,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(within(within(panel).getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
     expect(panel.textContent).not.toContain('בדירה:');
     expect(within(panel).queryByText(he.applicants.room.differs)).toBeNull();
-    expect(panel.querySelector('.bg-warn')).toBeNull();
+    expect(panel.querySelector('.text-warning')).toBeNull();
     expect(within(panel).getAllByText(he.applicants.room.noFlatAnswers)).toHaveLength(1);
     expect(within(panel).queryByText(/מתוך/)).toBeNull();
     reset(view);

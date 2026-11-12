@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -10,7 +11,7 @@ import { BackToMine, ListingWizard } from './ListingWizard';
 import { isPastExpiry } from './StatusBadge';
 import { useMyListings } from './useMyListings';
 
-const section = 'mx-auto flex w-full max-w-[480px] flex-col';
+const section = 'flex flex-col';
 
 /**
  * `/me/listings/:id/edit`: the wizard in edit mode for one of the owner's listings, found in
@@ -48,34 +49,34 @@ export function EditListingPage() {
   if (listings.data === undefined) {
     if (listings.isPending) {
       return (
-        <section className={`${section} gap-4`}>
+        <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
           {title}
           <Loading>
             <Skeleton />
           </Loading>
-        </section>
+        </PageContainer>
       );
     }
     return (
-      <section className={`${section} gap-4`}>
+      <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
         {title}
         <ErrorState onRetry={() => void listings.refetch()} />
-      </section>
+      </PageContainer>
     );
   }
 
   if (listing === undefined) {
     return (
-      <section className={`${section} gap-4`}>
+      <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
         <BackToMine />
         <h1 className="text-start text-2xl font-extrabold">{t('listings.edit.notFound')}</h1>
-      </section>
+      </PageContainer>
     );
   }
 
   if (readOnly) {
     return (
-      <section className={`${section} gap-4`}>
+      <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
         <BackToMine />
         <h1
           ref={expiredHeading}
@@ -84,14 +85,14 @@ export function EditListingPage() {
         >
           {t('listings.edit.expiredTitle')}
         </h1>
-        <p className="text-start text-[15px] text-muted">{t('listings.edit.expiredBody')}</p>
-      </section>
+        <p className="text-start text-[15px] text-ink-muted">{t('listings.edit.expiredBody')}</p>
+      </PageContainer>
     );
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" width="narrow" className={section}>
       <ListingWizard key={listing.id} listing={listing} />
-    </section>
+    </PageContainer>
   );
 }

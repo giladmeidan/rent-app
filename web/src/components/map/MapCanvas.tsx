@@ -42,9 +42,9 @@ type Props = {
 };
 
 const chip =
-  'pointer-events-none whitespace-nowrap rounded-full border-[1.5px] px-3 py-[6px] text-[13px] font-bold shadow-[0_3px_8px_rgba(0,0,0,0.12)]';
-const chipIdle = `${chip} border-[#D6D3D1] bg-white text-ink`;
-const chipSelected = `${chip} border-white bg-accent text-white`;
+  'pointer-events-none whitespace-nowrap rounded-full border-[1.5px] px-3 py-[6px] text-[13px] font-bold shadow-pin';
+const chipIdle = `${chip} border-border-strong bg-surface text-ink`;
+const chipSelected = `${chip} border-on-ink bg-accent text-on-ink`;
 // The button is the >= 44 px hit area around the smaller chip.
 const pinButton = `flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 ${focusRing}`;
 

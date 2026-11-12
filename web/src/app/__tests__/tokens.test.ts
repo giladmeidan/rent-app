@@ -41,7 +41,7 @@ describe('tailwind.config.ts', () => {
   it('ac1_token_scale', () => {
     const extend = config.theme.extend;
 
-    // Scope §1, group by group (the deprecated aliases until 0009h removes them).
+    // Scope §1, group by group.
     expect(extend.colors).toEqual({
       surface: { DEFAULT: '#FFFFFF', subtle: '#F3F4F6' },
       ink: { DEFAULT: '#111111', muted: '#5B6370' },
@@ -50,18 +50,12 @@ describe('tailwind.config.ts', () => {
         DEFAULT: '#2563EB',
         strong: '#1D4ED8',
         soft: '#E8F0FE',
-        tint: '#E8F0FE',
-        text: '#1D4ED8',
       },
       border: { DEFAULT: '#E5E7EB', strong: '#868E9B' },
       success: '#15803D',
       warning: '#B45309',
       danger: '#DC2626',
       mascot: { blush: '#BFD3FA', shade: '#DDE4F1' },
-      bg: '#FFFFFF',
-      muted: '#5B6370',
-      line: '#E5E7EB',
-      warn: { DEFAULT: '#F3F4F6', text: '#B45309' },
     });
     expect(extend.fontFamily).toEqual({
       display: ['Fredoka', '"Rubik Variable"', 'Rubik', 'system-ui', 'sans-serif'],

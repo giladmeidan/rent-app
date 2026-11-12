@@ -1,3 +1,4 @@
+import { PageContainer } from '../../components/PageContainer';
 import { useTranslation } from 'react-i18next';
 
 import { usePageTitle } from '../../app/usePageTitle';
@@ -8,8 +9,8 @@ export function NewListingPage() {
   // The wizard's <h1>.
   usePageTitle(t('listings.new.title'));
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col">
+    <PageContainer as="section" width="narrow" className="flex flex-col">
       <ListingWizard />
-    </section>
+    </PageContainer>
   );
 }

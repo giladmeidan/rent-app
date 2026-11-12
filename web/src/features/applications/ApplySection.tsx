@@ -24,12 +24,12 @@ const ANNOUNCE_BELOW = 50;
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
-const secondary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] border-[1.5px] border-[#D6D3D1] bg-white px-5 text-[15px] font-bold text-ink ${focusRing}`;
+const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const secondary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] border-[1.5px] border-border-strong bg-surface px-5 text-[15px] font-bold text-ink ${focusRing}`;
 const textarea =
-  'w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 py-3 text-start text-base text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const hint = 'text-xs text-muted';
+  'w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 py-3 text-start text-base text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const fieldError = 'text-sm font-semibold text-danger';
+const hint = 'text-xs text-ink-muted';
 
 /** True when a FastAPI 422 `detail` list has an item at `loc` `["body", "message"]`. */
 function isMessageError(detail: unknown): boolean {
@@ -236,7 +236,7 @@ function Applied({ application }: { application: MyApplicationOut }) {
         {application.source === 'like' ? (
           <p
             data-testid="application-mutual"
-            className="rounded-full border border-accent-tint bg-accent-tint px-3 py-[6px] text-[13px] font-semibold text-accent-text"
+            className="rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong"
           >
             {t('applications.mutual')}
           </p>
@@ -248,11 +248,11 @@ function Applied({ application }: { application: MyApplicationOut }) {
         <ApplicationStatusChip status={application.status} />
       </div>
       {application.status === 'declined' && (
-        <p className="text-start text-sm text-muted">{t('applications.declinedHint')}</p>
+        <p className="text-start text-sm text-ink-muted">{t('applications.declinedHint')}</p>
       )}
       <Link
         to="/me/applications"
-        className={`inline-flex min-h-[44px] items-center rounded-full text-[15px] font-semibold text-accent-text underline underline-offset-4 ${focusRing}`}
+        className={`inline-flex min-h-[44px] items-center rounded-full text-[15px] font-semibold text-accent-strong underline underline-offset-4 ${focusRing}`}
       >
         {t('applications.viewMine')}
       </Link>
@@ -330,7 +330,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     controls = (
       <div className="flex flex-col items-start gap-2">
         {apply.isSuccess && (
-          <p role="status" className="text-start text-[15px] font-bold text-accent-text">
+          <p role="status" className="text-start text-[15px] font-bold text-accent-strong">
             {t('applications.sent')}
           </p>
         )}
@@ -363,7 +363,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
       <h2 id={headingId} className="text-[17px] font-extrabold">
         {isOwner ? t('applications.headingOwner') : t('applications.heading')}
       </h2>
-      <p className="text-start text-[15px] text-muted">{countLine}</p>
+      <p className="text-start text-[15px] text-ink-muted">{countLine}</p>
       {controls}
     </section>
   );

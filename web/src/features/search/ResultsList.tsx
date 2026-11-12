@@ -24,7 +24,7 @@ type Props = {
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-5 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
+const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-border-strong bg-surface px-5 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 /** The count line (always mounted, so its first announcement is heard) and the result states. */
 export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
@@ -111,7 +111,7 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
       <p aria-live="polite" className="min-h-[1.5em] text-sm font-bold">
         {count}
         {sortedByMatch && (
-          <span className="font-normal text-muted">{t('search.sortedByMatch')}</span>
+          <span className="font-normal text-ink-muted">{t('search.sortedByMatch')}</span>
         )}
       </p>
       {body}

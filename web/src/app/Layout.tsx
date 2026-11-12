@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet } from 'react-router';
 
+import { PageContainer } from '../components/PageContainer';
 import { SkipLink } from '../components/SkipLink';
 import { AuthMenu } from '../features/auth/AuthMenu';
 import { ChatStreamProvider } from '../features/chat/ChatStreamProvider';
@@ -15,10 +16,10 @@ export function Layout() {
   const { t } = useTranslation();
   return (
     <ChatStreamProvider>
-      <div className="mx-auto max-w-[640px] px-4">
-        <SkipLink />
-        <RouteFocus />
-        <header className="pb-2 pt-[18px]">
+      <SkipLink />
+      <RouteFocus />
+      <header className="pb-2 pt-[18px]">
+        <PageContainer width="wide">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Link
               to="/"
@@ -31,7 +32,8 @@ export function Layout() {
                   height="18"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#FFFFFF"
+                  stroke="currentColor"
+                  className="text-on-ink"
                   strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -44,7 +46,7 @@ export function Layout() {
             </Link>
             <NavLink
               to="/search"
-              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-[current=page]:text-accent-text aria-[current=page]:underline aria-[current=page]:underline-offset-4"
+              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-[current=page]:text-accent-strong aria-[current=page]:underline aria-[current=page]:underline-offset-4"
             >
               {t('header.search')}
             </NavLink>
@@ -52,12 +54,12 @@ export function Layout() {
               <AuthMenu />
             </div>
           </div>
-          <p className="mt-1 text-muted">{t('app.tagline')}</p>
-        </header>
-        <main id="main" tabIndex={-1} className="pb-8 pt-6 focus:outline-none">
-          <Outlet />
-        </main>
-      </div>
+          <p className="mt-1 text-ink-muted">{t('app.tagline')}</p>
+        </PageContainer>
+      </header>
+      <main id="main" tabIndex={-1} className="pb-8 pt-6 focus:outline-none">
+        <Outlet />
+      </main>
     </ChatStreamProvider>
   );
 }

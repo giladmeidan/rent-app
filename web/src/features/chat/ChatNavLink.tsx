@@ -20,14 +20,14 @@ export function ChatNavLink() {
   return (
     <Link
       to="/chat"
-      className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-[10px] text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       {t('header.chat')}
       {count > 0 && (
         <>
           <span
             aria-hidden="true"
-            className="min-w-[22px] rounded-full bg-warn px-[6px] py-[1px] text-center text-[12px] font-bold text-warn-text"
+            className="min-w-[22px] rounded-full bg-accent-soft px-[6px] py-[1px] text-center text-[12px] font-bold text-accent-strong"
           >
             {count}
           </span>{' '}

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import he from '../../locales/he.json';
 import { ErrorState } from '../ErrorState';
 
+const classesOf = (element: Element) => element.className.split(' ');
 // "אין חיבור לאינטרנט. כשהחיבור יחזור, אפשר לנסות שוב."
 const OFFLINE =
   '\u05d0\u05d9\u05df \u05d7\u05d9\u05d1\u05d5\u05e8 \u05dc\u05d0\u05d9\u05e0\u05d8\u05e8\u05e0\u05d8. \u05db\u05e9\u05d4\u05d7\u05d9\u05d1\u05d5\u05e8 \u05d9\u05d7\u05d6\u05d5\u05e8, \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e0\u05e1\u05d5\u05ea \u05e9\u05d5\u05d1.';
@@ -15,6 +16,28 @@ afterEach(() => {
 });
 
 describe('ErrorState', () => {
+  it('ac5_retry_ink_pill', () => {
+    const onRetry = vi.fn();
+    render(<ErrorState onRetry={onRetry} />);
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(he.common.error);
+    expect(classesOf(alert)).toEqual(expect.arrayContaining(['rounded-lg', 'border-border']));
+
+    const retry = screen.getByRole('button', { name: he.common.retry });
+    expect(alert.contains(retry)).toBe(true);
+    expect(classesOf(retry)).toEqual(
+      expect.arrayContaining([
+        'bg-ink',
+        'text-on-ink',
+        'rounded-full',
+        'min-h-tap',
+        'focus-visible:outline-accent',
+      ]),
+    );
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it('ac4_page_variant_renders_h1', () => {
     // `page`: the message is the page's <h1>, with no <p>.
     const onRetry = vi.fn();

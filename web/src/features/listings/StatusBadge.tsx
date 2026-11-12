@@ -20,9 +20,9 @@ export function isPastExpiry(listing: Pick<ListingOut, 'expires_at'>, now: Date)
 }
 
 const tone: Record<ListingState, string> = {
-  live: 'bg-accent-tint text-accent-text',
-  paused: 'bg-line text-muted',
-  expired: 'bg-warn text-warn-text',
+  live: 'bg-accent-soft text-accent-strong',
+  paused: 'bg-border text-ink-muted',
+  expired: 'bg-surface-subtle text-warning',
 };
 
 export function StatusBadge({ state }: { state: ListingState }) {

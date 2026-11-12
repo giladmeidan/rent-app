@@ -28,7 +28,7 @@ export function DateReadback({ id, value }: { id: string; value: string }) {
   const { t } = useTranslation();
   if (!isIsoDay(value)) return null;
   return (
-    <p id={id} className="text-sm text-muted">
+    <p id={id} className="text-sm text-ink-muted">
       {t('common.dateChosen', { date: formatLongDate(value) })}
     </p>
   );

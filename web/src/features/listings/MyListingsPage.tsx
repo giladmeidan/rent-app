@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -17,8 +18,8 @@ import { usePatchListing } from './usePatchListing';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
+const fieldError = 'text-sm font-semibold text-danger';
+const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date; today: string }) {
   const { t } = useTranslation();
@@ -72,7 +73,7 @@ function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date;
               {listing.new_applicant_count > 0 && (
                 <>
                   {' '}
-                  <span className="rounded-full bg-warn px-2 py-[2px] text-[12px] font-bold text-warn-text">
+                  <span className="rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-bold text-warning">
                     {t('applicants.newBadge', { count: listing.new_applicant_count })}
                   </span>
                 </>
@@ -89,7 +90,7 @@ function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date;
                 {listing.liked_me_count > 0 && (
                   <>
                     {' '}
-                    <span className="rounded-full bg-warn px-2 py-[2px] text-[12px] font-bold text-warn-text">
+                    <span className="rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-bold text-warning">
                       {t('listings.mine.peopleLiked', { count: listing.liked_me_count })}
                     </span>
                   </>
@@ -160,29 +161,29 @@ export function MyListingsPage() {
   const live = listings.data?.filter((l) => listingState(l, now) === 'live').length;
 
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col gap-4">
+    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-start text-2xl font-extrabold">{t('listings.mine.title')}</h1>
           <Link
             to="/listings/new"
-            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-accent px-4 text-[15px] font-semibold text-white ${focusRing}`}
+            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-accent px-4 text-[15px] font-semibold text-on-ink ${focusRing}`}
           >
             {t('listings.mine.new')}
           </Link>
         </div>
         {live !== undefined && (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-ink-muted">
             {t('listings.mine.count', { live, cap: LISTING_CAP })}
           </p>
         )}
         {saved && (
-          <p role="status" className="text-sm font-semibold text-accent-text">
+          <p role="status" className="text-sm font-semibold text-accent-strong">
             {t('listings.edit.saved')}
           </p>
         )}
       </div>
       {body}
-    </section>
+    </PageContainer>
   );
 }

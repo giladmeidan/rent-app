@@ -17,9 +17,12 @@ const focusRing =
 
 // A high score is drawn in the accent, as the artboard; good and partial in the badge's neutral.
 const frame = {
-  high: { card: 'border-accent', score: 'border-accent bg-accent-tint text-accent-text' },
-  good: { card: 'border-line', score: 'border-[#D6D3D1] bg-[#F5F5F4] text-[#44403C]' },
-  partial: { card: 'border-line', score: 'border-[#D6D3D1] bg-[#F5F5F4] text-[#44403C]' },
+  high: { card: 'border-accent', score: 'border-accent bg-accent-soft text-accent-strong' },
+  good: { card: 'border-border', score: 'border-border-strong bg-surface-subtle text-ink-muted' },
+  partial: {
+    card: 'border-border',
+    score: 'border-border-strong bg-surface-subtle text-ink-muted',
+  },
 } as const;
 
 type Props = {
@@ -67,7 +70,7 @@ export function MatchCard({ match, listing }: Props) {
           </li>
         ))}
         {match.differs !== null && (
-          <li className="flex items-center gap-[10px] text-sm text-[#44403C]">
+          <li className="flex items-center gap-[10px] text-sm text-ink-muted">
             <DifferIcon />
             <span>{seekerReason(match.differs, 'differ', listing, p, t)}</span>
           </li>
@@ -82,7 +85,7 @@ export function MatchCard({ match, listing }: Props) {
         {t('match.card.title')}
       </h2>
       <div
-        className={`flex flex-col gap-[14px] rounded-[18px] border-[1.5px] bg-white p-4 ${frame[level].card}`}
+        className={`flex flex-col gap-[14px] rounded-[18px] border-[1.5px] bg-surface p-4 ${frame[level].card}`}
       >
         <div className="flex items-center gap-[14px]">
           <p
@@ -92,13 +95,13 @@ export function MatchCard({ match, listing }: Props) {
           </p>
           <div className="flex flex-col gap-[2px]">
             <p className="text-base font-bold">{label}</p>
-            <p className="text-[13px] text-muted">{t('match.card.basis')}</p>
+            <p className="text-[13px] text-ink-muted">{t('match.card.basis')}</p>
           </div>
         </div>
         {lines}
         <Link
           to={`/me/profile?next=${encodeURIComponent(`/listings/${listing.id}`)}`}
-          className={`inline-flex min-h-[44px] items-center self-start rounded-full text-sm font-semibold text-accent-text underline underline-offset-4 ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center self-start rounded-full text-sm font-semibold text-accent-strong underline underline-offset-4 ${focusRing}`}
         >
           {t('match.card.edit')}
         </Link>

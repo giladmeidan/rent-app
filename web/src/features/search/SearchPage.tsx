@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
 import { ProfileNudge } from '../match/ProfileNudge';
@@ -55,7 +56,7 @@ export function SearchPage() {
     setSearchParams(toSearchParams({ ...filters, view: next === 'map' ? 'map' : undefined }));
 
   return (
-    <section className="flex flex-col gap-4">
+    <PageContainer as="section" className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('search.title')}</h1>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -64,7 +65,7 @@ export function SearchPage() {
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((o) => !o)}
-          className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border-[1.5px] px-4 text-[15px] font-semibold ${active > 0 ? 'border-accent bg-accent-tint text-accent-text' : 'border-[#D6D3D1] bg-white'} ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border-[1.5px] px-4 text-[15px] font-semibold ${active > 0 ? 'border-accent bg-accent-soft text-accent-strong' : 'border-border-strong bg-surface'} ${focusRing}`}
         >
           <svg
             aria-hidden="true"
@@ -109,6 +110,6 @@ export function SearchPage() {
       ) : (
         <ResultsList search={search} profile={profile} hasFilters={active > 0} onClear={clear} />
       )}
-    </section>
+    </PageContainer>
   );
 }

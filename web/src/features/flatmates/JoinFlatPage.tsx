@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -16,11 +17,11 @@ import { useInvitePreview, useJoinFlat } from './api';
 import { clearInviteToken, isInviteToken, readInviteToken, stashInviteToken } from './inviteToken';
 
 const JOIN_PATH = '/flatmates/join';
-const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
-const card = 'flex flex-col gap-3 rounded-2xl border border-line bg-white p-4';
+const section = 'flex flex-col gap-4';
+const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
 const message = 'text-start text-[15px] font-semibold';
 
 /** The copy for an answer the page shows as text; `other` is an `ErrorState`. */
@@ -44,7 +45,7 @@ const WAY_OUT = {
   invalid: { to: '/search', label: 'flatmates.join.toSearch' },
 } as const;
 
-const link = `inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-text underline ${focusRing}`;
+const link = `inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-strong underline ${focusRing}`;
 
 /** The link out of a final message. Never inside the `role="alert"` element. */
 function WayOut({ failure }: { failure: Exclude<Failure, 'other'> }) {
@@ -87,10 +88,10 @@ function Frame({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   usePageTitle(t('flatmates.join.title'));
   return (
-    <section className={section}>
+    <PageContainer as="section" width="narrow" className={section}>
       <h1 className="text-start text-2xl font-extrabold">{t('flatmates.join.title')}</h1>
       {children}
-    </section>
+    </PageContainer>
   );
 }
 
@@ -246,7 +247,7 @@ function JoinFlow() {
   const title = (
     <div className="flex flex-col gap-1">
       <p className="text-start text-lg font-bold">{cardTitle(t, listing)}</p>
-      <p dir="auto" className="text-start text-[15px] text-muted">
+      <p dir="auto" className="text-start text-[15px] text-ink-muted">
         {t('flatmates.join.invitedBy', { owner })}
       </p>
     </div>
@@ -286,7 +287,7 @@ function JoinFlow() {
         )}
         {failure !== null && failure !== 'other' && (
           <>
-            <p role="alert" className={`${message} text-[#B91C1C]`}>
+            <p role="alert" className={`${message} text-danger`}>
               {t(COPY[failure])}
             </p>
             <WayOut failure={failure} />

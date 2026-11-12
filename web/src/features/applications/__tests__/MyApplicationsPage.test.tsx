@@ -151,7 +151,7 @@ describe('MyApplicationsPage', () => {
       expect(link).toHaveTextContent(titleOf(app));
       expect(link).toHaveAttribute('href', `/listings/${app.listing.id}`);
       // A 44 px target that reads as a link.
-      expect(link).toHaveClass('inline-flex', 'min-h-[44px]', 'underline', 'text-accent-text');
+      expect(link).toHaveClass('inline-flex', 'min-h-[44px]', 'underline', 'text-accent-strong');
       expect(card.getByText(/6,000[\s‎‏]*₪/)).toBeVisible();
       expect(card.getByTestId('application-status')).toHaveTextContent(
         he.applications.status[app.status as 'submitted'],

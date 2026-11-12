@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -15,7 +16,7 @@ import { useMyListings } from '../listings/useMyListings';
 import { flattenPeople, usePeople } from './usePeople';
 import { PersonCard, type Mutual, type PageAlert } from './PersonCard';
 
-const section = 'mx-auto flex w-full max-w-[640px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
@@ -24,7 +25,7 @@ function Back() {
   return (
     <Link
       to="/me/listings"
-      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       {t('people.back')}
     </Link>
@@ -33,10 +34,10 @@ function Back() {
 
 function Notice({ message }: { message: string }) {
   return (
-    <section className={section}>
+    <PageContainer as="section" className={section}>
       <Back />
       <h1 className="text-start text-2xl font-extrabold">{message}</h1>
-    </section>
+    </PageContainer>
   );
 }
 
@@ -94,20 +95,20 @@ export function PeoplePage() {
     const title = <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>;
     if (listings.isPending) {
       return (
-        <section className={section}>
+        <PageContainer as="section" className={section}>
           {title}
           <Loading>
             <Skeleton />
           </Loading>
-        </section>
+        </PageContainer>
       );
     }
     return (
-      <section className={section}>
+      <PageContainer as="section" className={section}>
         <Back />
         {title}
         <ErrorState onRetry={() => void listings.refetch()} />
-      </section>
+      </PageContainer>
     );
   }
 
@@ -138,7 +139,9 @@ export function PeoplePage() {
         <EmptyState message={t('people.empty')} />
       ) : (
         <>
-          <p className="text-start text-sm text-muted">{t('people.count', { count: lastTotal })}</p>
+          <p className="text-start text-sm text-ink-muted">
+            {t('people.count', { count: lastTotal })}
+          </p>
           <ul className="flex flex-col gap-3">
             {items.map((person) => (
               <PersonCard
@@ -163,7 +166,7 @@ export function PeoplePage() {
               onClick={() => void people.fetchNextPage()}
               disabled={people.isFetchingNextPage}
               aria-busy={people.isFetchingNextPage}
-              className={`inline-flex min-h-[44px] items-center justify-center self-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
+              className={`inline-flex min-h-[44px] items-center justify-center self-center rounded-xl border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
             >
               {t('people.loadMore')}
             </button>
@@ -173,7 +176,7 @@ export function PeoplePage() {
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" className={section}>
       <Back />
       <div className="flex flex-col gap-1">
         <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>
@@ -186,7 +189,7 @@ export function PeoplePage() {
         className={
           mutual === null
             ? undefined
-            : 'flex flex-wrap items-center gap-3 rounded-2xl bg-accent-tint px-4 py-3 text-start text-[15px] font-semibold text-accent-text focus:outline-none'
+            : 'flex flex-wrap items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3 text-start text-[15px] font-semibold text-accent-strong focus:outline-none'
         }
       >
         {mutual !== null && (
@@ -205,7 +208,7 @@ export function PeoplePage() {
         className={
           alert === null
             ? undefined
-            : 'rounded-2xl bg-warn px-4 py-3 text-start text-[15px] font-semibold text-warn-text focus:outline-none'
+            : 'rounded-2xl bg-surface-subtle px-4 py-3 text-start text-[15px] font-semibold text-warning focus:outline-none'
         }
       >
         {alert?.kind === 'alreadyApplied' && (
@@ -219,6 +222,6 @@ export function PeoplePage() {
         {alert?.kind === 'gone' && <span>{t('people.errors.gone')}</span>}
       </div>
       {body}
-    </section>
+    </PageContainer>
   );
 }

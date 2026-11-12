@@ -18,11 +18,11 @@ export function ProfileNudge() {
   if (!isSeeker || profile.data !== null) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 rounded-2xl bg-accent-tint px-4 py-1 text-start text-sm text-ink">
+    <div className="flex flex-wrap items-center gap-x-3 rounded-2xl bg-accent-soft px-4 py-1 text-start text-sm text-ink">
       <p className="py-2">{t('match.nudge')}</p>
       <Link
         to={`/me/profile?next=${encodeURIComponent(location.pathname + location.search)}`}
-        className={`inline-flex min-h-[44px] items-center rounded-full font-bold text-accent-text underline underline-offset-4 ${focusRing}`}
+        className={`inline-flex min-h-[44px] items-center rounded-full font-bold text-accent-strong underline underline-offset-4 ${focusRing}`}
       >
         {t('match.fillProfile')}
       </Link>

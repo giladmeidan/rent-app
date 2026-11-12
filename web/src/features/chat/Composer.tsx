@@ -11,7 +11,7 @@ const SHOW_REMAINING_BELOW = 200;
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+const fieldError = 'text-sm font-semibold text-danger';
 
 /** No alert: the thread is refetched (`chat_closed`, 404) or the session is gone (401). */
 function handledByPage(error: unknown): boolean {
@@ -97,10 +97,10 @@ export function Composer({ conversationId, onSent }: Props) {
         readOnly={send.isPending}
         onChange={(event) => setText(event.target.value)}
         aria-describedby={remaining < SHOW_REMAINING_BELOW ? `${id}-remaining` : undefined}
-        className={`w-full resize-y rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 py-2 text-[15px] leading-relaxed ${focusRing}`}
+        className={`w-full resize-y rounded-xl border-[1.5px] border-border-strong bg-surface px-3 py-2 text-[15px] leading-relaxed ${focusRing}`}
       />
       {remaining < SHOW_REMAINING_BELOW && (
-        <p id={`${id}-remaining`} className="text-start text-sm text-muted">
+        <p id={`${id}-remaining`} className="text-start text-sm text-ink-muted">
           {t('chat.composer.remaining', { count: remaining })}
         </p>
       )}
@@ -108,7 +108,7 @@ export function Composer({ conversationId, onSent }: Props) {
         <button
           type="button"
           onClick={onViewing}
-          className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-tint px-4 text-[14px] font-bold text-accent-text ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-soft px-4 text-[14px] font-bold text-accent-strong ${focusRing}`}
         >
           {t('chat.composer.viewing')}
         </button>
@@ -116,7 +116,7 @@ export function Composer({ conversationId, onSent }: Props) {
           type="submit"
           disabled={blank || send.isPending}
           aria-busy={send.isPending}
-          className={`inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-bold text-white disabled:opacity-60 ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-bold text-on-ink disabled:opacity-60 ${focusRing}`}
         >
           {send.isPending ? t('chat.composer.sending') : t('chat.composer.send')}
         </button>
