@@ -308,7 +308,7 @@ export function FiltersForm({ filters, onApply, onClear, titleId }: Props) {
       </fieldset>
 
       <div className="flex gap-3">
-        <Button type="submit" variant="primary" size="md" className="flex-[1.6] whitespace-nowrap">
+        <Button type="submit" variant="primary" size="md" className="grow whitespace-nowrap">
           {t('search.apply')}
         </Button>
         <Button type="button" variant="secondary" size="md" onClick={clear} className="flex-1">
