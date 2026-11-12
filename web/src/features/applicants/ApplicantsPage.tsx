@@ -13,12 +13,14 @@ import { Loading } from '../../components/Loading';
 import { BackLink, PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { TabPanel, Tabs, tabId } from '../../components/Tabs';
+import { useIsDesktop } from '../../components/useMediaQuery';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { MY_LISTINGS_KEY, useMyListings } from '../listings/useMyListings';
 import { hasStatus } from '../applications/api';
 import type { ApplicantOut, ApplicantStatus } from './api';
 import { ApplicantCard, type CardOutcome } from './ApplicantCard';
+import { ApplicantPane } from './ApplicantPane';
 import { useApplicants } from './useApplicants';
 
 const section = 'flex flex-col gap-4';
@@ -77,6 +79,11 @@ export function ApplicantsPage() {
   const [sort, setSort] = useState<Sort>('match');
   const [announcement, setAnnouncement] = useState<Announcement>(NO_ANNOUNCEMENT);
   const [gone, setGone] = useState(false);
+  // From 1024px the inbox is a card grid beside a detail pane (0009u); `selectedId` is kept, and
+  // ignored, below that. `null` means the first card shown.
+  const isDesktop = useIsDesktop();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const paneId = useId();
   // Set in the action's callback; applied by the effect after the next render.
   const pendingFocus = useRef<FocusRequest | null>(null);
   const [focusTick, setFocusTick] = useState(0);
@@ -163,7 +170,7 @@ export function ApplicantsPage() {
     );
     if (listings.isPending) {
       return (
-        <PageContainer as="section" className={section}>
+        <PageContainer as="section" width="wide" className={section}>
           {title}
           <Loading>
             <Skeleton />
@@ -172,7 +179,7 @@ export function ApplicantsPage() {
       );
     }
     return (
-      <PageContainer as="section" className={section}>
+      <PageContainer as="section" width="wide" className={section}>
         <BackLink {...back} />
         {title}
         <ErrorState onRetry={() => listings.refetch()} />
@@ -182,7 +189,7 @@ export function ApplicantsPage() {
 
   if (listing === undefined || notFound) {
     return (
-      <PageContainer as="section" className={section}>
+      <PageContainer as="section" width="wide" className={section}>
         <PageHeader back={back} title={t('applicants.notFound')} />
       </PageContainer>
     );
@@ -224,7 +231,7 @@ export function ApplicantsPage() {
         key: 'total',
         value: counts.all,
         label: t('applicants.stats.total'),
-        tone: 'bg-surface-subtle',
+        tone: isDesktop ? 'border border-border bg-surface' : 'bg-surface-subtle',
       },
       {
         key: 'shortlisted',
@@ -236,11 +243,13 @@ export function ApplicantsPage() {
         key: 'new',
         value: counts.submitted,
         label: t('applicants.stats.new'),
-        tone: 'bg-surface-subtle',
+        tone: isDesktop ? 'border border-border bg-surface' : 'bg-surface-subtle',
       },
     ];
     const filtered = list.filter((a) => matches(filter, a));
     const shown = sort === 'newest' ? filtered.toSorted(newestFirst) : filtered;
+    // The selected applicant (desktop): the chosen one while it is in view, else the first shown.
+    const selected = shown.find((a) => a.id === selectedId) ?? shown[0];
     const sortLabel: Record<Sort, string> = {
       match: t('applicants.sort.match'),
       newest: t('applicants.sort.newest'),
@@ -250,7 +259,7 @@ export function ApplicantsPage() {
         {stats.map((stat) => (
           <li
             key={stat.key}
-            className={`flex min-w-24 flex-1 flex-col gap-0.5 rounded-lg px-3 py-3 ${stat.tone}`}
+            className={`flex min-w-24 flex-1 flex-col gap-0.5 rounded-lg px-3 py-3 lg:min-w-32 ${stat.tone}`}
           >
             <span className="font-display text-h2">{stat.value}</span>{' '}
             <span className="text-caption">{stat.label}</span>
@@ -258,56 +267,95 @@ export function ApplicantsPage() {
         ))}
       </ul>
     );
+    const tabs = (
+      <Tabs
+        label={t('applicants.filter.label')}
+        items={FILTERS.map((f) => ({ value: f, label: filterLabel[f] }))}
+        value={filter}
+        onChange={(f) => {
+          setGone(false);
+          setAnnouncement(NO_ANNOUNCEMENT);
+          setFilter(f);
+          // A new tab opens on its first card.
+          setSelectedId(null);
+        }}
+        variant="underline"
+        scrollable
+        panelId={panelId}
+        // On desktop the row below owns the bottom line.
+        className={isDesktop ? 'border-b-0' : undefined}
+      />
+    );
+    const sortGroup = (
+      <div
+        role="group"
+        aria-label={t('applicants.sort.label')}
+        className="flex flex-wrap items-center gap-2"
+      >
+        {SORTS.map((s) => (
+          <Button
+            key={s}
+            size="sm"
+            shape="pill"
+            variant={sort === s ? 'soft' : 'ghost'}
+            aria-pressed={sort === s}
+            onClick={() => setSort(s)}
+          >
+            {sortLabel[s]}
+          </Button>
+        ))}
+      </div>
+    );
+    const cardOf = (applicant: ApplicantOut) => (
+      <li key={applicant.id}>
+        <ApplicantCard
+          layout={isDesktop ? 'compact' : 'stacked'}
+          selected={applicant.id === selected?.id}
+          onSelect={() => setSelectedId(applicant.id)}
+          paneId={paneId}
+          listingId={listing.id}
+          applicant={applicant}
+          headingId={headingIdOf(applicant.id)}
+          spots={listing.parking_spots}
+          flatLifestyle={listing.lifestyle}
+          flatIsRoom={listing.listing_type === 'room'}
+          confirmDecline={confirmDecline}
+          onSettled={(outcome, button) => onSettled(applicant.id, outcome, button)}
+        />
+      </li>
+    );
     body = (
       <>
-        <Tabs
-          label={t('applicants.filter.label')}
-          items={FILTERS.map((f) => ({ value: f, label: filterLabel[f] }))}
-          value={filter}
-          onChange={(f) => {
-            setGone(false);
-            setAnnouncement(NO_ANNOUNCEMENT);
-            setFilter(f);
-          }}
-          variant="underline"
-          scrollable
-          panelId={panelId}
-        />
-        <div
-          role="group"
-          aria-label={t('applicants.sort.label')}
-          className="flex flex-wrap items-center gap-2"
-        >
-          {SORTS.map((s) => (
-            <Button
-              key={s}
-              size="sm"
-              shape="pill"
-              variant={sort === s ? 'soft' : 'ghost'}
-              aria-pressed={sort === s}
-              onClick={() => setSort(s)}
-            >
-              {sortLabel[s]}
-            </Button>
-          ))}
-        </div>
-        <TabPanel panelId={panelId} value={filter} className="flex flex-col gap-3">
-          {shown.length === 0 ? (
+        {isDesktop ? (
+          <div className="flex items-end justify-between gap-3 border-b border-border">
+            {tabs}
+            {sortGroup}
+          </div>
+        ) : (
+          <>
+            {tabs}
+            {sortGroup}
+          </>
+        )}
+        <TabPanel panelId={panelId} value={filter}>
+          {selected === undefined ? (
             <EmptyState message={t('applicants.emptyFilter')} />
-          ) : (
-            shown.map((applicant) => (
-              <ApplicantCard
-                key={applicant.id}
-                listingId={listing.id}
-                applicant={applicant}
-                headingId={headingIdOf(applicant.id)}
+          ) : isDesktop ? (
+            <div className="flex items-start gap-6">
+              <ul className="grid min-w-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-2">
+                {shown.map(cardOf)}
+              </ul>
+              <ApplicantPane
+                key={selected.id}
+                id={paneId}
+                applicant={selected}
                 spots={listing.parking_spots}
                 flatLifestyle={listing.lifestyle}
                 flatIsRoom={listing.listing_type === 'room'}
-                confirmDecline={confirmDecline}
-                onSettled={(outcome, button) => onSettled(applicant.id, outcome, button)}
               />
-            ))
+            </div>
+          ) : (
+            <ul className="flex max-w-page flex-col gap-3">{shown.map(cardOf)}</ul>
           )}
         </TabPanel>
       </>
@@ -315,15 +363,16 @@ export function ApplicantsPage() {
   }
 
   return (
-    <PageContainer as="section" className={section}>
+    <PageContainer as="section" width="wide" className={section}>
       <PageHeader
         back={back}
         eyebrow={t('applicants.titleFor')}
         title={cardTitle(t, listing)}
         subtitle={`${formatIls(listing.price_ils)} ${t('listings.units.ils')}`}
         titleRef={headingRef}
+        actions={isDesktop ? tiles : undefined}
       />
-      {tiles}
+      {!isDesktop && tiles}
       {gone && (
         <p role="alert" className="text-body-sm font-semibold text-danger">
           {t('applicants.errors.gone')}

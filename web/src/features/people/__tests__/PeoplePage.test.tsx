@@ -127,7 +127,16 @@ describe('PeoplePage', () => {
     expect(about.textContent).toBe('line one\nline two');
     expect(about).toHaveClass('whitespace-pre-line', 'break-words');
     expect(about).toHaveAttribute('dir', 'auto');
-    expect(one.getByTestId('match-badge')).toBeVisible();
+    expect(one.getByTestId('match-ring')).toBeVisible();
+    expect(within(one.getByTestId('person-name-row')).queryByTestId('match-ring')).toBeNull();
+    expect(within(one.getByTestId('person-name-row')).getByText(he.people.likedMe)).toBeVisible();
+    const why0 = one.getByRole('button', { name: he.applicants.why });
+    const more0 = one.getByRole('button', { name: he.people.moreDetails });
+    expect(why0.parentElement).toBe(more0.parentElement);
+    fireEvent.click(more0);
+    expect(more0).toHaveAttribute('aria-expanded', 'true');
+    expect(why0).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(more0);
     expect(one.getByTestId('match-chips')).toHaveTextContent(he.match.owner.short.budget.agree);
     expect(one.getByTestId('match-chips')).toHaveTextContent(he.people.short.pets.differ);
 
@@ -156,7 +165,8 @@ describe('PeoplePage', () => {
     expect(
       two.getByText(he.people.moveIn.replace('{{date}}', formatDate(inDays(30)))),
     ).toBeVisible();
-    expect(two.getByTestId('match-badge')).toBeVisible();
+    expect(two.getByTestId('match-ring')).toBeVisible();
+    expect(within(two.getByTestId('person-name-row')).queryByTestId('match-ring')).toBeNull();
     expect(two.getByTestId('match-chips')).toHaveTextContent(he.match.owner.short.budget.agree);
 
     // Nothing the card hides: no household, pets, smoking, contract or parking fact, on any card.
@@ -240,7 +250,7 @@ describe('PeoplePage', () => {
     });
     // The name stays "אהבתי" (the tick is decoration); aria-pressed carries the state.
     expect(button()).toHaveAccessibleName(he.people.like);
-    expect(button()).toHaveAttribute('aria-disabled', 'false');
+    expect(button()).not.toHaveAttribute('aria-disabled', 'true');
     expect(banners()).toHaveLength(0);
     expect(api.calls(likeRoute('PUT', p2))).toHaveLength(1);
     expect(api.calls(MINE).length).toBeGreaterThan(1);
@@ -367,7 +377,7 @@ describe('PeoplePage', () => {
     ] as const) {
       const { view } = renderPage([json({ detail }, status)]);
       expect(await screen.findByRole('heading', { level: 1, name: text })).toBeVisible();
-      expect(screen.getByRole('link', { name: he.people.back })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
         'href',
         '/me/listings',
       );
@@ -375,8 +385,27 @@ describe('PeoplePage', () => {
       vi.unstubAllGlobals();
     }
 
+    // "My listings" pending and failed: the <h1> and the back link stay.
+    const mineBack = () =>
+      expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+        'href',
+        '/me/listings',
+      );
+    const mineWait = deferred();
+    let run = renderPage([page([])], { mine: [mineWait.promise] });
+    expect(await screen.findByRole('heading', { level: 1, name: he.people.title })).toBeVisible();
+    mineBack();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+    run = renderPage([page([])], { mine: [json({ detail: 'boom' }, 500)] });
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getByRole('heading', { level: 1, name: he.people.title })).toBeVisible();
+    mineBack();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
     // A 500: ErrorState, and retry refetches.
-    let run = renderPage([json({ detail: 'boom' }, 500), page([person({ display_name: 'P1' })])]);
+    run = renderPage([json({ detail: 'boom' }, 500), page([person({ display_name: 'P1' })])]);
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
     expect(await screen.findByRole('article', { name: 'P1' })).toBeVisible();
     expect(run.api.calls(PEOPLE)).toHaveLength(2);
