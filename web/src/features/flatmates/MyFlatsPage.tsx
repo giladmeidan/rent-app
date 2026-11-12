@@ -2,6 +2,7 @@ import { useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -9,7 +10,7 @@ import { cardTitle } from '../listings/cardTitle';
 import { useLeaveFlat, useMyFlats, type MyFlatOut } from './api';
 import { formatDay } from './format';
 
-const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const action = `inline-flex min-h-[44px] items-center justify-center self-start rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
@@ -88,7 +89,7 @@ export function MyFlatsPage() {
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" width="narrow" className={section}>
       <Link
         to="/chat"
         className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
@@ -97,6 +98,6 @@ export function MyFlatsPage() {
       </Link>
       <h1 className="text-start text-2xl font-extrabold">{t('flatmates.mine.title')}</h1>
       {body}
-    </section>
+    </PageContainer>
   );
 }

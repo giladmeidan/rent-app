@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -101,10 +102,10 @@ export function MyLikesPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[480px] flex-col gap-5">
+    <PageContainer width="narrow" className="flex flex-col gap-5">
       <h1 className="text-start text-2xl font-extrabold">{t('likes.title')}</h1>
       {mutualId !== null && <MutualBanner applicationId={mutualId} />}
       {body}
-    </div>
+    </PageContainer>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -16,7 +17,7 @@ import {
 } from './api';
 import { formatDay } from './format';
 
-const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
@@ -277,27 +278,27 @@ export function FlatmatesPage() {
   if (listings.data === undefined) {
     if (listings.isPending) {
       return (
-        <section className={section}>
+        <PageContainer as="section" width="narrow" className={section}>
           <div aria-busy="true" aria-label={t('common.loading')}>
             <Skeleton />
           </div>
-        </section>
+        </PageContainer>
       );
     }
     return (
-      <section className={section}>
+      <PageContainer as="section" width="narrow" className={section}>
         <Back />
         <ErrorState onRetry={() => void listings.refetch()} />
-      </section>
+      </PageContainer>
     );
   }
 
   if (listing === undefined || !isRoom) {
     return (
-      <section className={section}>
+      <PageContainer as="section" width="narrow" className={section}>
         <Back />
         <h1 className="text-start text-2xl font-extrabold">{t('flatmates.notFound')}</h1>
-      </section>
+      </PageContainer>
     );
   }
 
@@ -328,7 +329,7 @@ export function FlatmatesPage() {
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" width="narrow" className={section}>
       <Back />
       <div className="flex flex-col gap-1">
         <h1
@@ -350,6 +351,6 @@ export function FlatmatesPage() {
         {t('flatmates.list.title')}
       </h2>
       {list}
-    </section>
+    </PageContainer>
   );
 }

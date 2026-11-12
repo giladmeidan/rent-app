@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { hasStatus } from '../applications/api';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -255,9 +256,9 @@ export function ChatThreadPage() {
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <PageContainer as="section" className="flex flex-col gap-4">
       <BackToChats />
       {body}
-    </section>
+    </PageContainer>
   );
 }

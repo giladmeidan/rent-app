@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from '../auth/next';
@@ -14,7 +15,7 @@ import { useInvitePreview, useJoinFlat } from './api';
 import { clearInviteToken, isInviteToken, readInviteToken, stashInviteToken } from './inviteToken';
 
 const JOIN_PATH = '/flatmates/join';
-const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
@@ -60,10 +61,10 @@ function isFinal(error: unknown): boolean {
 function Frame({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
-    <section className={section}>
+    <PageContainer as="section" width="narrow" className={section}>
       <h1 className="text-start text-2xl font-extrabold">{t('flatmates.join.title')}</h1>
       {children}
-    </section>
+    </PageContainer>
   );
 }
 

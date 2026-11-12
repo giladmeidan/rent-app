@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { PageContainer } from '../../components/PageContainer';
 import { Skeleton } from '../../components/Skeleton';
 import { fetchAreas } from './api';
 
@@ -40,9 +41,9 @@ export function AreasList() {
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <PageContainer as="section" className="flex flex-col gap-4">
       <h2 className="text-start text-[22px] font-extrabold">{t('areas.heading')}</h2>
       {body}
-    </section>
+    </PageContainer>
   );
 }

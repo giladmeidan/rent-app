@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { ErrorState } from '../../components/ErrorState';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
@@ -167,7 +168,7 @@ export function ListingPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[640px] flex-col gap-4">
+    <PageContainer className="flex flex-col gap-4">
       <Link
         to="/search"
         className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
@@ -188,6 +189,6 @@ export function ListingPage() {
         {t('listing.backToSearch')}
       </Link>
       {body}
-    </div>
+    </PageContainer>
   );
 }

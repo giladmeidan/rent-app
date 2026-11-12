@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -13,7 +14,7 @@ import type { ApplicantOut, ApplicantStatus } from './api';
 import { ApplicantCard, type CardOutcome } from './ApplicantCard';
 import { useApplicants } from './useApplicants';
 
-const section = 'mx-auto flex w-full max-w-[640px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
@@ -113,27 +114,27 @@ export function ApplicantsPage() {
   if (listings.data === undefined) {
     if (listings.isPending) {
       return (
-        <section className={section}>
+        <PageContainer as="section" className={section}>
           <div aria-busy="true" aria-label={t('common.loading')}>
             <Skeleton />
           </div>
-        </section>
+        </PageContainer>
       );
     }
     return (
-      <section className={section}>
+      <PageContainer as="section" className={section}>
         <BackToMine />
         <ErrorState onRetry={() => void listings.refetch()} />
-      </section>
+      </PageContainer>
     );
   }
 
   if (listing === undefined) {
     return (
-      <section className={section}>
+      <PageContainer as="section" className={section}>
         <BackToMine />
         <h1 className="text-start text-2xl font-extrabold">{t('applicants.notFound')}</h1>
-      </section>
+      </PageContainer>
     );
   }
 
@@ -278,7 +279,7 @@ export function ApplicantsPage() {
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" className={section}>
       <BackToMine />
       <div className="flex flex-col gap-1">
         <h1
@@ -302,6 +303,6 @@ export function ApplicantsPage() {
       <p role="status" className="sr-only">
         {announcement}
       </p>
-    </section>
+    </PageContainer>
   );
 }

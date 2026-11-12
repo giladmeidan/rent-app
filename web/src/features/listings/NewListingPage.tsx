@@ -1,9 +1,10 @@
+import { PageContainer } from '../../components/PageContainer';
 import { ListingWizard } from './ListingWizard';
 
 export function NewListingPage() {
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col">
+    <PageContainer as="section" width="narrow" className="flex flex-col">
       <ListingWizard />
-    </section>
+    </PageContainer>
   );
 }

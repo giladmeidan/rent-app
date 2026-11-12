@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -13,7 +14,7 @@ import { useMyListings } from '../listings/useMyListings';
 import { flattenPeople, usePeople } from './usePeople';
 import { PersonCard, type Mutual, type PageAlert } from './PersonCard';
 
-const section = 'mx-auto flex w-full max-w-[640px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
@@ -31,10 +32,10 @@ function Back() {
 
 function Notice({ message }: { message: string }) {
   return (
-    <section className={section}>
+    <PageContainer as="section" className={section}>
       <Back />
       <h1 className="text-start text-2xl font-extrabold">{message}</h1>
-    </section>
+    </PageContainer>
   );
 }
 
@@ -79,18 +80,18 @@ export function PeoplePage() {
   if (listings.data === undefined) {
     if (listings.isPending) {
       return (
-        <section className={section}>
+        <PageContainer as="section" className={section}>
           <div aria-busy="true" aria-label={t('common.loading')}>
             <Skeleton />
           </div>
-        </section>
+        </PageContainer>
       );
     }
     return (
-      <section className={section}>
+      <PageContainer as="section" className={section}>
         <Back />
         <ErrorState onRetry={() => void listings.refetch()} />
-      </section>
+      </PageContainer>
     );
   }
 
@@ -158,7 +159,7 @@ export function PeoplePage() {
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" className={section}>
       <Back />
       <div className="flex flex-col gap-1">
         <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>
@@ -204,6 +205,6 @@ export function PeoplePage() {
         {alert?.kind === 'gone' && <span>{t('people.errors.gone')}</span>}
       </div>
       {body}
-    </section>
+    </PageContainer>
   );
 }

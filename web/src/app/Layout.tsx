@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet } from 'react-router';
 
+import { PageContainer } from '../components/PageContainer';
 import { AuthMenu } from '../features/auth/AuthMenu';
 import { ChatStreamProvider } from '../features/chat/ChatStreamProvider';
 
@@ -13,8 +14,8 @@ export function Layout() {
   const { t } = useTranslation();
   return (
     <ChatStreamProvider>
-      <div className="mx-auto max-w-[640px] px-4">
-        <header className="pb-2 pt-[18px]">
+      <header className="pb-2 pt-[18px]">
+        <PageContainer width="wide">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Link
               to="/"
@@ -50,11 +51,11 @@ export function Layout() {
             </div>
           </div>
           <p className="mt-1 text-ink-muted">{t('app.tagline')}</p>
-        </header>
-        <main className="pb-8 pt-6">
-          <Outlet />
-        </main>
-      </div>
+        </PageContainer>
+      </header>
+      <main className="pb-8 pt-6">
+        <Outlet />
+      </main>
     </ChatStreamProvider>
   );
 }

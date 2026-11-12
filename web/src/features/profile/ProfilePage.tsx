@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import type { AreaOut } from '../../api/client';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { EmptyState } from '../../components/EmptyState';
@@ -538,11 +539,11 @@ export function ProfilePage() {
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col gap-4">
+    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('profile.title')}</h1>
       <p className="text-start text-[15px]">{t('profile.intro')}</p>
       <p className="text-start text-sm text-ink-muted">{t('profile.privacy')}</p>
       {body}
-    </section>
+    </PageContainer>
   );
 }

@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { useMe } from '../auth/useMe';
 import { ProfileNudge } from '../match/ProfileNudge';
 import { useProfile } from '../profile/useProfile';
@@ -53,7 +54,7 @@ export function SearchPage() {
     setSearchParams(toSearchParams({ ...filters, view: next === 'map' ? 'map' : undefined }));
 
   return (
-    <section className="flex flex-col gap-4">
+    <PageContainer as="section" className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('search.title')}</h1>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -107,6 +108,6 @@ export function SearchPage() {
       ) : (
         <ResultsList search={search} profile={profile} hasFilters={active > 0} onClear={clear} />
       )}
-    </section>
+    </PageContainer>
   );
 }

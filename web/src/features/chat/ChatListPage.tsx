@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -150,7 +151,7 @@ export function ChatListPage() {
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <PageContainer as="section" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h1 className="text-start text-2xl font-extrabold">{t('chat.list.title')}</h1>
         {flats.data !== undefined && flats.data.length > 0 && (
@@ -168,6 +169,6 @@ export function ChatListPage() {
         </p>
       )}
       {body}
-    </section>
+    </PageContainer>
   );
 }

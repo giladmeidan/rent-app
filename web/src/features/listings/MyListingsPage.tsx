@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -157,7 +158,7 @@ export function MyListingsPage() {
   const live = listings.data?.filter((l) => listingState(l, now) === 'live').length;
 
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col gap-4">
+    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-start text-2xl font-extrabold">{t('listings.mine.title')}</h1>
@@ -180,6 +181,6 @@ export function MyListingsPage() {
         )}
       </div>
       {body}
-    </section>
+    </PageContainer>
   );
 }

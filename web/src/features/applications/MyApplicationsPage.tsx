@@ -2,6 +2,7 @@ import { useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
@@ -162,9 +163,9 @@ export function MyApplicationsPage() {
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col gap-4">
+    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('applications.mine.title')}</h1>
       {body}
-    </section>
+    </PageContainer>
   );
 }
