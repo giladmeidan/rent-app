@@ -135,6 +135,52 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(page.getByRole('region', { name: he.lifestyle.title.seeker })).toBeVisible();
   await expectNoAxeViolations(page, '/me/profile');
 
+  await test.step('0009r profile layout', async () => {
+    const profileForm = page.locator('form', { has: page.locator('[data-sticky-footer]') });
+    const index = page.getByRole('navigation', { name: he.profile.nav.label });
+    const box = async (locator: typeof index) => {
+      const rect = await locator.boundingBox();
+      expect(rect).not.toBeNull();
+      return rect as NonNullable<typeof rect>;
+    };
+
+    // A desktop: the page is long, the save bar is in reach, the index is at the inline start.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(index).toBeVisible();
+    const formBox = await box(profileForm);
+    expect(formBox.y + formBox.height).toBeGreaterThan(900);
+    const saveBox = await box(page.getByRole('button', { name: he.profile.save }));
+    expect(saveBox.y).toBeGreaterThanOrEqual(0);
+    expect(saveBox.y + saveBox.height).toBeLessThanOrEqual(900);
+    // RTL: the side track is at the right, so the index starts at or after the form's right edge.
+    const indexBox = await box(index);
+    expect(indexBox.x).toBeGreaterThanOrEqual(formBox.x + formBox.width - 1);
+
+    // A phone: no index, no sideways scroll, the bar sits on the tab bar.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(index).toBeHidden();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    const phoneForm = await box(profileForm);
+    expect(phoneForm.y + phoneForm.height).toBeGreaterThan(844);
+    const tabBar = page.locator('[data-bottom-nav]');
+    const footer = page.locator('[data-sticky-footer]');
+    await expect
+      .poll(async () => {
+        const footerBox = await box(footer);
+        const bottom = footerBox.y + footerBox.height;
+        const edge = (await tabBar.isVisible()) ? (await box(tabBar)).y : 844;
+        return Math.abs(bottom - edge);
+      })
+      .toBeLessThanOrEqual(2);
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
   // The gate's entry point lands on the room heading; switching off and saving clears the section.
   await page.goto('/me/profile?section=room');
   await expect(page.getByRole('heading', { level: 2, name: ROOM.title })).toBeFocused();
