@@ -11,7 +11,9 @@
     "loading": "טוען…",
     "error": "משהו השתבש",
     "retry": "נסו שוב",
-    "back": "חזרה"
+    "back": "חזרה",
+    "cancel": "ביטול",
+    "confirm": "אישור"
   },
   "header": {
     "login": "כניסה",
