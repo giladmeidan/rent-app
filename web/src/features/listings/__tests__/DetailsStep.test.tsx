@@ -103,6 +103,41 @@ describe('DetailsStep', () => {
     expect(api.calls('POST /listings')).toHaveLength(0);
   });
 
+  it('ac3_entry_date_read_back', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    const ids = () => (field(f.availableFrom).getAttribute('aria-describedby') ?? '').split(' ');
+
+    // Empty and invalid: the error alone, no read-back.
+    fireEvent.click(nextButton());
+    const error = errorFor(field(f.availableFrom));
+    expect(ids()).toEqual([error.id]);
+
+    // A day: the read-back under the input.
+    change(f.availableFrom, '2026-11-12');
+    // "התאריך שנבחר: 12 בנובמבר 2026"
+    const readback = screen.getByText(
+      '\u05d4\u05ea\u05d0\u05e8\u05d9\u05da \u05e9\u05e0\u05d1\u05d7\u05e8: 12 \u05d1\u05e0\u05d5\u05d1\u05de\u05d1\u05e8 2026',
+    );
+    expect(ids()).toContain(readback.id);
+    expect(
+      field(f.availableFrom).compareDocumentPosition(readback) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // A real day out of range: the error id stays, next to the read-back's.
+    change(f.availableFrom, '2099-01-01');
+    fireEvent.click(nextButton());
+    const rangeError = errorFor(field(f.availableFrom));
+    expect(rangeError).toHaveTextContent(he.listings.errors.dateRange);
+    // "התאריך שנבחר: 1 בינואר 2099"
+    const later = screen.getByText(
+      '\u05d4\u05ea\u05d0\u05e8\u05d9\u05da \u05e9\u05e0\u05d1\u05d7\u05e8: 1 \u05d1\u05d9\u05e0\u05d5\u05d0\u05e8 2099',
+    );
+    expect(ids()).toEqual([rangeError.id, later.id]);
+  });
+
   it('ac4_furnished_choice_by_type', async () => {
     const choices = () =>
       within(screen.getByRole('group', { name: f.furnished }))

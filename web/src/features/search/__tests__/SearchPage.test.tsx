@@ -130,6 +130,26 @@ describe('SearchPage', () => {
     ).toBeVisible();
   });
 
+  it('ac3_filter_date_read_back', async () => {
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    render('/search');
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
+    openPanel();
+    const input = screen.getByLabelText(he.search.availableBy);
+    const ids = () => (input.getAttribute('aria-describedby') ?? '').split(' ');
+    const hintId = screen.getByText(he.search.availableByHint).id;
+    expect(ids()).toEqual([hintId]);
+
+    fireEvent.change(input, { target: { value: '2026-11-12' } });
+    expect(ids()).toHaveLength(2);
+    expect(ids()[0]).toBe(hintId);
+    const readback = document.getElementById(ids()[1] ?? '');
+    // "התאריך שנבחר: 12 בנובמבר 2026"
+    expect(readback).toHaveTextContent(
+      '\u05d4\u05ea\u05d0\u05e8\u05d9\u05da \u05e9\u05e0\u05d1\u05d7\u05e8: 12 \u05d1\u05e0\u05d5\u05d1\u05de\u05d1\u05e8 2026',
+    );
+  });
+
   it('ac3_apply_clear_back_and_validation', async () => {
     // Apply: the URL gets the filters (a new history entry) and a new request is sent.
     let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
