@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
@@ -37,13 +38,13 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
   // page fails, and the loaded cards must stay.
   if (data === undefined) {
     body = search.isPending ? (
-      <ul aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-        {[0, 1, 2].map((i) => (
-          <li key={i}>
-            <Skeleton />
-          </li>
-        ))}
-      </ul>
+      <Loading>
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} />
+          ))}
+        </div>
+      </Loading>
     ) : (
       <ErrorState onRetry={() => void search.refetch()} />
     );

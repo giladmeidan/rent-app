@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { BackToMine, ListingWizard } from './ListingWizard';
 import { isPastExpiry } from './StatusBadge';
@@ -28,21 +30,35 @@ export function EditListingPage() {
   useEffect(() => {
     if (readOnly) expiredHeading.current?.focus();
   }, [readOnly]);
+  // The tab is named after the state's <h1> (the wizard's is the edit title as well).
+  usePageTitle(
+    t(
+      listings.data !== undefined && listing === undefined
+        ? 'listings.edit.notFound'
+        : readOnly
+          ? 'listings.edit.expiredTitle'
+          : 'listings.edit.title',
+    ),
+  );
+  // Loading and a failed list keep the page's <h1>: its text needs no data.
+  const title = <h1 className="text-start text-2xl font-extrabold">{t('listings.edit.title')}</h1>;
 
   // A cached list is used while it refetches, and kept if that refetch fails: the owner may be
   // typing in the form.
   if (listings.data === undefined) {
     if (listings.isPending) {
       return (
-        <section className={section}>
-          <div aria-busy="true" aria-label={t('common.loading')}>
+        <section className={`${section} gap-4`}>
+          {title}
+          <Loading>
             <Skeleton />
-          </div>
+          </Loading>
         </section>
       );
     }
     return (
-      <section className={section}>
+      <section className={`${section} gap-4`}>
+        {title}
         <ErrorState onRetry={() => void listings.refetch()} />
       </section>
     );

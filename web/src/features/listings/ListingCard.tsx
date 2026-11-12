@@ -41,6 +41,39 @@ const chipClass = {
   plain: 'rounded-full border border-line bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold',
 } as const;
 
+const titleClass = 'break-words text-lg font-bold leading-snug';
+
+/** The card title as a literal element switch, so each element is a static JSX tag. */
+function Title({
+  as,
+  id,
+  children,
+}: {
+  as: 'h2' | 'h3' | 'p';
+  id: string | undefined;
+  children: ReactNode;
+}) {
+  if (as === 'h3') {
+    return (
+      <h3 id={id} className={titleClass}>
+        {children}
+      </h3>
+    );
+  }
+  if (as === 'p') {
+    return (
+      <p id={id} className={titleClass}>
+        {children}
+      </p>
+    );
+  }
+  return (
+    <h2 id={id} className={titleClass}>
+      {children}
+    </h2>
+  );
+}
+
 type Props = {
   listing: CardFacts;
   /** Israel's calendar day, `YYYY-MM-DD`: an entry date on or before it reads "immediate". */
@@ -56,6 +89,9 @@ type Props = {
   /** The seeker's birth year (their profile's room section): a room whose every listed flatmate is
    * near that age gets "שותפים בגילך". `undefined` / `null`: no such chip. */
   seekerBirthYear?: number | null | undefined;
+  /** The title's element, for the page's heading order: `h3` under a section `<h2>`, `p` where
+   * the card is not a section of its own. Default `h2`. */
+  titleAs?: 'h2' | 'h3' | 'p';
 };
 
 /**
@@ -71,6 +107,7 @@ export function ListingCard({
   to,
   titleId,
   seekerBirthYear,
+  titleAs = 'h2',
 }: Props) {
   const { t } = useTranslation();
   const isRoom = listing.listing_type === 'room';
@@ -153,7 +190,7 @@ export function ListingCard({
           </p>
           {badge}
         </div>
-        <h2 id={titleId} className="break-words text-lg font-bold leading-snug">
+        <Title as={titleAs} id={titleId}>
           {to === undefined ? (
             title
           ) : (
@@ -166,7 +203,7 @@ export function ListingCard({
               {title}
             </Link>
           )}
-        </h2>
+        </Title>
         <p className="flex flex-wrap gap-x-[10px] text-sm text-muted">
           {facts.map((fact, i) => (
             <span key={fact} className="flex gap-x-[10px]">

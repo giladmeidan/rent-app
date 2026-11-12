@@ -228,14 +228,14 @@ describe('SearchPage', () => {
   });
 
   it('ac4_result_states', async () => {
-    // Pending: three skeletons in a busy list; the live region is already mounted, empty.
+    // Pending: three skeletons in a busy block; the live region is already mounted, empty.
     const pending = deferred();
     mockApi({ [SEARCH]: [pending.promise] });
     let view = render('/search');
     expect(screen.getByRole('heading', { level: 1, name: he.search.title })).toBeVisible();
-    const busy = screen.getByRole('list', { name: he.common.loading });
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getAllByTestId('skeleton')).toHaveLength(3);
+    expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(3);
     expect(liveRegion()).not.toBeNull();
     expect(liveRegion()).toHaveTextContent('');
     view.unmount();

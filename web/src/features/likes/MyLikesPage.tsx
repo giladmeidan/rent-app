@@ -2,8 +2,10 @@ import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { ListingCard } from '../listings/ListingCard';
 import { todayInIsrael } from '../listings/format';
@@ -32,7 +34,8 @@ function RoomList({
     <ul className="flex flex-col gap-4">
       {items.map(({ listing }) => (
         <li key={listing.id}>
-          <ListingCard listing={listing} today={today} to={`/listings/${listing.id}`}>
+          {/* `h3`: the cards sit under the section `<h2>`s. */}
+          <ListingCard listing={listing} today={today} to={`/listings/${listing.id}`} titleAs="h3">
             {/* Above the card's stretched link, so a click reaches the button. */}
             <div className="relative z-10">
               <LikeRoomButton listingId={listing.id} like={like} onMutual={onMutual} />
@@ -47,6 +50,7 @@ function RoomList({
 /** `/me/likes`, seekers only (`RequireSeeker`): the rooms that liked the seeker and the ones they liked. */
 export function MyLikesPage() {
   const { t } = useTranslation();
+  usePageTitle(t('likes.title'));
   const likes = useMyLikes();
   // Kept here, not in the lists: the card that made the match leaves them on the refetch.
   const [mutualId, setMutualId] = useState<string | null>(null);
@@ -54,10 +58,12 @@ export function MyLikesPage() {
   let body;
   if (likes.isPending) {
     body = (
-      <div aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-        <Skeleton className="h-[200px] w-full" />
-        <Skeleton className="h-[200px] w-full" />
-      </div>
+      <Loading>
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-[200px] w-full" />
+          <Skeleton className="h-[200px] w-full" />
+        </div>
+      </Loading>
     );
   } else if (likes.isError && likes.data === undefined) {
     body = <ErrorState onRetry={() => void likes.refetch()} />;

@@ -71,6 +71,7 @@ export class FakeEventSource extends EventTarget {
 globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 // jsdom lays nothing out, so it has no scrolling either.
 Element.prototype.scrollIntoView = () => {};
+window.scrollTo = () => {};
 
 afterEach(() => {
   cleanup();

@@ -66,7 +66,6 @@ export function LikeRoomButton({ listingId, like, onMutual, showHint = false }: 
       <button
         type="button"
         aria-pressed={pressed}
-        aria-label={pressed ? t('likes.unlikeLabel') : undefined}
         disabled={pending}
         aria-busy={pending}
         aria-describedby={hint ? hintId : undefined}

@@ -18,14 +18,14 @@ const newLink = () => screen.getByRole('link', { name: he.listings.mine.new });
 
 describe('MyListingsPage', () => {
   it('ac6_states_and_badges', async () => {
-    // Pending: three skeleton rows in a busy list.
+    // Pending: three skeleton rows in a busy block.
     const pending = deferred();
     mockApi({ 'GET /me/listings': [pending.promise] });
     let view = render();
     expect(screen.getByRole('heading', { level: 1, name: he.listings.mine.title })).toBeVisible();
-    const busy = screen.getByRole('list', { name: he.common.loading });
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getAllByTestId('skeleton')).toHaveLength(3);
+    expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(3);
     expect(newLink()).toHaveAttribute('href', '/listings/new');
     view.unmount();
     vi.unstubAllGlobals();

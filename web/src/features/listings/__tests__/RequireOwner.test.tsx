@@ -126,7 +126,9 @@ describe('RequireOwner', () => {
       const retry = await screen.findByRole('button', { name: he.common.retry });
       expect(screen.getByRole('alert')).toHaveTextContent(he.common.error);
       expect(currentPath()).toBe(path);
-      expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+      // The error is the whole page: its message is the page's one <h1>.
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.common.error);
 
       fireEvent.click(retry);
       expect(await screen.findByRole('heading', { level: 1, name: TITLES[path] })).toBeVisible();
@@ -135,5 +137,28 @@ describe('RequireOwner', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('ac4_pending_and_error_states', async () => {
+    // Pending: a busy block that says "loading", and no aria-label on a role-less element.
+    const me = deferred();
+    mockApi({ 'GET /me': [me.promise] });
+    let view = renderRoutes('/me/listings', routes);
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    expect(busy).not.toHaveAttribute('aria-label');
+    expect(busy).not.toHaveAttribute('role');
+    expect(document.querySelectorAll('[aria-label]:not([role])')).toHaveLength(0);
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A failed /me: exactly one <h1>, "something went wrong".
+    mockApi({ 'GET /me': [networkError] });
+    view = renderRoutes('/me/listings', routes);
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.common.error);
+    view.unmount();
   });
 });

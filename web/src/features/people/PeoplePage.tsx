@@ -3,8 +3,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { fetchAreas } from '../areas/api';
 import { hasStatus } from '../applications/api';
@@ -75,20 +77,35 @@ export function PeoplePage() {
     () => new Map((areas.data ?? []).map((a) => [a.id, a.name_he])),
     [areas.data],
   );
+  // The tab is named after the state's <h1> (a `Notice`, or the page title).
+  const peopleGone = people.data === undefined && people.isError;
+  usePageTitle(
+    t(
+      (listings.data !== undefined && !isRoom) || (peopleGone && hasStatus(people.error, 404))
+        ? 'people.notFound'
+        : peopleGone && hasStatus(people.error, 409)
+          ? 'people.notLive'
+          : 'people.title',
+    ),
+  );
 
+  // Loading and a failed list keep the page's <h1>: its text needs no data.
   if (listings.data === undefined) {
+    const title = <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>;
     if (listings.isPending) {
       return (
         <section className={section}>
-          <div aria-busy="true" aria-label={t('common.loading')}>
+          {title}
+          <Loading>
             <Skeleton />
-          </div>
+          </Loading>
         </section>
       );
     }
     return (
       <section className={section}>
         <Back />
+        {title}
         <ErrorState onRetry={() => void listings.refetch()} />
       </section>
     );
@@ -104,13 +121,13 @@ export function PeoplePage() {
       body = <ErrorState onRetry={() => void people.refetch()} />;
     } else {
       body = (
-        <ul aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-          {[0, 1, 2].map((i) => (
-            <li key={i}>
-              <Skeleton />
-            </li>
-          ))}
-        </ul>
+        <Loading>
+          <div className="flex flex-col gap-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} />
+            ))}
+          </div>
+        </Loading>
       );
     }
   } else {

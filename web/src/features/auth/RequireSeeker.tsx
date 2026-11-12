@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
 
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from './next';
 import { useMe } from './useMe';
@@ -11,9 +12,14 @@ export function RequireSeeker() {
   const me = useMe();
   const location = useLocation();
 
-  if (me.isPending) return <Skeleton />;
+  if (me.isPending)
+    return (
+      <Loading>
+        <Skeleton />
+      </Loading>
+    );
   // A failed /me (network, 5xx) is not a logout: offer a retry and stay on the page.
-  if (me.data === undefined) return <ErrorState onRetry={() => void me.refetch()} />;
+  if (me.data === undefined) return <ErrorState page onRetry={() => void me.refetch()} />;
   if (me.data === null) return <Navigate to={loginWithNext(location)} replace />;
   if (me.data.role !== 'seeker') return <Navigate to="/" replace />;
   return <Outlet />;

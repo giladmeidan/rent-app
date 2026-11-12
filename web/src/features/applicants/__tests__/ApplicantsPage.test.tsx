@@ -138,22 +138,24 @@ const appliedText = (p: ApplicantOut) =>
 
 describe('ApplicantsPage', () => {
   it('ac2_states', async () => {
-    // "My listings" pending: one busy skeleton.
+    // "My listings" pending: one busy skeleton, under the page's <h1>.
     const pending = deferred();
     let { view } = renderPage([json([])], { mine: [pending.promise] });
-    const busy = await screen.findByLabelText(he.common.loading);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.applicants.title }),
+    ).toBeVisible();
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getAllByTestId('skeleton')).toHaveLength(1);
-    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(1);
     reset(view);
 
     // "My listings" failing: ErrorState; retry refetches.
     let api;
     ({ api, view } = renderPage([json([])], { mine: [json({ detail: 'boom' }, 500), json([A])] }));
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
-    expect(
-      await screen.findByRole('heading', { level: 1, name: he.applicants.title }),
-    ).toBeVisible();
+    // The error state keeps the page's <h1>: wait for the loaded page.
+    expect(await screen.findByText(he.applicants.empty)).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: he.applicants.title })).toBeVisible();
     expect(api.calls(MINE)).toHaveLength(2);
     reset(view);
 
@@ -177,19 +179,19 @@ describe('ApplicantsPage', () => {
       reset(opened.view);
     }
 
-    // Found, applicants pending: three skeleton cards in a busy list, under the heading.
+    // Found, applicants pending: three skeleton cards in a busy block, under the heading.
     const apps = deferred();
     ({ view } = renderPage([apps.promise]));
-    expect(
-      await screen.findByRole('heading', { level: 1, name: he.applicants.title }),
-    ).toBeVisible();
-    expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+    // The back link shows once "my listings" has loaded (its loading state has the <h1> only).
+    expect(await screen.findByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
       'href',
       '/me/listings',
     );
-    const list = screen.getByRole('list', { name: he.common.loading });
+    expect(screen.getByRole('heading', { level: 1, name: he.applicants.title })).toBeVisible();
+
+    const list = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(list).toHaveAttribute('aria-busy', 'true');
-    expect(within(list).getAllByTestId('skeleton')).toHaveLength(3);
+    expect(within(list as HTMLElement).getAllByTestId('skeleton')).toHaveLength(3);
     reset(view);
 
     // Applicants failing: ErrorState; retry refetches.
@@ -1179,5 +1181,30 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     const inApplied = within(cardOf('M'));
     expect(inApplied.getByTestId('applicant-message')).toHaveTextContent('Hello there');
     expect(inApplied.queryByTestId('applicant-mutual')).toBeNull();
+  });
+
+  it('ac4_h1_while_loading_and_on_error', async () => {
+    const title = () => screen.getByRole('heading', { level: 1, name: he.applicants.title });
+    // "My listings" loading: the page's <h1> above the busy block.
+    const pending = deferred();
+    let { view } = renderPage([json([])], { mine: [pending.promise] });
+    await screen.findByRole('heading', { level: 1, name: he.applicants.title });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByText(he.common.loading).closest('[aria-busy="true"]')).not.toBeNull();
+    reset(view);
+
+    // "My listings" failing: the <h1> above ErrorState, whose message is no heading.
+    ({ view } = renderPage([json([])], { mine: [json({ detail: 'boom' }, 500)] }));
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(title()).toBeVisible();
+    reset(view);
+
+    // The applicants failing: still the one <h1>.
+    ({ view } = renderPage([json({ detail: 'boom' }, 500)]));
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(title()).toBeVisible();
+    reset(view);
   });
 });

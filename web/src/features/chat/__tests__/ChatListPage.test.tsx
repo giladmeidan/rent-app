@@ -50,14 +50,14 @@ const heading = () => screen.findByRole('heading', { level: 1, name: he.chat.lis
 
 describe('ChatListPage', () => {
   it('ac3_list_states', async () => {
-    // Pending: a busy list of three skeletons.
+    // Pending: a busy block of three skeletons (not a list of empty items).
     const pending = deferred();
     let { view } = renderPage([pending.promise]);
     await heading();
-    const busy = screen.getByRole('list');
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getAllByTestId('skeleton')).toHaveLength(3);
-    expect(screen.getByText(he.common.loading)).toBeInTheDocument();
+    expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(3);
+    expect(screen.queryByRole('list')).toBeNull();
     reset(view);
 
     // 500: ErrorState; retry refetches.

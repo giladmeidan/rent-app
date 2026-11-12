@@ -444,6 +444,33 @@ describe('ChatThreadPage', () => {
     expect(screen.getByText(he.chat.thread.closed)).toHaveAttribute('role', 'status');
   });
 
+  it('ac3_page_title', async () => {
+    // Loading: the app's name alone; loaded: the other person's name, as the <h1>.
+    const t = thread();
+    const pending = deferred();
+    let { view } = renderThread(t, [pending.promise]);
+    await screen.findByText(he.common.loading);
+    expect(document.title).toBe(he.app.title);
+    pending.resolve(json(t));
+    await h1(NAME);
+    expect(document.title).toBe(i18n.t('app.pageTitle', { page: NAME, app: he.app.title }));
+    reset(view);
+
+    // Not found: its <h1>.
+    ({ view } = renderThread(t, [json({ detail: 'conversation_not_found' }, 404)]));
+    await h1(he.chat.thread.notFound);
+    expect(document.title).toBe(
+      i18n.t('app.pageTitle', { page: he.chat.thread.notFound, app: he.app.title }),
+    );
+    reset(view);
+
+    // A failed load is the whole page: ErrorState's <h1>, the only one.
+    renderThread(t, [json({ detail: 'boom' }, 500)]);
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.common.error);
+  });
+
   it('ac9_not_found', async () => {
     // A 404: not found, the back link, one GET only (no retry, no poll).
     vi.useFakeTimers({ shouldAdvanceTime: true });
