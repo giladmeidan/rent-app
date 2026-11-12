@@ -27,7 +27,7 @@ export function ChatNavLink() {
         <>
           <span
             aria-hidden="true"
-            className="min-w-[22px] rounded-full bg-surface-subtle px-[6px] py-[1px] text-center text-[12px] font-bold text-warning"
+            className="min-w-[22px] rounded-full bg-accent-soft px-[6px] py-[1px] text-center text-[12px] font-bold text-accent-strong"
           >
             {count}
           </span>{' '}

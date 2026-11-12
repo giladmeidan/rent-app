@@ -18,7 +18,7 @@ import { useConversations } from './useConversations';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const pill =
-  'flex-none rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-bold text-warning';
+  'flex-none rounded-full bg-accent-soft px-2 py-[2px] text-[12px] font-bold text-accent-strong';
 
 function ConversationRow({ conversation }: { conversation: ConversationOut }) {
   const { t } = useTranslation();
