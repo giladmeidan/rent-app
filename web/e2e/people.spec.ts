@@ -37,6 +37,7 @@ test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
   await likeRoom(seekerPage, roomId);
 
   // "My listings": the room's people link carries the badge.
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/me/listings');
   const card = page.getByRole('article').filter({ hasText: street });
   const link = card.getByRole('link', { name: new RegExp(he.listings.mine.people) });
@@ -49,6 +50,11 @@ test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
   const person = page.getByRole('article', { name: SEEKER_NAME });
   await expect(person.getByText(he.people.likedMe)).toBeVisible();
   await expectNoAxeViolations(page, '/me/listings/:id/people');
+  await person.getByRole('button', { name: he.applicants.why }).click();
+  await expect(person.getByRole('button', { name: he.applicants.why })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
 
   // Liking back: the mutual banner, and its link opens the thread.
   await person.getByRole('button', { name: he.people.like, exact: true }).click();

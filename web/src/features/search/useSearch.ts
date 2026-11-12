@@ -1,6 +1,6 @@
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 
-import { searchListings, type ListingPublic, type ListingSearchOut } from './api';
+import { searchListings } from './api';
 import type { Filters } from './filters';
 
 /** The list's pages; `enabled` is false in the map view, which sends its own query. */
@@ -22,9 +22,9 @@ export function useSearch(filters: Filters, enabled = true) {
  * The loaded pages as one list in API order. A listing created while a visitor pages shifts the
  * later offsets by one, so a page can repeat the previous page's last id: the repeat is dropped.
  */
-export function flattenPages(data: InfiniteData<ListingSearchOut>): ListingPublic[] {
+export function flattenPages<T extends { id: string }>(data: InfiniteData<{ items: T[] }>): T[] {
   const seen = new Set<string>();
-  const items: ListingPublic[] = [];
+  const items: T[] = [];
   for (const page of data.pages) {
     for (const item of page.items) {
       if (seen.has(item.id)) continue;

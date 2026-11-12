@@ -1,24 +1,23 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Badge } from '../../components/Badge';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { DisclosureButton } from '../applicants/DisclosureButton';
 import { RoomDetails } from '../applicants/RoomDetails';
+import { RoomLine } from '../applicants/RoomLine';
 import { hasStatus } from '../applications/api';
 import { ApiError, type MyListingOut } from '../listings/api';
 import { formatDate, todayInIsrael } from '../listings/format';
-import { AgreeIcon, DifferIcon } from '../match/icons';
-import { MatchBadge } from '../match/MatchBadge';
-import { personReason, personShort } from '../match/reasons';
+import { MatchChips } from '../match/MatchChips';
+import { MatchRing } from '../match/MatchRing';
+import { personReason } from '../match/reasons';
+import { ReasonList } from '../match/ReasonList';
 import type { Criterion, ReasonKind } from '../match/types';
 import type { PersonOut } from './api';
 import { useLikePerson, useUnlikePerson } from './useLikePerson';
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-danger';
-const disclosure = `inline-flex min-h-[44px] items-center gap-1 self-start rounded-xl text-sm font-semibold text-accent-strong ${focusRing}`;
-const chip = 'rounded-full px-[10px] py-1 text-xs font-semibold';
-const agreeChip = `${chip} bg-accent-soft text-accent-strong`;
-const differChip = `${chip} bg-surface-subtle text-warning`;
 const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
 
 export type Mutual = { name: string; applicationId: string };
@@ -71,7 +70,6 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
   // A stored move-in that has passed means today (as the inbox shows it).
   const today = todayInIsrael();
   const moveIn = person.move_in_date > today ? person.move_in_date : today;
-  const gender = t(`profile.room.gender.${person.gender}`);
 
   async function toggle() {
     if (inFlight.current) return;
@@ -95,125 +93,96 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
     }
   }
 
-  const chips: { kind: ReasonKind; text: string }[] = [];
-  const top = match.agrees[0];
-  if (top !== undefined) chips.push({ kind: 'agree', text: personShort(top, 'agree', person, t) });
-  if (match.differs !== null) {
-    chips.push({ kind: 'differ', text: personShort(match.differs, 'differ', person, t) });
-  }
   const line = (criterion: Criterion, kind: ReasonKind) => personReason(criterion, kind, person, t);
+  const reasons: { kind: ReasonKind; text: string }[] = [
+    ...match.agrees.map((criterion) => ({
+      kind: 'agree' as const,
+      text: line(criterion, 'agree'),
+    })),
+    ...(match.differs !== null
+      ? [{ kind: 'differ' as const, text: line(match.differs, 'differ') }]
+      : []),
+  ];
 
   return (
     <li>
-      <article
-        aria-labelledby={headingId}
-        className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-4"
-      >
+      <Card as="article" aria-labelledby={headingId} padding="sm" className="flex flex-col gap-3">
         <div className="flex items-start gap-3">
           <div
             aria-hidden="true"
-            className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-soft text-[17px] font-extrabold text-accent-strong"
+            className="flex size-12 flex-none items-center justify-center rounded-full bg-surface-subtle text-h3 text-ink-muted"
           >
             {Array.from(name)[0] ?? ''}
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2
-                id={headingId}
-                className="min-w-0 max-w-full [overflow-wrap:anywhere] text-[17px] font-extrabold"
-              >
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div
+              data-testid="person-name-row"
+              className="flex flex-wrap items-center gap-x-2 gap-y-1"
+            >
+              {/* `overflow-wrap: anywhere` (no Tailwind token): a long unbroken name wraps. */}
+              <h2 id={headingId} className="min-w-0 max-w-full [overflow-wrap:anywhere] text-h3">
                 {name}
               </h2>
-              <MatchBadge score={match.score} />
               {person.liked_me && (
-                <span
-                  data-testid="person-liked-me"
-                  className="rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-bold text-warning"
-                >
+                <Badge tone="accent" data-testid="person-liked-me">
                   {t('people.likedMe')}
-                </span>
+                </Badge>
               )}
             </div>
-            <p className="text-start text-[13px] text-ink-muted">
-              {person.age === null
-                ? gender
-                : t('applicants.room.line', { gender, age: person.age })}
-            </p>
+            <RoomLine gender={person.gender} age={person.age} />
             {areaNames.length > 0 && (
-              <p className="text-start text-[13px] text-ink-muted">
+              <p className="text-start text-caption text-ink-muted">
                 {t('people.areas', { areas: conjunction.format(areaNames) })}
               </p>
             )}
-            <p className="text-start text-[13px] text-ink-muted">
+            <p className="text-start text-caption text-ink-muted">
               {t('people.moveIn', { date: formatDate(moveIn) })}
               {person.move_in_flexible && <> {t('applicants.flexible')}</>}
             </p>
           </div>
+          <div className="flex-none">
+            <MatchRing score={match.score} size="md" label />
+          </div>
         </div>
+        <MatchChips voice="person" match={match} person={person} />
         {person.about_me !== null && person.about_me !== '' && (
           <div className="flex flex-col gap-1">
-            <p className="text-start text-[13px] font-bold text-ink-muted">{t('people.aboutMe')}</p>
+            <p className="text-start text-label text-ink-muted">{t('people.aboutMe')}</p>
             {/* Free text from a seeker: React children only, line breaks kept, direction from its
-                first strong character. */}
+              first strong character. */}
             <p
               data-testid="person-about"
               dir="auto"
-              className="whitespace-pre-line break-words text-start text-[15px] leading-relaxed"
+              className="whitespace-pre-line break-words rounded-md bg-surface-subtle px-3 py-3 text-start text-body-sm text-ink"
             >
               {person.about_me}
             </p>
           </div>
         )}
-        {chips.length > 0 && (
-          <ul data-testid="match-chips" className="flex flex-wrap gap-[6px]">
-            {chips.map(({ kind, text }) => (
-              <li key={kind} className={kind === 'agree' ? agreeChip : differChip}>
-                {text}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            aria-expanded={whyOpen}
-            aria-controls={whyId}
-            aria-describedby={headingId}
-            onClick={() => setWhyOpen((o) => !o)}
-            className={disclosure}
-          >
-            {t('applicants.why')}
-            <Chevron open={whyOpen} />
-          </button>
-          <div id={whyId} hidden={!whyOpen} className={whyOpen ? 'flex flex-col gap-3' : undefined}>
-            <ul className="flex flex-col gap-2">
-              {match.agrees.map((criterion) => (
-                <li key={criterion} className="flex items-center gap-[10px] text-sm">
-                  <AgreeIcon />
-                  <span>{line(criterion, 'agree')}</span>
-                </li>
-              ))}
-              {match.differs !== null && (
-                <li className="flex items-center gap-[10px] text-sm text-ink-muted">
-                  <DifferIcon />
-                  <span>{line(match.differs, 'differ')}</span>
-                </li>
-              )}
-            </ul>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-x-4">
+            <DisclosureButton
+              open={whyOpen}
+              controls={whyId}
+              describedBy={headingId}
+              onToggle={() => setWhyOpen((o) => !o)}
+            >
+              {t('applicants.why')}
+            </DisclosureButton>
+            <DisclosureButton
+              open={moreOpen}
+              controls={moreId}
+              describedBy={headingId}
+              onToggle={() => setMoreOpen((o) => !o)}
+            >
+              {t('people.moreDetails')}
+            </DisclosureButton>
           </div>
-        </div>
-        <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            aria-expanded={moreOpen}
-            aria-controls={moreId}
-            aria-describedby={headingId}
-            onClick={() => setMoreOpen((o) => !o)}
-            className={disclosure}
-          >
-            {t('people.moreDetails')}
-            <Chevron open={moreOpen} />
-          </button>
+          {/* Always in the DOM, so `aria-controls` names them; a display class would override
+            `hidden`, so it is set only when open. */}
+          <div id={whyId} hidden={!whyOpen} className={whyOpen ? 'flex flex-col gap-3' : undefined}>
+            <ReasonList lines={reasons} />
+          </div>
           <div
             id={moreId}
             hidden={!moreOpen}
@@ -227,51 +196,27 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
           </div>
         </div>
         <div className="flex flex-col items-start gap-2">
-          {/* `aria-disabled`, not `disabled`: the focused button stays focusable while it runs. */}
-          <button
-            type="button"
+          {/* `busy` keeps the focused button focusable while it runs (aria-disabled, not disabled). */}
+          <Button
+            size="md"
+            variant={person.liked_by_me ? 'soft' : 'primary'}
             aria-pressed={person.liked_by_me}
             aria-describedby={headingId}
-            aria-disabled={pending}
-            aria-busy={pending}
+            busy={pending}
             onClick={() => void toggle()}
-            className={`inline-flex min-h-[44px] items-center justify-center gap-1 rounded-xl px-4 text-[15px] font-bold aria-disabled:opacity-60 ${focusRing} ${
-              person.liked_by_me
-                ? 'border-[1.5px] border-accent bg-accent-soft text-accent-strong'
-                : 'bg-accent text-on-ink'
-            }`}
           >
             {t('people.like')}
             {person.liked_by_me && <span aria-hidden="true">✓</span>}
-          </button>
+          </Button>
           {error !== null && (
-            <p role="alert" className={fieldError}>
+            <p role="alert" className="text-body-sm font-semibold text-danger">
               {error === 'notLive' && t('people.notLive')}
               {error === 'rateLimited' && t('people.errors.rateLimited')}
               {error === 'failed' && t('common.error')}
             </p>
           )}
         </div>
-      </article>
+      </Card>
     </li>
-  );
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`transition-transform motion-reduce:transition-none${open ? ' rotate-180' : ''}`}
-    >
-      <path d="M6 9l6 6 6-6" />
-    </svg>
   );
 }
