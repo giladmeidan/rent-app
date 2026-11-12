@@ -1,15 +1,16 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Visual check (`make screens`): screenshot scripts, not tests. They live in e2e/screens as
-// `*.screens.ts`, which `playwright.config.ts` (testMatch `*.spec.ts`) never picks up, so
-// `make e2e` does not run them. Run against the compose stack's web (`make dev`); every API call
-// is mocked in the script. Output: web/screens/<spec>/<state>-<project>.png (git-ignored).
+import { WEB_ORIGIN } from './e2e/screens/origin';
+
+// The visual check of the 9b specs (`make screens`): a screenshot per UI state, at a phone and a
+// desktop size, written to web/screens/<spec>/. Not part of `make e2e` (testMatch is `*.screens.ts`).
+// It needs only the vite server (`make dev`): the scripts answer every API request themselves.
 export default defineConfig({
   testDir: 'e2e/screens',
   testMatch: '*.screens.ts',
   forbidOnly: !!process.env.CI,
   reporter: 'list',
-  use: { baseURL: `http://localhost:${process.env.WEB_PORT || 5173}` },
+  use: { baseURL: WEB_ORIGIN },
   // Software WebGL for the map, as playwright.config.ts: otherwise the map renders "unavailable".
   projects: [
     {

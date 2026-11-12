@@ -76,4 +76,31 @@ describe('Badge', () => {
     expect(badge).toHaveTextContent(he.chat.list.new);
     expect(classesOf(badge)).toEqual(expect.arrayContaining(['rounded-full', 'bg-accent-soft']));
   });
+
+  it('forwards_attributes', () => {
+    render(
+      <Badge data-testid="application-status" id="b1" aria-label="x">
+        {he.chat.list.new}
+      </Badge>,
+    );
+    const badge = screen.getByTestId('application-status');
+    expect(badge).toHaveAttribute('id', 'b1');
+    expect(badge).toHaveAttribute('aria-label', 'x');
+    expect(badge.tagName).toBe('SPAN');
+    // Its own classes survive: layout `className` is still merged.
+    expect(badge).toHaveClass('inline-flex', 'rounded-full');
+  });
+
+  it('success_tone', () => {
+    render(<Badge tone="success">{he.applicants.status.shortlisted}</Badge>);
+    const badge = screen.getByText(he.applicants.status.shortlisted);
+    expect(classesOf(badge)).toEqual(
+      expect.arrayContaining(['border', 'border-border', 'bg-surface', 'text-success']),
+    );
+    const icon = badge.querySelector('svg');
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+    // The icon comes first; the words are the badge's only text.
+    expect(badge.firstElementChild).toBe(icon);
+    expect(badge.textContent).toBe(he.applicants.status.shortlisted);
+  });
 });

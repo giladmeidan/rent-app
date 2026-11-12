@@ -1,7 +1,7 @@
 ---
 id: 0009l
 title: An owner's applicant inbox is restyled to the Inbox artboard — kit cards with the score ring in a corner, the status and mutual badges by the name, one row of disclosures, a long message that opens with "הצגת עוד", scrolling underline filter tabs and a kit dialog for decline — one column at every width, behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009d, 0009h]   # 0009d: the kit (Button, Card, Badge, Tabs + TabPanel + tabId, useConfirm, PageContainer, PageHeader + BackLink) and the token scale; 0009h: the full-width shell and the hex swap of every feature file (it rewrites ApplicantsPage / ApplicantCard's colour classes, so this branches from 0009h's PR)
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux, security]
 estimate: 1 coder run   # coder Opus/medium: no auth, money or data, but six shared pieces, three kit prop additions with tests and ~20 test edits. Split by the verifier into 0009l (phone layout, shared pieces) and 0009u (desktop grid + detail pane); 0009p (people browse) is the third part

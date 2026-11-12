@@ -27,7 +27,7 @@ export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e screens build-web
+.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web screens
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -131,12 +131,11 @@ e2e: web/node_modules/.modules.yaml
 	  $(PNPM) exec playwright test --shard=$$i/$(E2E_SHARDS) || status=1; \
 	done; exit $$status
 
-## screens: the visual check - screenshot scripts (web/e2e/screens/*.screens.ts, every API call mocked)
-## against the running compose stack's web (`make dev` first), into web/screens/<spec>/ (git-ignored)
+## screens: the 9b visual check. One screenshot per UI state at 390x844 and 1440x900 into web/screens/<spec>/
+## (git-ignored). Needs only the vite server (`make dev`); the scripts answer every API request. WEB_PORT
+## (from .env) picks the vite port.
 screens: web/node_modules/.modules.yaml
-	$(PNPM) exec playwright install chromium
-	$(call wait_for,$(WEB_URL),90,web)
-	$(PNPM) exec playwright test --config playwright.screens.config.ts
+	$(PNPM) exec playwright test -c playwright.screens.config.ts
 
 ## build-web: production build (tsc --noEmit, vite build with the PWA manifest and service worker) into web/dist
 build-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts

@@ -2,16 +2,16 @@ import { test, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import { routeTiles } from '../helpers';
+import { WEB_ORIGIN } from './origin';
 
 // The visual check of spec 0009i (`make screens`): /search in seven states at 390px and 1440px.
 // Every API call is mocked, so the data is deterministic and nothing signs up. The four listings
 // copy the artboards (Search.dc.html / SearchDesktop.dc.html).
 
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
-const WEB = 'http://localhost:' + (process.env.WEB_PORT ?? '5173');
 
 const CORS = {
-  'access-control-allow-origin': WEB,
+  'access-control-allow-origin': WEB_ORIGIN,
   'access-control-allow-credentials': 'true',
 };
 const json = (route: Route, body: unknown, status = 200) =>
