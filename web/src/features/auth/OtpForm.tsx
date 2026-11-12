@@ -7,6 +7,7 @@ import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { ErrorState } from '../../components/ErrorState';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
+import { useOnline } from '../../components/useOnline';
 import { safeNext } from './next';
 import { RoleChoice } from './RoleChoice';
 import { clearSession } from './useLogout';
@@ -103,6 +104,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const id = useId();
+  const online = useOnline();
 
   const [step, setStep] = useState<'request' | 'verify'>('request');
   const [role, setRole] = useState<Role | null>(initialRole);
@@ -395,7 +397,9 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
               ? t('auth.errors.invalidCode')
               : step2Error.kind === 'tooMany'
                 ? tooManyText(step2Error)
-                : t('common.error')}
+                : online
+                  ? t('common.error')
+                  : t('common.offline')}
           </p>
         )}
       </div>

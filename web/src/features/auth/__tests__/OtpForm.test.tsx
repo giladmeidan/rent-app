@@ -98,6 +98,36 @@ describe('OtpForm', () => {
     expect(screen.getByRole('button', { name: he.auth.verify })).toBeEnabled();
   });
 
+  it('ac1_offline_on_failed_send', async () => {
+    // Step 2: a verify that fails while offline says so; online, the generic line.
+    for (const [offline, text] of [
+      [true, he.common.offline],
+      [false, he.common.error],
+    ] as const) {
+      const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+      mockApi({
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [() => Promise.reject(new TypeError('Failed to fetch'))],
+      });
+      const view = renderAt('/login', <OtpForm withProfile={false} />);
+      fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+        target: { value: 'dana@example.com' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+      await flush();
+      fireEvent.change(screen.getByLabelText(he.auth.code.label), {
+        target: { value: '123456' },
+      });
+      onLine.mockReturnValue(!offline);
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(screen.getByRole('alert').textContent).toBe(text);
+      view.unmount();
+      vi.unstubAllGlobals();
+      onLine.mockRestore();
+    }
+  });
+
   it('ac2_disabled_submit_explains_why', async () => {
     // "כדי להמשיך, צריך לבחור מה מתאים לך"
     const chooseRole =

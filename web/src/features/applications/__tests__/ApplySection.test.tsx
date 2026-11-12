@@ -210,6 +210,20 @@ describe('ApplySection', () => {
     }
   });
 
+  it('ac1_offline_on_failed_apply', async () => {
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    renderSeeker([json([])], { [APPLY]: [networkError] });
+    const field = await openForm();
+    type(field, MESSAGE);
+    onLine.mockReturnValue(false);
+    send();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(he.common.offline);
+    expect(alert).not.toHaveTextContent(he.common.error);
+    expect(field).toHaveValue(MESSAGE);
+    onLine.mockRestore();
+  });
+
   it('ac4_rate_limit_names_the_wait', async () => {
     const limited = (retryAfter?: string) =>
       new Response(JSON.stringify({ detail: 'rate_limited' }), {

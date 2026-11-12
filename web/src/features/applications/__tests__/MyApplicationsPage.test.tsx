@@ -310,6 +310,17 @@ describe('MyApplicationsPage', () => {
     view.unmount();
   });
 
+  it('ac1_offline_on_failed_withdraw', async () => {
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const app = to('L1', { status: 'submitted' });
+    const { view } = renderPage([json([app])], { [withdrawRoute(app)]: [networkError] });
+    fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
+    const alert = await within(cards()[0] as HTMLElement).findByRole('alert');
+    expect(alert.textContent).toBe(he.common.offline);
+    view.unmount();
+    onLine.mockRestore();
+  });
+
   it('ac10_chat_link_on_shortlisted', async () => {
     const shortlisted = to('L1', { status: 'shortlisted' });
     const submitted = to('L2', { status: 'submitted' });
