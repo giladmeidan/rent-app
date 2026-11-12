@@ -199,4 +199,12 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     await expect(page).toHaveURL('/search');
     await expect(card).toHaveCount(1);
   });
+
+  await test.step('0009j desktop: the room page keeps its privacy in the two-column layout', async () => {
+    // The viewport is still 1440x900 from the step above. The same visitor, no sign-up.
+    await page.goto(`/listings/${roomId}`);
+    await expect(page.getByTestId('room-facts')).toBeVisible();
+    await expect(page.getByText('27, 30')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: he.lifestyle.title.flat })).toHaveCount(0);
+  });
 });
