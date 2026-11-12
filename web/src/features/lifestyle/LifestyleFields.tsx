@@ -22,7 +22,7 @@ type Props = {
 const ANSWERS: readonly LifestyleAnswer[] = [1, 2, 3];
 
 const clearButton =
-  'inline-flex min-h-[44px] items-center self-start rounded-lg px-2 text-sm font-semibold text-accent-text underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+  'inline-flex min-h-[44px] items-center self-start rounded-lg px-2 text-sm font-semibold text-accent-strong underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 /** `answers` with `key` set to `answer` (or removed when `undefined`), as a new object of
  * answered keys only, in `LIFESTYLE_KEYS` order. */
@@ -61,7 +61,7 @@ export function LifestyleFields({ value, onChange, perspective, headingLevel = 3
         <Heading id={headingId} className="text-start text-lg font-extrabold">
           {t(`lifestyle.title.${perspective}`)}
         </Heading>
-        <p className="text-start text-sm text-muted">{t('lifestyle.nudge')}</p>
+        <p className="text-start text-sm text-ink-muted">{t('lifestyle.nudge')}</p>
       </div>
       {LIFESTYLE_KEYS.map((key) => {
         const question = t(`lifestyle.${key}.question.${perspective}`);

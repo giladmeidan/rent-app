@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -15,7 +16,7 @@ import type { ApplicantOut, ApplicantStatus } from './api';
 import { ApplicantCard, type CardOutcome } from './ApplicantCard';
 import { useApplicants } from './useApplicants';
 
-const section = 'mx-auto flex w-full max-w-[640px] flex-col gap-4';
+const section = 'flex flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
@@ -124,29 +125,29 @@ export function ApplicantsPage() {
     const title = <h1 className="text-start text-2xl font-extrabold">{t('applicants.title')}</h1>;
     if (listings.isPending) {
       return (
-        <section className={section}>
+        <PageContainer as="section" className={section}>
           {title}
           <Loading>
             <Skeleton />
           </Loading>
-        </section>
+        </PageContainer>
       );
     }
     return (
-      <section className={section}>
+      <PageContainer as="section" className={section}>
         <BackToMine />
         {title}
         <ErrorState onRetry={() => void listings.refetch()} />
-      </section>
+      </PageContainer>
     );
   }
 
   if (listing === undefined) {
     return (
-      <section className={section}>
+      <PageContainer as="section" className={section}>
         <BackToMine />
         <h1 className="text-start text-2xl font-extrabold">{t('applicants.notFound')}</h1>
-      </section>
+      </PageContainer>
     );
   }
 
@@ -181,18 +182,23 @@ export function ApplicantsPage() {
       declined: t('applicants.filter.declined', { count: counts.declined }),
     };
     const stats = [
-      { key: 'total', value: counts.all, label: t('applicants.stats.total'), tone: 'bg-[#F5F5F4]' },
+      {
+        key: 'total',
+        value: counts.all,
+        label: t('applicants.stats.total'),
+        tone: 'bg-surface-subtle',
+      },
       {
         key: 'shortlisted',
         value: counts.shortlisted,
         label: t('applicants.stats.shortlisted'),
-        tone: 'bg-accent-tint text-accent-text',
+        tone: 'bg-accent-soft text-accent-strong',
       },
       {
         key: 'new',
         value: counts.submitted,
         label: t('applicants.stats.new'),
-        tone: 'bg-[#F5F5F4]',
+        tone: 'bg-surface-subtle',
       },
     ];
     const filtered = list.filter((a) => matches(filter, a));
@@ -217,7 +223,7 @@ export function ApplicantsPage() {
         <div
           role="group"
           aria-label={t('applicants.filter.label')}
-          className="flex flex-wrap gap-1 border-b border-line"
+          className="flex flex-wrap gap-1 border-b border-border"
         >
           {FILTERS.map((f) => (
             <button
@@ -234,8 +240,8 @@ export function ApplicantsPage() {
               }}
               className={`min-h-[44px] border-b-[2.5px] px-[14px] text-sm ${
                 filter === f
-                  ? 'border-accent font-bold text-accent-text'
-                  : 'border-transparent font-semibold text-muted'
+                  ? 'border-accent font-bold text-accent-strong'
+                  : 'border-transparent font-semibold text-ink-muted'
               } ${focusRing}`}
             >
               {filterLabel[f]}
@@ -255,8 +261,8 @@ export function ApplicantsPage() {
               onClick={() => setSort(s)}
               className={`min-h-[44px] rounded-full border-[1.5px] px-[14px] text-[13px] ${
                 sort === s
-                  ? 'border-accent bg-accent-tint font-bold text-accent-text'
-                  : 'border-[#D6D3D1] bg-white font-semibold text-muted'
+                  ? 'border-accent bg-accent-soft font-bold text-accent-strong'
+                  : 'border-border-strong bg-surface font-semibold text-ink-muted'
               } ${focusRing}`}
             >
               {sortLabel[s]}
@@ -286,7 +292,7 @@ export function ApplicantsPage() {
   }
 
   return (
-    <section className={section}>
+    <PageContainer as="section" className={section}>
       <BackToMine />
       <div className="flex flex-col gap-1">
         <h1
@@ -297,12 +303,12 @@ export function ApplicantsPage() {
           {t('applicants.title')}
         </h1>
         <p className="text-start font-bold">{cardTitle(t, listing)}</p>
-        <p className="text-start text-sm text-muted">
+        <p className="text-start text-sm text-ink-muted">
           {formatIls(listing.price_ils)} {t('listings.units.ils')}
         </p>
       </div>
       {gone && (
-        <p role="alert" className="text-sm font-semibold text-[#B91C1C]">
+        <p role="alert" className="text-sm font-semibold text-danger">
           {t('applicants.errors.gone')}
         </p>
       )}
@@ -310,6 +316,6 @@ export function ApplicantsPage() {
       <p role="status" className="sr-only">
         {announcement}
       </p>
-    </section>
+    </PageContainer>
   );
 }

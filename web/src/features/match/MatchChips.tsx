@@ -29,8 +29,8 @@ type OwnerProps = {
 type Props = SeekerProps | OwnerProps;
 
 const chip = 'rounded-full px-[10px] py-1 text-xs font-semibold';
-const agreeChip = `${chip} bg-accent-tint text-accent-text`;
-const differChip = `${chip} bg-warn text-warn-text`;
+const agreeChip = `${chip} bg-accent-soft text-accent-strong`;
+const differChip = `${chip} bg-surface-subtle text-warning`;
 
 /** A card's two short reasons: the top agreeing criterion (teal) and the differing one (amber).
  * Not interactive. */
@@ -38,7 +38,7 @@ export function MatchChips(props: Props) {
   const { t } = useTranslation();
   const short = (criterion: Criterion, kind: ReasonKind) =>
     props.voice === 'owner'
-      ? ownerShort(criterion, kind, props.profile, t)
+      ? ownerShort(criterion, kind, props.profile, props.spots, t)
       : seekerShort(criterion, kind, props.listing, props.profile, t);
   const { match } = props;
   const chips: { kind: ReasonKind; text: string; className: string }[] = [];

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { AreaOut } from '../../api/client';
 import { ChoiceGroup } from '../../components/ChoiceGroup';
+import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Switch } from '../../components/Switch';
@@ -21,15 +22,15 @@ import {
 
 const label = 'text-sm font-bold';
 const box =
-  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-tint has-[[aria-invalid=true]]:border-[#B91C1C]';
+  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft has-[[aria-invalid=true]]:border-danger';
 const bare =
   'min-h-[44px] min-w-0 flex-1 self-stretch border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
 const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const suffix = 'shrink-0 text-sm text-muted';
-const hint = 'text-xs text-muted';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const card = 'flex flex-col divide-y divide-[#F0EEEB] rounded-2xl border border-line bg-white';
+  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const suffix = 'shrink-0 text-sm text-ink-muted';
+const hint = 'text-xs text-ink-muted';
+const fieldError = 'text-sm font-semibold text-danger';
+const card = 'flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface';
 
 // 1 … 10 rooms in half steps (the API allows up to 20; the select offers the common range).
 const ROOM_OPTIONS = Array.from({ length: 19 }, (_, i) => 1 + i / 2);
@@ -296,6 +297,11 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
         </label>
         <input
           {...a11y('available_from')}
+          aria-describedby={withReadback(
+            a11y('available_from')['aria-describedby'],
+            `${fieldId('available_from')}-chosen`,
+            form.available_from,
+          )}
           type="date"
           min={today}
           max={addDays(today, AVAILABLE_FROM_MAX_DAYS)}
@@ -303,6 +309,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
           onChange={(e) => onChange({ available_from: e.target.value })}
           className={input}
         />
+        <DateReadback id={`${fieldId('available_from')}-chosen`} value={form.available_from} />
         {errorText('available_from')}
       </div>
 

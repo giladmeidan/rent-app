@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-white ${focusRing}`;
+const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink ${focusRing}`;
 
 /** A seeker with no housing profile: why, and the way to fill one in and come back here. */
 export function ProfileGate({ listingId }: { listingId: string }) {

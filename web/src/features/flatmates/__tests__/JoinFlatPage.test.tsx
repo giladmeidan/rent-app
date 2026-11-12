@@ -234,6 +234,67 @@ describe('JoinFlatPage', () => {
     });
   });
 
+  it('ac9_final_states_have_a_way_out', async () => {
+    // "למודעות שלי", "למועמדויות שלי", "לחיפוש דירות וחדרים"
+    const toMyListings = '\u05dc\u05de\u05d5\u05d3\u05e2\u05d5\u05ea \u05e9\u05dc\u05d9';
+    const toApplications =
+      '\u05dc\u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05d9\u05d5\u05ea \u05e9\u05dc\u05d9';
+    const toSearch =
+      '\u05dc\u05d7\u05d9\u05e4\u05d5\u05e9 \u05d3\u05d9\u05e8\u05d5\u05ea \u05d5\u05d7\u05d3\u05e8\u05d9\u05dd';
+    const wayOut = async (name: string, href: string) => {
+      const link = await screen.findByRole('link', { name });
+      expect(link).toHaveAttribute('href', href);
+      expect(screen.getByRole('alert').contains(link)).toBe(false);
+    };
+    const noLinks = () => {
+      for (const name of [toMyListings, toApplications, toSearch]) {
+        expect(screen.queryByRole('link', { name })).toBeNull();
+      }
+    };
+
+    // The preview's final answers.
+    for (const [reply, name, href] of [
+      [err(409, 'own_listing'), toMyListings, '/me/listings'],
+      [err(404, 'not_found'), toSearch, '/search'],
+    ] as const) {
+      const { view } = renderJoin({ [PREVIEW]: [reply] });
+      await screen.findByRole('alert');
+      await wayOut(name, href);
+      reset(view);
+    }
+
+    // The join's final answers.
+    for (const [reply, name, href] of [
+      [err(409, 'already_applied'), toApplications, '/me/applications'],
+      [err(409, 'declined'), toSearch, '/search'],
+      [err(409, 'flatmates_full'), toSearch, '/search'],
+      [err(404, 'not_found'), toSearch, '/search'],
+    ] as const) {
+      const { view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [reply] });
+      fireEvent.click(await cta());
+      await screen.findByRole('alert');
+      await wayOut(name, href);
+      reset(view);
+    }
+
+    // No token at all.
+    let { view } = renderJoin({}, '/flatmates/join');
+    await screen.findByRole('alert');
+    await wayOut(toSearch, '/search');
+    reset(view);
+
+    // A 429, on the preview and on the join: no link.
+    ({ view } = renderJoin({ [PREVIEW]: [err(429, 'rate_limited')] }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.flatmates.join.rateLimited);
+    noLinks();
+    reset(view);
+    ({ view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [err(429, 'rate_limited')] }));
+    fireEvent.click(await cta());
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.flatmates.join.rateLimited);
+    noLinks();
+    reset(view);
+  });
+
   it('ac4_token_never_in_url', async () => {
     for (const storage of ['works', 'throws'] as const) {
       if (storage === 'throws') {

@@ -8,7 +8,7 @@ import { likeProblem, useLikeRoom, useUnlikeRoom } from './useLikeRoom';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+const fieldError = 'text-sm font-semibold text-danger';
 
 type Props = {
   listingId: string;
@@ -71,7 +71,7 @@ export function LikeRoomButton({
   return (
     <div className="flex flex-col items-start gap-2">
       {like.liked_me && !pressed && (
-        <p className="text-start text-[15px] font-bold text-accent-text">
+        <p className="text-start text-[15px] font-bold text-accent-strong">
           {t('likes.likedYouLine')}
         </p>
       )}
@@ -84,14 +84,14 @@ export function LikeRoomButton({
         onClick={onClick}
         className={`inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] px-5 text-[15px] font-bold disabled:opacity-60 ${focusRing} ${
           pressed
-            ? 'border-accent bg-accent-tint text-accent-text'
-            : 'border-[#D6D3D1] bg-white text-ink'
+            ? 'border-accent bg-accent-soft text-accent-strong'
+            : 'border-border-strong bg-surface text-ink'
         }`}
       >
         {pressed ? t('likes.liked') : t('likes.like')}
       </button>
       {hint && (
-        <p id={hintId} className="text-start text-sm text-muted">
+        <p id={hintId} className="text-start text-sm text-ink-muted">
           {t('likes.hint')}
         </p>
       )}
@@ -100,7 +100,7 @@ export function LikeRoomButton({
           <p className={fieldError}>{t('likes.errors.roomSection')}</p>
           <Link
             to={roomSectionHref(location.pathname)}
-            className={`inline-flex min-h-[44px] items-center rounded text-accent-text underline underline-offset-4 ${focusRing}`}
+            className={`inline-flex min-h-[44px] items-center rounded text-accent-strong underline underline-offset-4 ${focusRing}`}
           >
             {t('likes.toProfile')}
           </Link>

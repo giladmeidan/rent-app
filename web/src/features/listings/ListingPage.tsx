@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -81,14 +82,15 @@ export function ListingPage() {
     body = (
       <article className="flex flex-col gap-5">
         {/* The neutral photo placeholder of the card (photos are 0002c). */}
-        <div className="flex h-[200px] items-center justify-center rounded-2xl bg-[#DDD6CE]">
+        <div className="flex h-[200px] items-center justify-center rounded-2xl bg-surface-subtle">
           <svg
             aria-hidden="true"
             width="48"
             height="48"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#A8A29E"
+            stroke="currentColor"
+            className="text-ink-muted"
             strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -105,14 +107,14 @@ export function ListingPage() {
               <span>
                 {formatIls(l.price_ils)} {t('listings.units.ils')}
               </span>{' '}
-              <span className="text-sm font-medium tracking-normal text-muted">
+              <span className="text-sm font-medium tracking-normal text-ink-muted">
                 {t('listings.units.perMonth')}
               </span>
             </p>
             {l.match !== null && <MatchBadge score={l.match.score} />}
           </div>
           <h1 className="break-words text-xl font-bold leading-snug">{cardTitle(t, l)}</h1>
-          <p className="flex flex-wrap gap-x-[10px] text-sm text-muted">
+          <p className="flex flex-wrap gap-x-[10px] text-sm text-ink-muted">
             {facts.map((fact, i) => (
               <span key={fact} className="flex gap-x-[10px]">
                 {i > 0 && <span aria-hidden="true">·</span>}
@@ -131,7 +133,7 @@ export function ListingPage() {
             <h2 className="text-[17px] font-extrabold">{t('listings.fields.description')}</h2>
             <p
               data-testid="listing-description"
-              className="whitespace-pre-line break-words text-[15px] leading-relaxed text-[#44403C]"
+              className="whitespace-pre-line break-words text-[15px] leading-relaxed text-ink-muted"
             >
               {l.description}
             </p>
@@ -148,13 +150,13 @@ export function ListingPage() {
               interactive={false}
               approximate
               onError={() => setMapFailed(true)}
-              className="h-[150px] rounded-2xl border border-line"
+              className="h-[150px] rounded-2xl border border-border"
             />
           )}
           <p className="text-[15px] font-semibold">
             {t('listing.address', { street: l.street, city: l.city })}
           </p>
-          <p className="text-sm text-muted">{t('listing.locationHint')}</p>
+          <p className="text-sm text-ink-muted">{t('listing.locationHint')}</p>
         </section>
 
         <OwnerPreferences listing={l} />
@@ -178,10 +180,10 @@ export function ListingPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[640px] flex-col gap-4">
+    <PageContainer className="flex flex-col gap-4">
       <Link
         to="/search"
-        className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+        className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
       >
         <svg
           aria-hidden="true"
@@ -199,6 +201,6 @@ export function ListingPage() {
         {t('listing.backToSearch')}
       </Link>
       {body}
-    </div>
+    </PageContainer>
   );
 }

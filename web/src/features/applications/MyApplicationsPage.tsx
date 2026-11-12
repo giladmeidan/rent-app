@@ -2,12 +2,15 @@ import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { focusMainIfLost } from '../../components/focus';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
+import { useOnline } from '../../components/useOnline';
+import { ApiError } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { hasStatus, type MyApplicationOut } from './api';
@@ -18,11 +21,12 @@ import { useWithdraw } from './useWithdraw';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
+const fieldError = 'text-sm font-semibold text-danger';
+const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 function ApplicationCard({ application }: { application: MyApplicationOut }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const withdraw = useWithdraw(application.id);
   const titleId = useId();
   const { listing } = application;
@@ -69,13 +73,13 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
 
   return (
     <li>
-      <article className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-4 pb-4 pt-[14px]">
+      <article className="flex flex-col gap-2 rounded-2xl border border-border bg-surface px-4 pb-4 pt-[14px]">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[20px] font-extrabold tracking-[-0.3px]">
             <span>
               {formatIls(listing.price_ils)} {t('listings.units.ils')}
             </span>{' '}
-            <span className="text-sm font-medium tracking-normal text-muted">
+            <span className="text-sm font-medium tracking-normal text-ink-muted">
               {t('listings.units.perMonth')}
             </span>
           </p>
@@ -85,27 +89,27 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
           <Link
             ref={titleRef}
             to={`/listings/${listing.id}`}
-            className={`inline-flex min-h-[44px] items-center rounded text-accent-text underline underline-offset-4 ${focusRing}`}
+            className={`inline-flex min-h-[44px] items-center rounded text-accent-strong underline underline-offset-4 ${focusRing}`}
           >
             {cardTitle(t, listing)}
           </Link>
         </h2>
-        <p className="text-start text-sm text-muted">
+        <p className="text-start text-sm text-ink-muted">
           {t('applications.applied', { date: appliedOn(application.created_at) })}
         </p>
         {application.status === 'declined' && (
-          <p className="text-start text-sm text-muted">{t('applications.declinedHint')}</p>
+          <p className="text-start text-sm text-ink-muted">{t('applications.declinedHint')}</p>
         )}
         {application.source === 'like' ? (
           <p
             data-testid="application-mutual"
-            className="self-start rounded-full border border-accent-tint bg-accent-tint px-3 py-[6px] text-[13px] font-semibold text-accent-text"
+            className="self-start rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong"
           >
             {t('applications.mutual')}
           </p>
         ) : (
           <div className="flex flex-col gap-1">
-            <p className="text-xs font-bold text-muted">{t('applications.yourMessage')}</p>
+            <p className="text-xs font-bold text-ink-muted">{t('applications.yourMessage')}</p>
             {/* Plain text from the seeker: React children only, line breaks kept. */}
             <p
               data-testid="application-message"
@@ -122,7 +126,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
               <Link
                 to={`/chat/${application.id}`}
                 aria-describedby={titleId}
-                className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-tint px-4 text-[15px] font-bold text-accent-text ${focusRing}`}
+                className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-soft px-4 text-[15px] font-bold text-accent-strong ${focusRing}`}
               >
                 {t('applications.chat')}
               </Link>
@@ -147,7 +151,13 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
                 role="alert"
                 className={`${fieldError} focus:outline-none`}
               >
-                {t('common.error')}
+                {withdraw.error instanceof ApiError &&
+                withdraw.error.status === 409 &&
+                withdraw.error.detail === 'not_withdrawable'
+                  ? t('applications.errors.notWithdrawable')
+                  : online
+                    ? t('common.error')
+                    : t('common.offline')}
               </p>
             )}
           </div>
@@ -183,7 +193,7 @@ export function MyApplicationsPage() {
         <EmptyState message={t('applications.mine.empty')} />
         <Link
           to="/search"
-          className={`inline-flex min-h-[44px] items-center self-start rounded-full bg-accent px-4 text-[15px] font-semibold text-white ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center self-start rounded-full bg-accent px-4 text-[15px] font-semibold text-on-ink ${focusRing}`}
         >
           {t('applications.mine.search')}
         </Link>
@@ -200,9 +210,9 @@ export function MyApplicationsPage() {
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col gap-4">
+    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('applications.mine.title')}</h1>
       {body}
-    </section>
+    </PageContainer>
   );
 }

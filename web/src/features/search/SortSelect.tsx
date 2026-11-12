@@ -34,7 +34,7 @@ export function SortSelect({ value, withMatch, onChange }: Props) {
           const next = options.find((sort) => sort === e.target.value);
           if (next !== undefined) onChange(next);
         }}
-        className="min-h-[44px] rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-[15px] font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint"
+        className="min-h-[44px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-[15px] font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft"
       >
         {options.map((sort) => (
           <option key={sort} value={sort}>

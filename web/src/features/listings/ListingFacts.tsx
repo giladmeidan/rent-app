@@ -42,9 +42,9 @@ export function ListingFacts({ listing }: { listing: ListingPublic }) {
       {rows.map((row) => (
         <div
           key={row.label}
-          className="flex flex-col items-center gap-[6px] rounded-[14px] border border-line bg-white px-[10px] py-3 text-center"
+          className="flex flex-col items-center gap-[6px] rounded-[14px] border border-border bg-surface px-[10px] py-3 text-center"
         >
-          <dt className="text-xs text-muted">{row.label}</dt>
+          <dt className="text-xs text-ink-muted">{row.label}</dt>
           <dd className="text-sm font-bold">{row.value}</dd>
         </div>
       ))}

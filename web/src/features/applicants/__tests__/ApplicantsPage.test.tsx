@@ -453,6 +453,50 @@ describe('ApplicantsPage', () => {
     });
   });
 
+  it('ac6_action_error_copy', async () => {
+    // "השינוי לא נשמר. אפשר לנסות שוב."
+    const failed =
+      '\u05d4\u05e9\u05d9\u05e0\u05d5\u05d9 \u05dc\u05d0 \u05e0\u05e9\u05de\u05e8. \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e0\u05e1\u05d5\u05ea \u05e9\u05d5\u05d1.';
+    const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
+    const shortlistP = () =>
+      fireEvent.click(
+        within(cardOf(MICHAL)).getByRole('button', { name: he.applicants.actions.shortlist }),
+      );
+
+    // A 500.
+    let { api, view } = renderPage([json([P])], {
+      extra: { [patchRoute(P)]: [json({ detail: 'boom' }, 500)] },
+    });
+    await screen.findByRole('article');
+    shortlistP();
+    expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(failed);
+    reset(view);
+
+    // Offline: the offline line instead.
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    ({ view } = renderPage([json([P])], { extra: { [patchRoute(P)]: [networkError] } }));
+    await screen.findByRole('article');
+    shortlistP();
+    expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(he.common.offline);
+    onLine.mockRestore();
+    reset(view);
+
+    // A 409: the refetched status next to the same line.
+    ({ api, view } = renderPage([json([P]), json([{ ...P, status: 'declined' }])], {
+      extra: { [patchRoute(P)]: [json({ detail: 'invalid_transition' }, 409)] },
+    }));
+    await screen.findByRole('article');
+    shortlistP();
+    await vi.waitFor(() => {
+      expect(api.calls(APPS)).toHaveLength(2);
+    });
+    expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(failed);
+    await vi.waitFor(() => {
+      expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.declined);
+    });
+    reset(view);
+  });
+
   it('ac6_action_errors', async () => {
     const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
     const Q = applicant({ status: 'shortlisted' });
@@ -500,7 +544,9 @@ describe('ApplicantsPage', () => {
     await vi.waitFor(() => {
       expect(api.calls(APPS)).toHaveLength(2);
     });
-    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(
+      he.applicants.errors.actionFailed,
+    );
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.declined);
     expect(screen.queryByText(he.applicants.errors.gone)).toBeNull();
     await vi.waitFor(() => {
@@ -538,7 +584,9 @@ describe('ApplicantsPage', () => {
     ({ view } = renderPage([json([P])], { extra: { [patchRoute(P)]: [networkError] } }));
     await screen.findByRole('article');
     shortlistP();
-    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(await within(cardOf(MICHAL)).findByRole('alert')).toHaveTextContent(
+      he.applicants.errors.actionFailed,
+    );
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.submitted);
     for (const button of within(cardOf(MICHAL)).getAllByRole('button')) {
       expect(button).toBeEnabled();
@@ -763,8 +811,8 @@ describe('ApplicantsPage', () => {
     for (const li of items) {
       expect(li.querySelector('[aria-hidden="true"]')).not.toBeNull();
     }
-    expect(items[0]?.querySelector('.bg-accent-tint')).not.toBeNull();
-    expect(items[3]?.querySelector('.bg-warn')).not.toBeNull();
+    expect(items[0]?.querySelector('.bg-accent-soft')).not.toBeNull();
+    expect(items[3]?.querySelector('.text-warning')).not.toBeNull();
 
     // The six profile rows, with A's values.
     const terms = within(panel)
@@ -948,7 +996,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
 
     // The owner-voice lifestyle reason (0007g's copy) reaches a room applicant's card.
     const chips = within(within(cardOf('L')).getByTestId('match-chips')).getAllByRole('listitem');
-    const amber = chips.filter((chip) => chip.className.includes('bg-warn'));
+    const amber = chips.filter((chip) => chip.className.includes('text-warning'));
     expect(amber.map((chip) => chip.textContent)).toEqual([he.match.owner.short.lifestyle.differ]);
     fireEvent.click(whyOf('L'));
     expect(within(panelOf('L')).getByText(he.match.owner.lifestyle.differ)).toBeVisible();
@@ -1045,12 +1093,12 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(within(cleanliness).getByText(theirs('cleanliness', 3))).toBeVisible();
     expect(within(cleanliness).getByText(flat('cleanliness', 1))).toBeVisible();
     expect(within(cleanliness).getByText(he.applicants.room.differs)).toBeVisible();
-    expect(cleanliness.querySelector('.bg-warn[aria-hidden="true"]')).not.toBeNull();
+    expect(cleanliness.querySelector('[aria-hidden="true"] .text-warning')).not.toBeNull();
 
     expect(within(guests).getByText(theirs('guests', 2))).toBeVisible();
     expect(within(guests).getByText(flat('guests', 2))).toBeVisible();
     expect(within(guests).queryByText(he.applicants.room.differs)).toBeNull();
-    expect(guests.querySelector('.bg-warn')).toBeNull();
+    expect(guests.querySelector('.text-warning')).toBeNull();
 
     expect(within(night).getByText(theirs('night', 1))).toBeVisible();
     expect(night.textContent).not.toContain('בדירה');
@@ -1086,7 +1134,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(within(within(panel).getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
     expect(panel.textContent).not.toContain('בדירה:');
     expect(within(panel).queryByText(he.applicants.room.differs)).toBeNull();
-    expect(panel.querySelector('.bg-warn')).toBeNull();
+    expect(panel.querySelector('.text-warning')).toBeNull();
     expect(within(panel).getAllByText(he.applicants.room.noFlatAnswers)).toHaveLength(1);
     expect(within(panel).queryByText(/מתוך/)).toBeNull();
     reset(view);

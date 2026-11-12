@@ -27,7 +27,7 @@ type Props = {
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-5 text-[15px] font-semibold ${focusRing}`;
+const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-border-strong bg-surface px-5 text-[15px] font-semibold ${focusRing}`;
 
 /**
  * The map view of `/search`: the filters' results inside the visible box as price pins. The box is
@@ -141,7 +141,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
           }}
           onMoveEnd={(box) => setBbox(roundBbox(box))}
           onError={() => setUnavailable(true)}
-          className="h-[60vh] min-h-[360px] rounded-2xl border border-line"
+          className="h-[60vh] min-h-[360px] rounded-2xl border border-border"
         />
       )}
       {selected !== undefined && (

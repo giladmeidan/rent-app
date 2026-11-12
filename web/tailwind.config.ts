@@ -14,20 +14,12 @@ export default {
           DEFAULT: '#2563EB',
           strong: '#1D4ED8',
           soft: '#E8F0FE',
-          // DEPRECATED — 0009h renames every use and deletes these
-          tint: '#E8F0FE',
-          text: '#1D4ED8',
         },
         border: { DEFAULT: '#E5E7EB', strong: '#868E9B' },
         success: '#15803D',
         warning: '#B45309',
         danger: '#DC2626',
         mascot: { blush: '#BFD3FA', shade: '#DDE4F1' },
-        // DEPRECATED — 0009h renames every use and deletes these
-        bg: '#FFFFFF',
-        muted: '#5B6370',
-        line: '#E5E7EB',
-        warn: { DEFAULT: '#F3F4F6', text: '#B45309' },
       },
       fontFamily: {
         display: ['Fredoka', '"Rubik Variable"', 'Rubik', 'system-ui', 'sans-serif'],

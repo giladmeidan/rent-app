@@ -13,8 +13,8 @@ type Props = {
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const option = `min-h-[44px] rounded-full px-[14px] text-[13px] ${focusRing}`;
-const current = `${option} bg-white font-bold text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]`;
-const other = `${option} bg-transparent font-semibold text-muted`;
+const current = `${option} bg-surface font-bold text-ink shadow-segment`;
+const other = `${option} bg-transparent font-semibold text-ink-muted`;
 
 /** Search.dc.html's "list / map" segmented control. */
 export function ViewToggle({ view, onChange, listButtonRef }: Props) {
@@ -45,7 +45,7 @@ export function ViewToggle({ view, onChange, listButtonRef }: Props) {
     <div
       role="group"
       aria-label={t('search.view.label')}
-      className="flex rounded-full bg-[#E7E5E4] p-[3px]"
+      className="flex rounded-full bg-surface-subtle p-[3px]"
     >
       {button('list', t('search.view.list'))}
       {button('map', t('search.view.map'))}

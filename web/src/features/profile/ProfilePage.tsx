@@ -3,9 +3,11 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 
+import { PageContainer } from '../../components/PageContainer';
 import type { AreaOut } from '../../api/client';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
+import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -47,18 +49,18 @@ const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const label = 'text-sm font-bold';
 const box =
-  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-tint has-[[aria-invalid=true]]:border-[#B91C1C]';
+  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft has-[[aria-invalid=true]]:border-danger';
 const bare =
   'min-h-[44px] min-w-0 flex-1 self-stretch border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
 const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const suffix = 'shrink-0 text-sm text-muted';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const card = 'flex flex-col divide-y divide-[#F0EEEB] rounded-2xl border border-line bg-white';
+  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const suffix = 'shrink-0 text-sm text-ink-muted';
+const fieldError = 'text-sm font-semibold text-danger';
+const card = 'flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface';
 // ChoiceGroup's label classes, for the area checkboxes.
 const chip =
-  'flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-tint peer-checked:font-bold peer-checked:text-accent-text peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-aria-[invalid=true]:border-[#B91C1C]';
-const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+  'flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-bold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-aria-[invalid=true]:border-danger';
+const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
 
 type FormProps = {
   initial: SeekerProfileOut | null;
@@ -293,6 +295,11 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
         </label>
         <input
           {...a11y('move_in_date')}
+          aria-describedby={withReadback(
+            a11y('move_in_date')['aria-describedby'],
+            `${fieldId('move_in_date')}-chosen`,
+            form.move_in_date,
+          )}
           type="date"
           min={today}
           max={addDays(today, MOVE_IN_MAX_DAYS)}
@@ -300,6 +307,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
           onChange={(e) => change({ move_in_date: e.target.value }, 'move_in_date')}
           className={input}
         />
+        <DateReadback id={`${fieldId('move_in_date')}-chosen`} value={form.move_in_date} />
         {errorText('move_in_date')}
         <div className={card}>
           <Switch
@@ -362,7 +370,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
           >
             {t('profile.room.title')}
           </h2>
-          <p className="text-start text-sm text-muted">{t('profile.room.hint')}</p>
+          <p className="text-start text-sm text-ink-muted">{t('profile.room.hint')}</p>
         </div>
         <div className={card}>
           <Switch
@@ -382,7 +390,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
         </div>
         {form.room && (
           <div className="flex flex-col gap-[22px]">
-            <p className="text-start text-sm text-muted">{t('profile.room.privacy')}</p>
+            <p className="text-start text-sm text-ink-muted">{t('profile.room.privacy')}</p>
 
             <div className="flex flex-col gap-[6px]">
               <ChoiceGroup
@@ -393,7 +401,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                 onChange={(value) => change({ gender: value }, 'gender')}
                 error={groupError('gender')}
               />
-              <p className="text-start text-sm text-muted">{t('profile.room.genderNote')}</p>
+              <p className="text-start text-sm text-ink-muted">{t('profile.room.genderNote')}</p>
             </div>
 
             <div className="flex flex-col gap-[6px]">
@@ -416,7 +424,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                   className={bare}
                 />
               </div>
-              <p id={`${fieldId('birth_year')}-hint`} className="text-start text-sm text-muted">
+              <p id={`${fieldId('birth_year')}-hint`} className="text-start text-sm text-ink-muted">
                 {t('profile.room.birthYearHint')}
               </p>
               {errorText('birth_year')}
@@ -444,7 +452,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                 describedBy={`${id}-people-hint`}
               />
             </div>
-            <p id={`${id}-people-hint`} className="text-start text-sm text-muted">
+            <p id={`${id}-people-hint`} className="text-start text-sm text-ink-muted">
               {t('profile.room.peopleVisibleHint')}
             </p>
 
@@ -466,7 +474,10 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                 onChange={(e) => change({ about_me: e.target.value }, 'about_me')}
                 className={`${input} py-2 text-start`}
               />
-              <p id={`${fieldId('about_me')}-counter`} className="text-start text-sm text-muted">
+              <p
+                id={`${fieldId('about_me')}-counter`}
+                className="text-start text-sm text-ink-muted"
+              >
                 {t('listings.fields.charsLeft', { count: ABOUT_ME_MAX - form.about_me.length })}
               </p>
               {errorText('about_me')}
@@ -497,7 +508,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
               ref={savedRef}
               tabIndex={-1}
               role="status"
-              className="text-start text-[15px] font-bold text-accent-text focus:outline-none"
+              className="text-start text-[15px] font-bold text-accent-strong focus:outline-none"
             >
               {t('profile.saved')}
             </p>
@@ -551,11 +562,11 @@ export function ProfilePage() {
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-[480px] flex-col gap-4">
+    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
       <h1 className="text-start text-2xl font-extrabold">{t('profile.title')}</h1>
       <p className="text-start text-[15px]">{t('profile.intro')}</p>
-      <p className="text-start text-sm text-muted">{t('profile.privacy')}</p>
+      <p className="text-start text-sm text-ink-muted">{t('profile.privacy')}</p>
       {body}
-    </section>
+    </PageContainer>
   );
 }

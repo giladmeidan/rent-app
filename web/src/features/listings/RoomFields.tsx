@@ -17,9 +17,9 @@ import {
 
 const label = 'text-sm font-bold';
 const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const hint = 'text-xs text-muted';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const hint = 'text-xs text-ink-muted';
+const fieldError = 'text-sm font-semibold text-danger';
 
 /** 1 … 7 flatmates (the API's range). */
 const COUNT_OPTIONS = Array.from(
@@ -107,14 +107,14 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-[22px] border-t border-line pt-[22px]"
+      className="flex flex-col gap-[22px] border-t border-border pt-[22px]"
     >
       <div className="flex flex-col gap-1">
         <h3 id={headingId} className="text-start text-lg font-extrabold">
           {t('listings.room.title')}
         </h3>
         {/* PRODUCT.md "Rooms" → room privacy: ages and answers reach signed-in seekers only. */}
-        <p className="text-start text-sm text-muted">{t('listings.room.privacyNote')}</p>
+        <p className="text-start text-sm text-ink-muted">{t('listings.room.privacyNote')}</p>
       </div>
 
       <div className="flex flex-col gap-[6px]">
@@ -125,7 +125,7 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
           value={form.gender_preference}
           onChange={(gender_preference) => onChange({ gender_preference })}
         />
-        <p className="text-start text-sm text-muted">{t('listings.room.genderHint')}</p>
+        <p className="text-start text-sm text-ink-muted">{t('listings.room.genderHint')}</p>
       </div>
 
       <div className="flex flex-col gap-[6px]">
@@ -197,7 +197,7 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
         </fieldset>
       )}
 
-      <div className="border-t border-line pt-[22px]">
+      <div className="border-t border-border pt-[22px]">
         <LifestyleFields
           perspective="flat"
           headingLevel={4}

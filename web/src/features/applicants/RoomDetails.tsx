@@ -19,14 +19,14 @@ export function RoomDetails({ room, flat, flatIsRoom }: Props) {
   const theirs: LifestyleAnswers = room.lifestyle;
   const answered = LIFESTYLE_KEYS.filter((key) => theirs[key] !== undefined);
   if (answered.length === 0) {
-    return <p className="text-start text-sm text-[#44403C]">{t('applicants.room.noAnswers')}</p>;
+    return <p className="text-start text-sm text-ink-muted">{t('applicants.room.noAnswers')}</p>;
   }
   const { shared, same, differing } = compareLifestyle(theirs, flat);
   const flatAnswered = LIFESTYLE_KEYS.some((key) => flat[key] !== undefined);
   return (
     <div className="flex flex-col gap-2">
       {!flatAnswered && flatIsRoom && (
-        <p className="text-start text-sm text-muted">{t('applicants.room.noFlatAnswers')}</p>
+        <p className="text-start text-sm text-ink-muted">{t('applicants.room.noFlatAnswers')}</p>
       )}
       {shared > 0 && (
         <p className="text-start text-sm font-semibold">
@@ -39,7 +39,7 @@ export function RoomDetails({ room, flat, flatIsRoom }: Props) {
           return (
             <li
               key={key}
-              className="flex min-w-0 flex-col gap-[2px] rounded-xl bg-[#F5F5F4] px-3 py-[10px] text-start text-sm"
+              className="flex min-w-0 flex-col gap-[2px] rounded-xl bg-surface-subtle px-3 py-[10px] text-start text-sm"
             >
               <span className="font-bold">{t(`lifestyle.${key}.topic`)}</span>
               <span className="[overflow-wrap:anywhere]">
@@ -55,7 +55,7 @@ export function RoomDetails({ room, flat, flatIsRoom }: Props) {
                 </span>
               )}
               {differing.includes(key) && (
-                <span className="flex flex-wrap items-center gap-2 font-semibold text-warn-text">
+                <span className="flex flex-wrap items-center gap-2 font-semibold text-warning">
                   <DifferIcon />
                   {t('applicants.room.differs')}
                 </span>

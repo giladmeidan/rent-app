@@ -36,7 +36,7 @@ export function AuthMenu() {
         </Link>
         <Link
           to="/signup"
-          className={`inline-flex min-h-[44px] items-center rounded-full bg-accent px-[14px] text-[15px] font-semibold text-white ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center rounded-full bg-accent px-[14px] text-[15px] font-semibold text-on-ink ${focusRing}`}
         >
           {t('header.signup')}
         </Link>
@@ -50,7 +50,7 @@ export function AuthMenu() {
       {me.data.role === 'owner' ? (
         <Link
           to="/me/listings"
-          className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+          className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-strong ${focusRing}`}
         >
           {t('header.myListings')}
         </Link>
@@ -58,14 +58,14 @@ export function AuthMenu() {
         <>
           <Link
             to="/me/applications"
-            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-strong ${focusRing}`}
           >
             {t('header.myApplications')}
           </Link>
           <LikesNavLink />
           <Link
             to="/me/profile"
-            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+            className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold text-accent-strong ${focusRing}`}
           >
             {t('header.myProfile')}
           </Link>
@@ -79,7 +79,7 @@ export function AuthMenu() {
         onClick={() => logout.mutate()}
         disabled={logout.isPending}
         aria-busy={logout.isPending}
-        className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-[14px] text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
+        className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full border-[1.5px] border-border-strong bg-surface px-[14px] text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
       >
         {t('header.logout')}
       </button>

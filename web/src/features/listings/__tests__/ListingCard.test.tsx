@@ -156,7 +156,7 @@ describe('ListingCard', () => {
       he.listings.card.noElevator,
       he.listings.furnishedRoom.none,
     ]);
-    expect(chips[0]).toHaveClass('bg-accent-tint', 'text-accent-text');
+    expect(chips[0]).toHaveClass('bg-accent-soft', 'text-accent-strong');
     view.unmount();
 
     // On an apartment, the birth year adds nothing.

@@ -85,7 +85,8 @@ function CheckIcon() {
       height="14"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#FFFFFF"
+      stroke="currentColor"
+      className="text-on-ink"
       strokeWidth="3"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -102,7 +103,7 @@ export function BackToMine({ onClick }: { onClick?: LinkProps['onClick'] }) {
     <Link
       to="/me/listings"
       onClick={onClick}
-      className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       <svg
         aria-hidden="true"
@@ -396,8 +397,8 @@ export function ListingWizard({ listing }: Props) {
                     done
                       ? 'bg-accent'
                       : isCurrent
-                        ? 'border-[2.5px] border-accent bg-white font-extrabold text-accent-text'
-                        : 'border-2 border-[#D6D3D1] bg-white font-bold text-muted'
+                        ? 'border-[2.5px] border-accent bg-surface font-extrabold text-accent-strong'
+                        : 'border-2 border-border-strong bg-surface font-bold text-ink-muted'
                   }`}
                 >
                   {done ? <CheckIcon /> : n}
@@ -405,10 +406,10 @@ export function ListingWizard({ listing }: Props) {
                 <span
                   className={`text-xs ${
                     done
-                      ? 'font-semibold text-accent-text'
+                      ? 'font-semibold text-accent-strong'
                       : isCurrent
                         ? 'font-bold text-ink'
-                        : 'font-medium text-muted'
+                        : 'font-medium text-ink-muted'
                   }`}
                 >
                   {name}
@@ -423,7 +424,7 @@ export function ListingWizard({ listing }: Props) {
           aria-valuemin={1}
           aria-valuemax={4}
           aria-labelledby={`${id}-title`}
-          className="flex h-1 overflow-hidden rounded-full bg-line"
+          className="flex h-1 overflow-hidden rounded-full bg-border"
         >
           <div
             className="rounded-full bg-accent transition-[width]"
@@ -479,13 +480,13 @@ export function ListingWizard({ listing }: Props) {
 
       <div
         data-sticky-footer
-        className="sticky bottom-0 -mx-4 flex gap-[10px] border-t border-line bg-white px-4 pb-[22px] pt-3"
+        className="sticky bottom-0 -mx-4 flex gap-[10px] border-t border-border bg-surface px-4 pb-[22px] pt-3"
       >
         {step > 1 && (
           <button
             type="button"
             onClick={() => goTo((step - 1) as Step)}
-            className={`flex min-h-[52px] flex-1 items-center justify-center gap-[6px] rounded-[14px] border-[1.5px] border-[#D6D3D1] bg-white text-[15px] font-bold ${focusRing}`}
+            className={`flex min-h-[52px] flex-1 items-center justify-center gap-[6px] rounded-[14px] border-[1.5px] border-border-strong bg-surface text-[15px] font-bold ${focusRing}`}
           >
             <svg
               aria-hidden="true"
@@ -507,7 +508,7 @@ export function ListingWizard({ listing }: Props) {
           type="submit"
           disabled={(step === 1 && form.listing_type === null) || active.isPending}
           aria-busy={active.isPending}
-          className={`flex min-h-[52px] flex-[1.6] items-center justify-center gap-[6px] rounded-[14px] bg-accent text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+          className={`flex min-h-[52px] flex-[1.6] items-center justify-center gap-[6px] rounded-[14px] bg-accent text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
         >
           {step < 4 ? t('listings.next') : editing ? t('listings.save') : t('listings.publish')}
           {step < 4 && (

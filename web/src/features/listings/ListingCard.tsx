@@ -38,8 +38,9 @@ type Chip = { text: string; tone: 'accent' | 'plain' };
 const chipClass = {
   // The artboard's teal chip ("שותפים בגילך").
   accent:
-    'rounded-full border border-accent-tint bg-accent-tint px-3 py-[6px] text-[13px] font-semibold text-accent-text',
-  plain: 'rounded-full border border-line bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold',
+    'rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong',
+  plain:
+    'rounded-full border border-border bg-surface-subtle px-3 py-[6px] text-[13px] font-semibold',
 } as const;
 
 const titleClass = 'break-words text-lg font-bold leading-snug';
@@ -147,16 +148,17 @@ export function ListingCard({
 
   return (
     <article
-      className={`overflow-hidden rounded-2xl border border-line bg-white ${to === undefined ? '' : linkedCard}`}
+      className={`overflow-hidden rounded-2xl border border-border bg-surface ${to === undefined ? '' : linkedCard}`}
     >
-      <div className="relative flex h-[120px] items-center justify-center bg-[#DDD6CE]">
+      <div className="relative flex h-[120px] items-center justify-center bg-surface-subtle">
         <svg
           aria-hidden="true"
           width="40"
           height="40"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#A8A29E"
+          stroke="currentColor"
+          className="text-ink-muted"
           strokeWidth="1.6"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -167,7 +169,7 @@ export function ListingCard({
         </svg>
         {isRoom && (
           // The artboard's `right: 8px`: inline-start in RTL.
-          <span className="absolute bottom-2 start-2 rounded-full bg-[rgba(28,25,23,0.78)] px-2 py-[3px] text-[11px] font-semibold text-white">
+          <span className="absolute bottom-2 start-2 rounded-full bg-ink px-2 py-[3px] text-[11px] font-semibold text-on-ink">
             {t('listings.card.room')}
           </span>
         )}
@@ -178,7 +180,7 @@ export function ListingCard({
             <span>
               {formatIls(listing.price_ils)} {t('listings.units.ils')}
             </span>{' '}
-            <span className="text-sm font-medium tracking-normal text-muted">
+            <span className="text-sm font-medium tracking-normal text-ink-muted">
               {t('listings.units.perMonth')}
             </span>
           </p>
@@ -198,7 +200,7 @@ export function ListingCard({
             </Link>
           )}
         </Title>
-        <p className="flex flex-wrap gap-x-[10px] text-sm text-muted">
+        <p className="flex flex-wrap gap-x-[10px] text-sm text-ink-muted">
           {facts.map((fact, i) => (
             <span key={fact} className="flex gap-x-[10px]">
               {i > 0 && <span aria-hidden="true">·</span>}

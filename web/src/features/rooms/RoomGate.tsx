@@ -7,7 +7,7 @@ import { genderPreferenceLabel } from './flatmates';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-white ${focusRing}`;
+const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink ${focusRing}`;
 
 /**
  * A women- or men-only room and a seeker without the profile's room section (or without any
