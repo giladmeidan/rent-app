@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearAllDrafts, clearDraft, clearDraftsExcept, readDraft, writeDraft } from '../drafts';
 
 // "שלום"
-const HELLO = 'שלום';
+const HELLO = '\u05e9\u05dc\u05d5\u05dd';
 const KEY = 'rent-app:draft:apply:L';
 
 afterEach(() => {

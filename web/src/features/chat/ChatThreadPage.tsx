@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router';
 
+import { Button } from '../../components/Button';
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { clearDraft, readDraft } from '../../app/drafts';
@@ -283,13 +284,9 @@ function Thread({
               >
                 {unsent}
               </p>
-              <button
-                type="button"
-                onClick={discard}
-                className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[14px] font-bold text-ink ${focusRing}`}
-              >
+              <Button variant="secondary" shape="pill" onClick={discard}>
                 {t('chat.thread.discardDraft')}
-              </button>
+              </Button>
             </div>
           )}
         </>

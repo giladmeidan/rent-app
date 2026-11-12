@@ -41,7 +41,13 @@ export function Composer({ conversationId, userId, onSent }: Props) {
   const send = useSendMessage(conversationId);
   const [text, setText] = useState(() => readDraft('chat', conversationId, userId));
   // On every change of the text, typed or inserted by the viewing chip; an empty text removes it.
+  // The first run is skipped: with nothing restored it would remove an entry that is not ours.
+  const firstRun = useRef(true);
   useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
     writeDraft('chat', conversationId, userId, text);
   }, [conversationId, userId, text]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
