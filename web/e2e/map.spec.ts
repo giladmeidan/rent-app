@@ -102,11 +102,10 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     // The "updating" pill (drawn once the map has loaded) is gone with the busy state.
     await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
     await expect(page.getByTestId('map-updating')).toHaveCount(0);
-    // target-size: neighbouring 44px map pins overlap when listings sit close together (WCAG
-    // 2.5.8), as in a11y.spec.ts; clustering or offsetting pins is a design call (spec 0009t's
-    // question to Gilad). Re-enable when decided.
+    // Only the pins are exempt from target-size (WCAG 2.5.8 "essential": they sit at their
+    // listings' true positions; accepted by Gilad 2026-11-12); the rest of the page is checked.
     await expectNoAxeViolations(page, '/search?view=map (with pins)', {
-      disableRules: ['target-size'],
+      markerTargetSizeExempt: true,
     });
   });
 
