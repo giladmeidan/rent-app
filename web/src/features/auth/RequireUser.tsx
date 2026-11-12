@@ -25,7 +25,7 @@ export function RequireUser() {
   if (me.data === undefined)
     return (
       <PageContainer>
-        <ErrorState page onRetry={() => void me.refetch()} />
+        <ErrorState page onRetry={() => me.refetch()} />
       </PageContainer>
     );
   if (me.data === null) return <Navigate to={loginWithNext(location)} replace />;

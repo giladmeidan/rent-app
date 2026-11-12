@@ -539,10 +539,9 @@ export function ProfilePage() {
     // Only when nothing is cached: a failed background refetch keeps the form and what was typed.
     body = (
       <ErrorState
-        onRetry={() => {
-          if (profileFailed) void profile.refetch();
-          if (areasFailed) void areas.refetch();
-        }}
+        onRetry={() =>
+          Promise.all([profileFailed && profile.refetch(), areasFailed && areas.refetch()])
+        }
       />
     );
   } else if (profile.data === undefined || areas.data === undefined) {

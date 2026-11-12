@@ -50,7 +50,7 @@ export function ResultsList({ search, hasFilters, onClear, profile, countRef }: 
         </div>
       </Loading>
     ) : (
-      <ErrorState onRetry={() => void search.refetch()} />
+      <ErrorState onRetry={() => search.refetch()} />
     );
   } else {
     const total = data.pages[data.pages.length - 1]?.total ?? 0;
@@ -96,7 +96,7 @@ export function ResultsList({ search, hasFilters, onClear, profile, countRef }: 
             ))}
           </ul>
           {nextPageFailed ? (
-            <ErrorState onRetry={() => void search.fetchNextPage()} />
+            <ErrorState onRetry={() => search.fetchNextPage()} />
           ) : (
             search.hasNextPage && (
               <Button

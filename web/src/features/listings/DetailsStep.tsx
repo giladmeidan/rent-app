@@ -96,7 +96,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
       </select>
     );
   } else if (areas.isError) {
-    areaControl = <ErrorState onRetry={() => void areas.refetch()} />;
+    areaControl = <ErrorState onRetry={() => areas.refetch()} />;
   } else if (areas.data.length === 0) {
     areaControl = <EmptyState message={t('areas.empty')} />;
   } else {
