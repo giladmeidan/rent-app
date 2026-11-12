@@ -396,7 +396,9 @@ for (const state of STATES) {
     await state.act(page);
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({
-      fullPage: true,
+      // A modal is fixed to the viewport, so a full-page capture would misplace it and its backdrop.
+      fullPage: state.name !== 'decline-dialog',
+      animations: 'disabled',
       path: `screens/0009l/${state.name}-${testInfo.project.name}.png`,
     });
     expect(unmatched, 'unmatched API requests').toEqual([]);
