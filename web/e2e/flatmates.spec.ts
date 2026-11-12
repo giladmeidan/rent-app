@@ -229,6 +229,50 @@ test('ac5_group_chat_flow', async ({ page, browser }) => {
   await flatmatePage.getByRole('button', { name: he.chat.composer.send }).click();
   const flatmateLog = flatmatePage.getByRole('log', { name: he.chat.thread.log });
   await expect(flatmateLog.getByText(HELLO, { exact: true })).toBeVisible();
+  await test.step('0009s chat at 1440 and 390', async () => {
+    // After F's first message, so the log has a height to measure.
+    const seekerRow = flatmatePage.getByRole('link', { name: new RegExp(SEEKER) });
+    // Desktop: the list pane beside the thread, the open row marked, at the inline start (RTL:
+    // right); the composer stays on screen.
+    await flatmatePage.setViewportSize({ width: 1440, height: 900 });
+    await expect(seekerRow).toHaveAttribute('aria-current', 'page');
+    await expect(
+      flatmatePage.getByRole('heading', { level: 2, name: he.chat.list.title }),
+    ).toBeVisible();
+    await expect(flatmateLog).toBeVisible();
+    const composer = flatmatePage
+      .locator('form')
+      .filter({ has: flatmatePage.getByLabel(he.chat.composer.label) });
+    await expect(async () => {
+      const row = await layoutOf(flatmatePage, seekerRow);
+      const log = await layoutOf(flatmatePage, flatmateLog);
+      expect(row.box.x).toBeGreaterThan(log.box.x + log.box.width - 1);
+      const form = await layoutOf(flatmatePage, composer);
+      const height = await flatmatePage.evaluate(() => window.innerHeight);
+      expect(form.box.y + form.box.height).toBeLessThanOrEqual(height);
+    }).toPass();
+    // Back to the list: its <h1> and the "pick a chat" panel, no sideways scroll.
+    await flatmatePage.getByRole('link', { name: he.chat.thread.back }).click();
+    await expect(flatmatePage).toHaveURL('/chat');
+    await expect(
+      flatmatePage.getByRole('heading', { level: 1, name: he.chat.list.title }),
+    ).toBeVisible();
+    await expect(flatmatePage.getByText(he.chat.pickOne)).toBeVisible();
+    const noSideScroll = () =>
+      flatmatePage.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      );
+    expect(await noSideScroll()).toBe(true);
+    // Phone: the thread alone (a reload, no sign-up).
+    await flatmatePage.setViewportSize({ width: 390, height: 844 });
+    await flatmatePage.goto(`/chat/${applicationId}`);
+    await expect(flatmatePage.getByRole('heading', { level: 1, name: SEEKER })).toBeVisible();
+    await expect(flatmatePage.getByRole('link', { name: new RegExp(SEEKER) })).toHaveCount(0);
+    expect(await noSideScroll()).toBe(true);
+    // The project's viewport again, on the thread: step 7 types into its composer.
+    await flatmatePage.setViewportSize({ width: 1280, height: 720 });
+    await expect(flatmatePage.getByLabel(he.chat.composer.label)).toBeVisible();
+  });
 
   // 6. S's thread shows the message with F's name above it.
   await seekerPage.goto(`/chat/${applicationId}`);
