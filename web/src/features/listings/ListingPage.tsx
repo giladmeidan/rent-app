@@ -27,6 +27,9 @@ import { ListingFacts } from './ListingFacts';
 import { OwnerPreferences } from './OwnerPreferences';
 import { usePublicListing } from './usePublicListing';
 
+// The main column and the 24 rem action column, from `lg`: no scale step is a fixed 24 rem.
+const TWO_COLUMNS = 'lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-x-10';
+
 /** `/listings/:id`, public: Listing.dc.html without the parts later slices own. */
 export function ListingPage() {
   const { t } = useTranslation();
@@ -57,7 +60,7 @@ export function ListingPage() {
   if (listing.isPending) {
     body = (
       <Loading>
-        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-x-10">
+        <div className={`flex flex-col gap-3 ${TWO_COLUMNS}`}>
           <Skeleton className="-mx-4 h-40 md:-mx-6 lg:col-span-2 lg:mx-0 lg:h-64 lg:rounded-lg" />
           <div className="flex flex-col gap-3">
             <Skeleton className="h-8 w-32" />
@@ -85,7 +88,7 @@ export function ListingPage() {
     if (l.entry_flexible) facts.push(t('listings.fields.entryFlexible'));
 
     body = (
-      <article className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-x-10 lg:gap-y-6">
+      <article className={`flex flex-col gap-5 lg:gap-y-6 ${TWO_COLUMNS}`}>
         {/* The neutral photo placeholder of the card, edge to edge on a phone (photos are 0002c). */}
         <div className="-mx-4 flex h-40 items-center justify-center bg-surface-subtle md:-mx-6 lg:col-span-2 lg:mx-0 lg:h-64 lg:rounded-lg">
           <svg
