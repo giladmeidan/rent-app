@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes, useNavigationType } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,6 +44,56 @@ function submitCode(code: HTMLElement, value: string) {
 }
 
 describe('LoginPage', () => {
+  it('ac1_login_card_and_cross_link', async () => {
+    for (const [query, href] of [
+      ['', '/signup'],
+      ['?next=%2Fme%2Flikes', '/signup?next=%2Fme%2Flikes'],
+      // Only `safeNext`'s output is used: an unsafe `next` is dropped, not passed on.
+      ['?next=%2F%2Fevil.example', '/signup'],
+      ['?next=%2F%5Cevil.example', '/signup'],
+      ['?next=https%3A%2F%2Fevil.example', '/signup'],
+      ['?next=%2F%09%2Fevil.example', '/signup'],
+      // Encoding keeps a safe `next` from injecting a param or fragment into the link.
+      [
+        '?next=%2Fme%3Fa%3D1%26role%3Downer%23x',
+        `/signup?next=${encodeURIComponent('/me?a=1&role=owner#x')}`,
+      ],
+    ] as const) {
+      mockApi({ 'GET /me': [unauthenticated] });
+      const view = renderAt(`/login${query}`, <LoginPage />);
+
+      // The form replaces 0009g's skeleton once `/me` answers.
+      await screen.findByLabelText(he.auth.email.label);
+      const brand = screen.getByTestId('auth-brand');
+      const card = screen.getByTestId('auth-card');
+      expect(brand.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // The hello turtle and the wordmark, both decorative (empty alt: out of the a11y tree).
+      const images = [...brand.querySelectorAll('img')];
+      expect(images.map((img) => img.getAttribute('src'))).toEqual([
+        expect.stringMatching(/homie-turtle-hello/),
+        expect.stringMatching(/homie-wordmark-he\./),
+      ]);
+      expect(images.map((img) => img.getAttribute('alt'))).toEqual(['', '']);
+      expect(within(brand).queryAllByRole('img')).toEqual([]);
+      expect(document.querySelectorAll('img[src*="homie-turtle"]')).toHaveLength(1);
+
+      expect(within(card).getByRole('heading', { level: 1 })).toHaveTextContent(
+        he.auth.login.title,
+      );
+      expect(within(card).getByText(he.auth.login.subtitle)).toBeVisible();
+      expect(within(card).getByLabelText(he.auth.email.label)).toBeVisible();
+
+      const link = screen.getByRole('link', { name: he.auth.login.toSignup });
+      expect(link).toHaveAttribute('href', href);
+      const line = link.closest('p');
+      expect(line?.textContent).toBe(`${he.auth.login.noAccount} ${he.auth.login.toSignup}`);
+      expect(card.contains(link)).toBe(false);
+      expect(card.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('ac5_network_error_retry_and_invalid_code', async () => {
     const api = mockApi({
       'GET /me': [unauthenticated],
