@@ -177,7 +177,7 @@ export function ListingCard({
             </Tag>
           )}
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2 p-3 lg:p-0">
+        <div className={`flex min-w-0 flex-1 flex-col gap-2 p-3 ${row ? 'lg:p-0' : ''}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-h3 font-bold tracking-tight">
               <span>

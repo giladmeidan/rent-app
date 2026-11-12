@@ -119,7 +119,7 @@ export function SearchMap({ filters, profile, onShowList }: Props) {
       )}
       {below}
       {selected !== undefined && (
-        <div ref={cardRef}>
+        <div ref={cardRef} className="max-w-md">
           <ListingCard
             listing={selected}
             today={todayInIsrael()}
