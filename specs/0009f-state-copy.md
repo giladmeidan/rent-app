@@ -107,7 +107,7 @@ Hebrew dual nouns stay words ("שעתיים", "יומיים"), while other count
    `applicants.errors.actionFailed`, or `common.offline` when offline (`useOnline`). This includes the 409
    path, where the refetched status shows next to it; that path showed `common.error` before (FOLLOWUPS line
    69).
-7. **The owner's parking chip** (line 129, pending Gilad Q6).
+7. **The owner's parking chip** (line 129, accepted by Gilad 2026-11-12 Q6).
    - `ownerShort(criterion, kind, profile, spots, t)` (`features/match/reasons.ts:362`) gains `spots`, as
      `ownerReason` has.
    - Parking `agree` gives:
@@ -136,7 +136,7 @@ Hebrew dual nouns stay words ("שעתיים", "יומיים"), while other count
    No line states the seeker's household type, pets, smoking, contract length or parking count (`0008b`'s
    rule). Each line says only fit or no fit, which is what the chip already shows. Every line avoids the
    forbidden words of `reasons.test.ts:660-671`.
-9. **Join-flat dead ends** (line 189, pending Gilad Q7). In `JoinFlatPage.tsx`, each final message gets a
+9. **Join-flat dead ends** (line 189, accepted by Gilad 2026-11-12 Q7). In `JoinFlatPage.tsx`, each final message gets a
    link in the member state's link style (`JoinFlatPage.tsx:226-231`). This covers both the preview failure
    and a final join failure:
    - `own` → `/me/listings`, `flatmates.join.toMyListings`;
@@ -149,7 +149,7 @@ Hebrew dual nouns stay words ("שעתיים", "יומיים"), while other count
      `role="alert"` `<p>` itself. Each becomes a `<div className={card}>` holding the `role="alert"` `<p>`
      and then the `Link`.
    - On a final join failure, the link goes after the alert `<p>` inside the existing card (`:260-264`).
-10. **An empty `/chat` for a flatmate** (line 195, pending Gilad Q8). In `ChatListPage.tsx:141-145`, when
+10. **An empty `/chat` for a flatmate** (line 195, accepted by Gilad 2026-11-12 Q8). In `ChatListPage.tsx:141-145`, when
     `conversations.data` is empty and `useMyFlats()` has at least one flat, the empty state is
     `chat.list.emptyFlatmate`. Otherwise it stays `emptyOwner` / `emptySeeker` by role. That includes while
     `useMyFlats()` is pending or failed: the role line shows first and switches once the flats arrive. An
@@ -214,8 +214,8 @@ The build applies this table verbatim. A later change from Gilad is an edit to t
 | C12 | `applications.headingOwner` | — (new) | "מועמדויות" | 5 | |
 | C13 | `applications.countOwner_zero` / `_one` / `_two` / `_other` | — (new) | "עוד אין מועמדויות" / "מועמדות אחת" / "2 מועמדויות" / "{{count}} מועמדויות" | 5 | |
 | C14 | `applicants.errors.actionFailed` | — (new) | "השינוי לא נשמר. אפשר לנסות שוב." | 6 | |
-| C15 | `match.owner.short.parking.agreePartial` | — (new) | "חניה חלקית" | 7 | **pending Gilad (Q6)** |
-| C16 | `match.owner.short.parking.agreeNone` | — (new) | "חניה לא נדרשת" | 7 | **pending Gilad (Q6)** |
+| C15 | `match.owner.short.parking.agreePartial` | — (new) | "חניה חלקית" | 7 | **accepted by Gilad 2026-11-12 (Q6)** |
+| C16 | `match.owner.short.parking.agreeNone` | — (new) | "חניה לא נדרשת" | 7 | **accepted by Gilad 2026-11-12 (Q6)** |
 | C17 | `people.reason.household.agree` | — (new) | "משק הבית שלהם מתאים למה שביקשת" | 8 | |
 | C18 | `people.reason.household.differ` | — (new) | "משק הבית שלהם לא ברשימה שלך" | 8 | |
 | C19 | `people.reason.contract.agree` | — (new) | "משך החוזה שהם מחפשים מתאים לך" | 8 | |
@@ -226,10 +226,10 @@ The build applies this table verbatim. A later change from Gilad is an edit to t
 | C24 | `people.reason.smoking.differ` | — (new) | "הם לא מתאימים לכללי העישון בדירה" | 8 | |
 | C25 | `people.reason.pets.agree` | — (new) | "הם מתאימים לכללי חיות המחמד בדירה" | 8 | |
 | C26 | `people.reason.pets.differ` | — (new) | "הם לא מתאימים לכללי חיות המחמד בדירה" | 8 | |
-| C27 | `flatmates.join.toMyListings` | — (new) | "למודעות שלי" | 9 | **pending Gilad (Q7)** |
-| C28 | `flatmates.join.toApplications` | — (new) | "למועמדויות שלי" | 9 | **pending Gilad (Q7)** |
-| C29 | `flatmates.join.toSearch` | — (new) | "לחיפוש דירות וחדרים" | 9 | **pending Gilad (Q7)** |
-| C30 | `chat.list.emptyFlatmate` | — (new) | "אין עדיין שיחות על החדר. שיחה תופיע כאן כשבעלי הדירה יוסיפו מועמד/ת לרשימה הקצרה, או כשתהיה התאמה הדדית." | 10 | **pending Gilad (Q8)** |
+| C27 | `flatmates.join.toMyListings` | — (new) | "למודעות שלי" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
+| C28 | `flatmates.join.toApplications` | — (new) | "למועמדויות שלי" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
+| C29 | `flatmates.join.toSearch` | — (new) | "לחיפוש דירות וחדרים" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
+| C30 | `chat.list.emptyFlatmate` | — (new) | "אין עדיין שיחות על החדר. שיחה תופיע כאן כשבעלי הדירה יוסיפו מועמד/ת לרשימה הקצרה, או כשתהיה התאמה הדדית." | 10 | **accepted by Gilad 2026-11-12 (Q8)** |
 
 ## Acceptance criteria
 Hebrew in tests is written as `\uXXXX` escapes. Tests stub `fetch` with `Response` objects, whose headers
@@ -352,7 +352,7 @@ if a sibling spec created it first (`ErrorState.test.tsx` is also named by `0009
   - (c) The numbers, "חניה אחת מתוך 2". This is allowed on the inbox, which already shows the applicant's
     parking under "עוד פרטים", but it is longer than the other chips.
 
-  Recommendation: (a). Written on (a), pending Gilad.
+  Recommendation: (a). Written on (a), accepted by Gilad 2026-11-12.
 - **Q7 — a way out of the join-flat states** (FOLLOWUPS 189; C27–C29).
   - (a) **A link per state**: own → "למודעות שלי", applied → "למועמדויות שלי", declined / full / invalid →
     "לחיפוש דירות וחדרים" (the same words as `0009g`'s `listing.toSearch`), and none for the rate limit.
@@ -360,14 +360,14 @@ if a sibling spec created it first (`ErrorState.test.tsx` is also named by `0009
   - (b) One link "לדף הבית" on every state.
   - (c) No link (today).
 
-  Recommendation: (a). Written on (a), pending Gilad.
+  Recommendation: (a). Written on (a), accepted by Gilad 2026-11-12.
 - **Q8 — an empty `/chat` for a flatmate** (FOLLOWUPS 195, the open 0008f copy decision; C30).
   - (a) **C30's line**, shown when the person has at least one flat.
   - (b) A shorter "שיחות על החדר יופיעו כאן".
   - (c) Keep the owner and seeker lines.
 
   Recommendation: (a). It says when a chat appears: on a shortlist or a mutual match, the two ways a chat
-  opens (PRODUCT.md "Chat"). Written on (a), pending Gilad.
+  opens (PRODUCT.md "Chat"). Written on (a), accepted by Gilad 2026-11-12.
 - **`navigator.onLine` limits.** It is false only when the device has no network. A dead API on working wifi
   still reads "משהו השתבש", which is accurate enough. Nothing polls.
 - **The CORS change is the only API change.** Exposing one response header to the one allowed origin reveals

@@ -422,7 +422,7 @@ Component tests use `mockApi` (`vi.stubGlobal('fetch', …)`) as today.
 E2E: the AC9 step. Screens: AC11.
 
 ## Risks / open questions
-**Questions for Gilad** (the spec is written on each recommendation, marked "pending Gilad"). Orchestrator: get Q1
+**Questions for Gilad** (the spec is written on each recommendation, marked "accepted by Gilad 2026-11-12"). Orchestrator: get Q1
 and Q3 answered in the digest before the build starts; option (b) or (c) of either changes the build.
 - **Q1 Rooms field: segments or select?** The artboard shows segments 2 / 3 / 3.5 / 4 / 5+. The API stores an exact
   count in half steps (1–20). (a) Keep the select of exact half steps, as the kit's `Select` (**recommended, pending
@@ -430,7 +430,7 @@ and Q3 answered in the digest before the build starts; option (b) or (c) of eith
   (nine segments do not fit a row at 390 px; a new composite). (c) The artboard's five segments, "5+" opening a number
   input (2.5- and 5.5-room flats need an extra step).
 - **Q3 A back link in the new-listing wizard?** The artboard has a back chevron on "מודעה חדשה"; today only the edit
-  wizard has one, with the unsaved-edits guard. (a) None, as today (**recommended, pending Gilad**: the new wizard has
+  wizard has one, with the unsaved-edits guard. (a) None, as today (**recommended; accepted by Gilad 2026-11-12**: the new wizard has
   no leave guard, so a link would drop what was typed; FOLLOWUPS line 35 asks the same of the browser's Back). (b) A
   back link to "my listings" with the same dialog when anything was entered (a new guard). (c) A back link with no
   guard.

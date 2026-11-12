@@ -84,7 +84,7 @@ description, font preload) and the build check are **`0009e`**, which depends on
     - on `/`, only "כניסה" (`header.login`, to `/login`), exactly as the artboard;
     - elsewhere, "חיפוש דירות" (`header.search`, a `NavLink` to `/search`, moved here from `Layout.tsx:41-46`)
       and then "כניסה";
-    - the "הרשמה" header button is removed on every page (pending Gilad, Q5). The login form already signs up
+    - the "הרשמה" header button is removed on every page (accepted by Gilad 2026-11-12, Q5). The login form already signs up
       an unknown email (`auth.noAccountYet`, 0001b), and 0009m adds login ↔ signup cross-links. The
       `header.signup` key stays, because `ApplySection` uses it;
   - **pending** `/me`: the brand and today's skeleton. Nothing else shows: "חיפוש דירות" is hidden too, a
@@ -157,7 +157,7 @@ description, font preload) and the build check are **`0009e`**, which depends on
   - the new keys are in "UI" below;
   - `areas.heading`, `header.myApplications` and `header.myProfile` are deleted, because nothing uses them
     any more.
-- Fonts: the brand kit's two families, self-hosted (pending Gilad, Q6). Heebo is dropped. Each is one variable
+- Fonts: the brand kit's two families, self-hosted (accepted by Gilad 2026-11-12, Q6). Heebo is dropped. Each is one variable
   file per subset:
   - **`@fontsource-variable/rubik`** is the text font (`sans`). It is used at weights 400 and 500 (tokens.json
     `body` … `caption`, `h3`);
@@ -252,7 +252,7 @@ and from the brand tokens. It uses no colour literal, no arbitrary `[Npx]` class
 3. **Subline**: a `text-ink-muted` `<p>` in `text-body`, `landing.subtitle`.
 4. **CTAs**: two `block` `Button`s of size `lg` (52 px; the artboard draws 60 px). Each has a leading outline
    `icon` and `end={chevron}`. The brand voice applies: 1–3 words, starting with the action noun, no slash
-   forms (pending Gilad, Q2):
+   forms (accepted by Gilad 2026-11-12, Q2):
    - **primary** (`ink`): the house icon, `landing.cta.owner` "פרסום דירה",
      `to="/signup?role=owner&next=%2Flistings%2Fnew"`. Signup preselects the role, and the wizard opens after
      the code. Its first step asks apartment or room, so room listers are served too. A returning owner who
@@ -333,8 +333,8 @@ No new key depends on a count. The two existing counts keep their keys and their
 | Key | Hebrew |
 | --- | --- |
 | `app.title` | "הומי" (changed from "דירה"; the brand kit) |
-| `landing.cta.owner` | "פרסום דירה" (pending Gilad, Q2) |
-| `landing.cta.seeker` | "חיפוש דירה" (pending Gilad, Q2) |
+| `landing.cta.owner` | "פרסום דירה" (accepted by Gilad 2026-11-12, Q2) |
+| `landing.cta.seeker` | "חיפוש דירה" (accepted by Gilad 2026-11-12, Q2) |
 | `landing.badge` | "גוש דן · השקה בעברית" |
 | `landing.title` | "מתאימים,\nלא גוללים." |
 | `landing.subtitle` | "פרופילים מובנים, ציון התאמה לכל דירה וכרטיסי מועמדות מסודרים — במקום מאות הודעות בקבוצות." |
@@ -343,14 +343,14 @@ No new key depends on a count. The two existing counts keep their keys and their
 | `landing.example.city` | "גבעתיים" |
 | `landing.how.title` | "איך זה עובד" |
 | `landing.how.step1.title` | "ממלאים פרופיל קצר" |
-| `landing.how.step1.text` | "תקציב, תאריך כניסה, אורח חיים והעדפות דיור — פעם אחת." (pending Gilad, Q2) |
+| `landing.how.step1.text` | "תקציב, תאריך כניסה, אורח חיים והעדפות דיור — פעם אחת." (accepted by Gilad 2026-11-12, Q2) |
 | `landing.how.step2.title` | "רואים ציון התאמה לכל דירה" |
 | `landing.how.step2.text` | "מה מסתדר, מה פחות — לפני שמבזבזים זמן על סיור." |
-| `landing.how.step3.title` | "מגישים מועמדות בהודעה קצרה" (artboard: "…בלחיצה"; pending Gilad, Q2) |
+| `landing.how.step3.title` | "מגישים מועמדות בהודעה קצרה" (artboard: "…בלחיצה"; accepted by Gilad 2026-11-12, Q2) |
 | `landing.how.step3.text` | "בעלי הדירה מקבלים כרטיס מסודר, לא עוד הודעה בצ'אט." (plural, brand voice) |
-| `landing.trust.verified` | "משתמשים מאומתים באימייל" (artboard: "…בטלפון"; pending Gilad, Q2) |
+| `landing.trust.verified` | "משתמשים מאומתים באימייל" (artboard: "…בטלפון"; accepted by Gilad 2026-11-12, Q2) |
 | `landing.trust.noBrokers` | "בלי מתווכים" |
-| `landing.trust.free` | "חינם למחפשים" (pending Gilad, Q2) |
+| `landing.trust.free` | "חינם למחפשים" (accepted by Gilad 2026-11-12, Q2) |
 | `nav.label` | "ניווט ראשי" |
 | `nav.search` | "חיפוש" |
 | `nav.applications` | "מועמדויות" |

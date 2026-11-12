@@ -182,9 +182,9 @@ Component tests use `mockApi` (`vi.stubGlobal('fetch', …)`) as today.
 E2E: the AC4 step. Screens: AC6.
 
 ## Risks / open questions
-**Question for Gilad** (the spec is written on the recommendation, marked "pending Gilad"):
+**Question for Gilad** (the spec is written on the recommendation, marked "accepted by Gilad 2026-11-12"):
 - **Q2 Show the expiry date on the "my listings" cards?** It is not shown today; a listing expires 90 days after it
-  is created. (a) "בתוקף עד {date}" / "פג תוקף ב־{date}" (**recommended, pending Gilad**: owners see when the 90 days
+  is created. (a) "בתוקף עד {date}" / "פג תוקף ב־{date}" (**recommended; accepted by Gilad 2026-11-12**: owners see when the 90 days
   end, and an expired listing says when it expired). It does not change FOLLOWUPS 64: a paused listing past expiry
   still shows "הפעלה מחדש", now next to its "פג תוקף ב־" date. (b) No date until Slice 10's renewal designs it.
 

@@ -130,7 +130,7 @@ The checker still has no unused-key report. It never had one, and dynamic keys s
     type (`schemas/chat.py:80,98`);
   - in `ApplicantsPage` it is the `MyListingOut` from `useMyListings()` (`ApplicantsPage.tsx:46-47`).
   So FOLLOWUPS 147's "the chat screens need it from the API first" no longer holds, and 147 closes.
-- **Partial ages** (FOLLOWUPS 154, pending Gilad Q5). In `rooms/flatmates.ts` `flatmatesText` and in
+- **Partial ages** (FOLLOWUPS 154, accepted by Gilad 2026-11-12 Q5). In `rooms/flatmates.ts` `flatmatesText` and in
   `RoomPreview.tsx`, when fewer ages are given than flatmates, each missing age shows as
   `rooms.flatmateAgeUnknown` ("?") after the known ages, e.g. "2 שותפים (30, ?)". With no ages there are no
   parentheses, as today; a visitor, who gets no ages, is unchanged. `RoomPreview` keeps sorting the known
@@ -198,8 +198,8 @@ today.
 | `listings.card.parking` | — | "חניה" | "2 חניות" | "{{count}} חניות" | `…parkingOne` "חניה", `…parkingMany` "{{count}} חניות" | `ListingCard.tsx:90-93`: a chip when `parking_spots > 0` |
 | `listing.parking` | — | "מקום אחד" | "2 מקומות" | "{{count}} מקומות" | `listing.parkingOne` "מקום אחד", `listing.parkingMany` "{{count}} מקומות" | `ListingFacts.tsx:19-23` (0 stays `listing.no`), `reasons.ts:106-110`, `reasons.ts:251` (Section 2) |
 | `listings.mine.peopleLiked` | — | "אחד/ת אהב/ה את החדר" | "2 אהבו את החדר" | "{{count}} אהבו את החדר" | `…peopleLiked` "{{count}} אהבו את החדר", `…peopleLikedOne` "אחד/ת אהב/ה את החדר" | `MyListingsPage.tsx:91-93` |
-| `applicants.newBadge` | — | "חדשה אחת" | "2 חדשות" | "{{count}} חדשות" | "{{count}} חדשות" (FOLLOWUPS 86: "1 חדשות"). **pending Gilad (Q2)** | `MyListingsPage.tsx:74` (already passes `count`) |
-| `search.count` | — | "מודעה אחת" | "2 מודעות" | "{{count}} מודעות" | `search.count` "{{count}} דירות", `search.countOne` "דירה אחת". **pending Gilad (Q1)** | `ResultsList.tsx:52`, `SearchMap.tsx:87` |
+| `applicants.newBadge` | — | "חדשה אחת" | "2 חדשות" | "{{count}} חדשות" | "{{count}} חדשות" (FOLLOWUPS 86: "1 חדשות"). **accepted by Gilad 2026-11-12 (Q2)** | `MyListingsPage.tsx:74` (already passes `count`) |
+| `search.count` | — | "מודעה אחת" | "2 מודעות" | "{{count}} מודעות" | `search.count` "{{count}} דירות", `search.countOne` "דירה אחת". **accepted by Gilad 2026-11-12 (Q1)** | `ResultsList.tsx:52`, `SearchMap.tsx:87` |
 | `applications.count` | "עוד אין מועמדים. אפשר להיות הראשונים" | "מועמד/ת אחד/ת הגיש/ה מועמדות" | "2 מועמדים הגישו מועמדות" | "{{count}} מועמדים הגישו מועמדות" | the object `applications.count` `{zero, one, many}` (same texts) | `ApplySection.tsx:271-277` |
 | `people.count` | — | "מחפש/ת אחד/ת" | "2 מחפשים" | "{{count}} מחפשים" | `people.count` "{{count}} מחפשים", `people.countOne` "מחפש/ת אחד/ת" | `PeoplePage.tsx:125` |
 | `likes.badgeLabel` | — | "חדר אחד אהב אותך" | "2 חדרים אהבו אותך" | "{{count}} חדרים אהבו אותך" | `likes.badgeLabel` "{{count}} חדרים אהבו אותך", `likes.badgeLabelOne` "חדר אחד אהב אותך" | `LikesNavLink.tsx:34` |
@@ -243,11 +243,11 @@ stable: B7 (`flatmates.invite.hint`) was dropped in verification under rule 3's 
 | B5 | `match.seeker.smoking.differ` | "בעל הדירה מבקש ללא מעשנים" | "בעלי הדירה מבקשים ללא מעשנים" | rule 3 | |
 | B6 | `profile.room.fields.flatmates` | "עם מי אני מעדיפ/ה לגור?" | "עם מי אני מעדיף/ה לגור?" | rule 1: the base form keeps its final ף | |
 | B8 | `chat.list.new` | "חדש" | "חדשה" | the pill marks a new conversation (`is_new`, `ChatListPage.tsx:35`): שיחה is feminine | |
-| B9 | `chat.composer.sending` | "שולח…" | "בשליחה…" | rule 4 (FOLLOWUPS 110) | **pending Gilad (Q3)** |
-| B10 | `chat.composer.viewingTemplate` | "אשמח לתאם סיור בדירה. מתי נוח לך?" | "אשמח לתאם סיור בדירה. מתי נוח לכם?" | a room chat can include the flatmates (`0008f`); the plural speaks to everyone in it (FOLLOWUPS 110) | **pending Gilad (Q3)** |
-| B11 | `applicants.status.submitted` | "חדש" | "חדשה" | the chip is the application's status, as the seeker's "נשלחה" / "לא נבחרה" and the stats' "חדשות" (FOLLOWUPS 86) | **pending Gilad (Q2)** |
-| B12 | `applicants.status.declined` | "נדחה" | "נדחתה" | as B11 | **pending Gilad (Q2)** |
-| B13 | `applicants.statusChanged` | "{{name}}: {{status}}" | "המועמדות של {{name}}: {{status}}" | the announcement then reads "המועמדות של דנה: נדחתה" for anyone's name | **pending Gilad (Q2)** |
+| B9 | `chat.composer.sending` | "שולח…" | "בשליחה…" | rule 4 (FOLLOWUPS 110) | **accepted by Gilad 2026-11-12 (Q3)** |
+| B10 | `chat.composer.viewingTemplate` | "אשמח לתאם סיור בדירה. מתי נוח לך?" | "אשמח לתאם סיור בדירה. מתי נוח לכם?" | a room chat can include the flatmates (`0008f`); the plural speaks to everyone in it (FOLLOWUPS 110) | **accepted by Gilad 2026-11-12 (Q3)** |
+| B11 | `applicants.status.submitted` | "חדש" | "חדשה" | the chip is the application's status, as the seeker's "נשלחה" / "לא נבחרה" and the stats' "חדשות" (FOLLOWUPS 86) | **accepted by Gilad 2026-11-12 (Q2)** |
+| B12 | `applicants.status.declined` | "נדחה" | "נדחתה" | as B11 | **accepted by Gilad 2026-11-12 (Q2)** |
+| B13 | `applicants.statusChanged` | "{{name}}: {{status}}" | "המועמדות של {{name}}: {{status}}" | the announcement then reads "המועמדות של דנה: נדחתה" for anyone's name | **accepted by Gilad 2026-11-12 (Q2)** |
 | B14 | `listings.furnishedRoom.none` | — (new) | "לא מרוהט" | rule 7 (FOLLOWUPS 33) | |
 | B15 | `listings.furnishedRoom.partial` | — (new) | "מרוהט חלקית" | rule 7 | |
 | B16 | `listings.furnishedRoom.full` | — (new) | "מרוהט" | rule 7 | |
@@ -255,12 +255,12 @@ stable: B7 (`flatmates.invite.hint`) was dropped in verification under rule 3's 
 | B18 | `search.availableByHint` | "דירות שאפשר להיכנס אליהן עד התאריך הזה" | "דירות וחדרים שאפשר להיכנס אליהם עד התאריך הזה" | search lists both types | |
 | B19 | `listings.roomPreview.for` | "מתאים ל: {{who}}" | "ל{{who}} בלבד" | the public card's words (`rooms.card.forGender`); shown only for women or men | |
 | B20 | `applications.mine.empty` | "עוד לא הגשת מועמדות לאף דירה" | "עוד לא הגשת אף מועמדות" | seekers apply to rooms too | |
-| B21 | `search.empty` | "לא מצאנו דירות שמתאימות לחיפוש. אפשר להרחיב את המסננים." | "לא מצאנו מודעות שמתאימות לחיפוש. אפשר להרחיב את המסננים." | rule 7 | **pending Gilad (Q1)** |
-| B22 | `search.more` | "עוד דירות" | "עוד מודעות" | rule 7 | **pending Gilad (Q1)** |
-| B23 | `search.map.empty` | "אין דירות באזור הזה. אפשר להזיז את המפה או לשנות את המסננים." | "אין מודעות באזור הזה. אפשר להזיז את המפה או לשנות את המסננים." | rule 7 | **pending Gilad (Q1)** |
-| B24 | `search.map.tooMany` | "מוצגות {{shown}} מתוך {{total}} דירות. אפשר להתקרב כדי לראות את כולן." | "מוצגות {{shown}} מתוך {{total}} מודעות. אפשר להתקרב כדי לראות את כולן." | rule 7 | **pending Gilad (Q1)** |
-| B25 | `match.owner.contract.agree` | "מחפשים חוזה ל{{months}}" | "מחפשים חוזה של {{months}}" | "ל3 שנים ומעלה" had no maqaf; "של" reads well before every label: "של חצי שנה", "של 3 שנים ומעלה" (FOLLOWUPS 130) | **pending Gilad (Q4)** |
-| B26 | `match.owner.contract.differ` | "מחפשים חוזה ל{{months}} בלבד" | "מחפשים חוזה של {{months}} בלבד" | as B25. FOLLOWUPS 130's "…ומעלה בלבד" cannot happen: 36 months is the top answer and never falls below a listing's minimum | **pending Gilad (Q4)** |
+| B21 | `search.empty` | "לא מצאנו דירות שמתאימות לחיפוש. אפשר להרחיב את המסננים." | "לא מצאנו מודעות שמתאימות לחיפוש. אפשר להרחיב את המסננים." | rule 7 | **accepted by Gilad 2026-11-12 (Q1)** |
+| B22 | `search.more` | "עוד דירות" | "עוד מודעות" | rule 7 | **accepted by Gilad 2026-11-12 (Q1)** |
+| B23 | `search.map.empty` | "אין דירות באזור הזה. אפשר להזיז את המפה או לשנות את המסננים." | "אין מודעות באזור הזה. אפשר להזיז את המפה או לשנות את המסננים." | rule 7 | **accepted by Gilad 2026-11-12 (Q1)** |
+| B24 | `search.map.tooMany` | "מוצגות {{shown}} מתוך {{total}} דירות. אפשר להתקרב כדי לראות את כולן." | "מוצגות {{shown}} מתוך {{total}} מודעות. אפשר להתקרב כדי לראות את כולן." | rule 7 | **accepted by Gilad 2026-11-12 (Q1)** |
+| B25 | `match.owner.contract.agree` | "מחפשים חוזה ל{{months}}" | "מחפשים חוזה של {{months}}" | "ל3 שנים ומעלה" had no maqaf; "של" reads well before every label: "של חצי שנה", "של 3 שנים ומעלה" (FOLLOWUPS 130) | **accepted by Gilad 2026-11-12 (Q4)** |
+| B26 | `match.owner.contract.differ` | "מחפשים חוזה ל{{months}} בלבד" | "מחפשים חוזה של {{months}} בלבד" | as B25. FOLLOWUPS 130's "…ומעלה בלבד" cannot happen: 36 months is the top answer and never falls below a listing's minimum | **accepted by Gilad 2026-11-12 (Q4)** |
 | B27 | `lifestyle.night.topic` | "שעות לילה" | "שעת שינה" | "שעות לילה: מאוחר בלילה" repeated לילה (FOLLOWUPS 150); also changes the match differ line's topics | |
 | B28 | `lifestyle.social.topic` | "חברתיות" | "זמן בבית" | "חברתיות: בנפרד" did not answer the topic (FOLLOWUPS 150). The FOLLOWUPS suggestion "זמן משותף" reads oddly next to "בנפרד"; "זמן בבית" matches the question "את הזמן בבית אני מעביר/ה…" | |
 | B29 | `applicants.room.summary` | "{{same}} מתוך {{shared}} תשובות זהות לדירה" | "תשובות זהות לדירה: {{same}} מתוך {{shared}}" | "1 מתוך 1 תשובות" (FOLLOWUPS 153); rule 5, correct for every number | |
@@ -383,7 +383,7 @@ second source to keep in step with Gilad's edits, so there is none.
     "2 דירות" / "{{count}} דירות" and B21–B24 are dropped.
   - (c) "תוצאות": generic, but "תוצאה אחת" and "אין תוצאות באזור הזה" read flatter.
 
-  Recommendation: (a). Written on (a), pending Gilad.
+  Recommendation: (a). Written on (a), accepted by Gilad 2026-11-12.
 - **Q2 — owner inbox status words** (FOLLOWUPS 86; `applicants.newBadge`, B11–B13).
   - (a) **The application's feminine forms**: "חדשה", "נדחתה", "המועמדות של {{name}}: {{status}}", and the
     badge "חדשה אחת" / "2 חדשות". They match the seeker side ("נשלחה", "לא נבחרה") and the inbox stats
@@ -391,27 +391,27 @@ second source to keep in step with Gilad's edits, so there is none.
   - (b) The person's slash forms: "חדש/ה", "נדחה/תה", and "{{name}}: {{status}}" kept.
   - (c) Keep "חדש" / "נדחה" (masculine generic for the applicant).
 
-  Recommendation: (a). Written on (a), pending Gilad.
+  Recommendation: (a). Written on (a), accepted by Gilad 2026-11-12.
 - **Q3 — the composer** (FOLLOWUPS 110; B9, B10).
   - (a) **"מתי נוח לכם?" and "בשליחה…"**.
   - (b) Keep "מתי נוח לך?" (unvocalised "לך" reads as either gender) and change only "בשליחה…".
   - (c) Keep both.
 
-  Recommendation: (a), because a room chat can include flatmates. Written on (a), pending Gilad. The
+  Recommendation: (a), because a room chat can include flatmates. Written on (a), accepted by Gilad 2026-11-12. The
   remaining-characters forms in Table A are grammar, not a choice.
 - **Q4 — the owner's contract line** (FOLLOWUPS 130; B25, B26).
   - (a) **"מחפשים חוזה של {{months}}"** for every label.
   - (b) Keep "ל{{months}}" and give the 36-month answer its own line, "מחפשים חוזה של 3 שנים ומעלה".
   - (c) A maqaf, "ל־{{months}}": it fixes the digit but reads badly before a word label ("ל־שנה").
 
-  Recommendation: (a). Written on (a), pending Gilad.
+  Recommendation: (a). Written on (a), accepted by Gilad 2026-11-12.
 - **Q5 — flatmates with only some ages given** (FOLLOWUPS 154; Section 3).
   - (a) **"?" for each missing age**: "2 שותפים (30, ?)".
   - (b) Show the ages only when every age is given. This hides what the lister typed; the "שותפים בגילך"
     chip still uses the ages.
   - (c) Name the known ones: "2 שותפים, גיל ידוע: 30". This needs one more plural, on the known count.
 
-  Recommendation: (a). Written on (a), pending Gilad. The marker is the key `rooms.flatmateAgeUnknown`, so a
+  Recommendation: (a). Written on (a), accepted by Gilad 2026-11-12. The marker is the key `rooms.flatmateAgeUnknown`, so a
   different marker is a table edit.
 - **Proposed `PRODUCT.md` row** (orchestrator to add once Q1–Q5 are answered). Topic **Copy**: "Decided
   2026-11-?? (Slice 9, Gilad): Hebrew copy follows 0009b's conventions:

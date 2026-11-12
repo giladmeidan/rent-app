@@ -23,7 +23,7 @@ After this ships, `/search` uses the whole screen, follows its artboards' layout
   - the results are a grid of the artboard's row cards, with the photo at the inline start.
 - No results and a loading search show the brand's turtle (`Mascot pose="search"`).
 - The map view keeps today's structure inside the results column. Pairing the map with a list of its own
-  listings, as the desktop artboard draws it, is `0009n`, pending Gilad's Q1 there.
+  listings, as the desktop artboard draws it, is a later follow-up (FOLLOWUPS), accepted by Gilad 2026-11-12's Q1 there.
 
 Behaviour, URLs, requests and existing copy are unchanged. This serves `specs/FOLLOWUPS.md` line 44 (desktop is a
 single 640 px column) and line 43's radius half, and the Product Plan's screen 5 (Search). It is Slice 9b (Gilad,
@@ -73,7 +73,7 @@ single 640 px column) and line 43's radius half, and the Product Plan's screen 5
   inside the results column. The map keeps `h-[60vh] min-h-[360px]` at every width.
   - `0009t` owns its states and its loading pill: the empty text in the count line, `ErrorState` above the map,
     and `MapCanvas`'s `overlay`.
-  - The desktop pairing is `0009n`.
+  - The desktop pairing is a later follow-up (FOLLOWUPS).
 - `features/search/SortSelect.tsx`: the kit `Select`. Its own `<label>` stays inline beside it (`flex items-center
   gap-2`, as today), not a `Field`, which would stack the label above the control.
 - Kit `Button`s keep today's states: a control that is `disabled` today ("עוד דירות" while fetching) stays
@@ -136,7 +136,7 @@ single 640 px column) and line 43's radius half, and the Product Plan's screen 5
   - one-tap quick-filter chips and removable active-filter chips;
   - a hover link between a card and its pin.
   These are follow-ups if Gilad wants them.
-- The desktop map view's list column beside the map: `0009n`.
+- The desktop map view's list column beside the map: a later follow-up (FOLLOWUPS).
 - Owned by other specs:
   - the header and the bottom tab bar (`0009a` / `0009h`);
   - the map's pins, controls and attribution in `components/map/MapCanvas.tsx` (`0009h`'s class swaps and
@@ -224,7 +224,7 @@ None changed. It consumes `GET /listings` (list pages of 20, and the map's `west
 | "ניקוי" in the panel header | Clear at the bottom next to apply | One clear button, at the bottom next to apply, as today. Two would put two "ניקוי" buttons in the DOM, which breaks the component tests and duplicates a control. |
 | No apply button (implied live filtering) | Apply button | Kept: the form validates on submit (0003b). |
 | Results header: "38 דירות … · ממוינות לפי התאמה" first (17 px, weight 800), filter chips on the same row | Count, sort and toggle | The toolbar row (tags, sort, toggle) sits above the count line, in the results column. This is a decision: the count line must stay inside the view, always mounted, and the toggle outside it (see the phone row). The count line takes `lg:text-h3`. `ProfileNudge` is first in the results column. |
-| A list column of row cards beside a map | One 640 px list | **List view:** the results column holds a grid of `layout="row"` cards, one column at 1024 px and two at 1440 px (the `auto-fill` grid). **Map view:** today's structure in the results column; the pairing is `0009n`. |
+| A list column of row cards beside a map | One 640 px list | **List view:** the results column holds a grid of `layout="row"` cards, one column at 1024 px and two at 1440 px (the `auto-fill` grid). **Map view:** today's structure in the results column; the pairing is a later follow-up (FOLLOWUPS). |
 
 ### Filters panel (both layouts)
 | Artboard | Today | This spec |
@@ -254,7 +254,7 @@ None changed. It consumes `GET /listings` (list pages of 20, and the map's `west
   (`h-[60vh] min-h-[360px]`) and the selected pin's card below it. It sits in the results column, beside the
   panel on a desktop.
 - The selected card is a stacked `ListingCard` with the new anatomy.
-- `0009n` adds the desktop list column.
+- a later follow-up (FOLLOWUPS) adds the desktop list column.
 
 ### States
 Both layouts have the same states as today:
@@ -449,7 +449,7 @@ set, it can be one more than the number of tags. That is accepted: the count is 
 - **Visual:** `web/e2e/screens/search.screens.ts` (AC10), run by `make screens`, not by `make e2e`.
 
 ## Risks / open questions
-- **No question for Gilad here.** Q1, the desktop map placement, moved to `0009n` with the map pairing (verifier
+- **No question for Gilad here.** Q1, the desktop map placement, moved to a later follow-up (FOLLOWUPS) with the map pairing (verifier
   i-M1). This spec keeps the map view as it is, so nothing here waits on Gilad.
 - **Decisions this spec takes** (not product questions; the ux reviewer judges each against its reason):
   - the match badge stays in the price row on phone cards, and the room pill is the photo's one corner badge
@@ -490,7 +490,7 @@ set, it can be one more than the number of tags. That is accepted: the count is 
   - 42 (the facts helper, used by the card and the listing page).
 
   Line 45 stays open: the brand's 16:10 rule sets the photo box. Line 127 is 0009h's.
-- Verifier round 1: 6 majors and 13 minors, all applied (i-M1 split the desktop map pairing and Q1 into `0009n`).
+- Verifier round 1: 6 majors and 13 minors, all applied (i-M1 split the desktop map pairing and Q1 into a later follow-up (FOLLOWUPS)).
   The orchestrator's brand amendment (`specs/0009-brand-amendment.md`) was applied in the same pass. Second round
   waived.
 
