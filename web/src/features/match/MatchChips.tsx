@@ -38,7 +38,7 @@ export function MatchChips(props: Props) {
   const { t } = useTranslation();
   const short = (criterion: Criterion, kind: ReasonKind) =>
     props.voice === 'owner'
-      ? ownerShort(criterion, kind, props.profile, t)
+      ? ownerShort(criterion, kind, props.profile, props.spots, t)
       : seekerShort(criterion, kind, props.listing, props.profile, t);
   const { match } = props;
   const chips: { kind: ReasonKind; text: string; className: string }[] = [];
