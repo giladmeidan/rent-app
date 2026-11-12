@@ -229,7 +229,7 @@ The build applies this table verbatim. A later change from Gilad is an edit to t
 | C27 | `flatmates.join.toMyListings` | — (new) | "למודעות שלי" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
 | C28 | `flatmates.join.toApplications` | — (new) | "למועמדויות שלי" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
 | C29 | `flatmates.join.toSearch` | — (new) | "לחיפוש דירות וחדרים" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
-| C30 | `chat.list.emptyFlatmate` | — (new) | "אין עדיין שיחות על החדר. שיחה תופיע כאן כשבעלי הדירה יוסיפו מועמד/ת לרשימה הקצרה, או כשתהיה התאמה הדדית." | 10 | **accepted by Gilad 2026-11-12 (Q8)** |
+| C30 | `chat.list.emptyFlatmate` | — (new) | "אין עדיין שיחות על החדר. שיחה תופיע כאן כשבעלי הדירה יוסיפו מועמדים לרשימה הקצרה, או כשתהיה התאמה הדדית." | 10 | **accepted by Gilad 2026-11-12 (Q8)**; slash form dropped per the brand kit at build |
 
 ## Acceptance criteria
 Hebrew in tests is written as `\uXXXX` escapes. Tests stub `fetch` with `Response` objects, whose headers
@@ -308,7 +308,7 @@ if a sibling spec created it first (`ErrorState.test.tsx` is also named by `0009
   - the differ → "חסרה חניה".
 
   `reasons.test.ts:622` (`ac6_owner_copy`) calls `ownerShort` with `row.spots ?? 1`, and its rows are
-  unchanged. The inbox card tests pass with `MatchChips` passing `props.spots`.
+  unchanged except the two parking rows this AC changes (0 needed → C16, 2 asked and 1 spot → C15). The inbox card tests pass with `MatchChips` passing `props.spots`.
 - [ ] AC8 **The people page's reasons are sentences.** — `reasons.test.ts::ac8_person_reason_is_a_sentence`
   - For every criterion and kind, `personReason` differs from `personShort`. move_in included: its chip is
     now `match.owner.short.move_in.*`.
