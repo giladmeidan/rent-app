@@ -31,7 +31,7 @@ export function NavTab({ to, icon, label, count = 0, countLabel }: NavTabProps) 
         // The bottom bar: equal widths, the icon above the label.
         'max-lg:flex-1 max-lg:flex-col max-lg:justify-center max-lg:gap-1 max-lg:px-1 max-lg:text-caption max-lg:font-normal',
         // The top bar: text only, an accent underline on the active tab.
-        'lg:gap-1 lg:hover:text-ink lg:border-b-2 lg:border-transparent lg:px-3 lg:text-label lg:font-normal lg:aria-[current=page]:border-accent',
+        'lg:gap-1 lg:[&:not([aria-current=page]):hover]:text-ink lg:border-b-2 lg:border-transparent lg:px-3 lg:text-label lg:font-normal lg:aria-[current=page]:border-accent',
         focusRing,
       )}
     >
