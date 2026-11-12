@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
+import { clearDraftsExcept } from '../../app/drafts';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
@@ -228,6 +229,8 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
             // Drop whatever the previous person in this tab left under ['me', …] first. A stashed
             // invite token stays: it is this login's way back to the join page (0008e A1).
             clearSession(queryClient, { keepInviteToken: true });
+            // Another person's unsent text in this tab is never theirs (spec 0009g).
+            clearDraftsExcept(result.user.id);
             queryClient.setQueryData<UserOut | null>(ME_KEY, result.user);
             // `replace`: Back does not return to /login. `safeNext` again, as defence in depth.
             navigate(safeNext(next), { replace: true });

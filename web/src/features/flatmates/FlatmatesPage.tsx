@@ -335,7 +335,7 @@ export function FlatmatesPage() {
     return (
       <PageContainer as="section" width="default" className={section}>
         <PageHeader back={back} title={t('flatmates.title')} />
-        <ErrorState onRetry={() => void listings.refetch()} />
+        <ErrorState onRetry={() => listings.refetch()} />
       </PageContainer>
     );
   }
@@ -351,7 +351,7 @@ export function FlatmatesPage() {
   let list;
   if (flatmates.data === undefined) {
     list = flatmates.isError ? (
-      <ErrorState onRetry={() => void flatmates.refetch()} />
+      <ErrorState onRetry={() => flatmates.refetch()} />
     ) : (
       <Loading>
         <Skeleton />

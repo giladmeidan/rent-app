@@ -1,7 +1,7 @@
 ---
 id: 0009g
 title: Nothing a person typed or saw is lost silently — an expired session goes to login and back with the apply and chat drafts kept, a retry shows it is working, a 404 is "not found" at once, and a card that leaves the view says why
-status: in-progress
+status: done
 depends_on: [0009t]   # 0009t: the focus rules this spec relies on (focusMainIfLost, the ErrorState retry rescue, the closed-chat note's focus target, MyLikesPage's section h2 after a successful unlike); via 0009t, 0009c: components/Loading.tsx, ErrorState's `page` prop, usePageTitle, RouteFocus and the axe e2e helper. All three touch ApplySection, ChatThreadPage, MyLikesPage and ErrorState, so they build in order (web specs never build at once locally, Speed rule 2)
 reviewers: [code, qa, ux, security]   # security: the app-wide 401 handler (session clearing, the invite token) and private text kept in sessionStorage; ux: new states and copy; qa: session expiry and draft flows
 estimate: 1 coder run   # coder Opus/high: session handling (Speed rule 6)
@@ -37,6 +37,11 @@ The screens keep their layout; the screen specs (`0009i`–`0009s`) restyle them
          and `['listing']` are reset once. Every `GET /listings/{id}` counts a view (0004a);
        - otherwise call `clearSession(client, { keepInviteToken: query.meta?.keepInviteTokenOn401 === true
          })` (`features/auth/useLogout.ts`).
+
+       Build note: the build subscribes to the query cache and acts on the final `updated`/`error` action instead of
+       `QueryCache`'s `onError`, because `onError` runs after the dispatch that queues the page's re-render, so the
+       page re-creates the per-user queries `clearSession` just removed (AC1 fails; confirmed by the code and
+       security reviewers).
 
        `RequireOwner` / `RequireSeeker` / `RequireUser` then send the person to
        `/login?next=<this page>` (`loginWithNext`, unchanged). On public pages (the listing page's apply
@@ -77,9 +82,8 @@ The screens keep their layout; the screen specs (`0009i`–`0009s`) restyle them
    - The non-query sites keep their void handlers and get no busy state: `OtpForm.tsx:313`,
      `ApplySection.tsx:200`, `JoinFlatPage.tsx:266`, `PreviewStep.tsx:53`. `features/areas/AreasList.tsx` is
      `0009a`'s, so leave it.
-   - Accepted behaviour: while the device is offline, TanStack pauses a refetch (`networkMode: 'online'`).
-     The button then stays busy, and the paused refetch resumes on its own when the connection returns. The
-     offline text is `0009f`'s (`useOnline`).
+   - Accepted behaviour: the app keeps `networkMode: 'always'` (0009f), so while the device is offline a refetch
+     fails at once and the button leaves its busy state. The offline text is `0009f`'s (`useOnline`).
 
 3. **Drafts** (FOLLOWUPS 79, 109, 119)
    - New `web/src/app/drafts.ts`. The store is `sessionStorage`, one entry per draft:

@@ -120,7 +120,7 @@ export function MyFlatsPage() {
   let body;
   if (flats.data === undefined) {
     body = flats.isError ? (
-      <ErrorState onRetry={() => void flats.refetch()} />
+      <ErrorState onRetry={() => flats.refetch()} />
     ) : (
       <Loading>
         <Skeleton />

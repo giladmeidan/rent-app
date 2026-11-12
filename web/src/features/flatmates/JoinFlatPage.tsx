@@ -223,7 +223,7 @@ function JoinFlow() {
   if (me.data === undefined) {
     return (
       <Frame>
-        <ErrorState onRetry={() => void me.refetch()} />
+        <ErrorState onRetry={() => me.refetch()} />
       </Frame>
     );
   }
@@ -245,7 +245,7 @@ function JoinFlow() {
     return (
       <Frame>
         {failure === 'other' ? (
-          <ErrorState onRetry={() => void preview.refetch()} />
+          <ErrorState onRetry={() => preview.refetch()} />
         ) : (
           <Card padding="lg" className={card}>
             <p role="alert" className={message}>

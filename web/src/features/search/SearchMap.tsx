@@ -82,7 +82,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
   let empty = false;
   let error = null;
   if (search.isError) {
-    error = <ErrorState onRetry={() => void search.refetch()} />;
+    error = <ErrorState onRetry={() => search.refetch()} />;
   } else if (data !== undefined) {
     const { total, items } = data;
     if (total === 0) {

@@ -1410,4 +1410,114 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toBeVisible();
     reset(view);
   });
+
+  it('ac3_applicants_404_not_found', async () => {
+    const gone = () => json({ detail: 'not_found' }, 404);
+    const P = applicant({ applicant_name: MICHAL });
+
+    // First load answers 404: not found at once (the <h1>, the back link, the tab's title), and
+    // "my listings" is requested again.
+    let { api, view } = renderPage([gone], { mine: [() => json([A])] });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.applicants.notFound }),
+    ).toBeVisible();
+    expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+      'href',
+      '/me/listings',
+    );
+    expect(document.title).toBe(
+      i18n.t('app.pageTitle', { page: he.applicants.notFound, app: he.app.title }),
+    );
+    expect(api.calls(APPS)).toHaveLength(1);
+    await vi.waitFor(() => {
+      expect(api.calls(MINE)).toHaveLength(2);
+    });
+    reset(view);
+
+    // Cards shown, then a background refetch answers 404 (twice): the cards stay, and "my
+    // listings" is requested once more, which still has the listing.
+    let client = testQueryClient();
+    ({ api, view } = renderPage([() => json([P]), gone], { mine: [() => json([A])], client }));
+    expect(await screen.findByRole('article', { name: MICHAL })).toBeVisible();
+    for (let i = 0; i < 2; i += 1) {
+      await act(() => client.invalidateQueries({ queryKey: ['me', 'applicants', A.id] }));
+    }
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(api.calls(APPS)).toHaveLength(3);
+    expect(api.calls(MINE)).toHaveLength(2);
+    expect(screen.getByRole('article', { name: MICHAL })).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 1, name: he.applicants.notFound })).toBeNull();
+    reset(view);
+
+    // The same, and "my listings" no longer has it: the page shows not found.
+    client = testQueryClient();
+    ({ api, view } = renderPage([() => json([P]), gone], {
+      mine: [() => json([A]), () => json([B])],
+      client,
+    }));
+    expect(await screen.findByRole('article', { name: MICHAL })).toBeVisible();
+    await act(() => client.invalidateQueries({ queryKey: ['me', 'applicants', A.id] }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: he.applicants.notFound }),
+    ).toBeVisible();
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(api.calls(MINE)).toHaveLength(2);
+    reset(view);
+  });
+
+  it('ac9_card_leaving_filter_is_explained', async () => {
+    const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
+    const Q = applicant({ status: 'submitted' });
+    const shortlisted = { ...P, status: 'shortlisted' as const };
+    const fill = (template: string) =>
+      template.replace('{{name}}', MICHAL).replace('{{status}}', he.applicants.status.shortlisted);
+    const movedOut = fill(he.applicants.movedOut);
+    const changed = fill(he.applicants.statusChanged);
+    const page = () =>
+      renderPage([() => json([P, Q]), () => json([shortlisted, Q])], {
+        extra: { [patchRoute(P)]: [() => json(shortlisted)] },
+      });
+
+    // Under "new": the card leaves, and a visible status line before the list says why.
+    let { view } = page();
+    await screen.findAllByRole('article');
+    fireEvent.click(filterButton('new', 2));
+    fireEvent.click(
+      within(cardOf(MICHAL)).getByRole('button', { name: he.applicants.actions.shortlist }),
+    );
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('article', { name: MICHAL })).toBeNull();
+    });
+    const line = await screen.findByText(movedOut);
+    expect(line).toHaveAttribute('role', 'status');
+    expect(line).not.toHaveClass('sr-only');
+    expect(line).toHaveClass('text-body-sm', 'text-ink-muted');
+    expect(line.compareDocumentPosition(screen.getByRole('tabpanel'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(screen.queryByText(changed)).toBeNull();
+    // A sort change keeps it; choosing "all" clears it.
+    fireEvent.click(sortButton('newest'));
+    expect(screen.getByText(movedOut)).toBe(line);
+    fireEvent.click(filterButton('all', 2));
+    expect(screen.queryByText(movedOut)).toBeNull();
+    expect(line).toBeEmptyDOMElement();
+    expect(line).toHaveClass('sr-only');
+    reset(view);
+
+    // Under "all": the card stays, and the same line is announced only.
+    ({ view } = page());
+    await screen.findAllByRole('article');
+    fireEvent.click(
+      within(cardOf(MICHAL)).getByRole('button', { name: he.applicants.actions.shortlist }),
+    );
+    const announced = await screen.findByText(changed);
+    expect(announced).toHaveAttribute('role', 'status');
+    expect(announced).toHaveClass('sr-only');
+    expect(screen.getByRole('article', { name: MICHAL })).toBeVisible();
+    expect(screen.queryByText(movedOut)).toBeNull();
+    reset(view);
+  });
 });

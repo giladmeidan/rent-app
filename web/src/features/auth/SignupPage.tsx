@@ -4,10 +4,12 @@ import { Link, Navigate, useSearchParams } from 'react-router';
 import { Card } from '../../components/Card';
 import { cx } from '../../components/cx';
 import { focusRing } from '../../components/focusRing';
+import { Loading } from '../../components/Loading';
 import { Logo } from '../../components/Logo';
 import { Mascot } from '../../components/Mascot';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { Skeleton } from '../../components/Skeleton';
 import type { Role } from '../../api/client';
 import { usePageTitle } from '../../app/usePageTitle';
 import { safeNext } from './next';
@@ -38,7 +40,14 @@ export function SignupPage() {
       </div>
       <Card data-testid="auth-card" padding="lg" className="flex flex-col gap-6">
         <PageHeader title={t('auth.signup.title')} subtitle={t('auth.signup.subtitle')} />
-        <OtpForm withProfile initialRole={roleFromQuery(params.get('role'))} next={next} />
+        {/* While the session check runs, no editable form (a logged-in person is redirected). */}
+        {me.isPending ? (
+          <Loading>
+            <Skeleton />
+          </Loading>
+        ) : (
+          <OtpForm withProfile initialRole={roleFromQuery(params.get('role'))} next={next} />
+        )}
       </Card>
       <p className="text-center text-body text-ink-muted">
         {t('auth.signup.haveAccount')}{' '}

@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import { OtpForm } from '../OtpForm';
-import { deferred, empty, json, mockApi, renderAt } from './harness';
+import { readDraft, writeDraft } from '../../../app/drafts';
+import { deferred, empty, json, mockApi, noa, renderAt } from './harness';
 
 // Fake timers drive the cooldown, so testing-library's polling `findBy*` cannot be used here:
 // `flush` runs pending timers due now and lets the mocked fetch promises settle instead.
@@ -359,5 +360,32 @@ describe('OtpForm', () => {
     // That cooldown ends too.
     await advance(30_000);
     expect(status()).toHaveTextContent(he.auth.resendReady);
+  });
+
+  it('ac8_login_clears_other_users_drafts', async () => {
+    // V's drafts are on this tab; U (noa) logs in. U's own draft stays.
+    const V = '00000000-0000-0000-0000-0000000000bb';
+    writeDraft('apply', 'L', V, 'from V');
+    writeDraft('chat', 'C', V, 'from V');
+    writeDraft('apply', 'M', noa.id, 'from U');
+    mockApi({
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json(noa, 200)],
+    });
+    renderAt('/login', <OtpForm withProfile={false} />);
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: noa.email },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+    await flush();
+    await flush();
+    expect(readDraft('apply', 'L', V)).toBe('');
+    expect(readDraft('chat', 'C', V)).toBe('');
+    expect(window.sessionStorage.getItem('rent-app:draft:apply:L')).toBeNull();
+    expect(window.sessionStorage.getItem('rent-app:draft:chat:C')).toBeNull();
+    expect(readDraft('apply', 'M', noa.id)).toBe('from U');
   });
 });

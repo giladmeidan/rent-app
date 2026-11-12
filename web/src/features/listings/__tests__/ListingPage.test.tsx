@@ -875,4 +875,22 @@ describe('ListingPage', () => {
       expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
     });
   });
+
+  it('ac11_not_found_links_to_search', async () => {
+    // "חיפוש דירות וחדרים"
+    const TO_SEARCH =
+      '\u05d7\u05d9\u05e4\u05d5\u05e9 \u05d3\u05d9\u05e8\u05d5\u05ea \u05d5\u05d7\u05d3\u05e8\u05d9\u05dd';
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [() => json({ detail: 'not_found' }, 404)],
+    });
+    render(katznelson.id);
+    const heading = await screen.findByRole('heading', { level: 1, name: he.listing.notFound });
+    const link = screen.getByRole('link', { name: TO_SEARCH });
+    expect(link).toHaveAttribute('href', '/search');
+    expect(link.className.split(' ')).toEqual(
+      expect.arrayContaining(['min-h-tap', 'focus-visible:outline-accent']),
+    );
+    expect(heading.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

@@ -30,7 +30,7 @@ const emailInput = () => screen.getByLabelText(he.auth.email.label);
 const sendCode = () => screen.getByRole('button', { name: he.auth.sendCode });
 
 describe('SignupPage', () => {
-  it('ac1_signup_card_and_cross_link', () => {
+  it('ac1_signup_card_and_cross_link', async () => {
     for (const [query, href] of [
       ['', '/login'],
       // `?role` is not carried to login.
@@ -49,6 +49,8 @@ describe('SignupPage', () => {
       mockApi({ 'GET /me': [unauthenticated] });
       const view = renderAt(`/signup${query}`, <SignupPage />);
 
+      // The form replaces 0009g's skeleton once `/me` answers.
+      await screen.findByLabelText(he.auth.email.label);
       const brand = screen.getByTestId('auth-brand');
       const card = screen.getByTestId('auth-card');
       expect(brand.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -78,11 +80,11 @@ describe('SignupPage', () => {
     }
   });
 
-  it('ac2_role_is_choice_group', () => {
+  it('ac2_role_is_choice_group', async () => {
     mockApi({ 'GET /me': [unauthenticated] });
     renderAt('/signup?role=seeker', <SignupPage />);
 
-    const group = screen.getByRole('group', { name: he.auth.role.label });
+    const group = await screen.findByRole('group', { name: he.auth.role.label });
     const radios = within(group).getAllByRole('radio');
     expect(radios).toHaveLength(2);
     expect(radios[0]).toHaveAccessibleName(he.auth.role.owner);
@@ -120,6 +122,8 @@ describe('SignupPage', () => {
         'POST /auth/otp/verify': [json(noa, status)],
       });
       const view = renderAt('/signup?role=seeker', <SignupPage />);
+      // The form shows once `/me` has answered (spec 0009g: a skeleton until then).
+      await screen.findByLabelText(he.auth.email.label);
 
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.auth.signup.title);
       expect(screen.getByRole('radio', { name: he.auth.role.seeker })).toBeChecked();
@@ -171,6 +175,8 @@ describe('SignupPage', () => {
       ],
     });
     renderAt('/signup', <SignupPage />);
+    // The form shows once `/me` has answered (spec 0009g: a skeleton until then).
+    await screen.findByLabelText(he.auth.email.label);
 
     // No ?role: nothing preselected and the submit waits for a choice.
     expect(screen.getByRole('radio', { name: he.auth.role.owner })).not.toBeChecked();
@@ -222,6 +228,8 @@ describe('SignupPage', () => {
         'POST /auth/otp/verify': [json(noa, 201)],
       });
       const view = renderRoutes(`/signup?role=seeker&next=${next}`, routes);
+      // The form shows once `/me` has answered (spec 0009g: a skeleton until then).
+      await screen.findByLabelText(he.auth.email.label);
 
       // The prompt's signup link preselects the seeker role.
       expect(screen.getByRole('radio', { name: he.auth.role.seeker })).toBeChecked();
@@ -238,5 +246,23 @@ describe('SignupPage', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('ac11_skeleton_while_me_pending', async () => {
+    // While `/me` is pending: the page's <h1> and a busy skeleton, never an editable form.
+    const me = deferred();
+    mockApi({ 'GET /me': [me.promise] });
+    renderAt('/signup?role=seeker', <SignupPage />);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.auth.signup.title);
+    const skeleton = screen.getByTestId('skeleton');
+    expect(skeleton.closest('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByLabelText(he.auth.email.label)).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+
+    // Logged out: the form replaces the skeleton.
+    me.resolve(json({ detail: 'unauthenticated' }, 401));
+    expect(await screen.findByLabelText(he.auth.email.label)).toBeVisible();
+    expect(screen.queryByTestId('skeleton')).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut, MessageOut, ThreadOut } from '../api';
+import { readDraft, writeDraft } from '../../../app/drafts';
 import { CONVERSATIONS_KEY } from '../useConversations';
 import { conversation, message, thread } from './fixtures';
 import { chatRoutes, connected, ES, openStream, settle } from './harness';
@@ -408,7 +409,8 @@ describe('ChatThreadPage', () => {
     vi.restoreAllMocks();
     onlineManager.setOnline(true);
 
-    // 401 on the POST: the session is gone; to /login, and the sent text is not kept anywhere.
+    // 401 on the POST: the session is gone; to /login, and the sent text is not kept in the
+    // mutation cache (the composer's draft is, spec 0009g).
     const expired = renderThread(T, [() => json(T)], {
       extra: { [postRoute(T)]: [json({ detail: 'unauthenticated' }, 401)] },
     });
@@ -753,5 +755,103 @@ describe('ChatThreadPage', () => {
     await settle();
     expect(note).not.toHaveFocus();
     expect(link).toHaveFocus();
+  });
+
+  it('ac7_chat_draft', async () => {
+    const refetch = async () => {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+    };
+    // "אשמח לראות את הדירה\nמחר?"
+    const TEXT =
+      '\u05d0\u05e9\u05de\u05d7 \u05dc\u05e8\u05d0\u05d5\u05ea \u05d0\u05ea \u05d4\u05d3\u05d9\u05e8\u05d4\n\u05de\u05d7\u05e8?';
+    const T = thread({ messages: [message({ body: 'hello' })] });
+    const closed = { ...T, can_send: false };
+    const draft = () => readDraft('chat', T.id, seeker.id);
+    const unsentLabel = () => screen.queryByText(he.chat.thread.unsent);
+    const discardButton = () => screen.queryByRole('button', { name: he.chat.thread.discardDraft });
+
+    // Typed text survives a 401 (the send's: the session clears, to /login) and the way back.
+    let { view } = renderThread(T, [() => json(T)], {
+      extra: { [postRoute(T)]: [json({ detail: 'unauthenticated' }, 401)] },
+    });
+    expect(await h1(T.other_name)).toBeVisible();
+    fireEvent.change(textarea(), { target: { value: TEXT } });
+    expect(draft()).toBe(TEXT);
+    fireEvent.click(sendButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(`/login?next=${encodeURIComponent(`/chat/${T.id}`)}`);
+    });
+    reset(view);
+    ({ view } = renderThread(T, [() => json(T)]));
+    expect(await h1(T.other_name)).toBeVisible();
+    expect(textarea()).toHaveValue(TEXT);
+    reset(view);
+
+    // The send answers 409 `chat_closed` and the refetch `can_send: false`: under the closed note,
+    // the unsent text, read-only, with a discard button.
+    ({ view } = renderThread(T, [json(T), () => json(closed)], {
+      extra: { [postRoute(T)]: [json({ detail: 'chat_closed' }, 409)] },
+    }));
+    expect(await h1(T.other_name)).toBeVisible();
+    expect(textarea()).toHaveValue(TEXT);
+    fireEvent.click(sendButton());
+    const note = await screen.findByText(he.chat.thread.closed);
+    const label = await screen.findByText(he.chat.thread.unsent);
+    const text = screen.getByTestId('unsent-draft');
+    expect(text.textContent).toBe(TEXT);
+    expect(text).toHaveAttribute('dir', 'auto');
+    expect(text.tagName).toBe('P');
+    expect(note.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(label.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    // Discard: the text and the stored draft go, and focus lands on the closed note.
+    const discard = discardButton();
+    expect(discard).not.toBeNull();
+    act(() => discard?.focus());
+    fireEvent.click(discard as HTMLElement);
+    expect(unsentLabel()).toBeNull();
+    expect(screen.queryByTestId('unsent-draft')).toBeNull();
+    expect(discardButton()).toBeNull();
+    expect(draft()).toBe('');
+    expect(note).toHaveFocus();
+    reset(view);
+
+    // Not discarded: when the chat reopens, the composer holds the text again.
+    writeDraft('chat', T.id, seeker.id, TEXT);
+    ({ view } = renderThread(T, [json(closed), () => json(T)]));
+    expect(await screen.findByText(he.chat.thread.closed)).toBeVisible();
+    expect(screen.getByTestId('unsent-draft').textContent).toBe(TEXT);
+    await refetch();
+    await waitFor(() => {
+      expect(textarea()).toHaveValue(TEXT);
+    });
+    expect(unsentLabel()).toBeNull();
+    reset(view);
+
+    // A 201 clears the draft.
+    ({ view } = renderThread(T, [() => json(T)], {
+      extra: { [postRoute(T)]: [() => json(sent(TEXT), 201)] },
+    }));
+    expect(await h1(T.other_name)).toBeVisible();
+    expect(textarea()).toHaveValue(TEXT);
+    fireEvent.click(sendButton());
+    await waitFor(() => {
+      expect(textarea()).toHaveValue('');
+    });
+    expect(draft()).toBe('');
+    reset(view);
+
+    // The `Removed` state (the refetch answers 404) clears it.
+    ({ view } = renderThread(T, [() => json(T), () => json({ detail: 'not_found' }, 404)]));
+    expect(await h1(T.other_name)).toBeVisible();
+    fireEvent.change(textarea(), { target: { value: TEXT } });
+    expect(draft()).toBe(TEXT);
+    await refetch();
+    expect(await screen.findByRole('heading', { level: 1, name: he.chat.removed })).toBeVisible();
+    expect(draft()).toBe('');
+    reset(view);
   });
 });

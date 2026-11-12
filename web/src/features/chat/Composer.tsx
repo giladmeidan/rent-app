@@ -1,6 +1,7 @@
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { readDraft, writeDraft } from '../../app/drafts';
 import { hasStatus } from '../applications/api';
 import { ApiError } from '../listings/api';
 import type { MessageOut } from './api';
@@ -24,18 +25,31 @@ function handledByPage(error: unknown): boolean {
 
 type Props = {
   conversationId: string;
+  /** The signed-in person, whose draft this is (spec 0009g). */
+  userId: string | undefined;
   /** After a message of the caller's own was sent (the page scrolls to it). */
   onSent: (message: MessageOut) => void;
 };
 
 /**
  * The message form under an open thread. Enter inserts a newline; only the button sends. The text
- * is kept on every error.
+ * is kept on every error, and as `userId`'s draft in this tab (spec 0009g): a remount (a trip
+ * through login, the chat reopening) starts with it.
  */
-export function Composer({ conversationId, onSent }: Props) {
+export function Composer({ conversationId, userId, onSent }: Props) {
   const { t } = useTranslation();
   const send = useSendMessage(conversationId);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => readDraft('chat', conversationId, userId));
+  // On every change of the text, typed or inserted by the viewing chip; an empty text removes it.
+  // The first run is skipped: with nothing restored it would remove an entry that is not ours.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    writeDraft('chat', conversationId, userId, text);
+  }, [conversationId, userId, text]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Same-tick guard: a double click sends one message.
   const inFlight = useRef(false);

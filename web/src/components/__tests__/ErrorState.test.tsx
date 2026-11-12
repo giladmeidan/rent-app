@@ -122,4 +122,47 @@ describe('ErrorState', () => {
     render(<ErrorState page onRetry={onRetry} />);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(OFFLINE);
   });
+
+  it('ac4_busy_retry_keeps_focus', async () => {
+    let resolve: () => void = () => undefined;
+    const onRetry = vi.fn(
+      () =>
+        new Promise<void>((r) => {
+          resolve = r;
+        }),
+    );
+    const view = render(<ErrorState onRetry={onRetry} />);
+    const retry = screen.getByRole('button', { name: he.common.retry });
+    act(() => retry.focus());
+    fireEvent.click(retry);
+
+    // Busy while the promise is pending, and still the focused element: never `disabled`.
+    expect(retry).toHaveAttribute('aria-disabled', 'true');
+    expect(retry).toHaveAttribute('aria-busy', 'true');
+    expect(retry).not.toBeDisabled();
+    expect(document.activeElement).toBe(retry);
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    // Plain again once it settles.
+    await act(async () => {
+      resolve();
+      await Promise.resolve();
+    });
+    expect(retry).not.toHaveAttribute('aria-disabled');
+    expect(retry).not.toHaveAttribute('aria-busy');
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledTimes(2);
+    view.unmount();
+
+    // A void `onRetry` never turns the button busy.
+    const plain = vi.fn();
+    render(<ErrorState onRetry={plain} />);
+    const button = screen.getByRole('button', { name: he.common.retry });
+    fireEvent.click(button);
+    expect(button).not.toHaveAttribute('aria-disabled');
+    expect(button).not.toHaveAttribute('aria-busy');
+    fireEvent.click(button);
+    expect(plain).toHaveBeenCalledTimes(2);
+  });
 });

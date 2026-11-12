@@ -155,6 +155,7 @@ export function useInvitePreview(token: string | null) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
+    meta: { keepInviteTokenOn401: true },
   });
 }
 

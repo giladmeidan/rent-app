@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
+import { clearDraft } from '../../app/drafts';
 import type { ListingDetail } from '../listings/api';
 import { clearSession } from '../auth/useLogout';
 import { PROFILE_KEY } from '../profile/useProfile';
@@ -23,6 +24,10 @@ export const loginPath = (listingId: string) =>
  *   no extra view);
  * - any other (`already_applied`) refetches the list (it then holds the application).
  * A 401 forgets the session and sends the person to log in and come back.
+ *
+ * The typed message's draft (spec 0009g) is cleared by a 201, a 404 and the final 409s
+ * (`already_applied`, `room_gender_mismatch`); a 401 and the profile 409s keep it, since the person
+ * comes back to the form.
  */
 export function useApply(listingId: string) {
   const queryClient = useQueryClient();
@@ -30,6 +35,7 @@ export function useApply(listingId: string) {
   return useMutation({
     mutationFn: (message: string) => applyToListing(listingId, message),
     onSuccess: (app) => {
+      clearDraft('apply', listingId);
       queryClient.setQueryData<MyApplicationOut[]>(
         MY_APPLICATIONS_KEY,
         (old) => old && [app, ...old.filter((a) => a.id !== app.id)],
@@ -44,6 +50,8 @@ export function useApply(listingId: string) {
       if (hasStatus(error, 401)) {
         clearSession(queryClient);
         void navigate(loginPath(listingId));
+      } else if (hasStatus(error, 404)) {
+        clearDraft('apply', listingId);
       } else if (error instanceof ApiError && error.status === 409) {
         const code = error.detail;
         if (code === 'seeker_profile_required' || code === 'seeker_gender_required') {
@@ -52,11 +60,13 @@ export function useApply(listingId: string) {
             void queryClient.invalidateQueries({ queryKey: ['listing', listingId], exact: true });
           }
         } else if (code === 'room_gender_mismatch') {
+          clearDraft('apply', listingId);
           queryClient.setQueryData<ListingDetail>(
             ['listing', listingId],
             (old) => old && { ...old, room_fit: false },
           );
         } else {
+          if (code === 'already_applied') clearDraft('apply', listingId);
           void queryClient.invalidateQueries({ queryKey: MY_APPLICATIONS_KEY, exact: true });
         }
       }
