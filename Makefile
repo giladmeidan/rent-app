@@ -8,7 +8,7 @@
 # loaded with `?=` and exported, so precedence is
 #   `make VAR=…` > shell environment (`VAR=… make dev`) > `.env` > the defaults below.
 # Exported values reach every recipe: uv/pytest/alembic and compose interpolation
-# (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml; `API_PORT` also
+# (`DB_PORT`, `REDIS_PORT`, `API_PORT`, `WEB_PORT`, `WEB_ORIGIN` in infra/docker-compose.yml; `API_PORT` also
 # sets the web's `VITE_API_URL`).
 ifneq (,$(wildcard .env))
 $(foreach kv,$(shell awk -f infra/dotenv.awk .env),$(if $(filter !%,$(kv)),$(warning .env line $(kv:!%=%) ignored: not KEY=value (see .env.example)),$(eval export $(kv))))
@@ -22,7 +22,8 @@ PNPM    := pnpm --dir web
 export DATABASE_URL      ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent
 export TEST_DATABASE_URL ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent_test
 export REDIS_URL         ?= redis://localhost:$(or $(REDIS_PORT),6379)/0
-export WEB_ORIGIN        ?= http://localhost:5173
+export WEB_PORT          ?= 5173
+export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
@@ -30,7 +31,7 @@ export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
-WEB_URL    := http://localhost:5173
+WEB_URL    := http://localhost:$(WEB_PORT)
 
 # $(call wait_for,url,seconds,service): poll url until it answers 2xx; fail after `seconds`.
 define wait_for
@@ -57,7 +58,7 @@ dev:
 	$(call wait_for,$(WEB_URL),60,web)
 
 ## dev-api: `dev` without the web: db+redis, migrate, seed, then api (reload) and worker, waiting on
-## /health only. For an API spec built while another session holds the Vite port 5173 (Speed rule 2).
+## /health only. For an API spec built while another session needs no web port (WEB_PORT is per worktree).
 dev-api:
 	mkdir -p .outbox && chmod 0777 .outbox
 	$(COMPOSE) up -d --wait db redis
