@@ -49,6 +49,14 @@ describe('LoginPage', () => {
       ['?next=%2Fme%2Flikes', '/signup?next=%2Fme%2Flikes'],
       // Only `safeNext`'s output is used: an unsafe `next` is dropped, not passed on.
       ['?next=%2F%2Fevil.example', '/signup'],
+      ['?next=%2F%5Cevil.example', '/signup'],
+      ['?next=https%3A%2F%2Fevil.example', '/signup'],
+      ['?next=%2F%09%2Fevil.example', '/signup'],
+      // Encoding keeps a safe `next` from injecting a param or fragment into the link.
+      [
+        '?next=%2Fme%3Fa%3D1%26role%3Downer%23x',
+        `/signup?next=${encodeURIComponent('/me?a=1&role=owner#x')}`,
+      ],
     ] as const) {
       mockApi({ 'GET /me': [unauthenticated] });
       const view = renderAt(`/login${query}`, <LoginPage />);
