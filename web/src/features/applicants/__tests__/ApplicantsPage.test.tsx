@@ -1521,3 +1521,285 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     reset(view);
   });
 });
+
+// --- 0009u: the desktop layout --------------------------------------------------------------
+
+/** Opts in to the desktop layout: only `(min-width: 1024px)` matches (a reduced-motion query stays
+ * false). The listeners are kept, so `set(false)` fires a `change` as a resize would. The file's
+ * `vi.unstubAllGlobals()` clears it. */
+function stubDesktop(matches = true) {
+  let current = matches;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', (q: string) => ({
+    get matches() {
+      return current && q === '(min-width: 1024px)';
+    },
+    media: q,
+    addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+  }));
+  return {
+    set(next: boolean) {
+      current = next;
+      act(() => {
+        for (const listener of listeners) listener();
+      });
+    },
+  };
+}
+
+const pane = () => screen.getByRole('complementary', { name: he.applicants.pane.label });
+const nameButton = (name: string) =>
+  within(cardOf(name)).getByRole('button', { name, description: '' });
+const selectCard = (name: string) => fireEvent.click(nameButton(name));
+const paneMore = () => within(pane()).getByRole('button', { name: he.applicants.more });
+
+describe('ApplicantsPage, desktop (0009u)', () => {
+  it('ac1_desktop_pane', async () => {
+    stubDesktop();
+    const [a, , c0] = abc();
+    const b = applicant({
+      applicant_name: 'B',
+      status: 'shortlisted',
+      match: match(59, ['move_in', 'area', 'household'], 'budget'),
+      profile: applicantProfile(),
+    });
+    const c = roomApplicant(
+      { lifestyle: { cleanliness: 3 } },
+      { applicant_name: c0.applicant_name },
+    );
+    renderPage([json([a, b, c])], { mine: [json([roomListing({ cleanliness: 1 })])] });
+    await screen.findAllByRole('article');
+
+    const inPane = within(pane());
+    expect(inPane.getByRole('heading', { level: 2, name: 'A' })).toBeVisible();
+    expect(inPane.getByTestId('pane-status')).toHaveTextContent(he.applicants.status.submitted);
+    const ring = inPane.getByTestId('match-ring');
+    expect(ring).toHaveTextContent(badge(94));
+    expect(within(ring).queryByText(he.match.ring.label, { exact: true })).toBeNull();
+    expect(inPane.getAllByRole('term').map((dt) => dt.textContent)).toEqual([
+      he.applicants.profile.household,
+      he.applicants.profile.moveIn,
+      he.applicants.profile.contract,
+      he.applicants.profile.pets,
+      he.applicants.profile.smoker,
+      he.applicants.profile.parking,
+    ]);
+    expect(inPane.getByRole('heading', { level: 3, name: he.applicants.why })).toBeVisible();
+    expect(inPane.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      he.match.owner.budget.agree,
+      `תאריך הכניסה מתאים (${formatDate(inDays(30))})`,
+      he.match.owner.area.agree,
+    ]);
+    expect(inPane.getByTestId('pane-message')).toHaveTextContent(a.message ?? '');
+    expect(inPane.queryByRole('link')).toBeNull();
+    // The pane is not an article: `getByRole('article')` still finds the cards only.
+    expect(cards()).toHaveLength(3);
+    expect(pane()).toHaveAttribute('tabindex', '0');
+
+    // The selected card, and compact cards: no disclosures, a two-line preview.
+    expect(nameButton('A')).toHaveAttribute('aria-current', 'true');
+    expect(nameButton('B')).not.toHaveAttribute('aria-current');
+    expect(nameButton('C')).not.toHaveAttribute('aria-current');
+    expect(nameButton('A')).toHaveAttribute('aria-controls', pane().id);
+    for (const card of cards()) {
+      expect(within(card).queryByRole('button', { name: he.applicants.why })).toBeNull();
+      expect(within(card).queryByRole('button', { name: he.applicants.more })).toBeNull();
+      expect(within(card).getByTestId('applicant-message')).toHaveClass('line-clamp-2');
+    }
+    expect(cards()[0]?.closest('ul')).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-2');
+
+    // Selecting B: the marker and the pane move; B is shortlisted, so the pane links to its chat.
+    selectCard('B');
+    expect(nameButton('B')).toHaveAttribute('aria-current', 'true');
+    expect(nameButton('A')).not.toHaveAttribute('aria-current');
+    expect(within(pane()).getByRole('heading', { level: 2, name: 'B' })).toBeVisible();
+    expect(within(pane()).getByTestId('pane-status')).toHaveTextContent(
+      he.applicants.status.shortlisted,
+    );
+    expect(within(pane()).getByRole('link', { name: he.applicants.pane.chat })).toHaveAttribute(
+      'href',
+      `/chat/${b.id}`,
+    );
+  });
+
+  it('ac2_pane_room_answers_behind_more', async () => {
+    stubDesktop();
+    const [a, , c0] = abc();
+    const c = roomApplicant(
+      { lifestyle: { cleanliness: 3 } },
+      { applicant_name: c0.applicant_name },
+    );
+    renderPage([json([a, c])], { mine: [json([roomListing({ cleanliness: 1 })])] });
+    await screen.findAllByRole('article');
+
+    // An apartment applicant: no "עוד פרטים", no answers.
+    expect(within(pane()).queryByRole('button', { name: he.applicants.more })).toBeNull();
+    expect(within(pane()).queryByText(he.lifestyle.cleanliness.topic)).toBeNull();
+
+    // A room applicant: closed at first, its panel hidden; a click shows the differing line.
+    selectCard('C');
+    const more = paneMore();
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    const panelId = more.getAttribute('aria-controls') ?? '';
+    const panel = document.getElementById(panelId);
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute('hidden');
+    expect(panel).not.toBeVisible();
+    fireEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(panel).toBeVisible();
+    expect(within(panel as HTMLElement).getByText(he.applicants.room.differs)).toBeVisible();
+
+    // A, then C again: closed again (the pane remounts on every selection).
+    selectCard('A');
+    expect(within(pane()).queryByRole('button', { name: he.applicants.more })).toBeNull();
+    expect(within(pane()).queryByText(he.lifestyle.cleanliness.topic)).toBeNull();
+    selectCard('C');
+    expect(paneMore()).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      document.getElementById(paneMore().getAttribute('aria-controls') ?? ''),
+    ).not.toBeVisible();
+  });
+
+  it('ac3_desktop_selection_follows_view', async () => {
+    stubDesktop();
+    const [a, b, c] = abc({ b: { status: 'shortlisted' } });
+    const current = () => within(pane()).getByRole('heading', { level: 2 }).textContent;
+    const { view } = renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+    expect(current()).toBe('A');
+
+    // A sort change keeps the selection: C is last under both sorts, so a reset would show B.
+    selectCard('C');
+    fireEvent.click(sortButton('newest'));
+    expect(names()).toEqual(['B', 'A', 'C']);
+    expect(nameButton('C')).toHaveAttribute('aria-current', 'true');
+    expect(current()).toBe('C');
+    selectCard('B');
+    fireEvent.click(sortButton('match'));
+    expect(names()).toEqual(['A', 'B', 'C']);
+    expect(nameButton('B')).toHaveAttribute('aria-current', 'true');
+    expect(current()).toBe('B');
+
+    // A tab change opens on the tab's first card (B is shortlisted, so not in "new"), and coming
+    // back to "all" shows the first card, not B.
+    fireEvent.click(filterButton('new', 2));
+    expect(names()).toEqual(['A', 'C']);
+    expect(current()).toBe('A');
+    expect(nameButton('A')).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(filterButton('all', 3));
+    expect(current()).toBe('A');
+    expect(nameButton('A')).toHaveAttribute('aria-current', 'true');
+    expect(nameButton('B')).not.toHaveAttribute('aria-current');
+
+    // An empty view: the message, and no pane.
+    fireEvent.click(filterButton('declined', 0));
+    expect(screen.getByText(he.applicants.emptyFilter)).toBeVisible();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    reset(view);
+
+    // Shortlisting from a card: one PATCH, the selection stays, and focus never goes to the pane.
+    stubDesktop();
+    const [a2, b2, c2] = abc();
+    const { api } = renderPage([json([a2, b2, c2])], {
+      extra: {
+        [patchRoute(a2)]: [json({ ...a2, status: 'shortlisted' })],
+        [patchRoute(c2)]: [json({ ...c2, status: 'shortlisted' })],
+      },
+    });
+    await screen.findAllByRole('article');
+    // A click on C's "לרשימה הקצרה" shortlists C without selecting it.
+    fireEvent.click(
+      within(cardOf('C')).getByRole('button', { name: he.applicants.actions.shortlist }),
+    );
+    await vi.waitFor(() => {
+      expect(chipOf('C')).toHaveTextContent(he.applicants.status.shortlisted);
+    });
+    expect(api.calls(patchRoute(c2))).toHaveLength(1);
+    expect(nameButton('A')).toHaveAttribute('aria-current', 'true');
+    expect(nameButton('C')).not.toHaveAttribute('aria-current');
+    expect(within(pane()).getByRole('heading', { level: 2, name: 'A' })).toBeVisible();
+
+    // A, the selected one: shortlisted from its card, it stays selected and the pane follows.
+    fireEvent.click(
+      within(cardOf('A')).getByRole('button', { name: he.applicants.actions.shortlist }),
+    );
+    await vi.waitFor(() => {
+      expect(chipOf('A')).toHaveTextContent(he.applicants.status.shortlisted);
+    });
+    expect(api.calls(patchRoute(a2))).toHaveLength(1);
+    expect(nameButton('A')).toHaveAttribute('aria-current', 'true');
+    expect(within(pane()).getByTestId('pane-status')).toHaveTextContent(
+      he.applicants.status.shortlisted,
+    );
+    await vi.waitFor(() => {
+      expect(within(cardOf('A')).getByRole('heading', { level: 2 })).toHaveFocus();
+    });
+    expect(pane()).not.toContainElement(document.activeElement as HTMLElement);
+
+    // jsdom lays nothing out, so the overlay itself is the e2e's to prove (a real click on a chip
+    // selects; one on "לרשימה הקצרה" shortlists). Here: the stretched name button, the positioned
+    // card, and the action row above it.
+    expect(nameButton('B')).toHaveClass('after:absolute', 'after:inset-0');
+    expect(cardOf('B')).toHaveClass('relative');
+    expect(
+      within(cardOf('B')).getByRole('button', { name: he.applicants.actions.shortlist })
+        .parentElement?.parentElement,
+    ).toHaveClass('relative', 'z-10');
+    selectCard('B');
+    expect(nameButton('B')).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('ac4_breakpoint_switch', async () => {
+    const screenSize = stubDesktop();
+    const [a, b, c] = abc();
+    renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+    selectCard('B');
+    expect(screen.getByRole('complementary')).toBeVisible();
+
+    // Below lg: the phone layout again.
+    screenSize.set(false);
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(within(cardOf('A')).queryByRole('button', { name: 'A' })).toBeNull();
+    expect(within(cardOf('A')).getByRole('button', { name: he.applicants.why })).toBeVisible();
+    expect(within(cardOf('A')).getByTestId('applicant-message')).not.toHaveClass('line-clamp-2');
+
+    // Back: the pane returns, with B still selected.
+    screenSize.set(true);
+    expect(pane()).toBeVisible();
+    expect(nameButton('B')).toHaveAttribute('aria-current', 'true');
+    expect(within(pane()).getByRole('heading', { level: 2, name: 'B' })).toBeVisible();
+    expect(within(cardOf('A')).queryByRole('button', { name: he.applicants.why })).toBeNull();
+  });
+
+  it('ac5_desktop_header_row', async () => {
+    const screenSize = stubDesktop();
+    const [a, b, c] = abc();
+    renderPage([json([a, b, c])]);
+    await screen.findAllByRole('article');
+
+    // The tiles are in the header's actions, on the <h1>'s row; the tabs and the sort share a row.
+    const h1 = screen.getByRole('heading', { level: 1 });
+    const headerRow = h1.parentElement?.parentElement as HTMLElement;
+    const tiles = screen.getByTestId('applicant-totals');
+    expect(headerRow).toContainElement(tiles);
+    expect(tiles.parentElement).not.toContainElement(h1);
+    expect(tiles.parentElement?.parentElement).toBe(headerRow);
+    expect(filters().parentElement).toBe(sortGroup().parentElement);
+    expect(filters().parentElement).toHaveClass('flex', 'items-end', 'justify-between');
+    expect(filters().parentElement).not.toBe(screen.getByRole('tabpanel').parentElement);
+
+    // Below lg: the tiles follow the header.
+    screenSize.set(false);
+    expect(headerRow).toContainElement(h1);
+    const phoneTiles = screen.getByTestId('applicant-totals');
+    expect(
+      screen.getByRole('heading', { level: 1 }).parentElement?.parentElement,
+    ).not.toContainElement(phoneTiles);
+    expect(phoneTiles.previousElementSibling).toContainElement(
+      screen.getByRole('heading', { level: 1 }),
+    );
+  });
+});
