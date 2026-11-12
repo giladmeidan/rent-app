@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
@@ -14,7 +15,8 @@ import { Skeleton } from '../../components/Skeleton';
 import { TabPanel, Tabs, tabId } from '../../components/Tabs';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
-import { useMyListings } from '../listings/useMyListings';
+import { MY_LISTINGS_KEY, useMyListings } from '../listings/useMyListings';
+import { hasStatus } from '../applications/api';
 import type { ApplicantOut, ApplicantStatus } from './api';
 import { ApplicantCard, type CardOutcome } from './ApplicantCard';
 import { useApplicants } from './useApplicants';
@@ -39,6 +41,11 @@ type FocusRequest =
 const matches = (filter: Filter, applicant: ApplicantOut) =>
   filter === 'all' || applicant.status === filter;
 
+/** The page's one status line: a status change, announced only (`sr-only`), or shown when the
+ * changed card left the current filter (`movedOut`, spec 0009g). */
+type Announcement = { text: string; movedOut: boolean };
+const NO_ANNOUNCEMENT: Announcement = { text: '', movedOut: false };
+
 /**
  * `/me/listings/:id/applicants`, owners only (`RequireOwner`): the applicants of one own listing,
  * found in `GET /me/listings` (an id not in it — another owner's, unknown, malformed — is "not
@@ -51,10 +58,24 @@ export function ApplicantsPage() {
   const listings = useMyListings();
   const listing = listings.data?.find((l) => l.id === id);
   const applicants = useApplicants(id, listing !== undefined);
+  const queryClient = useQueryClient();
+  // A 404 on the applicants: the listing is gone (deleted, or no longer this owner's). Nothing
+  // cached shows not-found at once; cached cards stay, and "my listings" is refetched (once per
+  // listing id), which flips the page to not-found when the listing has left it (spec 0009g).
+  const applicantsGone = hasStatus(applicants.error, 404);
+  const refetchedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!applicantsGone || refetchedFor.current === id) return;
+    refetchedFor.current = id;
+    void queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY });
+  }, [applicantsGone, id, queryClient]);
+  const notFound =
+    listings.data !== undefined &&
+    (listing === undefined || (applicantsGone && applicants.data === undefined));
   const [filter, setFilter] = useState<Filter>('all');
   // "By match" is the API's order as received; "by date" is sorted here, on a copy.
   const [sort, setSort] = useState<Sort>('match');
-  const [announcement, setAnnouncement] = useState('');
+  const [announcement, setAnnouncement] = useState<Announcement>(NO_ANNOUNCEMENT);
   const [gone, setGone] = useState(false);
   // Set in the action's callback; applied by the effect after the next render.
   const pendingFocus = useRef<FocusRequest | null>(null);
@@ -72,13 +93,11 @@ export function ApplicantsPage() {
       tone: 'danger',
     });
   usePageTitle(
-    listing !== undefined
-      ? `${t('applicants.titleFor')} ${cardTitle(t, listing)}`
-      : t(
-          listings.data !== undefined && listing === undefined
-            ? 'applicants.notFound'
-            : 'applicants.title',
-        ),
+    notFound
+      ? t('applicants.notFound')
+      : listing !== undefined
+        ? `${t('applicants.titleFor')} ${cardTitle(t, listing)}`
+        : t('applicants.title'),
   );
 
   // Runs after the render that follows the action, when the target is in the DOM and enabled.
@@ -104,16 +123,20 @@ export function ApplicantsPage() {
     if (outcome.kind === 'changed') {
       const updated = outcome.applicant;
       setGone(false);
-      setAnnouncement(
-        t('applicants.statusChanged', {
-          name: updated.applicant_name,
-          status: {
-            submitted: t('applicants.status.submitted'),
-            shortlisted: t('applicants.status.shortlisted'),
-            declined: t('applicants.status.declined'),
-          }[updated.status],
-        }),
-      );
+      const values = {
+        name: updated.applicant_name,
+        status: {
+          submitted: t('applicants.status.submitted'),
+          shortlisted: t('applicants.status.shortlisted'),
+          declined: t('applicants.status.declined'),
+        }[updated.status],
+      };
+      // A card that left the current filter says why, visibly; otherwise the line is announced only.
+      const movedOut = !matches(filter, updated);
+      setAnnouncement({
+        text: movedOut ? t('applicants.movedOut', values) : t('applicants.statusChanged', values),
+        movedOut,
+      });
       setFocus(
         matches(filter, updated)
           ? { to: 'heading', id: headingIdOf(applicantId) }
@@ -152,12 +175,12 @@ export function ApplicantsPage() {
       <PageContainer as="section" className={section}>
         <BackLink {...back} />
         {title}
-        <ErrorState onRetry={() => void listings.refetch()} />
+        <ErrorState onRetry={() => listings.refetch()} />
       </PageContainer>
     );
   }
 
-  if (listing === undefined) {
+  if (listing === undefined || notFound) {
     return (
       <PageContainer as="section" className={section}>
         <PageHeader back={back} title={t('applicants.notFound')} />
@@ -170,7 +193,7 @@ export function ApplicantsPage() {
   const list = applicants.data;
   if (list === undefined) {
     body = applicants.isError ? (
-      <ErrorState onRetry={() => void applicants.refetch()} />
+      <ErrorState onRetry={() => applicants.refetch()} />
     ) : (
       <Loading>
         <div className="flex flex-col gap-3">
@@ -243,6 +266,7 @@ export function ApplicantsPage() {
           value={filter}
           onChange={(f) => {
             setGone(false);
+            setAnnouncement(NO_ANNOUNCEMENT);
             setFilter(f);
           }}
           variant="underline"
@@ -305,11 +329,15 @@ export function ApplicantsPage() {
           {t('applicants.errors.gone')}
         </p>
       )}
+      {/* Always mounted in this one place (never remounted), so a change is announced once. */}
+      <p
+        role="status"
+        className={announcement.movedOut ? 'text-body-sm text-ink-muted' : 'sr-only'}
+      >
+        {announcement.text}
+      </p>
       {body}
       {confirmDialog}
-      <p role="status" className="sr-only">
-        {announcement}
-      </p>
     </PageContainer>
   );
 }

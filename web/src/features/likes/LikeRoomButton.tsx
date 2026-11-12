@@ -2,6 +2,8 @@ import { useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 
+import { hasStatus } from '../applications/api';
+import { ApiError } from '../listings/api';
 import { roomSectionHref } from '../profile/links';
 import type { LikeStateOut } from './api';
 import { likeProblem, useLikeRoom, useUnlikeRoom } from './useLikeRoom';
@@ -21,7 +23,22 @@ type Props = {
   onUnliked?: () => void;
   /** Called after a successful like that did not make the pair mutual. */
   onLikedNotMutual?: () => void;
+  /**
+   * The card is leaving the list after a failed like or unlike (spec 0009g): a 404 (`'gone'`) or a
+   * 409 `already_applied` (`'alreadyApplied'`). When passed, the page says why and this button
+   * shows no `gone` alert of its own.
+   */
+  onGone?: (reason: 'gone' | 'alreadyApplied') => void;
 };
+
+/** Why the card leaves the list after `error`, or null when it stays. */
+function goneReason(error: unknown): 'gone' | 'alreadyApplied' | null {
+  if (hasStatus(error, 404)) return 'gone';
+  if (error instanceof ApiError && error.status === 409 && error.detail === 'already_applied') {
+    return 'alreadyApplied';
+  }
+  return null;
+}
 
 /**
  * The room like toggle (`aria-pressed`), with the "the lister liked you" line above it. It is
@@ -34,6 +51,7 @@ export function LikeRoomButton({
   showHint = false,
   onUnliked,
   onLikedNotMutual,
+  onGone,
 }: Props) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -53,9 +71,17 @@ export function LikeRoomButton({
     const settled = () => {
       inFlight.current = false;
     };
+    const onError = (error: unknown) => {
+      const reason = goneReason(error);
+      if (reason !== null) onGone?.(reason);
+    };
     if (pressed) {
       liking.reset();
-      unliking.mutate(undefined, { onSettled: settled, onSuccess: () => onUnliked?.() });
+      unliking.mutate(undefined, {
+        onSettled: settled,
+        onSuccess: () => onUnliked?.(),
+        onError,
+      });
     } else {
       unliking.reset();
       liking.mutate(undefined, {
@@ -64,6 +90,7 @@ export function LikeRoomButton({
           if (result.application_id !== null) onMutual(result.application_id);
           else onLikedNotMutual?.();
         },
+        onError,
       });
     }
   }
@@ -106,7 +133,7 @@ export function LikeRoomButton({
           </Link>
         </div>
       )}
-      {problem === 'gone' && (
+      {problem === 'gone' && onGone === undefined && (
         <p role="alert" className={fieldError}>
           {t('likes.errors.gone')}
         </p>

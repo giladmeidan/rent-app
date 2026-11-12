@@ -107,7 +107,7 @@ export function PeoplePage() {
       <PageContainer as="section" className={section}>
         <Back />
         {title}
-        <ErrorState onRetry={() => void listings.refetch()} />
+        <ErrorState onRetry={() => listings.refetch()} />
       </PageContainer>
     );
   }
@@ -119,7 +119,7 @@ export function PeoplePage() {
     if (people.isError) {
       if (hasStatus(people.error, 404)) return <Notice message={t('people.notFound')} />;
       if (hasStatus(people.error, 409)) return <Notice message={t('people.notLive')} />;
-      body = <ErrorState onRetry={() => void people.refetch()} />;
+      body = <ErrorState onRetry={() => people.refetch()} />;
     } else {
       body = (
         <Loading>

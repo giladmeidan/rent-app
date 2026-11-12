@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { clearDraft, readDraft, writeDraft } from '../../app/drafts';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { retryAfterText } from '../../components/retryAfter';
@@ -63,12 +64,20 @@ const FOCUSED_BRANCHES = new Set<Branch>(['applied', 'misfit', 'roomGate', 'prof
  * The empty state: the apply button, and the message form it discloses. `onSubmitted(true)` runs
  * before every request, so the section can move focus to whatever replaces the form (spec 0009t);
  * `onSubmitted(false)` after an answer that keeps the form, so a later swap takes no focus.
+ *
+ * The message is kept as `userId`'s draft in this tab (spec 0009g): a form mounted with a draft
+ * opens with it, without taking focus. Cancel clears it; `useApply` clears it on the final answers.
  */
 function ApplyForm({
   apply,
+  listingId,
+  userId,
   onSubmitted,
 }: {
   apply: Apply;
+  listingId: string;
+  /** The signed-in seeker, whose draft this is. */
+  userId: string | undefined;
   onSubmitted: (submitted: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -80,8 +89,10 @@ function ApplyForm({
   const errorId = `${id}-error`;
   const serverErrorId = `${id}-server-error`;
 
-  const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState('');
+  // Read once, on mount: a saved draft opens the form with its text.
+  const [draft] = useState(() => readDraft('apply', listingId, userId));
+  const [open, setOpen] = useState(draft !== '');
+  const [message, setMessage] = useState(draft);
   const [fieldErr, setFieldErr] = useState<'required' | 'invalid' | null>(null);
   const [serverErr, setServerErr] = useState<'rateLimited' | 'failed' | null>(null);
   // A 429's `Retry-After`, in seconds, when the API sent one.
@@ -94,8 +105,12 @@ function ApplyForm({
   const inFlight = useRef(false);
   const lastBody = useRef('');
 
+  // Focus follows the person opening the form, never the mount: a form reopened from a draft
+  // takes no focus (it would raise the mobile keyboard and fight `RouteFocus`).
+  const wasOpen = useRef(open);
   useEffect(() => {
-    if (open) fieldRef.current?.focus();
+    if (open && !wasOpen.current) fieldRef.current?.focus();
+    wasOpen.current = open;
   }, [open]);
 
   // A 404 replaces the form with its alert: focus follows.
@@ -153,6 +168,7 @@ function ApplyForm({
   }
 
   function onCancel() {
+    clearDraft('apply', listingId);
     setOpen(false);
     setMessage('');
     setFieldErr(null);
@@ -208,6 +224,7 @@ function ApplyForm({
             value={message}
             onChange={(e) => {
               setMessage(e.target.value);
+              writeDraft('apply', listingId, userId, e.target.value);
               setFieldErr(null);
               // Retry re-sends the last body, so it is offered only while the text is unchanged.
               setServerErr(null);
@@ -377,7 +394,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   } else if (mine.isError && mine.data === undefined) {
     // Only when nothing is cached: a failed background refetch keeps the list and the draft.
     branch = 'error';
-    controls = <ErrorState onRetry={() => void mine.refetch()} />;
+    controls = <ErrorState onRetry={() => mine.refetch()} />;
   } else if (live) {
     branch = 'applied';
     // An application to this listing never waits for the profile.
@@ -409,7 +426,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     controls = skeleton;
   } else if (profile.isError && profile.data === undefined) {
     branch = 'error';
-    controls = <ErrorState onRetry={() => void profile.refetch()} />;
+    controls = <ErrorState onRetry={() => profile.refetch()} />;
   } else if (
     listing.listing_type === 'room' &&
     listing.gender_preference !== 'any' &&
@@ -426,6 +443,8 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     controls = (
       <ApplyForm
         apply={apply}
+        listingId={listing.id}
+        userId={me.data?.id}
         onSubmitted={(value) => {
           submitted.current = value;
         }}

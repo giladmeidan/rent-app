@@ -200,7 +200,7 @@ export function MyApplicationsPage() {
     );
   } else if (applications.isError && applications.data === undefined) {
     // Only when nothing is cached: a failed background refetch keeps the list on the page.
-    body = <ErrorState onRetry={() => void applications.refetch()} />;
+    body = <ErrorState onRetry={() => applications.refetch()} />;
   } else if (applications.data.length === 0) {
     body = (
       <EmptyState

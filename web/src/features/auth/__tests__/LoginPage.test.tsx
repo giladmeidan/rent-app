@@ -28,7 +28,8 @@ afterEach(() => {
 
 /** Fills the email, submits step 1 and waits for the code input (step 2). */
 async function reachStep2() {
-  fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+  // The form shows once `/me` has answered (spec 0009g: a skeleton until then).
+  fireEvent.change(await screen.findByLabelText(he.auth.email.label), {
     target: { value: 'dana@example.com' },
   });
   fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
@@ -52,6 +53,8 @@ describe('LoginPage', () => {
     renderAt('/login', <LoginPage />);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.auth.login.title);
+    // The form shows once `/me` has answered (spec 0009g: a skeleton until then).
+    await screen.findByLabelText(he.auth.email.label);
     // Login asks for the email only.
     expect(screen.queryByRole('radio')).toBeNull();
     expect(screen.queryByLabelText(he.auth.name.label)).toBeNull();
@@ -226,5 +229,23 @@ describe('LoginPage', () => {
       screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]'),
     ).toHaveAttribute('aria-busy', 'true');
     expect(client.getQueryData(['me'])).toEqual(noa);
+  });
+
+  it('ac11_skeleton_while_me_pending', async () => {
+    // While `/me` is pending: the page's <h1> and a busy skeleton, never an editable form.
+    const me = deferred();
+    mockApi({ 'GET /me': [me.promise] });
+    renderAt('/login', <LoginPage />);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.auth.login.title);
+    const skeleton = screen.getByTestId('skeleton');
+    expect(skeleton.closest('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByLabelText(he.auth.email.label)).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+
+    // Logged out: the form replaces the skeleton.
+    me.resolve(json({ detail: 'unauthenticated' }, 401));
+    expect(await screen.findByLabelText(he.auth.email.label)).toBeVisible();
+    expect(screen.queryByTestId('skeleton')).toBeNull();
   });
 });

@@ -67,7 +67,7 @@ export function EditListingPage() {
     return (
       <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
         {title}
-        <ErrorState onRetry={() => void listings.refetch()} />
+        <ErrorState onRetry={() => listings.refetch()} />
       </PageContainer>
     );
   }

@@ -130,7 +130,7 @@ export function ChatListPage() {
   let body;
   if (conversations.data === undefined) {
     body = conversations.isError ? (
-      <ErrorState onRetry={() => void conversations.refetch()} />
+      <ErrorState onRetry={() => conversations.refetch()} />
     ) : (
       <Loading>
         <div className="flex flex-col gap-3">

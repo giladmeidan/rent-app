@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { Button } from '../../components/Button';
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
@@ -63,9 +64,14 @@ export function ListingPage() {
     );
   } else if (listing.isError) {
     body = notFound ? (
-      <h1 className="text-start text-2xl font-extrabold">{t('listing.notFound')}</h1>
+      <div className="flex flex-col items-start gap-4">
+        <h1 className="text-start text-2xl font-extrabold">{t('listing.notFound')}</h1>
+        <Button variant="primary" to="/search">
+          {t('listing.toSearch')}
+        </Button>
+      </div>
     ) : (
-      <ErrorState page onRetry={() => void listing.refetch()} />
+      <ErrorState page onRetry={() => listing.refetch()} />
     );
   } else {
     const l = listing.data;

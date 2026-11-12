@@ -1,6 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { writeDraft } from '../../../app/drafts';
 import he from '../../../locales/he.json';
 import { empty, json, mockApi, renderRoutes, testQueryClient } from '../../auth/__tests__/harness';
 import { AuthMenu } from '../../auth/AuthMenu';
@@ -29,5 +30,23 @@ describe('AuthMenu for an owner', () => {
     // Mutations (and the bodies they sent) are forgotten too.
     expect(client.getMutationCache().getAll()).toHaveLength(0);
     expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
+  });
+
+  it('ac7_logout_clears_drafts', async () => {
+    // Drafts of this person and of another one, and other tab storage.
+    writeDraft('apply', 'L', owner.id, 'apply text');
+    writeDraft('chat', 'C', owner.id, 'chat text');
+    writeDraft('chat', 'D', 'someone-else', 'other text');
+    window.sessionStorage.setItem('unrelated', 'kept');
+    mockApi({ 'GET /me': [json(owner)], 'POST /auth/logout': [empty(204)] });
+    renderRoutes('/', <AuthMenu />, testQueryClient());
+
+    fireEvent.click(await screen.findByRole('button', { name: he.header.logout }));
+    expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
+    const keys = Array.from({ length: window.sessionStorage.length }, (_, i) =>
+      window.sessionStorage.key(i),
+    );
+    expect(keys.filter((k) => k?.startsWith('rent-app:draft:'))).toEqual([]);
+    expect(window.sessionStorage.getItem('unrelated')).toBe('kept');
   });
 });
