@@ -368,6 +368,17 @@ if a sibling spec created it first (`ErrorState.test.tsx` is also named by `0009
 
   Recommendation: (a). It says when a chat appears: on a shortlist or a mutual match, the two ways a chat
   opens (PRODUCT.md "Chat"). Written on (a), accepted by Gilad 2026-11-12.
+- **Q9 — offline requests fail fast** (review round 1, qa major: TanStack's default `networkMode: 'online'`
+  paused every query and mutation while offline, so the offline line could almost never show).
+  - (a) **Fail fast:** `networkMode: 'always'` on the QueryClient's query and mutation defaults in `App.tsx`;
+    the `failed` paths of OtpForm step 2, the withdraw and ApplySection show `common.offline` when offline;
+    an e2e step uses `context.setOffline(true)`.
+  - (b) Keep pausing and show the offline line wherever a request is paused.
+  - (c) Ship as is.
+
+  **Decision: (a), accepted by Gilad 2026-11-12 ("Fail fast").** Trade-off: a mutation started offline is
+  not replayed on reconnect; the user sees the offline line and retries. Reconnect refetch of queries is
+  unchanged.
 - **`navigator.onLine` limits.** It is false only when the device has no network. A dead API on working wifi
   still reads "משהו השתבש", which is accurate enough. Nothing polls.
 - **The CORS change is the only API change.** Exposing one response header to the one allowed origin reveals
