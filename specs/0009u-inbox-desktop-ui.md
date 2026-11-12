@@ -323,3 +323,17 @@ Brand amendment (orchestrator, 2026-11-12, `specs/0009-brand-amendment.md`) appl
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009u — desktop applicant inbox (card grid + sticky detail pane)   PR open, not merged
+Shipped: at ≥ 1024 px `/me/listings/:id/applicants` follows InboxDesktop.dc.html. The stat tiles sit at the header's inline end, and the tabs and sort share one row. Compact cards form a grid (one column at 1024–1279, two from 1280) with a 2-line message preview and their own actions; clicking a card selects it (accent border, tinted avatar, `aria-current` on the name button). A sticky `aside` "פרטי המועמדות" shows the selected applicant: the large ring, facts, reasons, room answers behind a closed "עוד פרטים", the full message, and "פתיחת צ'אט" once shortlisted. Phones keep 0009l's layout; data, actions, focus and errors are unchanged. Demo: owner → המודעות שלי → מועמדויות at 1440 → click a second card → open "עוד פרטים" on a room applicant.
+Tests: +5 component tests (ac1–ac5, with a `stubDesktop` matchMedia helper; the existing tests stay on the phone layout unchanged); the `pageWidths.test.ts` row is now `wide`; +1 e2e `test.step('desktop 1440x900')` and a 390×844 viewport line in `inbox.spec.ts::ac12_shortlist_chat_decline`. There are 40 screenshots in `web/screens/0009u/`: 15 mobile (the phone set is unchanged) and 25 desktop, 13 of them the new `d-*` states including `d-1024`.
+Findings (ux only, quick route, one round): 0 blockers, 0 majors, 2 minors. Fixed: the compact preview folds line breaks, so a blank first line no longer leaves a lone "…". Logged: the chat action is named "צ'אט עם {name}" on the card and "פתיחת צ'אט" in the pane (FOLLOWUPS; rewording an existing key is 0009b's). 3 nits dropped. Visual verdict: pass. D1–D18 all match or are deviations the spec accepts. The reviewer accepted the 2-line preview and the pane without status actions, and found no double line under the tabs row (`border-b-0` on the desktop `Tabs`).
+Behaviour stayed unchanged, so no reviewers were added. No `dangerouslySetInnerHTML` / `innerHTML` / linkify in the diff; applicant text is React text children.
+AC9 grep: empty. The only arbitrary values are `max-h-[calc(100dvh-3rem)]` and `[overflow-wrap:anywhere]`, each commented.
+Coder choices kept:
+- AC1's "לצ'אט" became `applicants.pane.chat` ("פתיחת צ'אט", item 7).
+- The pane `<h2>` is `text-h2`, not D12's `text-xl`.
+- `Card` has no `radius` prop, and it is `rounded-lg` already.
+- The cards are `<li>`s in a `<ul>` in both layouts.
+- `ChatIcon` and `reasonLines()` are exported from `ApplicantCard` for the pane.
+Checks on the final head (main at 0009p merged): make lint / test-web (527) / i18n-check / build-web green; api 476 green before the 0009p merge (API untouched). No local e2e (Gilad 2026-11-12): CI e2e is the gate. Changed in PRODUCT.md: nothing.
