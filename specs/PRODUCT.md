@@ -8,6 +8,7 @@ Updated: 2026-11-11. Full reasoning in the Product Plan doc.
 | Language | Hebrew only at launch; i18n foundations for other languages from the first commit; RTL base layout |
 | Brokers | Not allowed at launch. Owner cap: 3 active listings per account (admin may raise). Broker account type reserved in the data model for a later paid tier |
 | Platform | Web first, responsive, PWA-installable |
+| Brand | Decided 2026-11-12 (Gilad): the product is **homie / הומי**; the brand kit `design/brand/` (tokens.json, logos, mascot, icons, voice) wins over `design/screens-v1/` for colour, type (Fredoka + Rubik), shape, voice and name; the artboards keep layout and anatomy only. Voice: never one gender and no slash forms (plural, infinitive or noun). **No new artboards**: screens without one take their design in the spec, from the kit and the existing artboards (see `specs/0009-brand-amendment.md`) |
 | Pricing | Free; free-tier infrastructure. Paid services need an explicit decision from Gilad |
 | Launch area | Gush Dan only; areas are a config table, listings outside are hidden |
 | Gender preference | Hard filter on ROOM listings and room-seeker profiles only; never on whole-apartment listings. Slice 7: a misfit room is **hidden** from that seeker, see "Rooms" |
@@ -29,5 +30,5 @@ Updated: 2026-11-11. Full reasoning in the Product Plan doc.
 
 ## Slice order (Dev Plan)
 0 Foundations · 1 Auth+roles · 2 Owner posts listing · 3 Seeker search · 4 Apply+inbox · 5 Chat ·
-6 Match score · 7 Rooms+questionnaire · 8 People browse+mutual interest · 9 Landing+polish ·
+6 Match score · 7 Rooms+questionnaire · 8 People browse+mutual interest · 9 Landing+polish · 9b UI/UX styling (Gilad 2026-11-12) ·
 10 Trust basics · 11 Admin minimal · 12 Launch readiness
