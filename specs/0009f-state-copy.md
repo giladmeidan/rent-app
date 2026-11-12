@@ -229,7 +229,7 @@ The build applies this table verbatim. A later change from Gilad is an edit to t
 | C27 | `flatmates.join.toMyListings` | — (new) | "למודעות שלי" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
 | C28 | `flatmates.join.toApplications` | — (new) | "למועמדויות שלי" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
 | C29 | `flatmates.join.toSearch` | — (new) | "לחיפוש דירות וחדרים" | 9 | **accepted by Gilad 2026-11-12 (Q7)** |
-| C30 | `chat.list.emptyFlatmate` | — (new) | "אין עדיין שיחות על החדר. שיחה תופיע כאן כשבעלי הדירה יוסיפו מועמד/ת לרשימה הקצרה, או כשתהיה התאמה הדדית." | 10 | **accepted by Gilad 2026-11-12 (Q8)** |
+| C30 | `chat.list.emptyFlatmate` | — (new) | "אין עדיין שיחות על החדר. שיחה תופיע כאן כשבעלי הדירה יוסיפו מועמדים לרשימה הקצרה, או כשתהיה התאמה הדדית." | 10 | **accepted by Gilad 2026-11-12 (Q8)**; slash form dropped per the brand kit at build |
 
 ## Acceptance criteria
 Hebrew in tests is written as `\uXXXX` escapes. Tests stub `fetch` with `Response` objects, whose headers
@@ -308,7 +308,7 @@ if a sibling spec created it first (`ErrorState.test.tsx` is also named by `0009
   - the differ → "חסרה חניה".
 
   `reasons.test.ts:622` (`ac6_owner_copy`) calls `ownerShort` with `row.spots ?? 1`, and its rows are
-  unchanged. The inbox card tests pass with `MatchChips` passing `props.spots`.
+  unchanged except the two parking rows this AC changes (0 needed → C16, 2 asked and 1 spot → C15). The inbox card tests pass with `MatchChips` passing `props.spots`.
 - [ ] AC8 **The people page's reasons are sentences.** — `reasons.test.ts::ac8_person_reason_is_a_sentence`
   - For every criterion and kind, `personReason` differs from `personShort`. move_in included: its chip is
     now `match.owner.short.move_in.*`.
@@ -368,6 +368,17 @@ if a sibling spec created it first (`ErrorState.test.tsx` is also named by `0009
 
   Recommendation: (a). It says when a chat appears: on a shortlist or a mutual match, the two ways a chat
   opens (PRODUCT.md "Chat"). Written on (a), accepted by Gilad 2026-11-12.
+- **Q9 — offline requests fail fast** (review round 1, qa major: TanStack's default `networkMode: 'online'`
+  paused every query and mutation while offline, so the offline line could almost never show).
+  - (a) **Fail fast:** `networkMode: 'always'` on the QueryClient's query and mutation defaults in `App.tsx`;
+    the `failed` paths of OtpForm step 2, the withdraw and ApplySection show `common.offline` when offline;
+    an e2e step uses `context.setOffline(true)`.
+  - (b) Keep pausing and show the offline line wherever a request is paused.
+  - (c) Ship as is.
+
+  **Decision: (a), accepted by Gilad 2026-11-12 ("Fail fast").** Trade-off: a mutation started offline is
+  not replayed on reconnect; the user sees the offline line and retries. Reconnect refetch of queries is
+  unchanged.
 - **`navigator.onLine` limits.** It is false only when the device has no network. A dead API on working wifi
   still reads "משהו השתבש", which is accurate enough. Nothing polls.
 - **The CORS change is the only API change.** Exposing one response header to the one allowed origin reveals

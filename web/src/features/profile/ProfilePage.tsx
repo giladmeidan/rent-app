@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import type { AreaOut } from '../../api/client';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
+import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -285,6 +286,11 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
         </label>
         <input
           {...a11y('move_in_date')}
+          aria-describedby={withReadback(
+            a11y('move_in_date')['aria-describedby'],
+            `${fieldId('move_in_date')}-chosen`,
+            form.move_in_date,
+          )}
           type="date"
           min={today}
           max={addDays(today, MOVE_IN_MAX_DAYS)}
@@ -292,6 +298,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
           onChange={(e) => change({ move_in_date: e.target.value }, 'move_in_date')}
           className={input}
         />
+        <DateReadback id={`${fieldId('move_in_date')}-chosen`} value={form.move_in_date} />
         {errorText('move_in_date')}
         <div className={card}>
           <Switch

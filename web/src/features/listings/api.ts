@@ -1,5 +1,6 @@
 import { api } from '../../api/client';
 import type { components } from '../../api/schema';
+import { parseRetryAfter } from '../../components/retryAfter';
 
 export type ListingIn = components['schemas']['ListingIn'];
 export type ListingOut = components['schemas']['ListingOut'];
@@ -24,13 +25,16 @@ export class ApiError extends Error {
   readonly status: number;
   /** The body's `detail`: a code string such as `listing_cap_reached`, or FastAPI's error list. */
   readonly detail: unknown;
+  /** A 429's `Retry-After` in seconds, when the caller passed the response's headers. */
+  readonly retryAfter: number | null;
 
-  constructor(method: string, path: string, status: number, body: unknown) {
+  constructor(method: string, path: string, status: number, body: unknown, headers?: Headers) {
     super(`${method} ${path}: HTTP ${String(status)}`);
     this.name = 'ApiError';
     this.status = status;
     this.detail =
       typeof body === 'object' && body !== null && 'detail' in body ? body.detail : undefined;
+    this.retryAfter = headers === undefined ? null : parseRetryAfter(headers);
   }
 }
 

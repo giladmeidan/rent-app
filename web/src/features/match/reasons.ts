@@ -215,7 +215,7 @@ export function seekerShort(
 // are ever sent, so those lines are words only) and, for parking, the listing's spots.
 
 type OwnerLine = (profile: ApplicantProfileOut, spots: number, t: TFunction) => string;
-type OwnerShort = (profile: ApplicantProfileOut, t: TFunction) => string;
+type OwnerShort = (profile: ApplicantProfileOut, spots: number, t: TFunction) => string;
 
 /** "שנתיים", as the profile form says it. */
 export function contractName(months: ContractMonths, t: TFunction): string {
@@ -301,45 +301,50 @@ const OWNER: Record<Criterion, Record<ReasonKind, OwnerLine>> = {
 
 const OWNER_SHORT: Record<Criterion, Record<ReasonKind, OwnerShort>> = {
   budget: {
-    agree: (_p, t) => t('match.owner.short.budget.agree'),
-    differ: (_p, t) => t('match.owner.short.budget.differ'),
+    agree: (_p, _s, t) => t('match.owner.short.budget.agree'),
+    differ: (_p, _s, t) => t('match.owner.short.budget.differ'),
   },
   move_in: {
-    agree: (_p, t) => t('match.owner.short.move_in.agree'),
-    differ: (p, t) => t('match.owner.short.move_in.differ', { date: applicantMoveIn(p) }),
+    agree: (_p, _s, t) => t('match.owner.short.move_in.agree'),
+    differ: (p, _s, t) => t('match.owner.short.move_in.differ', { date: applicantMoveIn(p) }),
   },
   area: {
-    agree: (_p, t) => t('match.owner.short.area.agree'),
-    differ: (_p, t) => t('match.owner.short.area.differ'),
+    agree: (_p, _s, t) => t('match.owner.short.area.agree'),
+    differ: (_p, _s, t) => t('match.owner.short.area.differ'),
   },
   household: {
-    agree: (_p, t) => t('match.owner.short.household.agree'),
-    differ: (_p, t) => t('match.owner.short.household.differ'),
+    agree: (_p, _s, t) => t('match.owner.short.household.agree'),
+    differ: (_p, _s, t) => t('match.owner.short.household.differ'),
   },
   contract: {
-    agree: (p, t) =>
+    agree: (p, _s, t) =>
       p.contract_months >= 24
         ? t('match.owner.short.contract.agreeLong')
         : t('match.owner.short.contract.agree'),
-    differ: (_p, t) => t('match.owner.short.contract.differ'),
+    differ: (_p, _s, t) => t('match.owner.short.contract.differ'),
   },
   parking: {
-    agree: (_p, t) => t('match.owner.short.parking.agree'),
-    differ: (_p, t) => t('match.owner.short.parking.differ'),
+    // `0006b` agrees at 0.5 when the listing has some but not all the spots asked for.
+    agree: (p, spots, t) => {
+      if (p.parking_needed === 0) return t('match.owner.short.parking.agreeNone');
+      if (spots < p.parking_needed) return t('match.owner.short.parking.agreePartial');
+      return t('match.owner.short.parking.agree');
+    },
+    differ: (_p, _s, t) => t('match.owner.short.parking.differ'),
   },
   smoking: {
-    agree: (p, t) =>
+    agree: (p, _s, t) =>
       p.smoker ? t('match.owner.short.smoking.agreeSmoker') : t('match.owner.short.smoking.agree'),
-    differ: (_p, t) => t('match.owner.short.smoking.differ'),
+    differ: (_p, _s, t) => t('match.owner.short.smoking.differ'),
   },
   pets: {
-    agree: (p, t) =>
+    agree: (p, _s, t) =>
       p.has_pets ? t('match.owner.short.pets.agreePet') : t('match.owner.short.pets.agree'),
-    differ: (_p, t) => t('match.owner.short.pets.differ'),
+    differ: (_p, _s, t) => t('match.owner.short.pets.differ'),
   },
   lifestyle: {
-    agree: (_p, t) => t('match.owner.short.lifestyle.agree'),
-    differ: (_p, t) => t('match.owner.short.lifestyle.differ'),
+    agree: (_p, _s, t) => t('match.owner.short.lifestyle.agree'),
+    differ: (_p, _s, t) => t('match.owner.short.lifestyle.differ'),
   },
 };
 
@@ -355,19 +360,23 @@ export function ownerReason(
   return OWNER[criterion][kind](profile, spots, t);
 }
 
-/** An inbox card's chip for `criterion`, in the owner's voice. */
+/** An inbox card's chip for `criterion`, in the owner's voice. `spots` is the listing's
+ * `parking_spots`. */
 export function ownerShort(
   criterion: Criterion,
   kind: ReasonKind,
   profile: ApplicantProfileOut,
+  spots: number,
   t: TFunction,
 ): string {
-  return OWNER_SHORT[criterion][kind](profile, t);
+  return OWNER_SHORT[criterion][kind](profile, spots, t);
 }
 
-// The people page's voice (0008b): about a seeker who has not applied. Fact-free: it reuses the
-// owner-short base keys for budget, area, household and lifestyle, `people.short.*` for the rest, never `agreeSmoker` / `agreePet` / `agreeLong` or a
-// line that states household, pets, smoking, contract or parking. Only `move_in` has a date,
+// The people page's voice (0008b): about a seeker who has not applied. Fact-free: the chips reuse
+// the owner-short base keys for budget, move-in, area, household and lifestyle and `people.short.*`
+// for the rest; the "למה ההתאמה?" lines (0009f) reuse `match.owner.*` for budget, move-in, area
+// and lifestyle and `people.reason.*` for the rest. Never `agreeSmoker` / `agreePet` / `agreeLong`
+// or a line that states household, pets, smoking, contract or parking. Only `move_in` has a date,
 // which the card shows anyway.
 
 /** The person's fields the lines read. */
@@ -375,7 +384,10 @@ export type PersonFacts = { move_in_date: string };
 
 const PERSON_BASE: Record<Criterion, Record<ReasonKind, string>> = {
   budget: { agree: 'match.owner.short.budget.agree', differ: 'match.owner.short.budget.differ' },
-  move_in: { agree: 'match.owner.move_in.agree', differ: 'match.owner.move_in.differ' },
+  move_in: {
+    agree: 'match.owner.short.move_in.agree',
+    differ: 'match.owner.short.move_in.differ',
+  },
   area: { agree: 'match.owner.short.area.agree', differ: 'match.owner.short.area.differ' },
   household: {
     agree: 'match.owner.short.household.agree',
@@ -400,26 +412,48 @@ const PERSON_BASE: Record<Criterion, Record<ReasonKind, string>> = {
   },
 };
 
-/** A people card's line for `criterion` / `kind`; the chip and the "למה ההתאמה?" line are the same
- * text. */
+/** The "למה ההתאמה?" lines: full sentences, each saying only fit or no fit. */
+const PERSON_REASON: Record<Criterion, Record<ReasonKind, string>> = {
+  budget: { agree: 'match.owner.budget.agree', differ: 'match.owner.budget.differ' },
+  move_in: { agree: 'match.owner.move_in.agree', differ: 'match.owner.move_in.differ' },
+  area: { agree: 'match.owner.area.agree', differ: 'match.owner.area.differ' },
+  household: { agree: 'people.reason.household.agree', differ: 'people.reason.household.differ' },
+  contract: { agree: 'people.reason.contract.agree', differ: 'people.reason.contract.differ' },
+  parking: { agree: 'people.reason.parking.agree', differ: 'people.reason.parking.differ' },
+  smoking: { agree: 'people.reason.smoking.agree', differ: 'people.reason.smoking.differ' },
+  pets: { agree: 'people.reason.pets.agree', differ: 'people.reason.pets.differ' },
+  lifestyle: { agree: 'match.owner.lifestyle.agree', differ: 'match.owner.lifestyle.differ' },
+};
+
+function personLine(
+  keys: Record<Criterion, Record<ReasonKind, string>>,
+  criterion: Criterion,
+  kind: ReasonKind,
+  person: PersonFacts,
+  t: TFunction,
+): string {
+  const key = keys[criterion][kind];
+  return criterion === 'move_in'
+    ? t(key, { date: formatDate(later(person.move_in_date, todayInIsrael())) })
+    : t(key);
+}
+
+/** A people card's "למה ההתאמה?" line for `criterion` / `kind`: a sentence, unlike the chip. */
 export function personReason(
   criterion: Criterion,
   kind: ReasonKind,
   person: PersonFacts,
   t: TFunction,
 ): string {
-  const key = PERSON_BASE[criterion][kind];
-  return criterion === 'move_in'
-    ? t(key, { date: formatDate(later(person.move_in_date, todayInIsrael())) })
-    : t(key);
+  return personLine(PERSON_REASON, criterion, kind, person, t);
 }
 
-/** A people card's chip: the same text as `personReason`. */
+/** A people card's chip for `criterion` / `kind`. */
 export function personShort(
   criterion: Criterion,
   kind: ReasonKind,
   person: PersonFacts,
   t: TFunction,
 ): string {
-  return personReason(criterion, kind, person, t);
+  return personLine(PERSON_BASE, criterion, kind, person, t);
 }

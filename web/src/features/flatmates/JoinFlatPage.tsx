@@ -35,6 +35,29 @@ const COPY = {
   rateLimited: 'flatmates.join.rateLimited',
 } as const;
 
+/** Where a final message leads (0009f); a rate limit has no link, the person retries later. */
+const WAY_OUT = {
+  own: { to: '/me/listings', label: 'flatmates.join.toMyListings' },
+  applied: { to: '/me/applications', label: 'flatmates.join.toApplications' },
+  declined: { to: '/search', label: 'flatmates.join.toSearch' },
+  full: { to: '/search', label: 'flatmates.join.toSearch' },
+  invalid: { to: '/search', label: 'flatmates.join.toSearch' },
+} as const;
+
+const link = `inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-text underline ${focusRing}`;
+
+/** The link out of a final message. Never inside the `role="alert"` element. */
+function WayOut({ failure }: { failure: Exclude<Failure, 'other'> }) {
+  const { t } = useTranslation();
+  if (failure === 'rateLimited') return null;
+  const { to, label } = WAY_OUT[failure];
+  return (
+    <Link to={to} className={link}>
+      {t(label)}
+    </Link>
+  );
+}
+
 const CONFLICTS: Record<string, Failure> = {
   own_listing: 'own',
   already_applied: 'applied',
@@ -163,9 +186,12 @@ function JoinFlow() {
   if (token === null) {
     return (
       <Frame>
-        <p role="alert" className={`${card} ${message}`}>
-          {t('flatmates.join.invalid')}
-        </p>
+        <div className={card}>
+          <p role="alert" className={message}>
+            {t('flatmates.join.invalid')}
+          </p>
+          <WayOut failure="invalid" />
+        </div>
       </Frame>
     );
   }
@@ -205,9 +231,12 @@ function JoinFlow() {
         {failure === 'other' ? (
           <ErrorState onRetry={() => void preview.refetch()} />
         ) : (
-          <p role="alert" className={`${card} ${message}`}>
-            {t(COPY[failure])}
-          </p>
+          <div className={card}>
+            <p role="alert" className={message}>
+              {t(COPY[failure])}
+            </p>
+            <WayOut failure={failure} />
+          </div>
         )}
       </Frame>
     );
@@ -229,10 +258,7 @@ function JoinFlow() {
         <div className={card}>
           {title}
           <p className={message}>{t('flatmates.join.member')}</p>
-          <Link
-            to="/chat"
-            className={`inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-text underline ${focusRing}`}
-          >
+          <Link to="/chat" className={link}>
             {t('flatmates.join.toChats')}
           </Link>
         </div>
@@ -259,9 +285,12 @@ function JoinFlow() {
           </button>
         )}
         {failure !== null && failure !== 'other' && (
-          <p role="alert" className={`${message} text-[#B91C1C]`}>
-            {t(COPY[failure])}
-          </p>
+          <>
+            <p role="alert" className={`${message} text-[#B91C1C]`}>
+              {t(COPY[failure])}
+            </p>
+            <WayOut failure={failure} />
+          </>
         )}
       </div>
       {failure === 'other' && <ErrorState onRetry={onJoin} />}

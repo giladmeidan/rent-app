@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router';
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { ErrorState } from '../../components/ErrorState';
+import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
+import { useOnline } from '../../components/useOnline';
 import { safeNext } from './next';
 import { RoleChoice } from './RoleChoice';
 import { clearSession } from './useLogout';
@@ -23,17 +25,21 @@ const nameIsValid = (name: string) => {
   return length >= 2 && length <= 40;
 };
 
-type RequestResult = 'ok' | 'invalidEmail' | 'tooMany' | 'failed';
+/** A 429 carries the API's `Retry-After` in seconds, or null when it is missing. */
+type TooMany = { kind: 'tooMany'; retryAfter: number | null };
+type RequestResult = { kind: 'ok' } | { kind: 'invalidEmail' } | TooMany | { kind: 'failed' };
 
 async function requestCode(email: string): Promise<RequestResult> {
   try {
     const { response } = await api.POST('/auth/otp/request', { body: { email } });
-    if (response.status === 204) return 'ok';
-    if (response.status === 422) return 'invalidEmail';
-    if (response.status === 429) return 'tooMany';
-    return 'failed';
+    if (response.status === 204) return { kind: 'ok' };
+    if (response.status === 422) return { kind: 'invalidEmail' };
+    if (response.status === 429) {
+      return { kind: 'tooMany', retryAfter: parseRetryAfter(response.headers) };
+    }
+    return { kind: 'failed' };
   } catch {
-    return 'failed'; // network error
+    return { kind: 'failed' }; // network error
   }
 }
 
@@ -86,8 +92,8 @@ type Props = {
   next?: string;
 };
 
-type Step1Error = 'tooMany' | 'failed' | null;
-type Step2Error = 'invalidCode' | 'tooMany' | 'failed' | null;
+type Step1Error = TooMany | { kind: 'failed' } | null;
+type Step2Error = TooMany | { kind: 'invalidCode' } | { kind: 'failed' } | null;
 
 /**
  * Two-step email-code form shared by /signup and /login. The email and code live in this
@@ -98,6 +104,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const id = useId();
+  const online = useOnline();
 
   const [step, setStep] = useState<'request' | 'verify'>('request');
   const [role, setRole] = useState<Role | null>(initialRole);
@@ -171,12 +178,12 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
     }
     request.mutate(email.trim(), {
       onSuccess: (result) => {
-        if (result === 'ok') {
+        if (result.kind === 'ok') {
           setCode('');
           setStep2Error(null);
           startCooldown();
           setStep('verify');
-        } else if (result === 'invalidEmail') {
+        } else if (result.kind === 'invalidEmail') {
           setEmailError(true);
           emailRef.current?.focus();
         } else {
@@ -223,7 +230,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
             setProfileNeeded(true);
             return;
           }
-          setStep2Error(result.kind === 'invalidCode' ? 'invalidCode' : 'failed');
+          setStep2Error({ kind: result.kind === 'invalidCode' ? 'invalidCode' : 'failed' });
           codeRef.current?.focus();
         },
       },
@@ -234,10 +241,17 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
     setStep2Error(null);
     resend.mutate(email.trim(), {
       onSuccess: (result) => {
-        if (result === 'ok') startCooldown();
-        else setStep2Error(result === 'tooMany' ? 'tooMany' : 'failed');
+        if (result.kind === 'ok') startCooldown();
+        else setStep2Error(result.kind === 'tooMany' ? result : { kind: 'failed' });
       },
     });
+  }
+
+  /** "יותר מדי ניסיונות…", naming the wait when the API sent one. */
+  function tooManyText(error: TooMany): string {
+    return error.retryAfter === null
+      ? t('auth.errors.tooMany')
+      : t('auth.errors.tooManyIn', { when: retryAfterText(t, error.retryAfter) });
   }
 
   function onChangeEmail() {
@@ -275,6 +289,11 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
     </div>
   );
 
+  const hintId = `${id}-submit-hint`;
+  // Why the submit button is disabled for a missing input; never while a request is pending.
+  const requestHint =
+    !request.isPending && withProfile && role === null ? t('auth.hint.chooseRole') : null;
+
   if (step === 'request') {
     return (
       <form noValidate onSubmit={onRequestSubmit} className="flex flex-col gap-[22px]">
@@ -305,26 +324,37 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
             </p>
           )}
         </div>
-        {step1Error === 'tooMany' && (
+        {step1Error?.kind === 'tooMany' && (
           <p role="alert" className={fieldError}>
-            {t('auth.errors.tooMany')}
+            {tooManyText(step1Error)}
           </p>
         )}
-        {step1Error === 'failed' && <ErrorState onRetry={sendRequest} />}
-        <button
-          type="submit"
-          disabled={request.isPending || (withProfile && role === null)}
-          aria-busy={request.isPending}
-          className={primary}
-        >
-          {t('auth.sendCode')}
-        </button>
+        {step1Error?.kind === 'failed' && <ErrorState onRetry={sendRequest} />}
+        <div className="flex flex-col gap-[6px]">
+          <button
+            type="submit"
+            disabled={request.isPending || requestHint !== null}
+            aria-busy={request.isPending}
+            aria-describedby={requestHint !== null ? hintId : undefined}
+            className={primary}
+          >
+            {t('auth.sendCode')}
+          </button>
+          {requestHint !== null && (
+            <p id={hintId} className="text-sm text-muted">
+              {requestHint}
+            </p>
+          )}
+        </div>
       </form>
     );
   }
 
   const codeReady = CODE_RE.test(code) && (!askProfile || role !== null);
   const cooling = secondsLeft > 0;
+  let verifyHint: string | null = null;
+  if (!verify.isPending && !CODE_RE.test(code)) verifyHint = t('auth.hint.enterCode');
+  else if (!verify.isPending && askProfile && role === null) verifyHint = t('auth.hint.chooseRole');
 
   return (
     <form noValidate onSubmit={onVerifySubmit} className="flex flex-col gap-[22px]">
@@ -357,17 +387,19 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
           onChange={(e) => {
             setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6));
           }}
-          aria-invalid={step2Error === 'invalidCode'}
+          aria-invalid={step2Error?.kind === 'invalidCode'}
           aria-describedby={step2Error !== null ? `${id}-code-error` : undefined}
           className={`${input} text-start tracking-[0.3em]`}
         />
         {step2Error !== null && (
           <p id={`${id}-code-error`} role="alert" className={fieldError}>
-            {step2Error === 'invalidCode'
+            {step2Error.kind === 'invalidCode'
               ? t('auth.errors.invalidCode')
-              : step2Error === 'tooMany'
-                ? t('auth.errors.tooMany')
-                : t('common.error')}
+              : step2Error.kind === 'tooMany'
+                ? tooManyText(step2Error)
+                : online
+                  ? t('common.error')
+                  : t('common.offline')}
           </p>
         )}
       </div>
@@ -378,14 +410,22 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
           {nameField}
         </div>
       )}
-      <button
-        type="submit"
-        disabled={verify.isPending || !codeReady}
-        aria-busy={verify.isPending}
-        className={primary}
-      >
-        {t('auth.verify')}
-      </button>
+      <div className="flex flex-col gap-[6px]">
+        <button
+          type="submit"
+          disabled={verify.isPending || !codeReady}
+          aria-busy={verify.isPending}
+          aria-describedby={verifyHint !== null ? hintId : undefined}
+          className={primary}
+        >
+          {t('auth.verify')}
+        </button>
+        {verifyHint !== null && (
+          <p id={hintId} className="text-sm text-muted">
+            {verifyHint}
+          </p>
+        )}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"

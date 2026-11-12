@@ -15,7 +15,13 @@ export async function applyToListing(
     body: { message },
   });
   if (data === undefined) {
-    throw new ApiError('POST', '/listings/{id}/applications', response.status, error);
+    throw new ApiError(
+      'POST',
+      '/listings/{id}/applications',
+      response.status,
+      error,
+      response.headers,
+    );
   }
   return data;
 }

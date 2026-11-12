@@ -162,6 +162,47 @@ describe('ChatListPage', () => {
     reset(view);
   });
 
+  it('ac10_empty_for_a_flatmate', async () => {
+    // "אין עדיין שיחות על החדר. …"
+    const flatmateLine =
+      /^\u05d0\u05d9\u05df \u05e2\u05d3\u05d9\u05d9\u05df \u05e9\u05d9\u05d7\u05d5\u05ea \u05e2\u05dc \u05d4\u05d7\u05d3\u05e8\./;
+    const plain = conversation();
+    const flat = { listing: plain.listing, owner_name: 'Roni', joined_at: '2026-11-01T08:00:00Z' };
+
+    // One flat: the flatmate line, for a seeker and for an owner.
+    for (const me of [seeker, owner]) {
+      const { view } = renderPage([json([])], me, [() => json([flat])]);
+      expect(await screen.findByText(flatmateLine)).toBeVisible();
+      expect(screen.getByText(flatmateLine).textContent).toBe(he.chat.list.emptyFlatmate);
+      expect(screen.queryByText(he.chat.list.emptyOwner)).toBeNull();
+      expect(screen.queryByText(he.chat.list.emptySeeker)).toBeNull();
+      reset(view);
+    }
+
+    // No flats: the role lines, as before.
+    for (const [me, line] of [
+      [owner, he.chat.list.emptyOwner],
+      [seeker, he.chat.list.emptySeeker],
+    ] as const) {
+      const { api, view } = renderPage([json([])], me, [() => json([])]);
+      expect(await screen.findByText(line)).toBeVisible();
+      await waitFor(() => expect(api.calls('GET /me/flats')).toHaveLength(1));
+      await settle();
+      expect(screen.queryByText(flatmateLine)).toBeNull();
+      reset(view);
+    }
+
+    // While /me/flats is pending: the role line, then the flatmate line once the flats arrive.
+    const flats = deferred();
+    const { view } = renderPage([json([])], seeker, [flats.promise]);
+    expect(await screen.findByText(he.chat.list.emptySeeker)).toBeVisible();
+    expect(screen.queryByText(flatmateLine)).toBeNull();
+    flats.resolve(json([flat]));
+    expect(await screen.findByText(flatmateLine)).toBeVisible();
+    expect(screen.queryByText(he.chat.list.emptySeeker)).toBeNull();
+    reset(view);
+  });
+
   it('ac3_flatmate_items', async () => {
     const flatmateItem = conversation({ my_role: 'flatmate', member_count: 3 });
     const plain = conversation();
