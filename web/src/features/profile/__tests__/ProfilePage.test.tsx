@@ -227,6 +227,30 @@ describe('ProfilePage', () => {
     expect(currentPath()).toBe('/me/profile');
   });
 
+  it('ac4_saved_takes_focus', async () => {
+    // An in-page save (no `next`): the "saved" line takes focus (and so scrolls into view).
+    renderPage({ [PROFILE]: [json(profile())] });
+    await form();
+    const button = screen.getByRole('button', { name: he.profile.save });
+    button.focus();
+    save();
+    const line = await screen.findByText(he.profile.saved);
+    await vi.waitFor(() => {
+      expect(line).toHaveFocus();
+    });
+    expect(line).toHaveAttribute('role', 'status');
+    cleanup();
+
+    // An unsafe `next` stays here too: the same.
+    renderPage({ [PROFILE]: [json(profile())] }, '/me/profile?next=%2F%2Fevil.example');
+    await form();
+    save();
+    const unsafe = await screen.findByText(he.profile.saved);
+    await vi.waitFor(() => {
+      expect(unsafe).toHaveFocus();
+    });
+  });
+
   it('ac3_prefills_and_drops_inactive_area', async () => {
     const gone = '00000000-0000-0000-0000-00000000dead';
     const stored = profile({ area_ids: [gone, sharon.id], smoker: true, move_in_flexible: false });
