@@ -41,7 +41,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://rent:rent@db:5432/rent
       REDIS_URL: redis://redis:6379/0
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:${WEB_PORT:-5173}}
       SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
       EMAIL_BACKEND: file
       EMAIL_OUTBOX_DIR: /outbox
@@ -88,12 +88,12 @@ services:
     restart: unless-stopped
     environment:
       # The browser calls the API directly on its host port (no Vite proxy). Must stay `localhost`:
-      # the page origin is http://localhost:5173, the only origin the API's CORS allows.
+      # the page origin is http://localhost:${WEB_PORT}  (default 5173), the only origin the API's CORS allows.
       VITE_API_URL: http://localhost:${API_PORT:-8000}
       # The MapLibre style (spec 0003d): public OSM raster tiles until self-hosted Protomaps.
       VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-/map/osm-raster.json}
     ports:
-      - "127.0.0.1:5173:5173"
+      - "127.0.0.1:${WEB_PORT:-5173}:5173"
     volumes:
       - ../web:/app
       # Keep the image's Linux node_modules; the host's (if any) is for another platform.
