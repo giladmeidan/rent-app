@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useNavigate, type LinkProps } from 'react-router';
 
 import type { UserOut } from '../../api/client';
-import { usePageTitle } from '../../app/usePageTitle';
 import { fetchAreas } from '../areas/api';
 import { ME_KEY } from '../auth/useMe';
 import { ApiError, type ListingOut, type MyListingOut } from './api';
@@ -145,7 +144,6 @@ export function ListingWizard({ listing }: Props) {
   // changes to the PATCH body.
   const [base] = useState(() => listing);
   const editing = base !== undefined;
-  usePageTitle(editing ? t('listings.edit.title') : t('listings.new.title'));
 
   const [step, setStep] = useState<Step>(editing ? 2 : 1);
   const [form, setForm] = useState<ListingForm>(() =>

@@ -30,7 +30,7 @@ export function EditListingPage() {
   useEffect(() => {
     if (readOnly) expiredHeading.current?.focus();
   }, [readOnly]);
-  // The tab is named after the state's <h1> (the wizard's is the edit title as well).
+  // The page owns the tab's title in every state: its <h1> (the wizard's is the edit title).
   usePageTitle(
     t(
       listings.data !== undefined && listing === undefined
