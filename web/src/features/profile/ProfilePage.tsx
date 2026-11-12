@@ -3,16 +3,24 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 
-import { PageContainer } from '../../components/PageContainer';
 import type { AreaOut } from '../../api/client';
 import { usePageTitle } from '../../app/usePageTitle';
-import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { ChoiceGroup, choiceSegment, type ChoiceOption } from '../../components/ChoiceGroup';
+import { cx } from '../../components/cx';
 import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Field } from '../../components/Field';
+import { focusRing } from '../../components/focusRing';
 import { Loading } from '../../components/Loading';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { Switch } from '../../components/Switch';
+import { TextInput } from '../../components/TextInput';
+import { Textarea } from '../../components/Textarea';
 import { hasStatus } from '../applications/api';
 import { fetchAreas } from '../areas/api';
 import { safeNext } from '../auth/next';
@@ -45,22 +53,13 @@ import {
   type ProfileForm,
 } from './validate';
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const label = 'text-sm font-bold';
-const box =
-  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft has-[[aria-invalid=true]]:border-danger';
-const bare =
-  'min-h-[44px] min-w-0 flex-1 self-stretch border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
-const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
-const suffix = 'shrink-0 text-sm text-ink-muted';
-const fieldError = 'text-sm font-semibold text-danger';
-const card = 'flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface';
-// ChoiceGroup's label classes, for the area checkboxes.
-const chip =
-  'flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-bold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-aria-[invalid=true]:border-danger';
-const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const sectionHeading = 'font-display text-h2';
+const mutedNote = 'text-body-sm text-ink-muted';
+const switchCard = 'flex flex-col divide-y divide-border';
+const navLink = cx(
+  'flex min-h-11 items-center rounded-md px-3 text-body font-medium text-ink-muted hover:bg-surface-subtle hover:text-ink',
+  focusRing,
+);
 
 type FormProps = {
   initial: SeekerProfileOut | null;
@@ -180,21 +179,16 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     const { key, ...params } = error;
     return t(key, params);
   }
+  // The areas fieldset's own error line; the text-like fields get theirs from `Field`.
   const errorText = (name: FieldName): ReactNode => {
     const error = errors[name];
     if (error === undefined) return null;
     return (
-      <p id={errorId(name)} role="alert" className={fieldError}>
+      <p id={errorId(name)} role="alert" className="text-body-sm text-danger">
         {message(error)}
       </p>
     );
   };
-  const a11y = (name: FieldName) => ({
-    id: fieldId(name),
-    name,
-    'aria-invalid': errors[name] !== undefined,
-    'aria-describedby': errors[name] !== undefined ? errorId(name) : undefined,
-  });
   const groupError = (name: FieldName) => {
     const error = errors[name];
     return error === undefined ? undefined : message(error);
@@ -234,10 +228,11 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
       <EmptyState message={t('areas.empty')} />
     ) : (
       <fieldset className="flex flex-col">
-        <legend className="mb-2 text-sm font-bold">{t('profile.fields.areas')}</legend>
+        <legend className="mb-2 text-label text-ink">{t('profile.fields.areas')}</legend>
         <div className="flex flex-wrap gap-2">
           {areas.map((area) => {
             const checkboxId = `${fieldId('area_ids')}-${area.id}`;
+            const checked = form.area_ids.has(area.id);
             return (
               <div key={area.id} className="flex">
                 <input
@@ -245,7 +240,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                   type="checkbox"
                   name="area_ids"
                   value={area.id}
-                  checked={form.area_ids.has(area.id)}
+                  checked={checked}
                   onChange={(e) => {
                     const next = new Set(form.area_ids);
                     if (e.target.checked) next.add(area.id);
@@ -256,266 +251,360 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                   aria-describedby={areaError !== undefined ? errorId('area_ids') : undefined}
                   className="peer sr-only"
                 />
-                <label htmlFor={checkboxId} className={chip}>
+                <label htmlFor={checkboxId} className={cx(choiceSegment, 'gap-1.5')}>
+                  {checked && (
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0"
+                    >
+                      <path d="M5 12l5 5 9-10" />
+                    </svg>
+                  )}
                   {area.name_he}
                 </label>
               </div>
             );
           })}
         </div>
-        {areaError !== undefined && <div className="mt-[6px]">{errorText('area_ids')}</div>}
+        {areaError !== undefined && <div className="mt-1.5">{errorText('area_ids')}</div>}
       </fieldset>
     );
 
+  const searchHeading = `${id}-search`;
+  const householdHeading = `${id}-household`;
+  const peopleHeading = `${id}-people`;
+
   return (
-    <form ref={formRef} noValidate onSubmit={onSubmit} className="flex flex-col gap-[22px]">
-      <div className="flex flex-col gap-[6px]">
-        <label htmlFor={fieldId('budget_max_ils')} className={label}>
-          {t('profile.fields.budget')}
-        </label>
-        <div className={`${box} min-h-[52px]`}>
-          <input
-            {...a11y('budget_max_ils')}
-            type="number"
-            inputMode="numeric"
-            min={BUDGET.min}
-            max={BUDGET.max}
-            value={form.budget_max_ils}
-            onChange={(e) => change({ budget_max_ils: e.target.value }, 'budget_max_ils')}
-            className={bare}
-          />
-          <span className={suffix}>{t('listings.units.ils')}</span>
-        </div>
-        {errorText('budget_max_ils')}
-      </div>
-
-      <div className="flex flex-col gap-[6px]">
-        <label htmlFor={fieldId('move_in_date')} className={label}>
-          {t('profile.fields.moveIn')}
-        </label>
-        <input
-          {...a11y('move_in_date')}
-          aria-describedby={withReadback(
-            a11y('move_in_date')['aria-describedby'],
-            `${fieldId('move_in_date')}-chosen`,
-            form.move_in_date,
+    <>
+      <nav
+        aria-label={t('profile.nav.label')}
+        className="hidden lg:sticky lg:top-6 lg:col-start-1 lg:row-start-2 lg:block lg:self-start lg:rounded-lg lg:border lg:border-border lg:bg-surface lg:p-6"
+      >
+        <ul className="flex flex-col gap-1">
+          <li>
+            <a href="#profile-search" className={navLink}>
+              {t('profile.sections.search')}
+            </a>
+          </li>
+          <li>
+            <a href="#profile-household" className={navLink}>
+              {t('profile.sections.household')}
+            </a>
+          </li>
+          <li>
+            <a href="#profile-room" className={navLink}>
+              {t('profile.room.title')}
+            </a>
+          </li>
+          {form.room && (
+            <>
+              <li>
+                <a href="#profile-lifestyle" className={navLink}>
+                  {t('lifestyle.title.seeker')}
+                </a>
+              </li>
+              <li>
+                <a href="#profile-people" className={navLink}>
+                  {t('profile.room.peopleTitle')}
+                </a>
+              </li>
+            </>
           )}
-          type="date"
-          min={today}
-          max={addDays(today, MOVE_IN_MAX_DAYS)}
-          value={form.move_in_date}
-          onChange={(e) => change({ move_in_date: e.target.value }, 'move_in_date')}
-          className={input}
-        />
-        <DateReadback id={`${fieldId('move_in_date')}-chosen`} value={form.move_in_date} />
-        {errorText('move_in_date')}
-        <div className={card}>
-          <Switch
-            label={t('profile.fields.flexible')}
-            checked={form.move_in_flexible}
-            onChange={(move_in_flexible) => change({ move_in_flexible })}
-          />
-        </div>
-      </div>
+        </ul>
+      </nav>
 
-      {areasControl}
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={onSubmit}
+        className="flex flex-col gap-8 lg:col-start-2 lg:row-start-2"
+      >
+        <section
+          id="profile-search"
+          aria-labelledby={searchHeading}
+          className="flex scroll-mt-6 flex-col gap-6"
+        >
+          <div className="flex flex-col gap-1">
+            <h2 id={searchHeading} className={sectionHeading}>
+              {t('profile.sections.search')}
+            </h2>
+          </div>
 
-      <ChoiceGroup
-        legend={t('profile.fields.household')}
-        name="household"
-        options={household}
-        value={form.household}
-        onChange={(value) => change({ household: value }, 'household')}
-        error={groupError('household')}
-      />
-
-      <div className={card}>
-        <Switch
-          label={t('profile.fields.pets')}
-          checked={form.has_pets}
-          onChange={(has_pets) => change({ has_pets })}
-        />
-        <Switch
-          label={t('profile.fields.smoker')}
-          checked={form.smoker}
-          onChange={(smoker) => change({ smoker })}
-        />
-      </div>
-
-      <ChoiceGroup
-        legend={t('profile.fields.contract')}
-        name="contract_months"
-        options={contract}
-        value={form.contract_months}
-        onChange={(value) => change({ contract_months: value }, 'contract_months')}
-        error={groupError('contract_months')}
-      />
-
-      <ChoiceGroup
-        legend={t('profile.fields.parking')}
-        name="parking_needed"
-        options={parking}
-        value={form.parking_needed}
-        onChange={(value) => change({ parking_needed: value }, 'parking_needed')}
-        error={groupError('parking_needed')}
-      />
-
-      <section aria-labelledby={`${id}-room`} className="mt-6 flex flex-col gap-[22px]">
-        <div className="flex flex-col gap-1">
-          <h2
-            ref={roomHeading}
-            id={`${id}-room`}
-            tabIndex={-1}
-            className="text-start text-xl font-extrabold focus:outline-none"
-          >
-            {t('profile.room.title')}
-          </h2>
-          <p className="text-start text-sm text-ink-muted">{t('profile.room.hint')}</p>
-        </div>
-        <div className={card}>
-          <Switch
-            label={t('profile.room.switch')}
-            checked={form.room}
-            onChange={(room) => {
-              change({ room });
-              // Errors are only for a section that is on: none comes back stale on switching on.
-              setErrors((shown) => ({
-                ...shown,
-                gender: undefined,
-                birth_year: undefined,
-                about_me: undefined,
-              }));
-            }}
-          />
-        </div>
-        {form.room && (
-          <div className="flex flex-col gap-[22px]">
-            <p className="text-start text-sm text-ink-muted">{t('profile.room.privacy')}</p>
-
-            <div className="flex flex-col gap-[6px]">
-              <ChoiceGroup
-                legend={t('profile.room.fields.gender')}
-                name="gender"
-                options={genders}
-                value={form.gender}
-                onChange={(value) => change({ gender: value }, 'gender')}
-                error={groupError('gender')}
+          <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start md:gap-4">
+            <Field
+              id={fieldId('budget_max_ils')}
+              label={t('profile.fields.budget')}
+              error={groupError('budget_max_ils')}
+            >
+              <TextInput
+                name="budget_max_ils"
+                size="lg"
+                end={t('listings.units.ils')}
+                type="number"
+                inputMode="numeric"
+                min={BUDGET.min}
+                max={BUDGET.max}
+                value={form.budget_max_ils}
+                onChange={(e) => change({ budget_max_ils: e.target.value }, 'budget_max_ils')}
               />
-              <p className="text-start text-sm text-ink-muted">{t('profile.room.genderNote')}</p>
-            </div>
+            </Field>
 
-            <div className="flex flex-col gap-[6px]">
-              <label htmlFor={fieldId('birth_year')} className={label}>
-                {t('profile.room.fields.birthYear')}
-              </label>
-              <div className={box}>
-                <input
-                  {...a11y('birth_year')}
-                  aria-describedby={
-                    errors.birth_year !== undefined
-                      ? `${fieldId('birth_year')}-hint ${errorId('birth_year')}`
-                      : `${fieldId('birth_year')}-hint`
-                  }
+            <div className="flex flex-col gap-1.5">
+              <Field
+                id={fieldId('move_in_date')}
+                label={t('profile.fields.moveIn')}
+                error={groupError('move_in_date')}
+              >
+                <TextInput
+                  name="move_in_date"
+                  aria-describedby={withReadback(
+                    undefined,
+                    `${fieldId('move_in_date')}-chosen`,
+                    form.move_in_date,
+                  )}
+                  type="date"
+                  min={today}
+                  max={addDays(today, MOVE_IN_MAX_DAYS)}
+                  value={form.move_in_date}
+                  onChange={(e) => change({ move_in_date: e.target.value }, 'move_in_date')}
+                />
+              </Field>
+              <DateReadback id={`${fieldId('move_in_date')}-chosen`} value={form.move_in_date} />
+              <Card padding="none" className={switchCard}>
+                <Switch
+                  label={t('profile.fields.flexible')}
+                  checked={form.move_in_flexible}
+                  onChange={(move_in_flexible) => change({ move_in_flexible })}
+                />
+              </Card>
+            </div>
+          </div>
+
+          {areasControl}
+        </section>
+
+        <section
+          id="profile-household"
+          aria-labelledby={householdHeading}
+          className="flex scroll-mt-6 flex-col gap-6 border-t border-border pt-8"
+        >
+          <div className="flex flex-col gap-1">
+            <h2 id={householdHeading} className={sectionHeading}>
+              {t('profile.sections.household')}
+            </h2>
+          </div>
+
+          <ChoiceGroup
+            legend={t('profile.fields.household')}
+            name="household"
+            options={household}
+            value={form.household}
+            onChange={(value) => change({ household: value }, 'household')}
+            error={groupError('household')}
+          />
+
+          <Card padding="none" className={switchCard}>
+            <Switch
+              label={t('profile.fields.pets')}
+              checked={form.has_pets}
+              onChange={(has_pets) => change({ has_pets })}
+            />
+            <Switch
+              label={t('profile.fields.smoker')}
+              checked={form.smoker}
+              onChange={(smoker) => change({ smoker })}
+            />
+          </Card>
+
+          <ChoiceGroup
+            legend={t('profile.fields.contract')}
+            name="contract_months"
+            options={contract}
+            value={form.contract_months}
+            onChange={(value) => change({ contract_months: value }, 'contract_months')}
+            error={groupError('contract_months')}
+          />
+
+          <ChoiceGroup
+            legend={t('profile.fields.parking')}
+            name="parking_needed"
+            options={parking}
+            value={form.parking_needed}
+            onChange={(value) => change({ parking_needed: value }, 'parking_needed')}
+            error={groupError('parking_needed')}
+          />
+        </section>
+
+        <section
+          id="profile-room"
+          aria-labelledby={`${id}-room`}
+          className="flex scroll-mt-6 flex-col gap-6 border-t border-border pt-8"
+        >
+          <div className="flex flex-col gap-1">
+            <h2
+              ref={roomHeading}
+              id={`${id}-room`}
+              tabIndex={-1}
+              className={cx(sectionHeading, 'focus:outline-none')}
+            >
+              {t('profile.room.title')}
+            </h2>
+            <p className={mutedNote}>{t('profile.room.hint')}</p>
+          </div>
+          <Card padding="none" className={switchCard}>
+            <Switch
+              label={t('profile.room.switch')}
+              checked={form.room}
+              onChange={(room) => {
+                change({ room });
+                // Errors are only for a section that is on: none comes back stale on switching on.
+                setErrors((shown) => ({
+                  ...shown,
+                  gender: undefined,
+                  birth_year: undefined,
+                  about_me: undefined,
+                }));
+              }}
+            />
+          </Card>
+          {form.room && (
+            <>
+              <p className={mutedNote}>{t('profile.room.privacy')}</p>
+
+              <div className="flex flex-col gap-1.5">
+                <ChoiceGroup
+                  legend={t('profile.room.fields.gender')}
+                  name="gender"
+                  options={genders}
+                  value={form.gender}
+                  onChange={(value) => change({ gender: value }, 'gender')}
+                  error={groupError('gender')}
+                />
+                <p className={mutedNote}>{t('profile.room.genderNote')}</p>
+              </div>
+
+              <Field
+                id={fieldId('birth_year')}
+                label={t('profile.room.fields.birthYear')}
+                hint={t('profile.room.birthYearHint')}
+                error={groupError('birth_year')}
+              >
+                <TextInput
+                  name="birth_year"
                   type="text"
                   inputMode="numeric"
                   maxLength={4}
+                  className="sm:max-w-xs"
                   value={form.birth_year}
                   onChange={(e) => change({ birth_year: e.target.value }, 'birth_year')}
-                  className={bare}
+                />
+              </Field>
+
+              <ChoiceGroup
+                legend={t('profile.room.fields.flatmates')}
+                name="flatmate_gender"
+                options={flatmates}
+                value={form.flatmate_gender}
+                onChange={(value) => change({ flatmate_gender: value })}
+              />
+
+              <div id="profile-lifestyle" className="scroll-mt-6 border-t border-border pt-6">
+                <LifestyleFields
+                  perspective="seeker"
+                  value={form.lifestyle}
+                  onChange={(lifestyle) => change({ lifestyle })}
                 />
               </div>
-              <p id={`${fieldId('birth_year')}-hint`} className="text-start text-sm text-ink-muted">
-                {t('profile.room.birthYearHint')}
-              </p>
-              {errorText('birth_year')}
-            </div>
 
-            <ChoiceGroup
-              legend={t('profile.room.fields.flatmates')}
-              name="flatmate_gender"
-              options={flatmates}
-              value={form.flatmate_gender}
-              onChange={(value) => change({ flatmate_gender: value })}
-            />
-
-            <LifestyleFields
-              perspective="seeker"
-              value={form.lifestyle}
-              onChange={(lifestyle) => change({ lifestyle })}
-            />
-
-            <div className={card}>
-              <Switch
-                label={t('profile.room.peopleVisible')}
-                checked={form.people_visible}
-                onChange={(people_visible) => change({ people_visible })}
-                describedBy={`${id}-people-hint`}
-              />
-            </div>
-            <p id={`${id}-people-hint`} className="text-start text-sm text-ink-muted">
-              {t('profile.room.peopleVisibleHint')}
-            </p>
-
-            <div className="flex flex-col gap-[6px]">
-              <label htmlFor={fieldId('about_me')} className={label}>
-                {t('profile.room.aboutMe')}
-              </label>
-              <textarea
-                {...a11y('about_me')}
-                aria-describedby={
-                  errors.about_me !== undefined
-                    ? `${fieldId('about_me')}-counter ${errorId('about_me')}`
-                    : `${fieldId('about_me')}-counter`
-                }
-                rows={4}
-                maxLength={ABOUT_ME_MAX}
-                dir="auto"
-                value={form.about_me}
-                onChange={(e) => change({ about_me: e.target.value }, 'about_me')}
-                className={`${input} py-2 text-start`}
-              />
-              <p
-                id={`${fieldId('about_me')}-counter`}
-                className="text-start text-sm text-ink-muted"
+              <section
+                id="profile-people"
+                aria-labelledby={peopleHeading}
+                className="flex scroll-mt-6 flex-col gap-6 border-t border-border pt-6"
               >
-                {t('listings.fields.charsLeft', { count: ABOUT_ME_MAX - form.about_me.length })}
-              </p>
-              {errorText('about_me')}
+                <h3 id={peopleHeading} className="text-h3">
+                  {t('profile.room.peopleTitle')}
+                </h3>
+                <Card padding="none" className={switchCard}>
+                  <Switch
+                    label={t('profile.room.peopleVisible')}
+                    checked={form.people_visible}
+                    onChange={(people_visible) => change({ people_visible })}
+                    describedBy={`${id}-people-hint`}
+                  />
+                </Card>
+                <p id={`${id}-people-hint`} className={mutedNote}>
+                  {t('profile.room.peopleVisibleHint')}
+                </p>
+
+                <Field
+                  id={fieldId('about_me')}
+                  label={t('profile.room.aboutMe')}
+                  hint={t('listings.fields.charsLeft', {
+                    count: ABOUT_ME_MAX - form.about_me.length,
+                  })}
+                  error={groupError('about_me')}
+                >
+                  <Textarea
+                    name="about_me"
+                    rows={4}
+                    maxLength={ABOUT_ME_MAX}
+                    dir="auto"
+                    value={form.about_me}
+                    onChange={(e) => change({ about_me: e.target.value }, 'about_me')}
+                  />
+                </Field>
+              </section>
+            </>
+          )}
+        </section>
+
+        {areas.length > 0 && (
+          <div
+            data-sticky-footer
+            className="sticky z-10 -mx-4 flex flex-col gap-2 border-t border-border bg-surface px-4 py-3 max-lg:bottom-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom,0px))] sm:mx-0 sm:rounded-lg sm:border lg:bottom-0"
+          >
+            {failed && (
+              <ErrorState
+                onRetry={() => {
+                  if (lastBody.current !== null) send(lastBody.current);
+                }}
+              />
+            )}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              {saved && (
+                <p
+                  ref={savedRef}
+                  tabIndex={-1}
+                  role="status"
+                  className="text-body font-medium text-success empty:hidden focus:outline-none"
+                >
+                  {t('profile.saved')}
+                </p>
+              )}
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                type="submit"
+                disabled={save.isPending}
+                aria-busy={save.isPending}
+                className="lg:ms-auto lg:w-auto lg:min-w-48"
+              >
+                {t('profile.save')}
+              </Button>
             </div>
           </div>
         )}
-      </section>
-
-      {areas.length > 0 && (
-        <div className="flex flex-col gap-3 pt-2">
-          {failed && (
-            <ErrorState
-              onRetry={() => {
-                if (lastBody.current !== null) send(lastBody.current);
-              }}
-            />
-          )}
-          <button
-            type="submit"
-            disabled={save.isPending}
-            aria-busy={save.isPending}
-            className={primary}
-          >
-            {t('profile.save')}
-          </button>
-          {saved && (
-            <p
-              ref={savedRef}
-              tabIndex={-1}
-              role="status"
-              className="text-start text-[15px] font-bold text-accent-strong focus:outline-none"
-            >
-              {t('profile.saved')}
-            </p>
-          )}
-        </div>
-      )}
-    </form>
+      </form>
+    </>
   );
 }
 
@@ -538,17 +627,21 @@ export function ProfilePage() {
   if (profileFailed || areasFailed) {
     // Only when nothing is cached: a failed background refetch keeps the form and what was typed.
     body = (
-      <ErrorState
-        onRetry={() =>
-          Promise.all([profileFailed && profile.refetch(), areasFailed && areas.refetch()])
-        }
-      />
+      <div className="lg:col-start-2">
+        <ErrorState
+          onRetry={() =>
+            Promise.all([profileFailed && profile.refetch(), areasFailed && areas.refetch()])
+          }
+        />
+      </div>
     );
   } else if (profile.data === undefined || areas.data === undefined) {
     body = (
-      <Loading>
-        <Skeleton />
-      </Loading>
+      <div className="lg:col-start-2">
+        <Loading>
+          <Skeleton />
+        </Loading>
+      </div>
     );
   } else {
     body = (
@@ -561,11 +654,14 @@ export function ProfilePage() {
   }
 
   return (
-    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
-      <h1 className="text-start text-2xl font-extrabold">{t('profile.title')}</h1>
-      <p className="text-start text-[15px]">{t('profile.intro')}</p>
-      <p className="text-start text-sm text-ink-muted">{t('profile.privacy')}</p>
-      {body}
+    <PageContainer as="section" width="wide">
+      <div className="mx-auto flex max-w-2xl flex-col gap-6 lg:grid lg:max-w-none lg:grid-cols-[18rem_minmax(0,42rem)] lg:justify-center lg:gap-x-8 lg:gap-y-6">
+        <div className="flex flex-col gap-1 lg:col-span-2">
+          <PageHeader title={t('profile.title')} subtitle={t('profile.intro')} />
+          <p className={mutedNote}>{t('profile.privacy')}</p>
+        </div>
+        {body}
+      </div>
     </PageContainer>
   );
 }

@@ -47,6 +47,14 @@ html:has([data-sticky-footer]) {
   }
 }
 
+/* The profile's sticky save bar above the tab bar: scroll padding for the bar's tallest normal state
+   (110px) plus 8px, so a field focused by Tab stays clear of both (spec 0009r). */
+@media not all and (min-width: 1024px) {
+  :root:has([data-sticky-footer]):has([data-bottom-nav]:not([data-hidden-mobile])) {
+    scroll-padding-block-end: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 118px);
+  }
+}
+
 /* Animations and transitions stop for people who asked the system for less motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
