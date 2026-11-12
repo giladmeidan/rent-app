@@ -16,6 +16,7 @@ import {
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
+import { cardTitle } from '../cardTitle';
 import { formatDate } from '../format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { application } from '../../applications/__tests__/fixtures';
@@ -178,7 +179,10 @@ describe('ListingPage', () => {
     });
     render(katznelson.id);
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('כצנלסון');
+    // The error state's <h1> is "something went wrong": wait for the listing's.
+    await vi.waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('כצנלסון');
+    });
     expect(api.calls(`GET /listings/${katznelson.id}`)).toHaveLength(2);
   });
 
@@ -562,6 +566,51 @@ describe('ListingPage', () => {
     ]);
   });
 
+  it('ac3_page_title', async () => {
+    // Loading: the app's name alone; loaded: the listing's <h1>.
+    const pending = deferred();
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [pending.promise],
+    });
+    let view = render(katznelson.id);
+    expect(document.title).toBe(he.app.title);
+    pending.resolve(json(katznelson));
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: cardTitle(i18n.t, katznelson),
+    });
+    expect(document.title).toBe(
+      i18n.t('app.pageTitle', { page: heading.textContent, app: he.app.title }),
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Not found: the not-found <h1>.
+    const missing = crypto.randomUUID();
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${missing}`]: [json({ detail: 'listing_not_found' }, 404)],
+    });
+    view = render(missing);
+    await screen.findByRole('heading', { level: 1, name: he.listing.notFound });
+    expect(document.title).toBe(
+      i18n.t('app.pageTitle', { page: he.listing.notFound, app: he.app.title }),
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A failed load is the whole page: ErrorState's <h1>, the only one.
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json({ detail: 'boom' }, 500)],
+    });
+    render(katznelson.id);
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.common.error);
+  });
+
   describe('likes (0008c)', () => {
     const likeRoom = (like: { liked_by_me: boolean; liked_me: boolean } | null, over = {}) =>
       listingDetail({ listing_type: 'room', like, room_fit: true, ...over });
@@ -627,7 +676,7 @@ describe('ListingPage', () => {
       // Idle: the hint under the button, tied to it.
       expect(button).toHaveAccessibleDescription(he.likes.hint);
       fireEvent.click(button);
-      const pressed = await screen.findByRole('button', { name: he.likes.unlikeLabel });
+      const pressed = await screen.findByRole('button', { name: he.likes.liked, pressed: true });
       expect(pressed).toHaveAttribute('aria-pressed', 'true');
       expect(pressed).toHaveTextContent(he.likes.liked);
       expect(screen.queryByText(he.likes.hint)).toBeNull();
@@ -783,6 +832,27 @@ describe('ListingPage', () => {
       fireEvent.click(button);
       expect(await screen.findByText(he.likes.mutual)).toBeVisible();
       expect(api.calls(`PUT /listings/${room.id}/like`)).toHaveLength(1);
+    });
+
+    it('ac8_like_toggle_name_matches_text', async () => {
+      const room = likeRoom({ liked_by_me: false, liked_me: false });
+      seekerApi(room, {
+        [`PUT /listings/${room.id}/like`]: [json({ liked: true, application_id: null })],
+      });
+      render(room.id);
+      // Idle: named by its visible text, not pressed, no aria-label.
+      const button = await likeButton();
+      expect(button).toHaveAccessibleName(button.textContent ?? '');
+      expect(button).toHaveAttribute('aria-pressed', 'false');
+      expect(button).not.toHaveAttribute('aria-label');
+
+      // Liked: the visible text changes and is still the name; the state is aria-pressed.
+      fireEvent.click(button);
+      const pressed = await screen.findByRole('button', { name: he.likes.liked, pressed: true });
+      expect(pressed).toHaveTextContent(he.likes.liked);
+      expect(pressed).toHaveAccessibleName(pressed.textContent ?? '');
+      expect(pressed).toHaveAttribute('aria-pressed', 'true');
+      expect(pressed).not.toHaveAttribute('aria-label');
     });
 
     it('ac3_apply_ends_the_like_control', async () => {

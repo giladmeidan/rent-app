@@ -133,13 +133,13 @@ describe('EditListingPage', () => {
   it('ac2_loads_from_my_listings_and_not_found', async () => {
     const a = stored();
 
-    // Pending: one busy skeleton.
+    // Pending: one busy skeleton, under the page's <h1>.
     mockApi({ 'GET /me/listings': [never], 'GET /areas': [() => json([gushDan])] });
     let view = renderEdit(a.id);
-    const busy = screen.getByLabelText(he.common.loading);
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getAllByTestId('skeleton')).toHaveLength(1);
-    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -152,9 +152,11 @@ describe('EditListingPage', () => {
     const retry = await screen.findByRole('button', { name: he.common.retry });
     expect(screen.getByRole('alert')).toHaveTextContent(he.common.error);
     fireEvent.click(retry);
-    expect(
-      await screen.findByRole('heading', { level: 1, name: he.listings.edit.title }),
-    ).toBeVisible();
+    // The error state keeps the page's <h1>: wait for the wizard's.
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+    expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
     expect(api.calls('GET /me/listings')).toHaveLength(2);
     view.unmount();
     vi.unstubAllGlobals();
@@ -513,10 +515,11 @@ describe('EditListingPage', () => {
       'GET /me/listings': [() => json([a]), never],
     });
     renderEdit(a.id);
-    expect(
-      await screen.findByRole('heading', { level: 1, name: he.listings.edit.title }),
-    ).toBeVisible();
-    expect(field(f.area)).toBeDisabled();
+    // The loading state has the page's <h1> too: wait for the wizard's form.
+    await vi.waitFor(() => {
+      expect(field(f.area)).toBeDisabled();
+    });
+    expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
     expect(beforeUnloadPrevented()).toBe(false);
     fireEvent.click(backLink());
     expect(confirm).not.toHaveBeenCalled();
@@ -754,5 +757,28 @@ describe('EditListingPage', () => {
         lifestyle: { guests: 1 },
       },
     ]);
+  });
+
+  it('ac4_h1_while_loading_and_on_error', async () => {
+    const a = stored();
+    // "My listings" loading: the page's <h1> above the busy block.
+    mockApi({ 'GET /me/listings': [never], 'GET /areas': [() => json([gushDan])] });
+    let view = renderEdit(a.id);
+    await screen.findByRole('heading', { level: 1, name: he.listings.edit.title });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByText(he.common.loading).closest('[aria-busy="true"]')).not.toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // "My listings" failing: the <h1> above ErrorState, whose message is no heading.
+    mockApi({
+      'GET /me/listings': [json({ detail: 'boom' }, 500)],
+      'GET /areas': [() => json([gushDan])],
+    });
+    view = renderEdit(a.id);
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
+    view.unmount();
   });
 });

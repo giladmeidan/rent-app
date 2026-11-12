@@ -12,6 +12,8 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
+    "@fontsource-variable/rubik": "5.3.0",
+    "@fontsource/fredoka": "5.3.0",
     "@tanstack/react-query": "5.107.1",
     "i18next": "27.0.1",
     "maplibre-gl": "6.16.0",
@@ -23,6 +25,7 @@
     "vite-plugin-pwa": "2.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.65.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",

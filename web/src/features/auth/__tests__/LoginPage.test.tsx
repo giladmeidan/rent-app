@@ -222,10 +222,9 @@ describe('LoginPage', () => {
     expect(screen.getByTestId('navigation')).toHaveTextContent('REPLACE');
     expect(screen.queryByText(previousMessage)).toBeNull();
     expect(screen.queryByRole('article')).toBeNull();
-    expect(screen.getByRole('list', { name: he.common.loading })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    );
+    expect(
+      screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]'),
+    ).toHaveAttribute('aria-busy', 'true');
     expect(client.getQueryData(['me'])).toEqual(noa);
   });
 });

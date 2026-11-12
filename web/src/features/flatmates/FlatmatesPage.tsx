@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { cardTitle } from '../listings/cardTitle';
 import { useMyListings } from '../listings/useMyListings';
@@ -273,20 +275,26 @@ export function FlatmatesPage() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   // A removal turns the link off (0008d): the invite block remounts and drops a shown link.
   const [removals, setRemovals] = useState(0);
+  const notFound = listings.data !== undefined && (listing === undefined || !isRoom);
+  usePageTitle(t(notFound ? 'flatmates.notFound' : 'flatmates.title'));
 
+  // Loading and a failed list keep the page's <h1>: its text needs no data.
   if (listings.data === undefined) {
+    const title = <h1 className="text-start text-2xl font-extrabold">{t('flatmates.title')}</h1>;
     if (listings.isPending) {
       return (
         <section className={section}>
-          <div aria-busy="true" aria-label={t('common.loading')}>
+          {title}
+          <Loading>
             <Skeleton />
-          </div>
+          </Loading>
         </section>
       );
     }
     return (
       <section className={section}>
         <Back />
+        {title}
         <ErrorState onRetry={() => void listings.refetch()} />
       </section>
     );
@@ -306,9 +314,9 @@ export function FlatmatesPage() {
     list = flatmates.isError ? (
       <ErrorState onRetry={() => void flatmates.refetch()} />
     ) : (
-      <div aria-busy="true" aria-label={t('common.loading')}>
+      <Loading>
         <Skeleton />
-      </div>
+      </Loading>
     );
   } else if (flatmates.data.length === 0) {
     list = <EmptyState message={t('flatmates.list.empty')} />;

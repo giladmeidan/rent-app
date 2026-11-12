@@ -1,17 +1,12 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { signUpOwner } from './helpers';
+import { expectNoAxeViolations } from './a11y';
+import { routeTiles, signUpOwner } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
-
-// A 1x1 transparent PNG: every OSM tile is answered locally, so a run never calls OpenStreetMap.
-const TILE = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-  'base64',
-);
 
 /** `YYYY-MM-DD`, `days` from today in Israel. */
 function israelDay(days: number): string {
@@ -19,17 +14,6 @@ function israelDay(days: number): string {
   const date = new Date(`${today}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-/** Every OSM tile is the 1x1 PNG, except the first `failing` requests, answered 500. */
-async function routeTiles(page: Page, failing = 0) {
-  let seen = 0;
-  await page.context().route('https://tile.openstreetmap.org/**', (route) => {
-    seen += 1;
-    return seen <= failing
-      ? route.fulfill({ status: 500, body: '' })
-      : route.fulfill({ status: 200, contentType: 'image/png', body: TILE });
-  });
 }
 
 test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
@@ -115,6 +99,7 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   await card.getByRole('link').click();
   await expect(page).toHaveURL(`/listings/${id}`);
   await expect(page.getByRole('region', { name: he.listing.mapLabel })).toBeVisible();
+  await expectNoAxeViolations(page, 'listing page (visitor)');
 
   // Back on the map view, a reload keeps it.
   await page.goBack();

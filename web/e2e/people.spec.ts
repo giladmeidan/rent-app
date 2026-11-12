@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { expectNoAxeViolations } from './a11y';
 import { likeRoom, postListing, putProfile, signUp } from './helpers';
 
 const withName = (text: string, name: string) => text.replace('{{name}}', name);
@@ -47,6 +48,7 @@ test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
   await expect(page.getByRole('heading', { level: 1, name: he.people.title })).toBeVisible();
   const person = page.getByRole('article', { name: SEEKER_NAME });
   await expect(person.getByText(he.people.likedMe)).toBeVisible();
+  await expectNoAxeViolations(page, '/me/listings/:id/people');
 
   // Liking back: the mutual banner, and its link opens the thread.
   await person.getByRole('button', { name: he.people.like, exact: true }).click();

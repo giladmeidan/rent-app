@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
@@ -59,6 +61,13 @@ export function ApplicantsPage() {
   const filterRefs = useRef(new Map<Filter, HTMLButtonElement>());
   const baseId = useId();
   const headingIdOf = (applicantId: string) => `${baseId}-${applicantId}`;
+  usePageTitle(
+    t(
+      listings.data !== undefined && listing === undefined
+        ? 'applicants.notFound'
+        : 'applicants.title',
+    ),
+  );
 
   // Runs after the render that follows the action, when the target is in the DOM and enabled.
   // The card's `<h2>`, else the pressed filter button, else the `<h1>`.
@@ -109,20 +118,24 @@ export function ApplicantsPage() {
   }
 
   // A cached list is used while it refetches, and kept if that refetch fails (every action
-  // invalidates "my listings").
+  // invalidates "my listings"). Loading and a failed list keep the page's <h1>: its text needs no
+  // data.
   if (listings.data === undefined) {
+    const title = <h1 className="text-start text-2xl font-extrabold">{t('applicants.title')}</h1>;
     if (listings.isPending) {
       return (
         <section className={section}>
-          <div aria-busy="true" aria-label={t('common.loading')}>
+          {title}
+          <Loading>
             <Skeleton />
-          </div>
+          </Loading>
         </section>
       );
     }
     return (
       <section className={section}>
         <BackToMine />
+        {title}
         <ErrorState onRetry={() => void listings.refetch()} />
       </section>
     );
@@ -143,13 +156,13 @@ export function ApplicantsPage() {
     body = applicants.isError ? (
       <ErrorState onRetry={() => void applicants.refetch()} />
     ) : (
-      <ul aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-        {[0, 1, 2].map((i) => (
-          <li key={i}>
-            <Skeleton />
-          </li>
-        ))}
-      </ul>
+      <Loading>
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} />
+          ))}
+        </div>
+      </Loading>
     );
   } else if (list.length === 0) {
     body = <EmptyState message={t('applicants.empty')} />;

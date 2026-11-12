@@ -3,7 +3,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from '../auth/next';
 import { clearSession } from '../auth/useLogout';
@@ -80,22 +82,15 @@ function isFinal(error: unknown): boolean {
   return error instanceof ApiError && [404, 409, 422].includes(error.status);
 }
 
+/** Every state of the page, with its one `<h1>` (which also names the tab). */
 function Frame({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  usePageTitle(t('flatmates.join.title'));
   return (
     <section className={section}>
       <h1 className="text-start text-2xl font-extrabold">{t('flatmates.join.title')}</h1>
       {children}
     </section>
-  );
-}
-
-function Loading() {
-  const { t } = useTranslation();
-  return (
-    <div aria-busy="true" aria-label={t('common.loading')}>
-      <Skeleton />
-    </div>
   );
 }
 
@@ -128,7 +123,9 @@ export function JoinFlatPage() {
   if (hashPending) {
     return (
       <Frame>
-        <Loading />
+        <Loading>
+          <Skeleton />
+        </Loading>
       </Frame>
     );
   }
@@ -201,7 +198,9 @@ function JoinFlow() {
   if (me.isPending) {
     return (
       <Frame>
-        <Loading />
+        <Loading>
+          <Skeleton />
+        </Loading>
       </Frame>
     );
   }
@@ -220,7 +219,9 @@ function JoinFlow() {
     if (!preview.isError || expired) {
       return (
         <Frame>
-          <Loading />
+          <Loading>
+            <Skeleton />
+          </Loading>
         </Frame>
       );
     }

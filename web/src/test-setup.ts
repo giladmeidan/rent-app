@@ -71,6 +71,23 @@ export class FakeEventSource extends EventTarget {
 globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 // jsdom lays nothing out, so it has no scrolling either.
 Element.prototype.scrollIntoView = () => {};
+window.scrollTo = () => {};
+
+/**
+ * A `<dialog>` stand-in (spec 0009d §6), installed unconditionally so every jsdom version behaves
+ * the same: `showModal()` sets `open` (a no-op when already open); `close()` removes it and
+ * dispatches `close` synchronously (a no-op with no event when already closed). The real modal
+ * (focus trap, top layer, Esc) is proven in a browser (0009d AC11).
+ */
+HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+  if (this.hasAttribute('open')) return;
+  this.setAttribute('open', '');
+};
+HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+  if (!this.hasAttribute('open')) return;
+  this.removeAttribute('open');
+  this.dispatchEvent(new Event('close'));
+};
 
 afterEach(() => {
   cleanup();

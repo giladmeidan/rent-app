@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { expectNoAxeViolations } from './a11y';
 import { API, likePerson, postListing, signUp } from './helpers';
 
 const ROOM = he.profile.room;
@@ -79,6 +80,7 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   // The room is under "אהבו אותך"; liking back opens the chat.
   const likedMe = page.getByRole('region', { name: he.likes.likedMe });
   await expect(likedMe.getByRole('link', { name: new RegExp(street) })).toBeVisible();
+  await expectNoAxeViolations(page, '/me/likes');
   await likedMe.getByRole('button', { name: he.likes.like }).click();
   await expect(page.getByText(he.likes.mutual)).toBeVisible();
   const chat = page.getByRole('link', { name: he.likes.toChat });

@@ -389,10 +389,11 @@ describe('PeoplePage', () => {
     run.view.unmount();
     vi.unstubAllGlobals();
 
-    // Loading: a busy skeleton list.
+    // Loading: a busy block of skeletons.
     const pending = deferred();
     run = renderPage([pending.promise]);
-    const busy = await screen.findByRole('list', { name: he.common.loading });
+    await screen.findByRole('heading', { level: 1, name: he.people.title });
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
     run.view.unmount();
     vi.unstubAllGlobals();
@@ -408,5 +409,31 @@ describe('PeoplePage', () => {
       run.view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('ac4_h1_while_loading_and_on_error', async () => {
+    const title = () => screen.getByRole('heading', { level: 1, name: he.people.title });
+    // "My listings" loading: the page's <h1> above the busy block.
+    const pending = deferred();
+    let run = renderPage([page([])], { mine: [pending.promise] });
+    await screen.findByRole('heading', { level: 1, name: he.people.title });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByText(he.common.loading).closest('[aria-busy="true"]')).not.toBeNull();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // "My listings" failing: the <h1> above ErrorState, whose message is no heading.
+    run = renderPage([page([])], { mine: [json({ detail: 'boom' }, 500)] });
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(title()).toBeVisible();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // The people failing: still the one <h1>.
+    run = renderPage([json({ detail: 'boom' }, 500)]);
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(title()).toBeVisible();
   });
 });

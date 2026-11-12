@@ -68,7 +68,9 @@ describe('MyFlatsPage', () => {
     const pending = deferred();
     let { view } = renderPage([pending.promise]);
     await title();
-    expect(screen.getByLabelText(he.common.loading)).toHaveAttribute('aria-busy', 'true');
+    expect(
+      screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]'),
+    ).toHaveAttribute('aria-busy', 'true');
     reset(view);
 
     // Error: retry refetches.

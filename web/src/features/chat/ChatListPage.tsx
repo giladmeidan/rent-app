@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
 
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import { useMyFlats } from '../flatmates/api';
 import { cardTitle } from '../listings/cardTitle';
 import type { ConversationOut } from './api';
 import { formatMessageTime } from './format';
-import { Loading } from './Loading';
 import { useConversations } from './useConversations';
 
 const focusRing =
@@ -103,6 +104,7 @@ function isJoined(state: unknown): boolean {
  * the person leaves the page and a reload or Back does not show it again. */
 export function ChatListPage() {
   const { t } = useTranslation();
+  usePageTitle(t('chat.list.title'));
   const me = useMe();
   const conversations = useConversations();
   const flats = useMyFlats();
@@ -122,13 +124,11 @@ export function ChatListPage() {
       <ErrorState onRetry={() => void conversations.refetch()} />
     ) : (
       <Loading>
-        <ul aria-busy="true" className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           {[0, 1, 2].map((i) => (
-            <li key={i}>
-              <Skeleton />
-            </li>
+            <Skeleton key={i} />
           ))}
-        </ul>
+        </div>
       </Loading>
     );
   } else if (conversations.data.length === 0) {

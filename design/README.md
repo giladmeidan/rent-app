@@ -16,8 +16,8 @@ self-contained HTML/CSS with Heebo, RTL, and the teal accent as a tweakable vari
 
 How agents use this: a spec's UI section references the artboard file; the coder reads it for
 structure, spacing, copy and component anatomy (not pixel-perfect); the UX reviewer compares
-the built screen against it. Tokens to lift into Tailwind config: background #F7F5F2, ink #1C1917,
-accent #0E7C6B (tint #E6F4F1, text #0B5F52), amber for "differs"/"new" #FEF3C7 / #92400E,
-radii 12–20px, font Heebo 400–800.
+the built screen against it. Colour, type, shape and voice come from `design/brand/` (it wins over
+these artboards); the tokens live in `web/tailwind.config.ts` (spec 0009d) and the components in
+`web/src/components/`. The artboards give layout and anatomy.
 
 When the canvas changes, re-export the artboards here and bump the folder (screens-v2/).

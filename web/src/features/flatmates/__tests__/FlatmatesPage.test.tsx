@@ -72,7 +72,12 @@ afterEach(() => {
   Reflect.deleteProperty(navigator, 'clipboard');
 });
 
-const heading = () => screen.findByRole('heading', { level: 1, name: he.flatmates.title });
+// The page's <h1> once the listing has loaded (its <h1> already shows while "my listings" loads):
+// the list's <h2> is there only then.
+const heading = async () => {
+  await screen.findByRole('heading', { level: 2, name: he.flatmates.list.title });
+  return screen.getByRole('heading', { level: 1, name: he.flatmates.title });
+};
 const button = (name: string) => screen.getByRole('button', { name });
 const alerts = () => screen.queryAllByRole('alert');
 
@@ -257,9 +262,9 @@ describe('FlatmatesPage', () => {
     ({ view } = renderPage({ list: [pending.promise] }));
     await heading();
     expect(screen.getByText(he.flatmates.invite.hint)).toBeVisible();
-    const busy = screen.getByLabelText(he.common.loading);
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getByTestId('skeleton')).toBeInTheDocument();
+    expect(within(busy as HTMLElement).getByTestId('skeleton')).toBeInTheDocument();
     pending.resolve(json([]));
     expect(await screen.findByText(he.flatmates.list.empty)).toBeVisible();
     reset(view);
@@ -290,11 +295,38 @@ describe('FlatmatesPage', () => {
     const mine = deferred();
     ({ view } = renderPage({ mine: [mine.promise] }));
     await waitFor(() => {
-      expect(screen.getByLabelText(he.common.loading)).toHaveAttribute('aria-busy', 'true');
+      expect(
+        screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]'),
+      ).toHaveAttribute('aria-busy', 'true');
     });
     reset(view);
     ({ api, view } = renderPage({ mine: [json({ detail: 'boom' }, 500), json([ROOM])] }));
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
     expect(await heading()).toBeVisible();
+  });
+
+  it('ac4_h1_while_loading_and_on_error', async () => {
+    const title = () => screen.getByRole('heading', { level: 1, name: he.flatmates.title });
+    // "My listings" loading: the page's <h1> above the busy block.
+    const pending = deferred();
+    let { view } = renderPage({ mine: [pending.promise] });
+    await screen.findByRole('heading', { level: 1, name: he.flatmates.title });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByText(he.common.loading).closest('[aria-busy="true"]')).not.toBeNull();
+    reset(view);
+
+    // "My listings" failing: the <h1> above ErrorState, whose message is no heading.
+    ({ view } = renderPage({ mine: [json({ detail: 'boom' }, 500)] }));
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(title()).toBeVisible();
+    reset(view);
+
+    // The flatmates failing: still the one <h1>.
+    ({ view } = renderPage({ list: [json({ detail: 'boom' }, 500)] }));
+    await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(title()).toBeVisible();
+    reset(view);
   });
 });

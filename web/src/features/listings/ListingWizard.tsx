@@ -477,7 +477,10 @@ export function ListingWizard({ listing }: Props) {
         )}
       </div>
 
-      <div className="sticky bottom-0 -mx-4 flex gap-[10px] border-t border-line bg-white px-4 pb-[22px] pt-3">
+      <div
+        data-sticky-footer
+        className="sticky bottom-0 -mx-4 flex gap-[10px] border-t border-line bg-white px-4 pb-[22px] pt-3"
+      >
         {step > 1 && (
           <button
             type="button"

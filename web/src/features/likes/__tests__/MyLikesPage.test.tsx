@@ -81,7 +81,7 @@ describe('MyLikesPage', () => {
 
     // Unlike a room of "mine": the DELETE, then the refetch drops it.
     const first = within(within(section(he.likes.mine)).getAllByRole('article')[1] as HTMLElement);
-    fireEvent.click(first.getByRole('button', { name: he.likes.unlikeLabel }));
+    fireEvent.click(first.getByRole('button', { name: he.likes.liked, pressed: true }));
     await vi.waitFor(() => {
       expect(within(section(he.likes.mine)).getAllByRole('article')).toHaveLength(2);
     });
@@ -106,5 +106,27 @@ describe('MyLikesPage', () => {
     fireEvent.click(retry[retry.length - 1] as HTMLElement);
     expect(await screen.findAllByRole('article')).toHaveLength(1);
     expect(api.calls(LIKES).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('ac4_card_heading_level', async () => {
+    const a = likedRoom();
+    const b = likedRoom();
+    render({ [LIKES]: [json(myLikes([a], [b]))] });
+    const likedMe = await screen.findByRole('region', { name: he.likes.likedMe });
+    // One <h1>; each section's <h2>; the cards' titles one level below, as <h3>.
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    for (const [region, room] of [
+      [likedMe, a],
+      [section(he.likes.mine), b],
+    ] as const) {
+      expect(within(region).getAllByRole('heading', { level: 2 })).toHaveLength(1);
+      const card = within(within(region).getByRole('article'));
+      const title = card.getByRole('heading', { level: 3 });
+      expect(within(title).getByRole('link')).toHaveAttribute(
+        'href',
+        `/listings/${room.listing.id}`,
+      );
+      expect(card.queryByRole('heading', { level: 2 })).toBeNull();
+    }
   });
 });

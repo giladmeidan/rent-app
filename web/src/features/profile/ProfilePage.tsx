@@ -4,10 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 
 import type { AreaOut } from '../../api/client';
+import { usePageTitle } from '../../app/usePageTitle';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { Switch } from '../../components/Switch';
 import { hasStatus } from '../applications/api';
@@ -48,7 +50,7 @@ const label = 'text-sm font-bold';
 const box =
   'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-tint has-[[aria-invalid=true]]:border-[#B91C1C]';
 const bare =
-  'min-w-0 flex-1 border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
+  'min-h-[44px] min-w-0 flex-1 self-stretch border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
 const input =
   'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
 const suffix = 'shrink-0 text-sm text-muted';
@@ -507,6 +509,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
  */
 export function ProfilePage() {
   const { t } = useTranslation();
+  usePageTitle(t('profile.title'));
   const profile = useProfile();
   // The key `AreasList` and `ListingWizard` use.
   const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
@@ -527,9 +530,9 @@ export function ProfilePage() {
     );
   } else if (profile.data === undefined || areas.data === undefined) {
     body = (
-      <div aria-busy="true" aria-label={t('common.loading')}>
+      <Loading>
         <Skeleton />
-      </div>
+      </Loading>
     );
   } else {
     body = (
