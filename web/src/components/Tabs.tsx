@@ -48,6 +48,7 @@ export function Tabs<T extends string>({
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
     const ltr = event.currentTarget.closest('[dir]')?.getAttribute('dir') === 'ltr';
     const count = items.length;
     let target: number;
@@ -76,6 +77,8 @@ export function Tabs<T extends string>({
   };
 
   const pill = variant === 'pill';
+  // With no tab selected, the first stays reachable by Tab.
+  const hasSelected = items.some((item) => item.value === value);
   return (
     <div
       role="tablist"
@@ -101,7 +104,7 @@ export function Tabs<T extends string>({
             id={tabId(panelId, item.value)}
             aria-selected={selected}
             aria-controls={panelId}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={selected || (index === 0 && !hasSelected) ? 0 : -1}
             onClick={() => onChange(item.value)}
             onKeyDown={(event) => onKeyDown(event, index)}
             className={cx(

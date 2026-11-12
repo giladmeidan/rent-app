@@ -44,6 +44,8 @@ describe('TextInput', () => {
     expect(box).not.toHaveClass('border-border-strong');
     expect(input).toHaveClass('text-body');
     expect(input).not.toHaveClass('text-h3');
+    // The input fills the box's height, so a click on the box's padding lands in it.
+    expect(input).toHaveClass('flex-1', 'self-stretch');
     // The adornments stay out of the name.
     expect(input).toHaveAccessibleName(he.listings.fields.price);
     unmount();

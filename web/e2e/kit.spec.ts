@@ -99,3 +99,37 @@ test('ac11_dialog_tabs_brand_in_browser', async ({ page }) => {
     ),
   ).toBe(true);
 });
+
+test('dialog_focus_not_stolen_after_close', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/dev/kit');
+  const leave = he.flatmates.mine.leave;
+  await page.getByRole('button', { name: leave, exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: he.flatmates.mine.leaveConfirm });
+  await expect(dialog).toBeVisible();
+
+  // Confirm; the moment the dialog closes (before Chrome's `close` event, a task later), move
+  // focus elsewhere, as an awaited `confirm()` caller would; 50 ms later it must still be there.
+  const kept = await dialog.evaluate(async (el, label) => {
+    const modal = el as HTMLDialogElement;
+    const other = document.querySelector('[role="tab"]') as HTMLElement;
+    const closed = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (modal.open) return;
+        observer.disconnect();
+        other.focus();
+        resolve();
+      });
+      observer.observe(modal, { attributes: true, attributeFilter: ['open'] });
+    });
+    const confirmButton = [...modal.querySelectorAll('button')].find(
+      (button) => button.textContent === label,
+    ) as HTMLButtonElement;
+    confirmButton.click();
+    await closed;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return document.activeElement === other;
+  }, leave);
+  await expect(dialog).toBeHidden();
+  expect(kept).toBe(true);
+});

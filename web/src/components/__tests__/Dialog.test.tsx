@@ -245,4 +245,48 @@ describe('Dialog', () => {
     await flush();
     expect(results).toEqual([true]);
   });
+
+  it('ac7_dialog_focus_not_stolen_after_close', async () => {
+    // Chrome's timing: close() returns at once and fires `close` a task later.
+    const pending: HTMLDialogElement[] = [];
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (
+      this: HTMLDialogElement,
+    ) {
+      if (!this.hasAttribute('open')) return;
+      this.removeAttribute('open');
+      pending.push(this);
+    });
+    const fireLateClose = () =>
+      act(() => {
+        for (const el of pending.splice(0)) el.dispatchEvent(new Event('close'));
+      });
+
+    results = [];
+    render(<ConfirmHarness options={{ title: TITLE, tone: 'danger' }} />);
+    const other = screen.getByRole('button', { name: he.common.retry });
+
+    // Confirm: focus is back on the opener synchronously, before the late `close`.
+    open();
+    fireEvent.click(screen.getByRole('button', { name: he.common.confirm }));
+    await flush();
+    expect(results).toEqual([true]);
+    expect(dialogEl()).not.toHaveAttribute('open');
+    expect(opener()).toHaveFocus();
+
+    // The caller moves focus on; the late `close` leaves it there.
+    other.focus();
+    fireLateClose();
+    expect(other).toHaveFocus();
+
+    // A browser-initiated close while focus is still inside the dialog does return it.
+    open();
+    expect(screen.getByRole('button', { name: he.common.cancel })).toHaveFocus();
+    act(() => {
+      dialogEl().removeAttribute('open');
+      dialogEl().dispatchEvent(new Event('close'));
+    });
+    await flush();
+    expect(results).toEqual([true, false]);
+    expect(opener()).toHaveFocus();
+  });
 });

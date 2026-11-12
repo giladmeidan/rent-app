@@ -48,7 +48,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
         aria-invalid={field.invalid ? true : undefined}
         aria-describedby={field.describedBy}
         className={cx(
-          'min-w-0 flex-1 bg-transparent py-2 text-ink outline-none placeholder:text-ink-muted',
+          'min-w-0 flex-1 self-stretch bg-transparent py-2 text-ink outline-none placeholder:text-ink-muted',
           size === 'lg' ? 'text-h3' : 'text-body',
         )}
       />

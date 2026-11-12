@@ -46,6 +46,13 @@ export function Dialog({
   const titleId = useId();
   const descriptionId = useId();
 
+  /** Focuses the opener (once) if it is still in the page. */
+  const restoreFocus = () => {
+    const target = opener.current;
+    opener.current = null;
+    if (target !== null && target.isConnected) target.focus();
+  };
+
   useEffect(() => {
     const dialog = ref.current;
     if (dialog === null) return;
@@ -56,14 +63,21 @@ export function Dialog({
       initialFocusRef?.current?.focus();
     } else if (!open && dialog.open) {
       dialog.close();
+      // Synchronously: the browser fires `close` a task later, after the caller (e.g. an awaited
+      // `confirm()`) may already have moved focus on.
+      restoreFocus();
     }
   }, [open, initialFocusRef]);
 
   const handleClose = () => {
-    const target = opener.current;
-    opener.current = null;
-    if (target !== null && target.isConnected) target.focus();
-    // Closed by something other than the parent (e.g. the browser's forced Esc close).
+    // Closed by the browser (a forced Esc close) or from outside: return focus only if it is
+    // still lost (on body, or inside the closed dialog), never pulling it from where it moved.
+    const active = document.activeElement;
+    if (active === null || active === document.body || ref.current?.contains(active)) {
+      restoreFocus();
+    } else {
+      opener.current = null;
+    }
     if (open) onClose();
   };
 

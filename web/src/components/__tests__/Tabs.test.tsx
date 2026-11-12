@@ -98,9 +98,13 @@ describe('Tabs', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(tab('all')).toHaveFocus();
 
-    // Other keys are left alone.
+    // Other keys, and arrows with a modifier (browser / AT shortcuts), are left alone.
     fireEvent.keyDown(tab('all'), { key: 'ArrowDown' });
+    for (const modifier of ['altKey', 'ctrlKey', 'metaKey']) {
+      fireEvent.keyDown(tab('all'), { key: 'ArrowLeft', [modifier]: true });
+    }
     expect(onChange).not.toHaveBeenCalled();
+    expect(tab('all')).toHaveAttribute('aria-selected', 'true');
 
     // A click calls onChange.
     fireEvent.click(tab('shortlisted'));
@@ -160,5 +164,24 @@ describe('Tabs', () => {
     expect(tabRef.current).toBe(screen.getByRole('tab', { name: he.search.view.map }));
     expect(screen.getByRole('tabpanel')).toHaveAttribute('tabIndex', '0');
     expect(tabId('view', 'map')).toBe('view-tab-map');
+  });
+
+  it('ac6_tabs_reachable_when_no_value_matches', () => {
+    render(
+      <Tabs
+        label={he.search.view.label}
+        items={[
+          { value: 'list', label: he.search.view.list },
+          { value: 'map', label: he.search.view.map },
+        ]}
+        value={'none' as 'list'}
+        onChange={() => {}}
+        panelId="view"
+      />,
+    );
+    const [first, second] = screen.getAllByRole('tab');
+    expect(first).toHaveAttribute('tabIndex', '0');
+    expect(second).toHaveAttribute('tabIndex', '-1');
+    expect(first).toHaveAttribute('aria-selected', 'false');
   });
 });
