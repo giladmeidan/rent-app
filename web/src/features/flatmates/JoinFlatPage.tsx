@@ -1,13 +1,17 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router';
+import { Navigate, useLocation, useNavigate } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
 import { ErrorState } from '../../components/ErrorState';
 import { focusMainIfLost } from '../../components/focus';
 import { Loading } from '../../components/Loading';
+import { Mascot } from '../../components/Mascot';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from '../auth/next';
 import { clearSession } from '../auth/useLogout';
@@ -19,11 +23,10 @@ import { clearInviteToken, isInviteToken, readInviteToken, stashInviteToken } fr
 
 const JOIN_PATH = '/flatmates/join';
 const section = 'flex flex-col gap-4';
-const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
-const message = 'text-start text-[15px] font-semibold';
+const card = 'flex flex-col gap-4';
+const message = 'text-body font-semibold';
+/** The card's row of links out; rendered only when it has one. */
+const actions = 'flex flex-wrap gap-2';
 
 /** The copy for an answer the page shows as text; `other` is an `ErrorState`. */
 type Failure = 'invalid' | 'own' | 'applied' | 'declined' | 'full' | 'rateLimited' | 'other';
@@ -46,17 +49,18 @@ const WAY_OUT = {
   invalid: { to: '/search', label: 'flatmates.join.toSearch' },
 } as const;
 
-const link = `inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-strong underline ${focusRing}`;
-
-/** The link out of a final message. Never inside the `role="alert"` element. */
+/** The link out of a final message, in the card's actions row. Never inside the `role="alert"`
+ * element. */
 function WayOut({ failure }: { failure: Exclude<Failure, 'other'> }) {
   const { t } = useTranslation();
   if (failure === 'rateLimited') return null;
   const { to, label } = WAY_OUT[failure];
   return (
-    <Link to={to} className={link}>
-      {t(label)}
-    </Link>
+    <div className={actions}>
+      <Button variant="secondary" to={to}>
+        {t(label)}
+      </Button>
+    </div>
   );
 }
 
@@ -90,7 +94,7 @@ function Frame({ children }: { children: ReactNode }) {
   usePageTitle(t('flatmates.join.title'));
   return (
     <PageContainer as="section" width="narrow" className={section}>
-      <h1 className="text-start text-2xl font-extrabold">{t('flatmates.join.title')}</h1>
+      <PageHeader title={t('flatmates.join.title')} />
       {children}
     </PageContainer>
   );
@@ -198,12 +202,12 @@ function JoinFlow() {
   if (token === null) {
     return (
       <Frame>
-        <div className={card}>
+        <Card padding="lg" className={card}>
           <p role="alert" className={message}>
             {t('flatmates.join.invalid')}
           </p>
           <WayOut failure="invalid" />
-        </div>
+        </Card>
       </Frame>
     );
   }
@@ -243,12 +247,12 @@ function JoinFlow() {
         {failure === 'other' ? (
           <ErrorState onRetry={() => void preview.refetch()} />
         ) : (
-          <div className={card}>
+          <Card padding="lg" className={card}>
             <p role="alert" className={message}>
               {t(COPY[failure])}
             </p>
             <WayOut failure={failure} />
-          </div>
+          </Card>
         )}
       </Frame>
     );
@@ -257,8 +261,8 @@ function JoinFlow() {
   const { listing, owner_name: owner, member } = preview.data;
   const title = (
     <div className="flex flex-col gap-1">
-      <p className="text-start text-lg font-bold">{cardTitle(t, listing)}</p>
-      <p dir="auto" className="text-start text-[15px] text-ink-muted">
+      <p className="text-h3">{cardTitle(t, listing)}</p>
+      <p dir="auto" className="text-body text-ink-muted">
         {t('flatmates.join.invitedBy', { owner })}
       </p>
     </div>
@@ -267,13 +271,16 @@ function JoinFlow() {
   if (member) {
     return (
       <Frame>
-        <div className={card}>
+        <Card padding="lg" className={card}>
+          <Mascot pose="celebrate" width={96} className="self-center" />
           {title}
           <p className={message}>{t('flatmates.join.member')}</p>
-          <Link to="/chat" className={link}>
-            {t('flatmates.join.toChats')}
-          </Link>
-        </div>
+          <div className={actions}>
+            <Button variant="secondary" to="/chat">
+              {t('flatmates.join.toChats')}
+            </Button>
+          </div>
+        </Card>
       </Frame>
     );
   }
@@ -282,18 +289,20 @@ function JoinFlow() {
   // A final answer ends the flow (`spent`): no button to press again.
   return (
     <Frame>
-      <div className={card}>
+      <Card padding="lg" className={card}>
+        <Mascot pose="hello" width={96} className="self-center" />
         {title}
         {!spent && (
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={onJoin}
             disabled={join.isPending}
             aria-busy={join.isPending}
-            className={primary}
           >
             {t('flatmates.join.cta')}
-          </button>
+          </Button>
         )}
         {failure !== null && failure !== 'other' && (
           <>
@@ -308,7 +317,7 @@ function JoinFlow() {
             <WayOut failure={failure} />
           </>
         )}
-      </div>
+      </Card>
       {failure === 'other' && <ErrorState onRetry={onJoin} />}
     </Frame>
   );
