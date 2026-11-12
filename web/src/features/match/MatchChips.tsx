@@ -4,7 +4,8 @@ import { Tag, type TagTone } from '../../components/Tag';
 import type { ApplicantProfileOut } from '../applicants/api';
 import type { ListingPublic } from '../listings/api';
 import type { SeekerProfileOut } from '../profile/api';
-import { ownerShort, seekerShort } from './reasons';
+import type { PersonOut } from '../people/api';
+import { ownerShort, personShort, seekerShort } from './reasons';
 import type { Criterion, MatchOut, ReasonKind } from './types';
 
 /** A search card's chips, about a listing (the seeker's voice, the default). */
@@ -27,7 +28,14 @@ type OwnerProps = {
   spots: number;
 };
 
-type Props = SeekerProps | OwnerProps;
+/** A people card's chips, about a seeker who has not applied (neutral, fact-free copy). */
+type PersonProps = {
+  voice: 'person';
+  match: MatchOut;
+  person: PersonOut;
+};
+
+type Props = SeekerProps | OwnerProps | PersonProps;
 
 /** A card's two short reasons: the top agreeing criterion (accent) and the differing one (warning,
  * with its words). Not interactive. */
@@ -36,7 +44,9 @@ export function MatchChips(props: Props) {
   const short = (criterion: Criterion, kind: ReasonKind) =>
     props.voice === 'owner'
       ? ownerShort(criterion, kind, props.profile, props.spots, t)
-      : seekerShort(criterion, kind, props.listing, props.profile, t);
+      : props.voice === 'person'
+        ? personShort(criterion, kind, props.person, t)
+        : seekerShort(criterion, kind, props.listing, props.profile, t);
   const { match } = props;
   const chips: { kind: ReasonKind; text: string; tone: TagTone }[] = [];
   const top = match.agrees[0];
