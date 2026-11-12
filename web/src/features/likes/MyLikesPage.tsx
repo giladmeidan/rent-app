@@ -190,14 +190,15 @@ export function MyLikesPage() {
   return (
     <PageContainer width="wide" className="flex flex-col gap-6">
       <PageHeader title={t('likes.title')} />
-      {/* Always mounted, so the text change is announced; it takes focus when set. */}
+      {/* Always mounted, so the text change is announced; it takes focus when set. Empty, it is
+          `sr-only` (out of the flow), so it adds no gap under the <h1>. */}
       <div
         ref={goneRef}
         role="alert"
         tabIndex={-1}
         className={
           gone === null
-            ? undefined
+            ? 'sr-only'
             : 'flex flex-wrap items-center gap-x-3 rounded-lg bg-surface-subtle px-4 py-3 text-start text-body font-semibold text-warning focus:outline-none'
         }
       >
