@@ -1,10 +1,13 @@
 import { useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ClampedText } from '../../components/ClampedText';
+import { cx } from '../../components/cx';
+import { focusRing } from '../../components/focusRing';
 import { useOnline } from '../../components/useOnline';
 import { hasStatus } from '../applications/api';
 import { ApplicationStatusChip } from '../applications/ApplicationStatusChip';
@@ -43,10 +46,19 @@ type Props = {
   /** Asks before a decline (the page's kit dialog); resolves `false` on cancel. */
   confirmDecline: (name: string) => Promise<boolean>;
   onSettled: (outcome: CardOutcome, button: HTMLButtonElement | null) => void;
+  /** `stacked`: the phone card, with its disclosures. `compact`: the desktop grid's card (0009u):
+   * a message preview, no disclosures (the pane has them) and a name button that selects it. */
+  layout: 'stacked' | 'compact';
+  /** Compact only: whether this card's applicant is the one the pane shows. */
+  selected?: boolean;
+  /** Compact only: selects this applicant. */
+  onSelect?: () => void;
+  /** Compact only: the id of the pane the name button controls. */
+  paneId?: string;
 };
 
 /** The chat link's icon (today's path): decorative, the link is named by its `aria-label`. */
-function ChatIcon() {
+export function ChatIcon() {
   return (
     <svg
       aria-hidden="true"
@@ -64,6 +76,29 @@ function ChatIcon() {
   );
 }
 
+/** The owner-voice reason lines of an applicant: the agreeing criteria, then the differing one. */
+export function reasonLines(
+  { match, profile }: Pick<ApplicantOut, 'match' | 'profile'>,
+  spots: number,
+  t: TFunction,
+): { kind: ReasonKind; text: string }[] {
+  if (match === null || profile === null) return [];
+  return [
+    ...match.agrees.map((criterion) => ({
+      kind: 'agree' as const,
+      text: ownerReason(criterion, 'agree', profile, spots, t),
+    })),
+    ...(match.differs !== null
+      ? [
+          {
+            kind: 'differ' as const,
+            text: ownerReason(match.differs, 'differ', profile, spots, t),
+          },
+        ]
+      : []),
+  ];
+}
+
 /** One applicant in the owner's inbox (Inbox.dc.html): the score ring at the inline end, a household /
  * move-in line, two chips, the message in a quiet box (clamped, with "הצגת עוד") and the disclosures
  * and actions. An applicant from before Slice 6 has no profile and no match: a "no score" badge only.
@@ -77,6 +112,10 @@ export function ApplicantCard({
   flatIsRoom,
   confirmDecline,
   onSettled,
+  layout,
+  selected = false,
+  onSelect,
+  paneId,
 }: Props) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -89,6 +128,7 @@ export function ApplicantCard({
   // Same-tick guard: a double click sends one request (and asks once).
   const inFlight = useRef(false);
   const name = applicant.applicant_name;
+  const compact = layout === 'compact';
 
   async function onAction(status: ApplicantStatus, target: HTMLButtonElement) {
     if (inFlight.current) return;
@@ -133,30 +173,25 @@ export function ApplicantCard({
     !hasStatus(change.error, 403) &&
     !hasStatus(change.error, 404);
 
-  const reasons: { kind: ReasonKind; text: string }[] =
-    match !== null && profile !== null
-      ? [
-          ...match.agrees.map((criterion) => ({
-            kind: 'agree' as const,
-            text: ownerReason(criterion, 'agree', profile, spots, t),
-          })),
-          ...(match.differs !== null
-            ? [
-                {
-                  kind: 'differ' as const,
-                  text: ownerReason(match.differs, 'differ', profile, spots, t),
-                },
-              ]
-            : []),
-        ]
-      : [];
+  const reasons = reasonLines(applicant, spots, t);
 
   return (
-    <Card as="article" aria-labelledby={headingId} padding="sm" className="flex flex-col gap-3">
+    <Card
+      as="article"
+      aria-labelledby={headingId}
+      padding="sm"
+      variant={compact && selected ? 'selected' : 'default'}
+      className={cx('flex flex-col gap-3', compact && 'relative')}
+    >
       <div className="flex items-start gap-3">
         <div
           aria-hidden="true"
-          className="flex size-12 flex-none items-center justify-center rounded-full bg-surface-subtle text-h3 text-ink-muted"
+          className={cx(
+            'flex size-12 flex-none items-center justify-center rounded-full text-h3',
+            compact && selected
+              ? 'bg-accent-soft text-accent-strong'
+              : 'bg-surface-subtle text-ink-muted',
+          )}
         >
           {Array.from(name)[0] ?? ''}
         </div>
@@ -171,7 +206,22 @@ export function ApplicantCard({
               tabIndex={-1}
               className="min-w-0 max-w-full [overflow-wrap:anywhere] text-h3 focus:outline-none"
             >
-              {name}
+              {compact ? (
+                // The card's stretched control: the ::after covers the card, so a click anywhere on
+                // it selects (the action row sits above it, `relative z-10`). Not `Card interactive`:
+                // its ring follows a link's focus, never a button's.
+                <button
+                  type="button"
+                  aria-controls={paneId}
+                  aria-current={selected ? 'true' : undefined}
+                  onClick={onSelect}
+                  className={cx('text-start after:absolute after:inset-0', focusRing)}
+                >
+                  {name}
+                </button>
+              ) : (
+                name
+              )}
             </h2>
             <ApplicationStatusChip viewer="owner" status={applicant.status} />
             {applicant.source === 'like' && (
@@ -205,24 +255,34 @@ export function ApplicantCard({
       {profile !== null && match !== null && (
         <MatchChips voice="owner" match={match} profile={profile} spots={spots} />
       )}
-      {applicant.source !== 'like' && (
-        // Free text from a seeker: React text children only (never linkified or HTML), line breaks
-        // kept, direction from its first strong character. A mutual match has no message.
-        <ClampedText
-          lines={4}
-          id={`${headingId}-message`}
-          describedBy={headingId}
-          textProps={{
-            dir: 'auto',
-            'data-testid': 'applicant-message',
-            className:
-              'self-stretch whitespace-pre-line break-words rounded-md bg-surface-subtle px-3 py-3 text-body-sm text-ink',
-          }}
-        >
-          {applicant.message ?? ''}
-        </ClampedText>
-      )}
-      {(profile !== null || room !== null) && (
+      {applicant.source !== 'like' &&
+        (compact ? (
+          // A two-line preview for scanning; the pane shows the whole message, so nothing is hidden.
+          <p
+            dir="auto"
+            data-testid="applicant-message"
+            className="line-clamp-2 whitespace-pre-line break-words text-body-sm text-ink-muted"
+          >
+            {applicant.message ?? ''}
+          </p>
+        ) : (
+          // Free text from a seeker: React text children only (never linkified or HTML), line breaks
+          // kept, direction from its first strong character. A mutual match has no message.
+          <ClampedText
+            lines={4}
+            id={`${headingId}-message`}
+            describedBy={headingId}
+            textProps={{
+              dir: 'auto',
+              'data-testid': 'applicant-message',
+              className:
+                'self-stretch whitespace-pre-line break-words rounded-md bg-surface-subtle px-3 py-3 text-body-sm text-ink',
+            }}
+          >
+            {applicant.message ?? ''}
+          </ClampedText>
+        ))}
+      {!compact && (profile !== null || room !== null) && (
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-x-4">
             {profile !== null && (
@@ -266,7 +326,7 @@ export function ApplicantCard({
         </div>
       )}
       {(actions.length > 0 || showError) && (
-        <div className="flex flex-col gap-2">
+        <div className={cx('flex flex-col gap-2', compact && 'relative z-10')}>
           {actions.length > 0 && (
             <div className="flex gap-2">
               {actions.map((action) => (

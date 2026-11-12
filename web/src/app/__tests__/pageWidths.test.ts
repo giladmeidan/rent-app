@@ -21,7 +21,7 @@ const PAGES: Record<string, { file: string; width: Width }> = {
   NewListingPage: { file: 'features/listings/NewListingPage.tsx', width: 'wide' },
   MyListingsPage: { file: 'features/listings/MyListingsPage.tsx', width: 'narrow' },
   EditListingPage: { file: 'features/listings/EditListingPage.tsx', width: 'wide' },
-  ApplicantsPage: { file: 'features/applicants/ApplicantsPage.tsx', width: 'default' },
+  ApplicantsPage: { file: 'features/applicants/ApplicantsPage.tsx', width: 'wide' },
   PeoplePage: { file: 'features/people/PeoplePage.tsx', width: 'default' },
   FlatmatesPage: { file: 'features/flatmates/FlatmatesPage.tsx', width: 'default' },
   MyApplicationsPage: { file: 'features/applications/MyApplicationsPage.tsx', width: 'default' },
