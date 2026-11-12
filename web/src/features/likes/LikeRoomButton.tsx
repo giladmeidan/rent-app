@@ -1,16 +1,15 @@
 import { useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 
+import { Button } from '../../components/Button';
 import { hasStatus } from '../applications/api';
 import { ApiError } from '../listings/api';
 import { roomSectionHref } from '../profile/links';
 import type { LikeStateOut } from './api';
 import { likeProblem, useLikeRoom, useUnlikeRoom } from './useLikeRoom';
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-danger';
+const fieldError = 'text-body-sm font-semibold text-danger';
 
 type Props = {
   listingId: string;
@@ -98,39 +97,33 @@ export function LikeRoomButton({
   return (
     <div className="flex flex-col items-start gap-2">
       {like.liked_me && !pressed && (
-        <p className="text-start text-[15px] font-bold text-accent-strong">
+        <p className="text-start text-body font-semibold text-accent-strong">
           {t('likes.likedYouLine')}
         </p>
       )}
-      <button
-        type="button"
+      {/* `disabled` while the request runs, not the kit's `busy`: the tests pin the attribute. */}
+      <Button
+        variant={pressed ? 'soft' : 'secondary'}
+        shape="pill"
         aria-pressed={pressed}
         disabled={pending}
         aria-busy={pending}
         aria-describedby={hint ? hintId : undefined}
         onClick={onClick}
-        className={`inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] px-5 text-[15px] font-bold disabled:opacity-60 ${focusRing} ${
-          pressed
-            ? 'border-accent bg-accent-soft text-accent-strong'
-            : 'border-border-strong bg-surface text-ink'
-        }`}
       >
         {pressed ? t('likes.liked') : t('likes.like')}
-      </button>
+      </Button>
       {hint && (
-        <p id={hintId} className="text-start text-sm text-ink-muted">
+        <p id={hintId} className="text-start text-body-sm text-ink-muted">
           {t('likes.hint')}
         </p>
       )}
       {problem === 'roomSection' && (
         <div role="alert" className="flex flex-col items-start gap-1">
           <p className={fieldError}>{t('likes.errors.roomSection')}</p>
-          <Link
-            to={roomSectionHref(location.pathname)}
-            className={`inline-flex min-h-[44px] items-center rounded text-accent-strong underline underline-offset-4 ${focusRing}`}
-          >
+          <Button variant="ghost" to={roomSectionHref(location.pathname)}>
             {t('likes.toProfile')}
-          </Link>
+          </Button>
         </div>
       )}
       {problem === 'gone' && onGone === undefined && (

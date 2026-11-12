@@ -1,13 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 
+import { Button } from '../../components/Button';
 import type { ListingDetail } from '../listings/api';
 import { roomSectionHref } from '../profile/links';
 import { genderPreferenceLabel } from './flatmates';
-
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink ${focusRing}`;
 
 /**
  * A women- or men-only room and a seeker without the profile's room section (or without any
@@ -18,14 +14,14 @@ export function RoomGate({ listing }: { listing: ListingDetail }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-start gap-3">
-      <p tabIndex={-1} className="text-start text-[15px] focus:outline-none">
+      <p tabIndex={-1} className="text-start text-body focus:outline-none">
         {t('rooms.apply.roomSectionRequired', {
           who: genderPreferenceLabel(t, listing.gender_preference),
         })}
       </p>
-      <Link to={roomSectionHref(`/listings/${listing.id}`)} className={`${primary} w-full`}>
+      <Button variant="primary" size="lg" fullWidth to={roomSectionHref(`/listings/${listing.id}`)}>
         {t('rooms.apply.fillRoomSection')}
-      </Link>
+      </Button>
     </div>
   );
 }
