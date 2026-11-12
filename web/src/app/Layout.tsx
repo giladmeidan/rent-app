@@ -9,8 +9,8 @@ import { ChatStreamProvider } from '../features/chat/ChatStreamProvider';
 import { RouteFocus } from './RouteFocus';
 
 /**
- * The shell on every route: one header row (the homie lockup at the inline start, the auth menu
- * and, from `lg`, a signed-in person's nav, then the inline end), on `surface` with a bottom border
+ * The shell on every route: one header row (the homie lockup at the inline start, then from `lg`
+ * the signed-in nav, then the auth menu at the inline end), on `surface` with a bottom border
  * (InboxDesktop.dc.html). Nothing here takes `transform`, `filter` or `backdrop-filter`: the tab bar
  * below `lg` is `position: fixed` to the viewport. The chat event stream (one per tab) wraps both
  * the header (its chat count) and the page.

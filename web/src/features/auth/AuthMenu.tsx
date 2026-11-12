@@ -47,7 +47,11 @@ export function AuthMenu() {
   const logout = useLogout();
   const { pathname } = useLocation();
 
-  if (me.isPending) {
+  // Data wins: a failed background refetch keeps the cached person (TanStack Query v5 sets
+  // `isError` beside `data`), so a signed-in tab bar never flips to the anonymous nav.
+  const user = me.data;
+
+  if (user === undefined && me.isPending) {
     return (
       <div className="ms-auto flex min-h-tap items-center" aria-busy="true">
         <Skeleton className="h-5 w-24" />
@@ -55,8 +59,8 @@ export function AuthMenu() {
     );
   }
 
-  // A network or server error on /me renders the logged-out state too.
-  if (me.isError || me.data === null) {
+  // 401, or a network or server error on /me with nothing cached, renders the logged-out state.
+  if (user === undefined || user === null) {
     return (
       <nav aria-label={t('nav.label')} className="ms-auto flex items-center gap-1">
         {pathname !== '/' && (
@@ -88,7 +92,7 @@ export function AuthMenu() {
           focused && 'max-lg:hidden',
         )}
       >
-        {me.data.role === 'owner' ? (
+        {user.role === 'owner' ? (
           <>
             <NavTab
               to="/me/listings"
@@ -134,7 +138,7 @@ export function AuthMenu() {
       </nav>
       <div className="ms-auto flex min-w-0 items-center gap-3">
         <span className="truncate text-label max-sm:hidden">
-          {t('header.greeting', { name: me.data.display_name })}
+          {t('header.greeting', { name: user.display_name })}
         </span>
         <Button
           variant="secondary"

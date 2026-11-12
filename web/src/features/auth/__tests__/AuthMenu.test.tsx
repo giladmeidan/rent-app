@@ -72,6 +72,25 @@ describe('AuthMenu', () => {
     }
   });
 
+  it('refetch_error_keeps_signed_in_nav', async () => {
+    mockApi({
+      'GET /me': [json(noa), json({ detail: 'boom' }, 500)],
+      [LIST]: [json([])],
+    });
+    const client = testQueryClient();
+    renderRoutes('/', menu, client);
+    expect(await screen.findByRole('button', { name: he.header.logout })).toBeVisible();
+
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['me'] });
+    });
+    await vi.waitFor(() => {
+      expect(client.getQueryState(['me'])?.status).toBe('error');
+    });
+    expect(screen.getByRole('button', { name: he.header.logout })).toBeVisible();
+    expect(screen.queryByRole('link', { name: he.header.login })).toBeNull();
+  });
+
   it('ac2_logged_out_on_401_and_on_error', async () => {
     mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)] });
     const first = renderRoutes('/', menu);

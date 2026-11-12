@@ -57,7 +57,7 @@ export function LandingPage() {
   ];
 
   return (
-    <PageContainer width="wide" className="py-8">
+    <PageContainer width="wide">
       <div className="flex flex-col gap-6 max-lg:mx-auto max-lg:max-w-page lg:gap-12">
         {/* The hero: the inline-start column (the right, in RTL) holds the copy and the CTAs. */}
         <div className="grid gap-6 lg:grid-cols-2 lg:items-center lg:gap-12 lg:py-12">
