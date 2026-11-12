@@ -737,5 +737,21 @@ describe('ChatThreadPage', () => {
     await settle();
     expect(note).not.toHaveFocus();
     expect(back).toHaveFocus();
+    reset(view);
+
+    // Negative: focus left the composer to nothing (a click on dead space), then the person
+    // tabbed to the back link; the chat closing later leaves focus on the link.
+    ({ view } = renderThread(T, [() => json(T), () => json(closed)]));
+    expect(await h1(T.other_name)).toBeVisible();
+    act(() => textarea().focus());
+    act(() => textarea().blur());
+    expect(document.activeElement).toBe(document.body);
+    const link = screen.getByRole('link', { name: he.chat.thread.back });
+    act(() => link.focus());
+    await refetch();
+    note = await closedNote();
+    await settle();
+    expect(note).not.toHaveFocus();
+    expect(link).toHaveFocus();
   });
 });

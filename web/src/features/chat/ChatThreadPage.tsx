@@ -111,14 +111,15 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   const closedRef = useRef<HTMLParagraphElement>(null);
   const couldSend = useRef(thread.can_send);
 
-  // The chat closed under the composer: the closed note replaces it and takes focus.
+  // The chat closed under the composer: the closed note replaces it and takes focus, only when
+  // focus was lost with the composer (on <body>); focus the person moved elsewhere stays there.
   useEffect(() => {
     const closed = couldSend.current && !thread.can_send;
     couldSend.current = thread.can_send;
-    if (closed && composerHadFocus.current) {
-      composerHadFocus.current = false;
-      closedRef.current?.focus();
-    }
+    if (!closed || !composerHadFocus.current) return;
+    composerHadFocus.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body) closedRef.current?.focus();
   }, [thread.can_send]);
 
   const onComposerBlur = (event: FocusEvent<HTMLDivElement>) => {
