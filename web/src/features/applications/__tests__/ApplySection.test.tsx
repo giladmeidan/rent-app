@@ -50,14 +50,14 @@ const routes = (
 
 const renderListing = (client = testQueryClient()) => renderRoutes('/listings/A', routes, client);
 
-/** The apply section, once the listing has loaded. */
-async function section() {
-  return within(await screen.findByRole('region', { name: he.applications.heading }));
+/** The apply section, once the listing has loaded. An owner's is headed `headingOwner`. */
+async function section(name = he.applications.heading) {
+  return within(await screen.findByRole('region', { name }));
 }
 
 /** Waits for `/me` (and the seeker's list) to settle: the section's skeleton is gone. */
-async function settled() {
-  const s = await section();
+async function settled(name = he.applications.heading) {
+  const s = await section(name);
   await vi.waitFor(() => {
     expect(s.queryByTestId('skeleton')).toBeNull();
   });
@@ -124,9 +124,9 @@ function cleanup() {
 
 describe('ApplySection', () => {
   it('ac1_applicant_count', async () => {
+    // An owner's heading and line are their own (0009f AC5).
     const viewers = [
       () => ({ 'GET /me': [unauthenticated()] }),
-      () => ({ 'GET /me': [json(owner)] }),
       () => ({ 'GET /me': [json(seeker)], [MINE]: [json([])], [PROFILE]: [json(profile())] }),
     ];
     for (const count of [0, 1, 12]) {
@@ -170,6 +170,75 @@ describe('ApplySection', () => {
     }
   });
 
+  it('ac5_owner_sees_owner_copy', async () => {
+    const heading = '\u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05d9\u05d5\u05ea'; // "מועמדויות"
+    const lines: [number, string][] = [
+      // "עוד אין מועמדויות"
+      [
+        0,
+        '\u05e2\u05d5\u05d3 \u05d0\u05d9\u05df \u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05d9\u05d5\u05ea',
+      ],
+      // "מועמדות אחת"
+      [1, '\u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05ea \u05d0\u05d7\u05ea'],
+      // "3 מועמדויות"
+      [3, '3 \u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05d9\u05d5\u05ea'],
+    ];
+    for (const [count, line] of lines) {
+      mockApi({ 'GET /me': [json(owner)], [LISTING]: [listingReply(count)] });
+      const view = renderListing();
+      const s = await settled(heading);
+      expect(s.getByRole('heading', { name: heading })).toBeVisible();
+      expect(s.getByText(line)).toBeVisible();
+      expect(s.queryByText(countText(count))).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // A visitor and a seeker keep the seeker-addressed heading and line.
+    const others = [
+      () => ({ 'GET /me': [unauthenticated()] }),
+      () => ({ 'GET /me': [json(seeker)], [MINE]: [json([])], [PROFILE]: [json(profile())] }),
+    ];
+    for (const viewer of others) {
+      mockApi({ [LISTING]: [listingReply(3)], ...viewer() });
+      const view = renderListing();
+      const s = await settled();
+      expect(s.getByRole('heading', { name: he.applications.heading })).toBeVisible();
+      expect(s.getByText(countText(3))).toBeVisible();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac4_rate_limit_names_the_wait', async () => {
+    const limited = (retryAfter?: string) =>
+      new Response(JSON.stringify({ detail: 'rate_limited' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(retryAfter === undefined ? {} : { 'Retry-After': retryAfter }),
+        },
+      });
+    // "הגשת הרבה מועמדויות בזמן קצר. אפשר לנסות שוב "
+    const lead =
+      '\u05d4\u05d2\u05e9\u05ea \u05d4\u05e8\u05d1\u05d4 \u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05d9\u05d5\u05ea \u05d1\u05d6\u05de\u05df \u05e7\u05e6\u05e8. \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e0\u05e1\u05d5\u05ea \u05e9\u05d5\u05d1 ';
+    const cases: [string | undefined, string][] = [
+      ['3600', `${lead}\u05d1\u05e2\u05d5\u05d3 \u05e9\u05e2\u05d4.`], // "בעוד שעה."
+      ['86400', `${lead}\u05d1\u05e2\u05d5\u05d3 \u05d9\u05d5\u05dd.`], // "בעוד יום."
+      [undefined, he.applications.errors.rateLimited],
+    ];
+    for (const [retryAfter, text] of cases) {
+      renderSeeker([json([])], { [APPLY]: [() => limited(retryAfter)] });
+      const field = await openForm();
+      type(field, MESSAGE);
+      send();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(text, { normalizeWhitespace: false });
+      expect(alert.textContent).toBe(text);
+      cleanup();
+    }
+  });
+
   it('ac2_visitor_prompt_owner_hidden', async () => {
     for (const me of [unauthenticated, networkError]) {
       const api = mockApi({ 'GET /me': [me], [LISTING]: [listingReply()] });
@@ -192,8 +261,8 @@ describe('ApplySection', () => {
 
     const api = mockApi({ 'GET /me': [json(owner)], [LISTING]: [listingReply()] });
     renderListing();
-    const s = await settled();
-    expect(s.getByText(countText(0))).toBeVisible();
+    const s = await settled(he.applications.headingOwner);
+    expect(s.getByText(he.applications.countOwner_zero)).toBeVisible();
     expect(s.queryByText(he.applications.loginPrompt)).toBeNull();
     expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
     expect(s.queryByRole('textbox')).toBeNull();
@@ -535,10 +604,13 @@ describe('ApplySection', () => {
     cleanup();
 
     // A visitor and an owner never request the profile.
-    for (const me of [unauthenticated(), json(owner)]) {
+    for (const [me, heading] of [
+      [unauthenticated(), he.applications.heading],
+      [json(owner), he.applications.headingOwner],
+    ] as const) {
       api = mockApi({ 'GET /me': [me], [LISTING]: [listingReply()], [PROFILE]: [noProfile()] });
       renderListing();
-      await settled();
+      await settled(heading);
       await new Promise((r) => setTimeout(r, 20));
       expect(api.calls(PROFILE)).toHaveLength(0);
       cleanup();

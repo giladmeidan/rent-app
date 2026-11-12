@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
+import { ApiError } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { hasStatus, type MyApplicationOut } from './api';
@@ -110,7 +111,11 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             {/* A 401 clears the session and RequireSeeker leaves the page. */}
             {withdraw.isError && !hasStatus(withdraw.error, 401) && (
               <p role="alert" className={fieldError}>
-                {t('common.error')}
+                {withdraw.error instanceof ApiError &&
+                withdraw.error.status === 409 &&
+                withdraw.error.detail === 'not_withdrawable'
+                  ? t('applications.errors.notWithdrawable')
+                  : t('common.error')}
               </p>
             )}
           </div>

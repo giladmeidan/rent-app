@@ -224,7 +224,9 @@ describe('MyApplicationsPage', () => {
       expect(api.calls(MINE)).toHaveLength(2);
     });
     const first = within(cards()[0] as HTMLElement);
-    expect(await first.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(await first.findByRole('alert')).toHaveTextContent(
+      he.applications.errors.notWithdrawable,
+    );
     expect(within(cards()[1] as HTMLElement).queryByRole('alert')).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
@@ -264,6 +266,40 @@ describe('MyApplicationsPage', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('ac4_not_withdrawable_copy', async () => {
+    // "כבר אי אפשר לבטל את המועמדות הזו. הסטטוס שלה עודכן."
+    const tooLate =
+      '\u05db\u05d1\u05e8 \u05d0\u05d9 \u05d0\u05e4\u05e9\u05e8 \u05dc\u05d1\u05d8\u05dc \u05d0\u05ea \u05d4\u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05ea \u05d4\u05d6\u05d5. \u05d4\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e9\u05dc\u05d4 \u05e2\u05d5\u05d3\u05db\u05df.';
+    const app = to('L1', { status: 'submitted' });
+    let { api, view } = renderPage([json([app]), json([{ ...app, status: 'shortlisted' }])], {
+      [withdrawRoute(app)]: [json({ detail: 'not_withdrawable' }, 409)],
+    });
+    fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
+    await vi.waitFor(() => {
+      expect(api.calls(MINE)).toHaveLength(2);
+    });
+    const card = within(cards()[0] as HTMLElement);
+    expect(await card.findByRole('alert')).toHaveTextContent(tooLate);
+    // Next to the refetched status.
+    await vi.waitFor(() => {
+      expect(card.getByTestId('application-status')).toHaveTextContent(
+        he.applications.status.shortlisted,
+      );
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A 500: the generic line ("משהו השתבש").
+    ({ api, view } = renderPage([json([app])], {
+      [withdrawRoute(app)]: [json({ detail: 'boom' }, 500)],
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
+    const alert = await within(cards()[0] as HTMLElement).findByRole('alert');
+    expect(alert).toHaveTextContent('\u05de\u05e9\u05d4\u05d5 \u05d4\u05e9\u05ea\u05d1\u05e9');
+    expect(alert).not.toHaveTextContent(tooLate);
+    view.unmount();
   });
 
   it('ac10_chat_link_on_shortlisted', async () => {
