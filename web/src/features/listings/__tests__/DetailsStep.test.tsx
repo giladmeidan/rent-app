@@ -16,6 +16,7 @@ import {
   progress,
   renderWizard,
 } from './wizard';
+import { FIELD_ORDER } from '../validate';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -25,6 +26,79 @@ const f = he.listings.fields;
 const telAviv = { id: '00000000-0000-0000-0000-00000000a2a2', slug: 'tlv', name_he: 'תל אביב' };
 
 describe('DetailsStep', () => {
+  it('ac2_groups_keep_field_order', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+
+    // The five group headings, in order.
+    const s = he.listings.section;
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      s.address,
+      s.apartment,
+      s.priceEntry,
+      s.amenities,
+      s.payments,
+    ]);
+
+    // The controls keep `FIELD_ORDER`'s order (the first invalid one gets the focus).
+    const byId = (name: string) =>
+      document.querySelector<HTMLElement>(`[id$="-${name}"]`) as HTMLElement;
+    const order = FIELD_ORDER.slice(0, FIELD_ORDER.indexOf('description') + 1);
+    const controls = order.map(byId);
+    controls.forEach((control, i) => {
+      expect(control, order[i]).toBeInTheDocument();
+      const next = controls[i + 1];
+      if (next !== undefined) {
+        expect(
+          control.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+          `${order[i] ?? ''} before ${order[i + 1] ?? ''}`,
+        ).toBeTruthy();
+      }
+    });
+
+    // The flexible switch follows the date input.
+    const follows = (a: HTMLElement, b: HTMLElement) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const flexible = screen.getByRole('switch', { name: f.entryFlexible });
+    expect(follows(field(f.availableFrom), flexible)).toBe(true);
+
+    // The amenities card: elevator, parking, furnished, pets.
+    const elevator = screen.getByRole('switch', { name: f.elevator });
+    const card = elevator.closest('.divide-y') as HTMLElement;
+    expect(card).toContainElement(field(f.parking));
+    expect(card).not.toContainElement(flexible);
+    const inCard = [
+      elevator,
+      field(f.parking),
+      within(card).getByRole('group', { name: f.furnished }),
+      screen.getByRole('switch', { name: f.pets }),
+    ];
+    inCard.forEach((control, i) => {
+      expect(card).toContainElement(control);
+      const next = inCard[i + 1];
+      if (next !== undefined) expect(follows(control, next)).toBe(true);
+    });
+
+    // Floor 5 of 3: the one box reddens; each input names only its own alert (or none).
+    change(f.floor, '5');
+    change(f.totalFloors, '3');
+    fireEvent.click(nextButton());
+    const floor = field(f.floor);
+    const total = field(f.totalFloors);
+    expect(floor.parentElement).toHaveClass('border-danger');
+    expect(total.parentElement).toBe(floor.parentElement);
+    const alertOf = (input: HTMLElement) =>
+      (input.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id))
+        .filter((el) => el?.getAttribute('role') === 'alert');
+    expect(alertOf(total)).toHaveLength(1);
+    expect(alertOf(total)[0]).toHaveTextContent(he.listings.errors.floors);
+    expect(alertOf(floor)).toHaveLength(0);
+  });
+
   it('ac3_client_validation', async () => {
     // Two areas: the placeholder is selected.
     mockApi({ 'GET /areas': [json([gushDan, telAviv])] });
@@ -43,10 +117,11 @@ describe('DetailsStep', () => {
     const empty = await screen.findByText(he.areas.empty);
     expect(screen.queryByRole('combobox', { name: f.area })).toBeNull();
     fireEvent.click(nextButton());
-    // The message sits in the EmptyState card; the alert is the card's sibling in the field.
-    expect(
-      within(empty.parentElement?.parentElement as HTMLElement).getByRole('alert'),
-    ).toHaveTextContent(he.listings.errors.required);
+    // The message sits in the EmptyState card; the alert is in the same field.
+    expect(empty).toBeInTheDocument();
+    expect(within(screen.getByTestId('area-field')).getByRole('alert')).toHaveTextContent(
+      he.listings.errors.required,
+    );
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -62,7 +137,7 @@ describe('DetailsStep', () => {
     for (const label of [f.city, f.street, f.rooms, f.floor, f.size, f.price, f.availableFrom]) {
       expect(errorFor(field(label)), label).toHaveTextContent(he.listings.errors.required);
     }
-    expect(field(f.area)).toHaveAttribute('aria-invalid', 'false');
+    expect(field(f.area)).not.toHaveAttribute('aria-invalid', 'true');
     expect(field(f.city)).toHaveFocus();
     expect(api.calls('POST /listings')).toHaveLength(0);
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
@@ -72,7 +147,7 @@ describe('DetailsStep', () => {
     change(f.totalFloors, '2');
     fireEvent.click(nextButton());
     expect(errorFor(field(f.totalFloors))).toHaveTextContent(he.listings.errors.floors);
-    expect(field(f.floor)).toHaveAttribute('aria-invalid', 'false');
+    expect(field(f.floor)).not.toHaveAttribute('aria-invalid', 'true');
 
     // Price below the range.
     change(f.price, '100');
@@ -92,11 +167,11 @@ describe('DetailsStep', () => {
     // After the first attempt: a fixed field's error goes at once (no layout jump on the next
     // click); a newly invalid field is reported on blur, not while typing.
     change(f.city, 'גבעתיים');
-    expect(field(f.city)).toHaveAttribute('aria-invalid', 'false');
+    expect(field(f.city)).not.toHaveAttribute('aria-invalid', 'true');
     change(f.street, 'כצנלסון');
-    expect(field(f.street)).toHaveAttribute('aria-invalid', 'false');
+    expect(field(f.street)).not.toHaveAttribute('aria-invalid', 'true');
     change(f.street, 'א'.repeat(81));
-    expect(field(f.street)).toHaveAttribute('aria-invalid', 'false');
+    expect(field(f.street)).not.toHaveAttribute('aria-invalid', 'true');
     fireEvent.blur(field(f.street));
     expect(errorFor(field(f.street))).toHaveTextContent(
       i18n.t('listings.errors.tooLong', { max: 80 }),

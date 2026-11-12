@@ -22,24 +22,19 @@ worktree) in a turn Gilad wrote, and sends each its "go" later with `SendMessage
 Overall: IN_PROGRESS
 
 Current focus:
-**Slice 9 + 9b** — 21 specs `0009a`–`0009u` (no `0009n`). Merged 13/21: 0009a, b, c, d, e, f, g, h, i, l, qa, qb, t.
-In flight: 0009m and 0009k (just started).
-**Gilad (2026-11-12): start no new builds after 0009k** — finish the four in flight, then stop.
+**Slice 9 + 9b** — 21 specs `0009a`–`0009u` (no `0009n`). Merged 15/21: 0009a, b, c, d, e, f, g, h, i, k, l, m, qa, qb, t.
+In flight from this orchestrator: none.
+**Gilad (2026-11-12): this orchestrator started no builds after 0009k.** Gilad runs the remaining specs from a
+separate chat, which handles its own builds and merges — check `main` and `gh pr list` for what it has done.
 Not started (worktrees prepared, `in-progress` locks): 0009j, 0009o, 0009p, 0009r, 0009s, 0009u.
 Alembic head on `main` still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-12 ~20:30 (orchestrator session `local_2b79d58f-319e-4151-9049-06dfc8b883e9`, after #52 merged)
+2026-11-12 (orchestrator `local_2b79d58f…`, after #56 merged at fb6ba96)
 
 ## Current Work
-- Orchestrator = session `local_2b79d58f-319e-4151-9049-06dfc8b883e9` ("Specs and handoff continuation"). All
-  in-flight build sessions report to it. The older orchestrator `local_f7f3bc91-…` is retired.
-- **0009e** PWA install — PR #53, head 7ce7176 (orchestrator's docs-only FOLLOWUPS union merge with 0009qb on top of
-  the green 9dde1ba). Merge on green `api`/`web`/`e2e`. Session `local_c0b47c3e-e380-47cb-967b-6a58410de2dd`.
-- **0009g** state polish (app-wide 401 + drafts + skeleton) — 4 reviews in, 0 blockers/majors; fix round then one
-  push. Session `local_757c81c0-8201-4a41-833d-0f0259b0d31b`, worktree `../rent-app-0009g`.
-- **0009m** login/signup UI (full route + security) — session `local_314d34cd-ebdd-4e40-aae9-28eb6020abd6`.
-- **0009k** listing wizard UI (quick route) — session `local_e396dd9a-7102-43db-8c85-c3a4d87fb39d`.
+- Orchestrator session `local_2b79d58f-319e-4151-9049-06dfc8b883e9` finished its batch: 0009e (#53), 0009g (#54),
+  0009k (#55), 0009m (#56) merged; all their worktrees and branches removed. Nothing of its own is in flight.
 - Not started, deps all merged: 0009j (← 0009i), 0009o, 0009p and 0009u (← 0009l), 0009r, 0009s. **0009s should
   start only after 0009g merges** (it builds on 0009g's chat drafts; same `ChatThreadPage` / `Composer`).
 - Remaining worktrees `../rent-app-<id>` are on branches cut from 1601481 with their own `.env` ports; the session
@@ -89,11 +84,12 @@ Last updated:
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. Merge PR #53 (0009e) on green CI; mark done; clean up after its `make down`.
-2. Merge 0009g, 0009m, 0009k as their PRs go green (expect `he.json` / FOLLOWUPS conflicts; a second-to-merge PR
-   goes back to its session to merge main and push once).
-3. **Do not start further builds** (Gilad, 2026-11-12) until Gilad says so. When he does: 0009s after 0009g merges;
-   then 0009j, 0009o, 0009p, 0009r, 0009u, max 3 at a time.
+1. Remaining Slice 9 specs: 0009j, 0009o, 0009p, 0009r, 0009s, 0009u (`in-progress` locks, worktrees ready).
+   Gilad is running them from another chat; before acting, check `gh pr list` and spec statuses on `main` so two
+   orchestrators never build or merge the same spec.
+2. 0009s builds on 0009g's chat drafts (0009g is merged, so it is unblocked). 0009o shares listing files with 0009k
+   (merged): merge main first.
+3. Every remaining worktree must merge `origin/main` and rebuild the web container (0009a's font packages).
 4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
 5. **Supervise CI e2e** on every merge; on a runner failure `gh variable set E2E_IN_CI --body off` and tell Gilad.
 6. FOLLOWUPS from Slice 9: map pin clustering (0009t), map desktop list pairing (0009i), range tags "3–4" render
@@ -232,7 +228,8 @@ Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
 - 2026-11-12 (evening) — Orchestrator session `local_2b79d58f…`: took over from `local_f7f3bc91…`; merged 0009l,
-  0009t, 0009i, 0009qa, 0009a, 0009qb (PRs #47–#52); started 0009e/g/m/k. Gilad: 0009qb merged with a GitGuardian
+  0009t, 0009i, 0009qa, 0009a, 0009qb, 0009e, 0009g, 0009k, 0009m (PRs #47–#56; #56 after one e2e flake rerun,
+  an `/areas` GET timeout in `applications.spec`). Gilad: 0009qb merged with a GitGuardian
   false positive, same OK for that incident on later PRs; no new builds after 0009k. Mac rebooted mid-session.
 - 2026-11-12 — Slice 9 orchestrator session: locked all 21 Slice 9 specs, prepared 21 worktrees, built and merged
   0009b/d/c/f/h (PRs #42–#46) plus the `WEB_PORT` infra PR #41. Gilad: quick route for cosmetic specs, max 3 builds at

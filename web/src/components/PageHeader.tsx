@@ -51,6 +51,11 @@ export type PageHeaderProps = {
   /** Lets a page move focus to its `<h1>` (it has `tabIndex={-1}`). */
   titleRef?: Ref<HTMLHeadingElement>;
   titleId?: string;
+  /**
+   * `compact`: below `lg` the back link and a Rubik title share one row (a band's title bar; Fredoka
+   * is never below 24px); at `lg` it renders as `default`.
+   */
+  size?: 'default' | 'compact';
   /** Layout only. */
   className?: string;
 };
@@ -64,18 +69,36 @@ export function PageHeader({
   back,
   titleRef,
   titleId,
+  size = 'default',
   className,
 }: PageHeaderProps) {
+  const compact = size === 'compact';
   return (
-    <div className={cx('flex flex-col gap-1', className)}>
+    <div
+      className={cx(
+        'flex',
+        compact ? 'items-center gap-2 lg:flex-col lg:items-stretch lg:gap-1' : 'flex-col gap-1',
+        className,
+      )}
+    >
       {back !== undefined && <BackLink {...back} />}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+      <div
+        className={cx(
+          'flex flex-wrap items-end justify-between gap-x-4 gap-y-3',
+          compact && 'min-w-0 flex-1 lg:flex-none',
+        )}
+      >
         <div className="flex min-w-0 flex-col gap-1">
           <h1
             ref={titleRef}
             id={titleId}
             tabIndex={-1}
-            className="font-display text-h2 lg:text-h1 break-words focus:outline-none"
+            className={cx(
+              compact
+                ? 'font-sans text-body font-medium lg:font-display lg:text-h1'
+                : 'font-display text-h2 lg:text-h1',
+              'break-words focus:outline-none',
+            )}
           >
             {eyebrow !== undefined && (
               <>

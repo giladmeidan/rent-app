@@ -217,6 +217,29 @@ describe('EditListingPage', () => {
     expect(api.calls(`PATCH /listings/${a.id}`).map((c) => c.body)).toStrictEqual([
       { price_ils: 7500 },
     ]);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A cached list survives a background refetch that answers 500: the form stays and no
+    // ErrorState shows (FOLLOWUPS 54).
+    const failing = mockApi({
+      'GET /me/listings': [json({ detail: 'boom' }, 500), never],
+      'GET /areas': [() => json([gushDan])],
+    });
+    const cached = testQueryClient();
+    cached.setQueryData<ListingOut[]>(MY_LISTINGS_KEY, [a]);
+    view = renderEdit(a.id, cached);
+    await areasLoaded();
+    await vi.waitFor(() => {
+      expect(failing.calls('GET /me/listings')).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(cached.getQueryState(MY_LISTINGS_KEY)?.fetchStatus).toBe('idle');
+    });
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(field(f.city)).toHaveValue(a.city);
+    expect(cached.getQueryData<ListingOut[]>(MY_LISTINGS_KEY)).toHaveLength(1);
   });
 
   it('ac3_prefilled_from_listing', async () => {
@@ -354,7 +377,7 @@ describe('EditListingPage', () => {
     change(f.street, `${a.street} 2`);
     expect(errorFor(field(f.city))).toHaveTextContent(he.listings.errors.invalid);
     change(f.city, 'גבעתיים');
-    expect(field(f.city)).toHaveAttribute('aria-invalid', 'false');
+    expect(field(f.city)).not.toHaveAttribute('aria-invalid', 'true');
     expect(screen.queryByText(he.listings.errors.invalid)).toBeNull();
     opened.view.unmount();
     vi.unstubAllGlobals();
@@ -517,7 +540,9 @@ describe('EditListingPage', () => {
   });
 
   it('ac9_unsaved_changes_guard', async () => {
+    // The kit's dialog (`useConfirm`) asks, not the browser's `confirm`.
     const confirm = vi.spyOn(window, 'confirm');
+    const leaveDialog = () => screen.queryByRole('dialog', { name: he.listings.edit.leaveConfirm });
 
     // Nothing changed: no prompt on unload, the link leaves without asking.
     let a = stored();
@@ -525,24 +550,35 @@ describe('EditListingPage', () => {
     expect(beforeUnloadPrevented()).toBe(false);
     fireEvent.click(backLink());
     expect(currentPath()).toBe('/me/listings');
-    expect(confirm).not.toHaveBeenCalled();
+    expect(leaveDialog()).toBeNull();
     opened.view.unmount();
     vi.unstubAllGlobals();
 
-    // A changed field: unload is prevented and the link asks; cancel stays with the value kept.
+    // A changed field: unload is prevented and the link asks; "המשך עריכה" stays with the value
+    // kept, a second click and "יציאה בלי שמירה" leave.
     a = stored();
     opened = await openEdit(a);
     change(f.price, '7500');
     expect(beforeUnloadPrevented()).toBe(true);
-    confirm.mockReturnValueOnce(false);
     fireEvent.click(backLink());
-    expect(confirm).toHaveBeenCalledWith(he.listings.edit.leaveConfirm);
+    const dialog = await screen.findByRole('dialog', { name: he.listings.edit.leaveConfirm });
+    expect(currentPath()).toBe(editPath(a.id));
+    fireEvent.click(within(dialog).getByRole('button', { name: he.listings.edit.stay }));
+    await vi.waitFor(() => {
+      expect(leaveDialog()).toBeNull();
+    });
     expect(currentPath()).toBe(editPath(a.id));
     expect(field(f.price)).toHaveValue(formatIls(7500));
-    confirm.mockReturnValueOnce(true);
     fireEvent.click(backLink());
-    expect(confirm).toHaveBeenCalledTimes(2);
-    expect(currentPath()).toBe('/me/listings');
+    fireEvent.click(
+      within(await screen.findByRole('dialog', { name: he.listings.edit.leaveConfirm })).getByRole(
+        'button',
+        { name: he.listings.edit.leave },
+      ),
+    );
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
     expect(beforeUnloadPrevented()).toBe(false);
     opened.view.unmount();
     vi.unstubAllGlobals();
@@ -555,7 +591,6 @@ describe('EditListingPage', () => {
     });
     expect(beforeUnloadPrevented()).toBe(false);
     vi.unstubAllGlobals();
-    confirm.mockClear();
 
     // Areas still loading on an untouched form: not dirty (`withArea` would give `area_id: ''`).
     a = stored();
@@ -572,6 +607,7 @@ describe('EditListingPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
     expect(beforeUnloadPrevented()).toBe(false);
     fireEvent.click(backLink());
+    expect(leaveDialog()).toBeNull();
     expect(confirm).not.toHaveBeenCalled();
     expect(currentPath()).toBe('/me/listings');
   });
@@ -723,7 +759,7 @@ describe('EditListingPage', () => {
     expect(opened.api.calls(`PATCH /listings/${legacy.id}`)).toHaveLength(0);
 
     fireEvent.change(flatmatesCount(), { target: { value: '2' } });
-    expect(flatmatesCount()).toHaveAttribute('aria-invalid', 'false');
+    expect(flatmatesCount()).not.toHaveAttribute('aria-invalid', 'true');
     expect(await saveFromPreferences(opened.api, legacy)).toStrictEqual([
       { price_ils: 7500, flatmates_count: 2 },
     ]);

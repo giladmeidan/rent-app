@@ -1,4 +1,8 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +30,89 @@ const emailInput = () => screen.getByLabelText(he.auth.email.label);
 const sendCode = () => screen.getByRole('button', { name: he.auth.sendCode });
 
 describe('SignupPage', () => {
+  it('ac1_signup_card_and_cross_link', async () => {
+    for (const [query, href] of [
+      ['', '/login'],
+      // `?role` is not carried to login.
+      ['?role=owner&next=%2Fme%2Flikes', '/login?next=%2Fme%2Flikes'],
+      // Only `safeNext`'s output is used: an unsafe `next` is dropped, not passed on.
+      ['?next=%2F%2Fevil.example', '/login'],
+      ['?next=%2F%5Cevil.example', '/login'],
+      ['?next=https%3A%2F%2Fevil.example', '/login'],
+      ['?next=%2F%09%2Fevil.example', '/login'],
+      // Encoding keeps a safe `next` from injecting a param or fragment into the link.
+      [
+        '?next=%2Fme%3Fa%3D1%26role%3Downer%23x',
+        `/login?next=${encodeURIComponent('/me?a=1&role=owner#x')}`,
+      ],
+    ] as const) {
+      mockApi({ 'GET /me': [unauthenticated] });
+      const view = renderAt(`/signup${query}`, <SignupPage />);
+
+      // The form replaces 0009g's skeleton once `/me` answers.
+      await screen.findByLabelText(he.auth.email.label);
+      const brand = screen.getByTestId('auth-brand');
+      const card = screen.getByTestId('auth-card');
+      expect(brand.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const images = [...brand.querySelectorAll('img')];
+      expect(images.map((img) => img.getAttribute('src'))).toEqual([
+        expect.stringMatching(/homie-turtle-hello/),
+        expect.stringMatching(/homie-wordmark-he\./),
+      ]);
+      expect(images.map((img) => img.getAttribute('alt'))).toEqual(['', '']);
+      expect(within(brand).queryAllByRole('img')).toEqual([]);
+      expect(document.querySelectorAll('img[src*="homie-turtle"]')).toHaveLength(1);
+
+      expect(within(card).getByRole('heading', { level: 1 })).toHaveTextContent(
+        he.auth.signup.title,
+      );
+      expect(within(card).getByText(he.auth.signup.subtitle)).toBeVisible();
+      expect(within(card).getByLabelText(he.auth.email.label)).toBeVisible();
+
+      const link = screen.getByRole('link', { name: he.auth.signup.toLogin });
+      expect(link).toHaveAttribute('href', href);
+      const line = link.closest('p');
+      expect(line?.textContent).toBe(`${he.auth.signup.haveAccount} ${he.auth.signup.toLogin}`);
+      expect(card.contains(link)).toBe(false);
+      expect(card.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac2_role_is_choice_group', async () => {
+    mockApi({ 'GET /me': [unauthenticated] });
+    renderAt('/signup?role=seeker', <SignupPage />);
+
+    const group = await screen.findByRole('group', { name: he.auth.role.label });
+    const radios = within(group).getAllByRole('radio');
+    expect(radios).toHaveLength(2);
+    expect(radios[0]).toHaveAccessibleName(he.auth.role.owner);
+    expect(radios[1]).toHaveAccessibleName(he.auth.role.seeker);
+    expect(radios.map((radio) => radio.getAttribute('name'))).toEqual(['role', 'role']);
+    expect(radios[1]).toBeChecked();
+    expect(radios[0]).not.toBeChecked();
+
+    // The shared ChoiceGroup replaced RoleChoice (FOLLOWUPS 0002b): the file and its imports are gone.
+    const src = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    expect(existsSync(join(src, 'features', 'auth', 'RoleChoice.tsx'))).toBe(false);
+    const importers: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (
+          /\.tsx?$/.test(entry.name) &&
+          /from '[^']*\/RoleChoice'/.test(readFileSync(path, 'utf8'))
+        ) {
+          importers.push(path);
+        }
+      }
+    };
+    walk(src);
+    expect(importers).toEqual([]);
+  });
+
   it('ac3_signup_sends_profile_and_navigates_on_200_or_201', async () => {
     for (const status of [201, 200]) {
       const request = deferred();

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import type { ListingInBody } from './api';
 import { LISTING_CAP } from './constants';
@@ -18,35 +19,33 @@ type Props = {
   onBackToDetails: () => void;
 };
 
-const fieldError = 'text-sm font-semibold text-danger';
-const secondary =
-  'min-h-[44px] self-start rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const alertText = 'text-body-sm font-medium text-danger';
 
 /** Step 4: the card exactly as "my listings" will render it, a room's flatmates and questionnaire,
- * the owner's preferences as the listing page shows them, and the publish errors. */
+ * the owner's preferences as the listing page shows them, and the publish errors. The step's
+ * heading and hint are the wizard's. */
 export function PreviewStep({ body, today, error, onRetry, onBackToDetails }: Props) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-ink-muted">{t('listings.preview.hint')}</p>
       <ListingCard listing={body} today={today} />
       {body.listing_type === 'room' && <RoomPreview body={body} />}
       <OwnerPreferences listing={body} />
       {error === 'capReached' && (
-        <p role="alert" className={fieldError}>
+        <p role="alert" className={alertText}>
           {t('listings.errors.capReached', { cap: LISTING_CAP })}
         </p>
       )}
       {error === 'areaInactive' && (
         <div role="alert" className="flex flex-col gap-2">
-          <p className={fieldError}>{t('listings.errors.areaInactive')}</p>
-          <button type="button" onClick={onBackToDetails} className={secondary}>
+          <p className={alertText}>{t('listings.errors.areaInactive')}</p>
+          <Button variant="secondary" onClick={onBackToDetails} className="self-start">
             {t('listings.preview.backToDetails')}
-          </button>
+          </Button>
         </div>
       )}
       {error === 'invalid' && (
-        <p role="alert" className={fieldError}>
+        <p role="alert" className={alertText}>
           {t('common.error')}
         </p>
       )}
