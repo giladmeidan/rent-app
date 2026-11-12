@@ -1,7 +1,7 @@
 ---
 id: 0009g
 title: Nothing a person typed or saw is lost silently — an expired session goes to login and back with the apply and chat drafts kept, a retry shows it is working, a 404 is "not found" at once, and a card that leaves the view says why
-status: in-progress
+status: done
 depends_on: [0009t]   # 0009t: the focus rules this spec relies on (focusMainIfLost, the ErrorState retry rescue, the closed-chat note's focus target, MyLikesPage's section h2 after a successful unlike); via 0009t, 0009c: components/Loading.tsx, ErrorState's `page` prop, usePageTitle, RouteFocus and the axe e2e helper. All three touch ApplySection, ChatThreadPage, MyLikesPage and ErrorState, so they build in order (web specs never build at once locally, Speed rule 2)
 reviewers: [code, qa, ux, security]   # security: the app-wide 401 handler (session clearing, the invite token) and private text kept in sessionStorage; ux: new states and copy; qa: session expiry and draft flows
 estimate: 1 coder run   # coder Opus/high: session handling (Speed rule 6)
