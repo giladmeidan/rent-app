@@ -152,13 +152,12 @@ describe('ListingWizard', () => {
     expect(
       within(card).getByText(i18n.t('listings.card.floorOf', { floor: 3, total: 5 })),
     ).toBeVisible();
-    const chips = within(within(card).getByTestId('listing-chips')).getAllByRole('listitem');
-    expect(chips.map((chip) => chip.textContent)).toEqual([
-      'מעלית',
-      'חניה',
-      'מרוהטת חלקית',
-      'חיות מחמד',
-    ]);
+    // The features read in the facts line, in this order; no chip list on an apartment.
+    const facts = within(card).getByTestId('listing-facts').textContent ?? '';
+    const at = ['מעלית', 'חניה', 'מרוהטת חלקית', 'חיות מחמד'].map((text) => facts.indexOf(text));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    expect(within(card).queryByTestId('listing-chips')).toBeNull();
 
     // Publish.
     fireEvent.click(publishButton());

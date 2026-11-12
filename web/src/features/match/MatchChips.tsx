@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { Tag, type TagTone } from '../../components/Tag';
 import type { ApplicantProfileOut } from '../applicants/api';
 import type { ListingPublic } from '../listings/api';
 import type { SeekerProfileOut } from '../profile/api';
@@ -28,12 +29,8 @@ type OwnerProps = {
 
 type Props = SeekerProps | OwnerProps;
 
-const chip = 'rounded-full px-[10px] py-1 text-xs font-semibold';
-const agreeChip = `${chip} bg-accent-soft text-accent-strong`;
-const differChip = `${chip} bg-surface-subtle text-warning`;
-
-/** A card's two short reasons: the top agreeing criterion (teal) and the differing one (amber).
- * Not interactive. */
+/** A card's two short reasons: the top agreeing criterion (accent) and the differing one (warning,
+ * with its words). Not interactive. */
 export function MatchChips(props: Props) {
   const { t } = useTranslation();
   const short = (criterion: Criterion, kind: ReasonKind) =>
@@ -41,24 +38,24 @@ export function MatchChips(props: Props) {
       ? ownerShort(criterion, kind, props.profile, props.spots, t)
       : seekerShort(criterion, kind, props.listing, props.profile, t);
   const { match } = props;
-  const chips: { kind: ReasonKind; text: string; className: string }[] = [];
+  const chips: { kind: ReasonKind; text: string; tone: TagTone }[] = [];
   const top = match.agrees[0];
   if (top !== undefined) {
     const text = short(top, 'agree');
-    if (text !== null) chips.push({ kind: 'agree', text, className: agreeChip });
+    if (text !== null) chips.push({ kind: 'agree', text, tone: 'accent' });
   }
   if (match.differs !== null) {
     const text = short(match.differs, 'differ');
-    if (text !== null) chips.push({ kind: 'differ', text, className: differChip });
+    if (text !== null) chips.push({ kind: 'differ', text, tone: 'warning' });
   }
   if (chips.length === 0) return null;
 
   return (
-    <ul data-testid="match-chips" className="flex flex-wrap gap-[6px]">
-      {chips.map(({ kind, text, className }) => (
-        <li key={kind} className={className}>
+    <ul data-testid="match-chips" className="flex flex-wrap gap-1.5">
+      {chips.map(({ kind, text, tone }) => (
+        <Tag key={kind} as="li" size="sm" tone={tone}>
           {text}
-        </li>
+        </Tag>
       ))}
     </ul>
   );

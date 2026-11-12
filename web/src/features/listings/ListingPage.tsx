@@ -17,7 +17,8 @@ import { MatchCard } from '../match/MatchCard';
 import { RoomFacts } from '../rooms/RoomFacts';
 import { ApiError } from './api';
 import { cardTitle } from './cardTitle';
-import { formatDate, formatIls, todayInIsrael } from './format';
+import { entryFact, floorFact, sizeFact } from './facts';
+import { formatIls, todayInIsrael } from './format';
 import { ListingFacts } from './ListingFacts';
 import { OwnerPreferences } from './OwnerPreferences';
 import { usePublicListing } from './usePublicListing';
@@ -68,15 +69,7 @@ export function ListingPage() {
     );
   } else {
     const l = listing.data;
-    const facts = [
-      l.total_floors === null
-        ? t('listings.card.floor', { floor: l.floor })
-        : t('listings.card.floorOf', { floor: l.floor, total: l.total_floors }),
-      `${String(l.size_sqm)} ${t('listings.units.sqm')}`,
-      l.available_from <= todayInIsrael()
-        ? t('listings.card.immediate')
-        : t('listings.card.availableFrom', { date: formatDate(l.available_from) }),
-    ];
+    const facts = [floorFact(l, t), sizeFact(l, t), entryFact(l, todayInIsrael(), t)];
     if (l.entry_flexible) facts.push(t('listings.fields.entryFlexible'));
 
     body = (

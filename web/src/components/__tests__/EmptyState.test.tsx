@@ -34,4 +34,16 @@ describe('EmptyState', () => {
       expect.arrayContaining(['flex', 'flex-col', 'items-center', 'py-8', 'text-center']),
     );
   });
+
+  it('renders an action below the message, and nothing when there is none', () => {
+    const view = render(
+      <EmptyState message={message} pose="search" action={<button type="button">act</button>} />,
+    );
+    const action = screen.getByRole('button', { name: 'act' });
+    expect(action.parentElement?.previousElementSibling).toBe(screen.getByText(message));
+    view.unmount();
+    const bare = render(<EmptyState message={message} pose="search" />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(bare.container.querySelector('p')?.nextElementSibling).toBeNull();
+  });
 });
