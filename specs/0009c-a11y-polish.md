@@ -1,7 +1,7 @@
 ---
 id: 0009c
 title: The app's accessibility baseline — a skip link, focus and scroll at the top of every new page with a tab title that names it, one h1 per page state, announced loading blocks, focus rings that show and are never hidden, 44 px fields, reduced motion honoured, honest toggle names — and an axe check in e2e that keeps it that way
-status: in-progress
+status: done
 depends_on: []
 reviewers: [code, qa, ux]   # ux: headings, focus order, titles (no new screen); qa: keyboard flows, the axe e2e and the OTP budget per shard; no security: no auth, data or PII change (page titles show only what the page shows, see Risks); no perf: no query change
 estimate: 1 coder run   # coder Opus/high: ~25 files, mostly mechanical, but route focus is easy to get subtly wrong (Speed rule 6, "when in doubt, the stronger one")
