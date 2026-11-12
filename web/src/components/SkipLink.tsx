@@ -1,6 +1,9 @@
 import type { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { cx } from './cx';
+import { focusRing } from './focusRing';
+
 /**
  * The first stop of the Tab key: hidden until focused, then a pill at the inline start of the
  * viewport. Enter moves focus to `<main id="main">` by hand, so the URL keeps no `#main` hash and
@@ -19,7 +22,10 @@ export function SkipLink() {
     <a
       href="#main"
       onClick={skip}
-      className="sr-only focus:not-sr-only focus:fixed focus:start-2 focus:top-2 focus:z-50 focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-surface focus:px-4 focus:font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className={cx(
+        'sr-only focus:not-sr-only focus:fixed focus:start-2 focus:top-2 focus:z-50 focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-surface focus:px-4 focus:font-semibold',
+        focusRing,
+      )}
     >
       {t('a11y.skipToMain')}
     </a>
