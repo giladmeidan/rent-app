@@ -8,6 +8,7 @@ import { RequireOwner } from '../features/auth/RequireOwner';
 import { RequireSeeker } from '../features/auth/RequireSeeker';
 import { RequireUser } from '../features/auth/RequireUser';
 import { SignupPage } from '../features/auth/SignupPage';
+import { ChatLayout } from '../features/chat/ChatLayout';
 import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
 import { FlatmatesPage } from '../features/flatmates/FlatmatesPage';
@@ -71,8 +72,11 @@ export function AppRoutes() {
           <Route path="me/profile" element={<ProfilePage />} />
         </Route>
         <Route element={<RequireUser />}>
-          <Route path="chat" element={<ChatListPage />} />
-          <Route path="chat/:id" element={<ChatThreadPage />} />
+          {/* One layout for both: on a desktop the list stays beside the thread (spec 0009s). */}
+          <Route path="chat" element={<ChatLayout />}>
+            <Route index element={<ChatListPage />} />
+            <Route path=":id" element={<ChatThreadPage />} />
+          </Route>
           <Route path="me/flats" element={<MyFlatsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

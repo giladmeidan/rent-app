@@ -618,6 +618,127 @@ describe('ChatThreadPage', () => {
     reset(view);
   });
 
+  it('ac9_thread_kit_layout', async () => {
+    const theirs = message({ body: 'theirs' });
+    const mine = message({ body: 'mine', mine: true });
+    const T = thread({ other_name: NAME, messages: [theirs, mine] });
+    let { view } = renderThread(T, [() => json(T)]);
+    expect(await h1(NAME)).toBeVisible();
+
+    // Bubbles: mine at the end on accent-soft, theirs at the start on a bordered surface.
+    const [first, second] = bubbles() as [HTMLElement, HTMLElement];
+    expect(first).toHaveClass('self-start', 'max-w-[85%]', 'lg:max-w-xl');
+    const theirsBubble = within(first).getByTestId('message-body').closest('div') as HTMLElement;
+    expect(theirsBubble).toHaveClass('rounded-lg', 'rounded-es-sm', 'border', 'bg-surface');
+    expect(second).toHaveClass('self-end');
+    const mineBubble = within(second).getByTestId('message-body').closest('div') as HTMLElement;
+    expect(mineBubble).toHaveClass('rounded-lg', 'rounded-ee-sm', 'bg-accent-soft', 'text-ink');
+    expect(mineBubble).not.toHaveClass('bg-accent');
+
+    // The warning, word for word; the back link; the listing link by role.
+    expect(screen.getByRole('note').textContent).toBe(he.chat.thread.warning);
+    expect(screen.getByRole('link', { name: he.chat.thread.back })).toHaveAttribute(
+      'href',
+      '/chat',
+    );
+    expect(screen.getByRole('link', { name: he.chat.thread.toListing })).toHaveAttribute(
+      'href',
+      `/listings/${T.listing.id}`,
+    );
+
+    // The composer: a sticky (at lg) form around a card; the submit is the kit's primary button.
+    const box = textarea().parentElement as HTMLElement;
+    expect(box).toHaveClass('rounded-lg', 'border', 'border-border', 'bg-surface');
+    const form = box.closest('form') as HTMLFormElement;
+    expect(form).toHaveClass('lg:sticky', 'lg:bottom-0');
+    const send = screen.getByRole('button', { name: 'שליחה' });
+    expect(send).toBe(sendButton());
+    expect(send).toHaveAttribute('type', 'submit');
+    expect(send).toHaveClass('bg-ink', 'text-on-ink', 'rounded-md');
+    expect(box).toContainElement(send);
+    reset(view);
+
+    // An owner: the applicants link.
+    const asOwner = { ...T, my_role: 'owner' as const };
+    ({ view } = renderThread(asOwner, [() => json(asOwner)], { me: owner }));
+    expect(await h1(NAME)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.chat.thread.toApplicants })).toHaveAttribute(
+      'href',
+      `/me/listings/${T.listing.id}/applicants`,
+    );
+    reset(view);
+
+    // Closed: the note is a status in a muted card.
+    const closed = { ...T, can_send: false };
+    renderThread(closed, [() => json(closed)]);
+    const note = await screen.findByText(he.chat.thread.closed);
+    expect(note).toHaveAttribute('role', 'status');
+    expect(note.parentElement).toHaveClass('rounded-lg', 'bg-surface-subtle');
+  });
+
+  it('ac10_member_line_show_all', async () => {
+    const six: ThreadOut['members'] = [
+      { name: 'רוני', role: 'owner', is_me: false },
+      { name: 'דנה', role: 'flatmate', is_me: true },
+      { name: 'יעל', role: 'flatmate', is_me: false },
+      { name: 'Maya Rosenberg-Levi', role: 'flatmate', is_me: false },
+      { name: 'עומר', role: 'flatmate', is_me: false },
+      { name: 'נועה', role: 'seeker', is_me: false },
+    ];
+    const joined =
+      'רוני (בעל/ת הדירה) · את/ה · יעל (שותף/ה) · Maya Rosenberg-Levi (שותף/ה) · עומר (שותף/ה) · נועה';
+    const T = group({ members: six, messages: [message({ body: 'hi', sender_name: 'רוני' })] });
+    const stubHeights = (scroll: number, client: number) => {
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get: () => scroll,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+        configurable: true,
+        get: () => client,
+      });
+    };
+    try {
+      // Taller than two lines: "show all", collapsed, controlling the line, after it.
+      stubHeights(60, 32);
+      let { view } = renderThread(T, [() => json(T)]);
+      expect(await h1('נועה')).toBeVisible();
+      const line = memberLine();
+      expect(line.textContent).toBe(joined);
+      expect(line).not.toHaveAttribute('title');
+      expect(line).toHaveClass('text-caption', 'text-ink-muted', '[overflow-wrap:anywhere]');
+      expect(line.firstElementChild).toHaveClass('line-clamp-2');
+      const more = screen.getByRole('button', { name: he.common.showMore });
+      expect(more).toHaveAttribute('aria-expanded', 'false');
+      expect(more).toHaveAttribute('aria-controls', line.id);
+      expect(line.id).not.toBe('');
+      expect(line.contains(more)).toBe(false);
+      expect(line.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      // A click shows it all; focus stays on the toggle.
+      act(() => more.focus());
+      fireEvent.click(more);
+      const less = screen.getByRole('button', { name: he.common.showLess });
+      expect(less).toHaveAttribute('aria-expanded', 'true');
+      expect(less).toBe(more);
+      expect(less).toHaveFocus();
+      expect(line.firstElementChild).not.toHaveClass('line-clamp-2');
+      expect(memberLine().textContent).toBe(joined);
+      reset(view);
+
+      // It fits: no button.
+      stubHeights(32, 32);
+      ({ view } = renderThread(T, [() => json(T)]));
+      expect(await h1('נועה')).toBeVisible();
+      expect(memberLine().textContent).toBe(joined);
+      expect(screen.queryByRole('button', { name: he.common.showMore })).toBeNull();
+      reset(view);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+
   it('ac6_focus_refetch_and_removed', async () => {
     const focus = async () => {
       await act(async () => {
