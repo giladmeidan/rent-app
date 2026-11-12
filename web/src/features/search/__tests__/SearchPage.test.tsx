@@ -1,8 +1,9 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes, useNavigate } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
+import { resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -13,13 +14,34 @@ import {
   renderRoutes,
 } from '../../auth/__tests__/harness';
 import { owner } from '../../listings/__tests__/fixtures';
+import { formatDate } from '../../listings/format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
 
+vi.mock(
+  '../../../components/map/MapCanvas',
+  () => import('../../../components/map/__tests__/fakeMapCanvas'),
+);
+
+beforeEach(() => {
+  resetFakeMap();
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+/** `window.matchMedia` as a desktop browser answers it (`useIsDesktop`: `(min-width: 1024px)`). */
+const stubDesktop = () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(min-width: 1024px)',
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+};
+const mascots = () => document.querySelectorAll('img[src*="homie-turtle"]');
 
 const SEARCH = 'GET /listings';
 const ME = 'GET /me';
@@ -469,8 +491,9 @@ describe('SearchPage', () => {
       'text-warning',
     );
     expect(within(second).getByText('בתקציב')).toHaveClass('bg-accent-soft');
-    // The listing's own chips are a separate list.
-    expect(within(first).getByTestId('listing-chips')).not.toHaveTextContent('בתקציב');
+    // The listing's own facts are a separate line, and an apartment has no chip list.
+    expect(within(first).queryByTestId('listing-chips')).toBeNull();
+    expect(within(first).getByTestId('listing-facts')).not.toHaveTextContent('בתקציב');
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -720,10 +743,15 @@ describe('SearchPage', () => {
       flatmate_ages: [27, 30],
     });
     const flat = publicListing({ street: 'דירה' });
-    const listChips = (street: string) =>
-      within(within(cardOf(street)).getByTestId('listing-chips'))
-        .getAllByRole('listitem')
-        .map((li) => li.textContent);
+    // The room chips of a card; `[]` when it has none (an apartment).
+    const listChips = (street: string) => {
+      const list = within(cardOf(street)).queryByTestId('listing-chips');
+      return list === null
+        ? []
+        : within(list)
+            .getAllByRole('listitem')
+            .map((li) => li.textContent);
+    };
     const cardOf = (street: string) => {
       const card = screen
         .getAllByRole('article')
@@ -841,5 +869,157 @@ describe('SearchPage', () => {
     expect(within(third).getByText('התאמה 100%')).toBeVisible();
     expect(matchChips(third)).toEqual([he.match.short.budget.agree]);
     expect(within(third).queryByText(he.listings.card.room)).toBeNull();
+  });
+
+  it('ac1_phone_layout', async () => {
+    // jsdom has no matchMedia: the phone layout. A seeker without a profile sees the nudge.
+    mockApi({
+      [ME]: [json(noa)],
+      [PROFILE]: [noProfile()],
+      [SEARCH]: [json(page([publicListing(), publicListing()]))],
+    });
+    render('/search');
+    expect(await screen.findByText(he.match.nudge)).toBeVisible();
+    await screen.findAllByRole('article');
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.search.title);
+
+    const toggle = screen.getByRole('button', { name: he.search.filters });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    expect(panel).toHaveAttribute('hidden');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(panel).not.toHaveAttribute('hidden');
+    expect(panel).toBeVisible();
+
+    // The toolbar (the sort and the view toggle), then the nudge, then the count line.
+    const sort = screen.getByLabelText(he.search.sort.label);
+    const views = screen.getByRole('group', { name: he.search.view.label });
+    const toolbar = views.parentElement?.parentElement;
+    expect(toolbar).toContainElement(sort);
+    const before = (a: Node, b: Node | null) =>
+      b !== null && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const nudge = screen.getByText(he.match.nudge);
+    expect(before(views, nudge)).toBe(true);
+    expect(before(sort, liveRegion())).toBe(true);
+    expect(before(nudge, liveRegion())).toBe(true);
+
+    for (const card of screen.getAllByRole('article')) {
+      expect(card).toHaveAttribute('data-layout', 'row');
+    }
+  });
+
+  it('ac2_active_filter_tags', async () => {
+    const tags = () =>
+      within(screen.getByRole('list', { name: he.search.tags.label }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
+    const url =
+      '/search?price_max=8000&rooms_min=3&rooms_max=4&available_by=2027-01-01&listing_type=room&pets=true';
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    let view = render(url);
+    await screen.findAllByRole('article');
+    expect(tags()).toEqual([
+      'עד 8,000 ₪',
+      'חדרים: 3–4',
+      `כניסה עד ${formatDate('2027-01-01')}`,
+      he.search.type.room,
+      he.search.feature.pets,
+    ]);
+    // Static: no button inside the list.
+    expect(
+      within(screen.getByRole('list', { name: he.search.tags.label })).queryAllByRole('button'),
+    ).toHaveLength(0);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    view = render('/search?price_min=4000&price_max=8000&rooms_min=3');
+    await screen.findAllByRole('article');
+    expect(tags()).toEqual(['4,000–8,000 ₪', 'חדרים: 3 ומעלה']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    view = render('/search?rooms_max=4');
+    await screen.findAllByRole('article');
+    expect(tags()).toEqual(['חדרים: עד 4']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No filter: no list at all. The sort and the view are not filters.
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    view = render('/search?sort=price_asc&view=map');
+    await screen.findByRole('group', { name: he.search.view.label });
+    expect(screen.queryByRole('list', { name: he.search.tags.label })).toBeNull();
+  });
+
+  it('ac3_desktop_side_panel', async () => {
+    stubDesktop();
+    const api = mockApi({ [SEARCH]: [json(page([publicListing(), publicListing()]))] });
+    render('/search');
+    await screen.findAllByRole('article');
+
+    // No toggle: the panel is always open.
+    expect(screen.queryByRole('button', { name: /^מסננים/ })).toBeNull();
+    const panel = screen.getByRole('region', { name: he.search.filters });
+    expect(panel).not.toHaveAttribute('hidden');
+    expect(panel).toBeVisible();
+    // It comes before the results.
+    const [card] = screen.getAllByRole('article');
+    expect(
+      panel.compareDocumentPosition(card as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    // Its heading is the visible name.
+    expect(within(panel).getByRole('heading', { level: 2, name: he.search.filters })).toBeVisible();
+
+    fireEvent.change(priceTo(), { target: { value: '5000' } });
+    apply();
+    expect(currentPath()).toBe('/search?price_max=5000');
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    // One count line.
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+  });
+
+  it('ac5_mascot_states', async () => {
+    // Loading: the search turtle (decorative, aria-hidden) above three skeletons.
+    const pending = deferred();
+    mockApi({ [SEARCH]: [pending.promise] });
+    let view = render('/search');
+    expect(mascots()).toHaveLength(1);
+    const turtle = mascots()[0] as HTMLElement;
+    expect((turtle.getAttribute('src') ?? '').split('/').pop()).toBe('homie-turtle-search.svg');
+    expect(turtle).toHaveAttribute('width', '96');
+    expect(turtle.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(screen.getAllByTestId('skeleton')).toHaveLength(3);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Empty with filters: the mascot, the message and a working clear button.
+    mockApi({ [SEARCH]: [json(page([]))] });
+    view = render('/search?pets=true');
+    expect(await screen.findByText(he.search.empty)).toBeVisible();
+    expect(mascots()).toHaveLength(1);
+    expect((mascots()[0]?.getAttribute('src') ?? '').split('/').pop()).toBe(
+      'homie-turtle-search.svg',
+    );
+    // The panel's own "ניקוי" is hidden on the phone until opened; the empty state's is visible.
+    const clears = screen.getAllByRole('button', { name: he.search.clear });
+    expect(clears).toHaveLength(1);
+    fireEvent.click(clears[0] as HTMLElement);
+    expect(currentPath()).toBe('/search');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Empty with no filter: the mascot, but no clear button in the empty state.
+    mockApi({ [SEARCH]: [json(page([]))] });
+    render('/search');
+    expect(await screen.findByText(he.search.empty)).toBeVisible();
+    expect(mascots()).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { name: he.search.clear })).toHaveLength(0);
   });
 });

@@ -1,15 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { focusRing } from '../../components/focusRing';
+
 export type View = 'list' | 'map';
 
 type Props = { view: View; onChange: (view: View) => void };
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const option = `min-h-[44px] rounded-full px-[14px] text-[13px] ${focusRing}`;
-const current = `${option} bg-surface font-bold text-ink shadow-segment`;
-const other = `${option} bg-transparent font-semibold text-ink-muted`;
+const option = `min-h-tap rounded-full border px-3.5 text-label ${focusRing}`;
+// The pressed segment is outlined, not shadowed (brand: no shadows on cards or controls).
+const current = `${option} border-border bg-surface text-ink`;
+const other = `${option} border-transparent bg-transparent text-ink-muted`;
 
 /** Search.dc.html's "list / map" segmented control. */
 export function ViewToggle({ view, onChange }: Props) {
@@ -39,7 +40,7 @@ export function ViewToggle({ view, onChange }: Props) {
     <div
       role="group"
       aria-label={t('search.view.label')}
-      className="flex rounded-full bg-surface-subtle p-[3px]"
+      className="flex rounded-full bg-surface-subtle p-0.5"
     >
       {button('list', t('search.view.list'))}
       {button('map', t('search.view.map'))}

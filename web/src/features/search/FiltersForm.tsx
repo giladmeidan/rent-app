@@ -1,7 +1,12 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Button } from '../../components/Button';
 import { DateReadback, withReadback } from '../../components/DateReadback';
+import { Field } from '../../components/Field';
+import { Select } from '../../components/Select';
+import { TextInput } from '../../components/TextInput';
+import { focusRing } from '../../components/focusRing';
 import { formatRooms } from '../listings/format';
 import {
   FEATURES,
@@ -22,6 +27,8 @@ type Props = {
   filters: Filters;
   onApply: (values: FormFilters) => void;
   onClear: () => void;
+  /** The id of the panel's `<h2>`, so the page can name the panel's region after it. */
+  titleId?: string;
 };
 
 type Values = {
@@ -126,47 +133,23 @@ function toFilters(values: Values): FormFilters {
   };
 }
 
-const legend = 'mb-2 text-sm font-bold';
-const label = 'text-sm font-bold';
-const box =
-  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft has-[[aria-invalid=true]]:border-danger';
-const bare =
-  'min-h-[44px] min-w-0 flex-1 self-stretch border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
-const control =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
-const fieldError = 'text-sm font-semibold text-danger';
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const legend = 'mb-2 text-label';
 
 /** The filters panel of SearchDesktop.dc.html, in a single column. Validates on submit only. */
-export function FiltersForm({ filters, onApply, onClear }: Props) {
+export function FiltersForm({ filters, onApply, onClear, titleId }: Props) {
   const { t } = useTranslation();
   const formId = useId();
   const [values, setValues] = useState<Values>(() => initialValues(filters));
   const [errors, setErrors] = useState<Errors>({});
 
   const fieldId = (name: keyof Values) => `${formId}-${name}`;
-  const errorId = (name: ErrorField) => `${fieldId(name)}-error`;
   const set = (patch: Partial<Values>) => setValues((current) => ({ ...current, ...patch }));
 
-  const a11y = (name: ErrorField | 'rooms_min') => {
-    const invalid = name !== 'rooms_min' && errors[name] !== undefined;
-    return {
-      id: fieldId(name),
-      'aria-invalid': invalid,
-      'aria-describedby': invalid ? errorId(name) : undefined,
-    };
-  };
-
-  const errorText = (name: ErrorField): ReactNode => {
+  const errorText = (name: ErrorField): string | undefined => {
     const error = errors[name];
-    if (error === undefined) return null;
+    if (error === undefined) return undefined;
     const { key, ...params } = error;
-    return (
-      <p id={errorId(name)} role="alert" className={fieldError}>
-        {t(key, params)}
-      </p>
-    );
+    return t(key, params);
   };
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -191,53 +174,48 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
   }
 
   const priceInput = (name: 'price_min' | 'price_max', text: string) => (
-    <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
-      <div className={box}>
-        <label htmlFor={fieldId(name)} className="shrink-0 text-sm text-ink-muted">
-          {text}
-        </label>
-        <input
-          {...a11y(name)}
-          type="text"
-          inputMode="numeric"
-          autoComplete="off"
-          value={values[name]}
-          onChange={(e) => set({ [name]: e.target.value.replace(/\D/g, '') })}
-          className={bare}
-        />
-        <span className="shrink-0 text-sm text-ink-muted">{t('listings.units.ils')}</span>
-      </div>
-      {errorText(name)}
-    </div>
+    <Field
+      id={fieldId(name)}
+      label={text}
+      labelHidden
+      error={errorText(name)}
+      className="min-w-0 flex-1"
+    >
+      <TextInput
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        value={values[name]}
+        onChange={(e) => set({ [name]: e.target.value.replace(/\D/g, '') })}
+        start={<span aria-hidden="true">{text}</span>}
+        end={t('listings.units.ils')}
+      />
+    </Field>
   );
 
   const roomsSelect = (name: 'rooms_min' | 'rooms_max', text: string) => (
-    <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
-      <label htmlFor={fieldId(name)} className="text-sm text-ink-muted">
-        {text}
-      </label>
-      <select
-        {...a11y(name)}
-        value={values[name]}
-        onChange={(e) => set({ [name]: e.target.value })}
-        className={control}
-      >
+    <Field
+      id={fieldId(name)}
+      label={text}
+      error={name === 'rooms_max' ? errorText(name) : undefined}
+      className="min-w-0 flex-1"
+    >
+      <Select value={values[name]} onChange={(e) => set({ [name]: e.target.value })}>
         <option value="">{t('search.any')}</option>
         {ROOM_OPTIONS.map((rooms) => (
           <option key={rooms} value={String(rooms)}>
             {formatRooms(rooms)}
           </option>
         ))}
-      </select>
-      {name === 'rooms_max' && errorText(name)}
-    </div>
+      </Select>
+    </Field>
   );
 
   // The only box still on cannot be turned off; the hint says why.
   const oneType = values.apartment !== values.room;
   const typeHintId = `${fieldId('room')}-type-hint`;
   const typeBox = (name: 'apartment' | 'room', text: string) => (
-    <label className="flex min-h-[44px] cursor-pointer items-center gap-[10px] text-[14px] has-[:disabled]:cursor-default">
+    <label className="flex min-h-tap cursor-pointer items-center gap-2.5 text-body-sm has-[:disabled]:cursor-default">
       <input
         id={fieldId(name)}
         type="checkbox"
@@ -245,7 +223,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
         disabled={oneType && values[name]}
         aria-describedby={oneType ? typeHintId : undefined}
         onChange={(e) => set({ [name]: e.target.checked })}
-        className={`h-[18px] w-[18px] shrink-0 accent-accent ${focusRing}`}
+        className={`h-5 w-5 shrink-0 accent-accent ${focusRing}`}
       />
       {text}
     </label>
@@ -258,12 +236,15 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
     parking: t('search.feature.parking'),
   };
 
+  const dateId = fieldId('available_by');
+  const chosenId = `${dateId}-chosen`;
+
   return (
-    <form
-      noValidate
-      onSubmit={submit}
-      className="flex flex-col gap-[22px] rounded-2xl border border-border bg-surface p-4"
-    >
+    <form noValidate onSubmit={submit} className="flex flex-col gap-5">
+      <h2 id={titleId} className="sr-only text-h3 lg:not-sr-only">
+        {t('search.filters')}
+      </h2>
+
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.type.legend')}</legend>
         <div className="flex flex-col">
@@ -271,7 +252,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
           {typeBox('room', t('search.type.room'))}
         </div>
         {oneType && (
-          <p id={typeHintId} className="text-xs text-ink-muted">
+          <p id={typeHintId} className="text-caption text-ink-muted">
             {t('search.type.hint')}
           </p>
         )}
@@ -293,27 +274,15 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
         </div>
       </fieldset>
 
-      <div className="flex flex-col gap-[6px]">
-        <label htmlFor={fieldId('available_by')} className={label}>
-          {t('search.availableBy')}
-        </label>
-        <input
-          id={fieldId('available_by')}
+      <Field id={dateId} label={t('search.availableBy')} hint={t('search.availableByHint')}>
+        <TextInput
           type="date"
           value={values.available_by}
-          aria-describedby={withReadback(
-            `${fieldId('available_by')}-hint`,
-            `${fieldId('available_by')}-chosen`,
-            values.available_by,
-          )}
+          aria-describedby={withReadback(undefined, chosenId, values.available_by)}
           onChange={(e) => set({ available_by: e.target.value })}
-          className={control}
         />
-        <DateReadback id={`${fieldId('available_by')}-chosen`} value={values.available_by} />
-        <p id={`${fieldId('available_by')}-hint`} className="text-xs text-ink-muted">
-          {t('search.availableByHint')}
-        </p>
-      </div>
+        <DateReadback id={chosenId} value={values.available_by} />
+      </Field>
 
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.features')}</legend>
@@ -329,7 +298,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
               />
               <label
                 htmlFor={fieldId(feature)}
-                className="flex min-h-[44px] cursor-pointer items-center rounded-full border-[1.5px] border-border-strong bg-surface px-[14px] text-[14px] font-medium peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+                className="flex min-h-tap cursor-pointer items-center rounded-full border border-border-strong bg-surface px-3.5 text-label text-ink peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
               >
                 {featureLabels[feature]}
               </label>
@@ -339,19 +308,12 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
       </fieldset>
 
       <div className="flex gap-3">
-        <button
-          type="submit"
-          className={`flex min-h-[48px] flex-[1.6] items-center justify-center rounded-[14px] bg-accent px-4 text-base font-bold text-on-ink ${focusRing}`}
-        >
+        <Button type="submit" variant="primary" size="md" className="flex-1">
           {t('search.apply')}
-        </button>
-        <button
-          type="button"
-          onClick={clear}
-          className={`flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-bold ${focusRing}`}
-        >
+        </Button>
+        <Button type="button" variant="secondary" size="md" onClick={clear} className="flex-1">
           {t('search.clear')}
-        </button>
+        </Button>
       </div>
     </form>
   );

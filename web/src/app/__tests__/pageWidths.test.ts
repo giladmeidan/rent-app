@@ -14,7 +14,7 @@ const PAGES: Record<string, { file: string; width: Width }> = {
   AreasList: { file: 'features/areas/AreasList.tsx', width: 'default' },
   LoginPage: { file: 'features/auth/LoginPage.tsx', width: 'narrow' },
   SignupPage: { file: 'features/auth/SignupPage.tsx', width: 'narrow' },
-  SearchPage: { file: 'features/search/SearchPage.tsx', width: 'default' },
+  SearchPage: { file: 'features/search/SearchPage.tsx', width: 'wide' },
   ListingPage: { file: 'features/listings/ListingPage.tsx', width: 'default' },
   JoinFlatPage: { file: 'features/flatmates/JoinFlatPage.tsx', width: 'narrow' },
   NewListingPage: { file: 'features/listings/NewListingPage.tsx', width: 'narrow' },

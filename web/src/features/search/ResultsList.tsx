@@ -1,9 +1,11 @@
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
+import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
+import { Mascot } from '../../components/Mascot';
 import { Skeleton } from '../../components/Skeleton';
 import { todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
@@ -22,10 +24,6 @@ type Props = {
   profile: SeekerProfileOut | undefined;
 };
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-border-strong bg-surface px-5 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
-
 /** The count line (always mounted, so its first announcement is heard) and the result states. */
 export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
   const { t } = useTranslation();
@@ -40,8 +38,11 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
     body = search.isPending ? (
       <Loading>
         <div className="flex flex-col gap-3">
+          <div aria-hidden="true" className="flex justify-center">
+            <Mascot pose="search" width={96} />
+          </div>
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} />
+            <Skeleton key={i} className="h-64 w-full lg:h-40" />
           ))}
         </div>
       </Loading>
@@ -55,21 +56,25 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
     sortedByMatch = data.pages[0]?.sort === 'match' && total > 0;
     if (total === 0) {
       body = (
-        <div className="flex flex-col items-start gap-3">
-          <EmptyState message={t('search.empty')} />
-          {hasFilters && (
-            <button type="button" onClick={onClear} className={secondary}>
-              {t('search.clear')}
-            </button>
-          )}
-        </div>
+        <EmptyState
+          pose="search"
+          message={t('search.empty')}
+          action={
+            hasFilters && (
+              <Button variant="secondary" onClick={onClear}>
+                {t('search.clear')}
+              </Button>
+            )
+          }
+        />
       );
     } else {
       const today = todayInIsrael();
       const nextPageFailed = search.isFetchNextPageError && !search.isFetchingNextPage;
       body = (
         <div className="flex flex-col gap-4">
-          <ul className="flex flex-col gap-4">
+          {/* The grid: each row card at least the artboard's 440px list column. */}
+          <ul className="grid gap-3 lg:grid-cols-[repeat(auto-fill,minmax(min(100%,27.5rem),1fr))]">
             {flattenPages(data).map((listing) => (
               <li key={listing.id}>
                 <ListingCard
@@ -77,6 +82,7 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
                   today={today}
                   to={`/listings/${listing.id}`}
                   seekerBirthYear={profile?.birth_year}
+                  layout="row"
                   badge={listing.match && <MatchBadge score={listing.match.score} />}
                 >
                   {listing.match && (
@@ -90,15 +96,15 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
             <ErrorState onRetry={() => void search.fetchNextPage()} />
           ) : (
             search.hasNextPage && (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => void search.fetchNextPage()}
                 disabled={search.isFetchingNextPage}
                 aria-busy={search.isFetchingNextPage}
-                className={`self-center ${secondary}`}
+                className="self-center"
               >
                 {t('search.more')}
-              </button>
+              </Button>
             )
           )}
         </div>
@@ -108,11 +114,9 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p aria-live="polite" className="min-h-[1.5em] text-sm font-bold">
+      <p aria-live="polite" className="min-h-6 text-label lg:text-h3">
         {count}
-        {sortedByMatch && (
-          <span className="font-normal text-ink-muted">{t('search.sortedByMatch')}</span>
-        )}
+        {sortedByMatch && <span className="text-ink-muted">{t('search.sortedByMatch')}</span>}
       </p>
       {body}
     </div>

@@ -2,11 +2,16 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
 import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
+import { useIsDesktop } from '../../components/useMediaQuery';
 import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
 import { ProfileNudge } from '../match/ProfileNudge';
 import { useProfile } from '../profile/useProfile';
+import { ActiveFilterTags } from './ActiveFilterTags';
 import { FiltersForm, type FormFilters } from './FiltersForm';
 import { countActive, parseFilters, toSearchParams, type Sort } from './filters';
 import { ResultsList } from './ResultsList';
@@ -14,9 +19,6 @@ import { SearchMap } from './SearchMap';
 import { SortSelect } from './SortSelect';
 import { useSearch } from './useSearch';
 import { ViewToggle, type View } from './ViewToggle';
-
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 /**
  * `/search`: the URL is the only filter state (plus `view=map`); the panel's open state and the
@@ -45,6 +47,9 @@ export function SearchPage() {
       : (filters.sort ?? (hasProfile ? 'match' : 'newest')));
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const titleId = useId();
+  // From `lg` up the panel is always open beside the results, and the toggle is gone.
+  const isDesktop = useIsDesktop();
 
   const apply = (values: FormFilters) => {
     setSearchParams(toSearchParams({ ...parseFilters(searchParams), ...values }));
@@ -55,61 +60,84 @@ export function SearchPage() {
   const switchView = (next: View) =>
     setSearchParams(toSearchParams({ ...filters, view: next === 'map' ? 'map' : undefined }));
 
-  return (
-    <PageContainer as="section" className="flex flex-col gap-4">
-      <h1 className="text-start text-2xl font-extrabold">{t('search.title')}</h1>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen((o) => !o)}
-          className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border-[1.5px] px-4 text-[15px] font-semibold ${active > 0 ? 'border-accent bg-accent-soft text-accent-strong' : 'border-border-strong bg-surface'} ${focusRing}`}
+  const toggle = (
+    <Button
+      variant={active > 0 ? 'soft' : 'secondary'}
+      aria-expanded={open}
+      aria-controls={panelId}
+      onClick={() => setOpen((o) => !o)}
+      icon={
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
-          <svg
-            aria-hidden="true"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M4 7h16M7 12h10M10 17h4" />
-          </svg>
-          {active > 0 ? t('search.filtersActive', { count: active }) : t('search.filters')}
-        </button>
-        <ViewToggle view={view ?? 'list'} onChange={switchView} />
-        <SortSelect
-          value={sortValue}
-          withMatch={hasProfile || sortValue === 'match'}
-          onChange={sort}
-        />
+          <path d="M4 7h16M7 12h10M10 17h4" />
+        </svg>
+      }
+    >
+      {active > 0 ? t('search.filtersActive', { count: active }) : t('search.filters')}
+    </Button>
+  );
+
+  return (
+    <PageContainer as="section" width="wide" className="flex flex-col gap-4">
+      <PageHeader title={t('search.title')} actions={isDesktop ? undefined : toggle} />
+
+      {/* The side panel: the artboard's 280px (18rem). */}
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+        <Card
+          as="section"
+          padding={isDesktop ? 'lg' : 'md'}
+          id={panelId}
+          hidden={!isDesktop && !open}
+          aria-labelledby={titleId}
+        >
+          <FiltersForm
+            key={searchParams.toString()}
+            filters={filters}
+            onApply={apply}
+            onClear={clear}
+            titleId={titleId}
+          />
+        </Card>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <ActiveFilterTags filters={filters} className="w-full min-w-0 lg:w-auto lg:flex-1" />
+            <div className="ms-auto flex flex-wrap items-center gap-3">
+              <SortSelect
+                value={sortValue}
+                withMatch={hasProfile || sortValue === 'match'}
+                onChange={sort}
+              />
+              <ViewToggle view={view ?? 'list'} onChange={switchView} />
+            </div>
+          </div>
+
+          <ProfileNudge />
+
+          {view === 'map' ? (
+            <SearchMap
+              filters={filtersWithoutView}
+              profile={profile}
+              onShowList={() => switchView('list')}
+            />
+          ) : (
+            <ResultsList
+              search={search}
+              profile={profile}
+              hasFilters={active > 0}
+              onClear={clear}
+            />
+          )}
+        </div>
       </div>
-
-      <div id={panelId} hidden={!open}>
-        <FiltersForm
-          key={searchParams.toString()}
-          filters={filters}
-          onApply={apply}
-          onClear={clear}
-        />
-      </div>
-
-      <ProfileNudge />
-
-      {view === 'map' ? (
-        <SearchMap
-          filters={filtersWithoutView}
-          profile={profile}
-          onShowList={() => switchView('list')}
-        />
-      ) : (
-        <ResultsList search={search} profile={profile} hasFilters={active > 0} onClear={clear} />
-      )}
     </PageContainer>
   );
 }
