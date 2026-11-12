@@ -64,12 +64,7 @@ async function settled() {
   return s;
 }
 
-const countText = (count: number) =>
-  count === 0
-    ? he.applications.count.zero
-    : count === 1
-      ? he.applications.count.one
-      : i18n.t('applications.count.many', { count });
+const countText = (count: number) => i18n.t('applications.count', { count });
 const appliedText = (app: MyApplicationOut) =>
   i18n.t('applications.applied', {
     date: new Intl.DateTimeFormat('he-IL', {
@@ -143,6 +138,35 @@ describe('ApplySection', () => {
         view.unmount();
         vi.unstubAllGlobals();
       }
+    }
+  });
+
+  it('ac3_applicant_count_forms', async () => {
+    const forms: [number, string][] = [
+      [
+        0,
+        '\u05e2\u05d5\u05d3 \u05d0\u05d9\u05df \u05de\u05d5\u05e2\u05de\u05d3\u05d9\u05dd. \u05d0\u05e4\u05e9\u05e8 \u05dc\u05d4\u05d9\u05d5\u05ea \u05d4\u05e8\u05d0\u05e9\u05d5\u05e0\u05d9\u05dd',
+      ],
+      [
+        1,
+        '\u05d4\u05d5\u05d2\u05e9\u05d4 \u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05ea \u05d0\u05d7\u05ea',
+      ],
+      [
+        2,
+        '2 \u05de\u05d5\u05e2\u05de\u05d3\u05d9\u05dd \u05d4\u05d2\u05d9\u05e9\u05d5 \u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05ea',
+      ],
+      [
+        7,
+        '7 \u05de\u05d5\u05e2\u05de\u05d3\u05d9\u05dd \u05d4\u05d2\u05d9\u05e9\u05d5 \u05de\u05d5\u05e2\u05de\u05d3\u05d5\u05ea',
+      ],
+    ];
+    for (const [count, text] of forms) {
+      mockApi({ [LISTING]: [listingReply(count)], 'GET /me': [unauthenticated()] });
+      const view = renderListing();
+      const s = await settled();
+      expect(s.getByText(text)).toBeVisible();
+      view.unmount();
+      vi.unstubAllGlobals();
     }
   });
 

@@ -39,7 +39,7 @@ test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
   await page.goto('/me/listings');
   const card = page.getByRole('article').filter({ hasText: street });
   const link = card.getByRole('link', { name: new RegExp(he.listings.mine.people) });
-  await expect(link.getByText(he.listings.mine.peopleLikedOne)).toBeVisible();
+  await expect(link.getByText(he.listings.mine.peopleLiked_one)).toBeVisible();
 
   // The people page: the seeker's card says she liked the room.
   await link.click();

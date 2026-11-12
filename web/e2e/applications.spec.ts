@@ -38,7 +38,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.context().clearCookies();
   await page.goto(`/listings/${id}`);
   const section = page.getByRole('region', { name: he.applications.heading });
-  await expect(section.getByText(he.applications.count.zero)).toBeVisible();
+  await expect(section.getByText(he.applications.count_zero)).toBeVisible();
   await expect(section.getByRole('link', { name: he.header.login })).toBeVisible();
   const signupHref = await section
     .getByRole('link', { name: he.header.signup })
@@ -93,7 +93,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await section.getByRole('button', { name: he.applications.form.submit }).click();
   await expect(section.getByText(he.applications.sent, { exact: true })).toBeVisible();
   await expect(section.getByText(he.applications.status.submitted, { exact: true })).toBeVisible();
-  await expect(section.getByText(he.applications.count.one)).toBeVisible();
+  await expect(section.getByText(he.applications.count_one)).toBeVisible();
 
   // "My applications": one card for this listing; withdraw it.
   await page.getByRole('banner').getByRole('link', { name: he.header.myApplications }).click();
@@ -188,8 +188,8 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     // A signed-in seeker gets the ages and the answers (room privacy, the counterpart of AC12).
     const facts = page.getByRole('region', { name: he.rooms.facts.title });
     await expect(facts).toContainText(
-      he.rooms.flatmates.withAges
-        .replace('{{flatmates}}', he.rooms.flatmates.many.replace('{{count}}', '2'))
+      he.rooms.flatmatesWithAges
+        .replace('{{flatmates}}', he.rooms.flatmates_two)
         .replace('{{ages}}', '27, 30'),
     );
     await expect(

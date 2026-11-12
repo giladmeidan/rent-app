@@ -7,6 +7,7 @@ import { flatmatesText, genderPreferenceLabel } from '../rooms/flatmates';
 import type { ListingOut } from './api';
 import { cardTitle } from './cardTitle';
 import { formatDate, formatIls } from './format';
+import { furnishedLabel } from './furnished';
 
 // The focus ring of the title link, drawn around the whole card.
 const linkedCard =
@@ -87,17 +88,10 @@ export function ListingCard({
     }
   }
   plain(listing.elevator ? t('listings.card.elevator') : t('listings.card.noElevator'));
-  if (listing.parking_spots === 1) plain(t('listings.card.parkingOne'));
-  else if (listing.parking_spots > 1) {
-    plain(t('listings.card.parkingMany', { count: listing.parking_spots }));
+  if (listing.parking_spots > 0) {
+    plain(t('listings.card.parking', { count: listing.parking_spots }));
   }
-  plain(
-    {
-      none: t('listings.furnished.none'),
-      partial: t('listings.furnished.partial'),
-      full: t('listings.furnished.full'),
-    }[listing.furnished],
-  );
+  plain(furnishedLabel(t, listing.furnished, listing.listing_type));
   if (listing.pets_allowed) plain(t('listings.card.pets'));
 
   const flatmates = isRoom ? flatmatesText(t, listing) : null;

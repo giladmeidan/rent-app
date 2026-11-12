@@ -42,6 +42,7 @@ function reset(view: { unmount: () => void }) {
 
 const titleOf = (c: ConversationOut) =>
   i18n.t('listings.card.title', {
+    count: c.listing.rooms,
     rooms: String(c.listing.rooms),
     street: c.listing.street,
     city: c.listing.city,
@@ -139,6 +140,26 @@ describe('ChatListPage', () => {
     for (const link of [first, second, fourth]) {
       expect(within(link).queryByText(/^\d+$/)).toBeNull();
     }
+  });
+
+  it('ac4_room_title', async () => {
+    const c = conversation();
+    const room = {
+      ...c,
+      listing: {
+        ...c.listing,
+        listing_type: 'room' as const,
+        rooms: 4,
+        street: '\u05d4\u05e8\u05e6\u05dc',
+      },
+    };
+    const { view } = renderPage([json([room])]);
+    expect(
+      await screen.findByText(
+        '\u05d7\u05d3\u05e8 \u05d1\u05be4 \u05d7\u05d3\u05e8\u05d9\u05dd, \u05e8\u05d7\u05d5\u05d1 \u05d4\u05e8\u05e6\u05dc, \u05e8\u05de\u05ea \u05d2\u05df',
+      ),
+    ).toBeVisible();
+    reset(view);
   });
 
   it('ac3_flatmate_items', async () => {

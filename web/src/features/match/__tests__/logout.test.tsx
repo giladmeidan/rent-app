@@ -52,7 +52,7 @@ describe('logout drops the match scores', () => {
       expect(screen.queryByText(/התאמה/)).toBeNull();
     });
     expect(screen.queryByTestId('match-chips')).toBeNull();
-    expect(screen.queryByText('ממוינות לפי התאמה', { exact: false })).toBeNull();
+    expect(screen.queryByText('לפי התאמה', { exact: false })).toBeNull();
     expect(screen.getByLabelText(he.search.sort.label)).toHaveValue('newest');
   });
 });

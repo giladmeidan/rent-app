@@ -103,10 +103,7 @@ const SEEKER: Record<Criterion, Record<ReasonKind, Line>> = {
       if (l.parking_spots === 0) return t('match.seeker.parking.differNone');
       return t('match.seeker.parking.differ', {
         needed: p.parking_needed,
-        spots:
-          l.parking_spots === 1
-            ? t('listing.parkingOne')
-            : t('listing.parkingMany', { count: l.parking_spots }),
+        spots: t('listing.parking', { count: l.parking_spots }),
       });
     },
   },
@@ -248,7 +245,7 @@ function parkingShortfall(profile: ApplicantProfileOut, spots: number, t: TFunct
   const parking = parkingName(profile.parking_needed, t);
   return spots === 0
     ? t('match.owner.parking.differNone', { parking })
-    : t('match.owner.parking.differ', { parking, spots });
+    : t('match.owner.parking.differ', { parking, spots: t('listing.parking', { count: spots }) });
 }
 
 const OWNER: Record<Criterion, Record<ReasonKind, OwnerLine>> = {

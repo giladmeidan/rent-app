@@ -7,7 +7,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import { useMyFlats } from '../flatmates/api';
-import { formatRooms } from '../listings/format';
+import { cardTitle } from '../listings/cardTitle';
 import type { ConversationOut } from './api';
 import { formatMessageTime } from './format';
 import { Loading } from './Loading';
@@ -69,13 +69,7 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
               </span>
             )}
           </span>
-          <span className="truncate text-[13px] text-muted">
-            {t('listings.card.title', {
-              rooms: formatRooms(listing.rooms),
-              street: listing.street,
-              city: listing.city,
-            })}
-          </span>
+          <span className="truncate text-[13px] text-muted">{cardTitle(t, listing)}</span>
           {last === null ? (
             <span className="text-[15px] text-muted">{t('chat.list.noMessages')}</span>
           ) : (

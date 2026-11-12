@@ -27,6 +27,9 @@ links, the empty `/chat` for a flatmate) is `0009f`, which builds on this spec's
 The tables follow these rules. The `PRODUCT.md` row proposed under Risks carries them forward.
 1. **One addressed person**: slash forms, with the base form first and its final letter kept: "את/ה",
    "מחפש/ת", "מעדיף/ה", "תגיש/י".
+   *For this spec's values the brand amendment replaces this rule (Gilad 2026-11-12): no slash forms;
+   the plural, an infinitive or a noun instead. The rows marked "brand voice" below carry his wording;
+   the other slash forms in `he.json` are a FOLLOWUPS sweep.*
 2. **Instructions**: the plural imperative or "אפשר ל…": "נסו שוב", "שלחו לי קוד", "אפשר לנסות שוב".
 3. **The other side, inside a sentence**: plural, e.g. "בעלי הדירה מחפשים", "מבקשים כניסה ב־…". A role
    label for one named person stays "בעל/ת הדירה" (`chat.roles.owner`). Hebrew's generic "מי ש…", "כל מי
@@ -39,6 +42,7 @@ The tables follow these rules. The `PRODUCT.md` row proposed under Risks carries
      unchanged);
    - buttons are verbal nouns ("שמירה", "שליחת המועמדות"), except a call to action copied from an artboard,
      which keeps the artboard's words ("הגש/י מועמדות", `applications.apply`, `Listing.dc.html`).
+     *Brand amendment (Gilad 2026-11-12): `applications.apply` is the verbal noun "הגשת מועמדות" too.*
 5. **Counts**:
    - one is a word ("חדר אחד", "מודעה אחת"), 2 and up are digits;
    - a count after a colon, a "·" or in parentheses needs no plural form ("שיחות חדשות: 3", "הכול (3)").
@@ -191,19 +195,19 @@ today.
 | `auth.resendIn` | — | "שליחה חוזרת בעוד שנייה" | "שליחה חוזרת בעוד 2 שניות" | "שליחה חוזרת בעוד {{count}} שניות" | `auth.resendIn` "שליחה חוזרת בעוד {{seconds}} שניות" | `OtpForm.tsx:397` passes `{ count: secondsLeft }` |
 | `listings.fields.charsLeft` | "לא נותרו תווים" | "נותר תו אחד" | "נותרו 2 תווים" | "נותרו {{count}} תווים" | "נשארו {{count}} תווים" | `DetailsStep.tsx:377`, `ProfilePage.tsx:460`, `ApplySection.tsx:184` (already pass `count`) |
 | `chat.composer.remaining` | "לא נותרו תווים" | "נותר תו אחד" | "נותרו 2 תווים" | "נותרו {{count}} תווים" | "נותרו {{count}} תווים" (FOLLOWUPS 110) | `Composer.tsx:104` (already passes `count`) |
-| `listings.roomPreview.flatmates` | — | "שותף/ה אחד/ת בדירה" | "2 שותפים בדירה" | "{{count}} שותפים בדירה" | `…flatmates` "{{count}} שותפים בדירה", `…flatmatesOne` "שותף/ה אחד/ת בדירה" | `RoomPreview.tsx:36-45` |
-| `listings.roomPreview.flatmatesAges` | — | "שותף/ה אחד/ת בדירה ({{ages}})" | "2 שותפים בדירה ({{ages}})" | "{{count}} שותפים בדירה ({{ages}})" | `…flatmatesAges` "{{count}} שותפים בדירה ({{ages}})", `…flatmatesOneAge` "שותף/ה אחד/ת בדירה ({{age}})" | `RoomPreview.tsx` |
+| `listings.roomPreview.flatmates` | — | "אדם אחד בדירה" | "2 שותפים בדירה" | "{{count}} שותפים בדירה" | `…flatmates` "{{count}} שותפים בדירה", `…flatmatesOne` "שותף/ה אחד/ת בדירה" | `RoomPreview.tsx:36-45`. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
+| `listings.roomPreview.flatmatesAges` | — | "אדם אחד בדירה ({{ages}})" | "2 שותפים בדירה ({{ages}})" | "{{count}} שותפים בדירה ({{ages}})" | `…flatmatesAges` "{{count}} שותפים בדירה ({{ages}})", `…flatmatesOneAge` "שותף/ה אחד/ת בדירה ({{age}})" | `RoomPreview.tsx`. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
 | `listings.card.title` | — | "חדר אחד, רחוב {{street}}, {{city}}" | "{{rooms}} חדרים, רחוב {{street}}, {{city}}" | "{{rooms}} חדרים, רחוב {{street}}, {{city}}" | "{{rooms}} חדרים, רחוב {{street}}, {{city}}" (FOLLOWUPS 33: "1 חדרים") | `cardTitle.ts` only |
 | `listings.card.roomTitle` | — | "חדר בדירת חדר אחד, רחוב {{street}}, {{city}}" | "חדר ב־{{rooms}} חדרים, רחוב {{street}}, {{city}}" | "חדר ב־{{rooms}} חדרים, רחוב {{street}}, {{city}}" | "חדר ב־{{rooms}} חדרים, רחוב {{street}}, {{city}}" | `cardTitle.ts` only |
 | `listings.card.parking` | — | "חניה" | "2 חניות" | "{{count}} חניות" | `…parkingOne` "חניה", `…parkingMany` "{{count}} חניות" | `ListingCard.tsx:90-93`: a chip when `parking_spots > 0` |
 | `listing.parking` | — | "מקום אחד" | "2 מקומות" | "{{count}} מקומות" | `listing.parkingOne` "מקום אחד", `listing.parkingMany` "{{count}} מקומות" | `ListingFacts.tsx:19-23` (0 stays `listing.no`), `reasons.ts:106-110`, `reasons.ts:251` (Section 2) |
-| `listings.mine.peopleLiked` | — | "אחד/ת אהב/ה את החדר" | "2 אהבו את החדר" | "{{count}} אהבו את החדר" | `…peopleLiked` "{{count}} אהבו את החדר", `…peopleLikedOne` "אחד/ת אהב/ה את החדר" | `MyListingsPage.tsx:91-93` |
+| `listings.mine.peopleLiked` | — | "אדם אחד אהב את החדר" | "2 אהבו את החדר" | "{{count}} אהבו את החדר" | `…peopleLiked` "{{count}} אהבו את החדר", `…peopleLikedOne` "אחד/ת אהב/ה את החדר" | `MyListingsPage.tsx:91-93`. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
 | `applicants.newBadge` | — | "חדשה אחת" | "2 חדשות" | "{{count}} חדשות" | "{{count}} חדשות" (FOLLOWUPS 86: "1 חדשות"). **accepted by Gilad 2026-11-12 (Q2)** | `MyListingsPage.tsx:74` (already passes `count`) |
 | `search.count` | — | "מודעה אחת" | "2 מודעות" | "{{count}} מודעות" | `search.count` "{{count}} דירות", `search.countOne` "דירה אחת". **accepted by Gilad 2026-11-12 (Q1)** | `ResultsList.tsx:52`, `SearchMap.tsx:87` |
-| `applications.count` | "עוד אין מועמדים. אפשר להיות הראשונים" | "מועמד/ת אחד/ת הגיש/ה מועמדות" | "2 מועמדים הגישו מועמדות" | "{{count}} מועמדים הגישו מועמדות" | the object `applications.count` `{zero, one, many}` (same texts) | `ApplySection.tsx:271-277` |
-| `people.count` | — | "מחפש/ת אחד/ת" | "2 מחפשים" | "{{count}} מחפשים" | `people.count` "{{count}} מחפשים", `people.countOne` "מחפש/ת אחד/ת" | `PeoplePage.tsx:125` |
+| `applications.count` | "עוד אין מועמדים. אפשר להיות הראשונים" | "הוגשה מועמדות אחת" | "2 מועמדים הגישו מועמדות" | "{{count}} מועמדים הגישו מועמדות" | the object `applications.count` `{zero, one, many}` (same texts, `one` "מועמד/ת אחד/ת הגיש/ה מועמדות") | `ApplySection.tsx:271-277`. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
+| `people.count` | — | "פרופיל אחד" | "2 מחפשים" | "{{count}} מחפשים" | `people.count` "{{count}} מחפשים", `people.countOne` "מחפש/ת אחד/ת" | `PeoplePage.tsx:125`. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
 | `likes.badgeLabel` | — | "חדר אחד אהב אותך" | "2 חדרים אהבו אותך" | "{{count}} חדרים אהבו אותך" | `likes.badgeLabel` "{{count}} חדרים אהבו אותך", `likes.badgeLabelOne` "חדר אחד אהב אותך" | `LikesNavLink.tsx:34` |
-| `rooms.flatmates` | — | "שותף/ה אחד/ת" | "2 שותפים" | "{{count}} שותפים" | `rooms.flatmates.one` "שותף/ה אחד/ת", `rooms.flatmates.many` "{{count}} שותפים" | `flatmates.ts:19-22` |
+| `rooms.flatmates` | — | "אדם אחד בדירה" | "2 שותפים" | "{{count}} שותפים" | `rooms.flatmates.one` "שותף/ה אחד/ת", `rooms.flatmates.many` "{{count}} שותפים" | `flatmates.ts:19-22`. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
 
 These keys move or are new, with no plural:
 - `rooms.flatmatesWithAges` "{{flatmates}} ({{ages}})" (moved from `rooms.flatmates.withAges`);
@@ -225,7 +229,8 @@ These keys move or are new, with no plural:
   `rooms.card.forGender` "ל{{who}} בלבד", `rooms.apply.roomSectionRequired` "…ל{{who}} בלבד…".
 - Hebrew's generic "מי ש…" / "אף אחד" (rule 3): `flatmates.invite.hint`, `flatmates.invite.onceWarning`,
   `listings.room.flatmatesHint`, `applications.form.hint`, `flatmates.list.empty`.
-- An artboard's call to action (rule 4): `applications.apply` "הגש/י מועמדות".
+- ~~An artboard's call to action (rule 4): `applications.apply` "הגש/י מועמדות".~~ Changed instead:
+  `applications.apply` "הגש/י מועמדות" → "הגשת מועמדות", an action-noun button. **accepted by Gilad 2026-11-12 (brand voice: no slash forms)**.
 - Reworded to the colon form in Table B instead: `applicants.room.summary` (FOLLOWUPS 153) and
   `listings.roomPreview.lifestyle`.
 - Not counts: `listings.room.ageOf` "שותף/ה {{n}}" (an ordinal label) and `common.loading` "טוען…" (rule 4).
@@ -241,7 +246,7 @@ stable: B7 (`flatmates.invite.hint`) was dropped in verification under rule 3's 
 | B3 | `match.seeker.household.differ` | "בעל הדירה מחפש {{households}}" | "בעלי הדירה מחפשים {{households}}" | rule 3 | |
 | B4 | `match.seeker.contract.differ` | "בעל הדירה מבקש חוזה של {{months}} חודשים לפחות" | "בעלי הדירה מבקשים חוזה של {{months}} חודשים לפחות" | rule 3 | |
 | B5 | `match.seeker.smoking.differ` | "בעל הדירה מבקש ללא מעשנים" | "בעלי הדירה מבקשים ללא מעשנים" | rule 3 | |
-| B6 | `profile.room.fields.flatmates` | "עם מי אני מעדיפ/ה לגור?" | "עם מי אני מעדיף/ה לגור?" | rule 1: the base form keeps its final ף | |
+| B6 | `profile.room.fields.flatmates` | "עם מי אני מעדיפ/ה לגור?" | "עם מי הכי נוח לי לגור?" | no slash form; first person without a gendered verb |**accepted by Gilad 2026-11-12 (brand voice: no slash forms)** |
 | B8 | `chat.list.new` | "חדש" | "חדשה" | the pill marks a new conversation (`is_new`, `ChatListPage.tsx:35`): שיחה is feminine | |
 | B9 | `chat.composer.sending` | "שולח…" | "בשליחה…" | rule 4 (FOLLOWUPS 110) | **accepted by Gilad 2026-11-12 (Q3)** |
 | B10 | `chat.composer.viewingTemplate` | "אשמח לתאם סיור בדירה. מתי נוח לך?" | "אשמח לתאם סיור בדירה. מתי נוח לכם?" | a room chat can include the flatmates (`0008f`); the plural speaks to everyone in it (FOLLOWUPS 110) | **accepted by Gilad 2026-11-12 (Q3)** |
@@ -309,17 +314,17 @@ switches to `i18n.t(base, { count })` where its key became a family: for example
     - an apartment with 1 / 2 / 2.5 rooms → "חדר אחד, רחוב …" / "2 חדרים, …" / "2.5 חדרים, …";
     - a room in a 1-room / 4-room flat → "חדר בדירת חדר אחד, …" / "חדר ב־4 חדרים, …".
   - `ApplySection.test.tsx::ac3_applicant_count_forms`: `applicant_count` 0 / 1 / 2 / 7 show the four
-    `applications.count` forms.
+    `applications.count` forms (1 → "הוגשה מועמדות אחת").
   - `MyListingsPage.test.tsx::ac3_badges_one_two_many`:
     - `new_applicant_count` 1 → "חדשה אחת", 2 → "2 חדשות";
-    - `liked_me_count` 1 → "אחד/ת אהב/ה את החדר", 3 → "3 אהבו את החדר".
+    - `liked_me_count` 1 → "אדם אחד אהב את החדר", 3 → "3 אהבו את החדר".
   - `SearchPage.test.tsx::ac3_result_count_forms`: `total` 1 / 2 / 12 → "מודעה אחת" / "2 מודעות" / "12 מודעות".
     `SearchMap.test.tsx`'s count assertions are updated to the same words.
   - `OtpForm.test.tsx::ac3_resend_countdown_singular`: with 1 second left the button reads
     "שליחה חוזרת בעוד שנייה", and with 30 seconds "שליחה חוזרת בעוד 30 שניות".
   - `ChatThreadPage.test.tsx::ac3_composer_remaining_forms`: with 1 character left "נותר תו אחד", with 0
     "לא נותרו תווים".
-  - `PeoplePage.test.tsx::ac3_people_count_one`: `total` 1 → "מחפש/ת אחד/ת".
+  - `PeoplePage.test.tsx::ac3_people_count_one`: `total` 1 → "פרופיל אחד".
   - `AuthMenu.test.tsx::ac3_likes_badge_forms` (new): 1 → "חדר אחד אהב אותך", 2 → "2 חדרים אהבו אותך",
     both `sr-only`. 0008c's `ac6_likes_link` (line 238) keeps its name; its lines 250 and 262 switch to
     `i18n.t('likes.badgeLabel', { count })`.
@@ -329,13 +334,13 @@ switches to `i18n.t(base, { count })` where its key became a family: for example
   - `ListingCard.test.tsx::ac3_parking_and_flatmates_forms` (the card shows the text, wherever `0009i` puts
     it):
     - parking 1 → "חניה", 2 → "2 חניות";
-    - a room with 1 flatmate → "שותף/ה אחד/ת";
+    - a room with 1 flatmate → "אדם אחד בדירה";
     - 2 flatmates with ages `[30]` → "2 שותפים (30, ?)";
     - 2 flatmates with no ages → "2 שותפים".
   - `ListingPage.test.tsx::ac3_facts_parking_forms`: the facts grid shows parking 1 → "מקום אחד", 2 →
     "2 מקומות", 0 → "אין".
   - `ListingWizard.test.tsx::ac3_room_preview_flatmates`: the preview chip for 2 flatmates with one age →
-    "2 שותפים בדירה (30, ?)"; for 1 flatmate aged 30 → "שותף/ה אחד/ת בדירה (30)".
+    "2 שותפים בדירה (30, ?)"; for 1 flatmate aged 30 → "אדם אחד בדירה (30)".
 - [ ] AC4 **A room is described as a room.**
   - `ListingCard.test.tsx::ac4_room_furnished_forms`: for a room with `full` / `partial` / `none` the card
     shows "מרוהט" / "מרוהט חלקית" / "לא מרוהט", and for an apartment it still shows "מרוהטת".

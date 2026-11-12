@@ -66,7 +66,7 @@ describe('ListingCard', () => {
 
     // One flatmate, no ages.
     c = room({ flatmates_count: 1, flatmate_ages: [] });
-    expect(c.factsLine().startsWith('שותף/ה אחד/ת')).toBe(true);
+    expect(c.factsLine().startsWith('אדם אחד בדירה')).toBe(true);
     c.view.unmount();
 
     // A visitor's or an owner's response (room privacy): no ages, no parentheses.
@@ -81,9 +81,9 @@ describe('ListingCard', () => {
     expect(c.factsLine().startsWith('קומה 2')).toBe(true);
     c.view.unmount();
 
-    // Fewer ages than flatmates is legal.
+    // Fewer ages than flatmates is legal: each missing age shows as "?" (spec 0009b).
     c = room({ flatmates_count: 3, flatmate_ages: [27] });
-    expect(c.factsLine().startsWith('3 שותפים (27)')).toBe(true);
+    expect(c.factsLine().startsWith('3 שותפים (27, ?, ?)')).toBe(true);
     c.view.unmount();
 
     // An apartment is unchanged: its title, no pill, no flatmates, no gender chip.
@@ -93,6 +93,47 @@ describe('ListingCard', () => {
     expect(c.factsLine().startsWith('קומה 2 מתוך 4')).toBe(true);
     expect(c.factsLine()).not.toContain('שותפ');
     expect(c.chips()).toEqual([he.listings.card.noElevator, he.listings.furnished.none]);
+  });
+
+  it('ac3_parking_and_flatmates_forms', () => {
+    // What the card shows, wherever it shows it.
+    const shown = () => screen.getByRole('article').textContent;
+    let c = renderCard({ parking_spots: 1 });
+    expect(c.chips()).toContain('\u05d7\u05e0\u05d9\u05d4');
+    expect(shown()).not.toContain('\u05d7\u05e0\u05d9\u05d5\u05ea');
+    c.view.unmount();
+    c = renderCard({ parking_spots: 2 });
+    expect(shown()).toContain('2 \u05d7\u05e0\u05d9\u05d5\u05ea');
+    c.view.unmount();
+
+    c = room({ flatmates_count: 1, flatmate_ages: [] });
+    expect(shown()).toContain(
+      '\u05d0\u05d3\u05dd \u05d0\u05d7\u05d3 \u05d1\u05d3\u05d9\u05e8\u05d4',
+    );
+    c.view.unmount();
+    c = room({ flatmates_count: 2, flatmate_ages: [30] });
+    expect(shown()).toContain('2 \u05e9\u05d5\u05ea\u05e4\u05d9\u05dd (30, ?)');
+    c.view.unmount();
+    c = room({ flatmates_count: 2, flatmate_ages: [] });
+    expect(shown()).toContain('2 \u05e9\u05d5\u05ea\u05e4\u05d9\u05dd');
+    expect(shown()).not.toContain('2 \u05e9\u05d5\u05ea\u05e4\u05d9\u05dd (');
+    c.view.unmount();
+  });
+
+  it('ac4_room_furnished_forms', () => {
+    const forms = [
+      ['full', '\u05de\u05e8\u05d5\u05d4\u05d8'],
+      ['partial', '\u05de\u05e8\u05d5\u05d4\u05d8 \u05d7\u05dc\u05e7\u05d9\u05ea'],
+      ['none', '\u05dc\u05d0 \u05de\u05e8\u05d5\u05d4\u05d8'],
+    ] as const;
+    for (const [furnished, text] of forms) {
+      const c = room({ furnished });
+      expect(c.chips()).toContain(text);
+      c.view.unmount();
+    }
+    const c = renderCard({ listing_type: 'apartment', furnished: 'full' });
+    expect(c.chips()).toContain('\u05de\u05e8\u05d5\u05d4\u05d8\u05ea');
+    c.view.unmount();
   });
 
   it('ac5_similar_age_chip_first', () => {
@@ -113,7 +154,7 @@ describe('ListingCard', () => {
       he.rooms.card.similarAge,
       'לנשים בלבד',
       he.listings.card.noElevator,
-      he.listings.furnished.none,
+      he.listings.furnishedRoom.none,
     ]);
     expect(chips[0]).toHaveClass('bg-accent-tint', 'text-accent-text');
     view.unmount();
