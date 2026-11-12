@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 
 import { ApplicantsPage } from '../features/applicants/ApplicantsPage';
@@ -21,11 +22,32 @@ import { NewListingPage } from '../features/listings/NewListingPage';
 import { PeoplePage } from '../features/people/PeoplePage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { SearchPage } from '../features/search/SearchPage';
+import { PageContainer } from '../components/PageContainer';
+import { Skeleton } from '../components/Skeleton';
 import { Layout } from './Layout';
+
+// The dev-only kit gallery (spec 0009d): neither the route nor its chunk ships in a build.
+const KitPreview = import.meta.env.DEV ? lazy(() => import('./KitPreview')) : null;
 
 export function AppRoutes() {
   return (
     <Routes>
+      {KitPreview && (
+        <Route
+          path="dev/kit"
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <Skeleton />
+                </PageContainer>
+              }
+            >
+              <KitPreview />
+            </Suspense>
+          }
+        />
+      )}
       <Route element={<Layout />}>
         <Route index element={<AreasList />} />
         <Route path="login" element={<LoginPage />} />
