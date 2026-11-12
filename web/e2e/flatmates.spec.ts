@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { expectNoAxeViolations } from './a11y';
 import {
   API,
   createInvite,
@@ -163,12 +164,19 @@ test('ac5_group_chat_flow', async ({ page, browser }) => {
   // 4. F opens the chat: the three members and the joined note.
   await flatmatePage.goto('/chat');
   await expect(flatmatePage.getByRole('link', { name: he.chat.myFlats })).toBeVisible();
+  await expectNoAxeViolations(flatmatePage, '/chat');
+  // "My flats" (0009c's axe check, already signed in), then back to the chats.
+  await flatmatePage.goto('/me/flats');
+  await expect(flatmatePage.getByRole('button', { name: he.flatmates.mine.leave })).toBeVisible();
+  await expectNoAxeViolations(flatmatePage, '/me/flats');
+  await flatmatePage.goto('/chat');
   await flatmatePage.getByRole('link', { name: new RegExp(SEEKER) }).click();
   await expect(flatmatePage).toHaveURL(`/chat/${applicationId}`);
   await expect(flatmatePage.getByRole('group', { name: he.chat.members })).toHaveText(
     `${OWNER} (${he.chat.roles.owner}) \u00b7 ${he.chat.you} \u00b7 ${SEEKER}`,
   );
   await expect(flatmatePage.getByText(he.chat.joinedNote.replace('{{date}}', today))).toBeVisible();
+  await expectNoAxeViolations(flatmatePage, 'group thread');
 
   // 5. F sends a message.
   await flatmatePage.getByLabel(he.chat.composer.label).fill(HELLO);
@@ -185,6 +193,8 @@ test('ac5_group_chat_flow', async ({ page, browser }) => {
   // 7. O removes F. F's open thread is told on the next send (not on a focus event: focus across
   // contexts is not reliable), and the chat list no longer has the conversation.
   await page.goto(`/me/listings/${roomId}/flatmates`);
+  await expect(page.getByRole('button', { name: he.flatmates.list.remove })).toBeVisible();
+  await expectNoAxeViolations(page, '/me/listings/:id/flatmates');
   page.once('dialog', (dialog) => void dialog.accept());
   await page.getByRole('button', { name: he.flatmates.list.remove }).click();
   await expect(page.getByText(he.flatmates.list.empty)).toBeVisible();

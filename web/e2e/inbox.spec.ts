@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { expectNoAxeViolations } from './a11y';
 import { API, postListing, putProfile, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
@@ -61,6 +62,7 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const panel = page.locator(`[id="${(await why.getAttribute('aria-controls')) ?? ''}"]`);
   await expect(panel.getByRole('list').getByRole('listitem').first()).toBeVisible();
   await expect(panel.getByText(he.match.owner.budget.agree, { exact: true })).toBeVisible();
+  await expectNoAxeViolations(page, 'applicants inbox');
 
   // Shortlist.
   await applicant.getByRole('button', { name: he.applicants.actions.shortlist }).click();

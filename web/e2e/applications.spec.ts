@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { expectNoAxeViolations } from './a11y';
 import { API, postListing, putProfile, signUp } from './helpers';
 
 const MESSAGE = 'Hi, we are a quiet couple';
@@ -90,6 +91,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   // Apply.
   await section.getByRole('button', { name: he.applications.apply }).click();
   await section.getByLabel(he.applications.form.label).fill(MESSAGE);
+  await expectNoAxeViolations(page, 'listing page, apply form open');
   await section.getByRole('button', { name: he.applications.form.submit }).click();
   await expect(section.getByText(he.applications.sent, { exact: true })).toBeVisible();
   await expect(section.getByText(he.applications.status.submitted, { exact: true })).toBeVisible();
@@ -102,6 +104,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(card).toHaveCount(1);
   await expect(card).toContainText(street);
   await expect(card.getByText(he.applications.status.submitted, { exact: true })).toBeVisible();
+  await expectNoAxeViolations(page, '/me/applications');
   await card.getByRole('button', { name: he.applications.withdraw }).click();
   await expect(card.getByText(he.applications.status.withdrawn, { exact: true })).toBeVisible();
 
@@ -127,6 +130,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(roomRadio(ROOM.fields.flatmates, he.rooms.genderPreference.women)).toBeChecked();
   await expect(roomRadio(cleanliness, he.lifestyle.cleanliness.answer['3'])).toBeChecked();
   await expect(page.getByRole('region', { name: he.lifestyle.title.seeker })).toBeVisible();
+  await expectNoAxeViolations(page, '/me/profile');
 
   // The gate's entry point lands on the room heading; switching off and saving clears the section.
   await page.goto('/me/profile?section=room');
@@ -208,7 +212,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     await expect(section.getByText(he.rooms.apply.misfit, { exact: true })).toBeVisible();
     await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
     await page.goto('/search?listing_type=room');
-    await expect(page.getByRole('list', { name: he.common.loading })).toHaveCount(0);
+    await expect(page.getByText(he.common.loading)).toHaveCount(0);
     await expect(page.locator('p[aria-live="polite"]')).not.toBeEmpty();
     await expect(page.getByRole('article').filter({ hasText: roomStreet })).toHaveCount(0);
 
