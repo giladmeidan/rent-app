@@ -549,7 +549,7 @@ export function ListingWizard({ listing }: Props) {
                 type="submit"
                 disabled={(step === 1 && form.listing_type === null) || active.isPending}
                 aria-busy={active.isPending}
-                className="flex-1 lg:min-w-48 lg:flex-none"
+                className="flex-1 lg:ms-auto lg:min-w-48 lg:flex-none"
               >
                 {step < 4
                   ? t('listings.next')

@@ -50,9 +50,10 @@ export function EditListingPage() {
           : 'listings.edit.title',
     ),
   );
-  // Loading and a failed list keep the page's <h1>: its text needs no data.
-  const title = <PageHeader title={t('listings.edit.title')} />;
   const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+  // Loading and a failed list keep the page's <h1>: its text needs no data. The back link needs no
+  // guard there: no form is shown.
+  const title = <PageHeader title={t('listings.edit.title')} back={back} />;
 
   // A cached list is used while it refetches, and kept if that refetch fails: the owner may be
   // typing in the form.
