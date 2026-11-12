@@ -12,10 +12,14 @@ export type ButtonClassOptions = {
   fullWidth?: boolean;
   /** No label: the button is square, and that replaces the size's padding. */
   iconOnly?: boolean;
+  /** A trailing node (`Button`'s `end`): the content sits at the two ends, not centred. */
+  between?: boolean;
 };
 
+// `justify-*` sits between these two, so a button without `end` renders the same class string.
+const BASE_BOX = 'inline-flex items-center';
 const BASE =
-  'inline-flex items-center justify-center gap-2 text-center transition-colors motion-reduce:transition-none disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60';
+  'gap-2 text-center transition-colors motion-reduce:transition-none disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60';
 
 const VARIANTS: Record<ButtonVariant, string> = {
   // Brand: primary buttons are ink.
@@ -40,9 +44,12 @@ export function buttonClasses({
   shape = 'rounded',
   fullWidth = false,
   iconOnly = false,
+  between = false,
 }: ButtonClassOptions = {}): string {
   const s = SIZES[size];
   return cx(
+    BASE_BOX,
+    between ? 'justify-between' : 'justify-center',
     BASE,
     VARIANTS[variant],
     focusRing,

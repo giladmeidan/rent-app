@@ -72,6 +72,25 @@ describe('AuthMenu', () => {
     }
   });
 
+  it('refetch_error_keeps_signed_in_nav', async () => {
+    mockApi({
+      'GET /me': [json(noa), json({ detail: 'boom' }, 500)],
+      [LIST]: [json([])],
+    });
+    const client = testQueryClient();
+    renderRoutes('/', menu, client);
+    expect(await screen.findByRole('button', { name: he.header.logout })).toBeVisible();
+
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['me'] });
+    });
+    await vi.waitFor(() => {
+      expect(client.getQueryState(['me'])?.status).toBe('error');
+    });
+    expect(screen.getByRole('button', { name: he.header.logout })).toBeVisible();
+    expect(screen.queryByRole('link', { name: he.header.login })).toBeNull();
+  });
+
   it('ac2_logged_out_on_401_and_on_error', async () => {
     mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)] });
     const first = renderRoutes('/', menu);
@@ -80,7 +99,8 @@ describe('AuthMenu', () => {
       'href',
       '/login',
     );
-    expect(screen.getByRole('link', { name: he.header.signup })).toHaveAttribute('href', '/signup');
+    // No "הרשמה" in the header (spec 0009a Q5): the login form signs up an unknown email.
+    expect(screen.queryByRole('link', { name: he.header.signup })).toBeNull();
     first.unmount();
     vi.unstubAllGlobals();
 
@@ -92,15 +112,14 @@ describe('AuthMenu', () => {
     expect(
       await screen.findByRole('link', { name: he.header.login }, { timeout: 100 }),
     ).toBeVisible();
-    expect(screen.getByRole('link', { name: he.header.signup })).toBeVisible();
     expect(api.calls('GET /me')).toHaveLength(1);
   });
 
   it('ac9_my_applications_link', async () => {
-    // A seeker: "my applications", not "my listings".
+    // A seeker: "מועמדויות", not "my listings".
     mockApi({ 'GET /me': [json(noa)], [LIST]: [json([])] });
     let view = renderRoutes('/', menu);
-    expect(await screen.findByRole('link', { name: he.header.myApplications })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: he.nav.applications })).toHaveAttribute(
       'href',
       '/me/applications',
     );
@@ -115,7 +134,7 @@ describe('AuthMenu', () => {
       'href',
       '/me/listings',
     );
-    expect(screen.queryByRole('link', { name: he.header.myApplications })).toBeNull();
+    expect(screen.queryByRole('link', { name: he.nav.applications })).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -124,7 +143,7 @@ describe('AuthMenu', () => {
     renderRoutes('/', menu);
     expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
     expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
-    expect(screen.queryByRole('link', { name: he.header.myApplications })).toBeNull();
+    expect(screen.queryByRole('link', { name: he.nav.applications })).toBeNull();
   });
   it('ac1_chat_link_and_count', async () => {
     const chatLink = () => screen.findByRole('link', { name: new RegExp(`^${he.header.chat}`) });
@@ -143,9 +162,9 @@ describe('AuthMenu', () => {
     expect(link).toHaveAttribute('href', '/chat');
     expect(await within(link).findByText('2')).toHaveAttribute('aria-hidden', 'true');
     expect(link).toHaveAccessibleName(`${he.header.chat} ${newCount(2)}`);
-    // Before the role link.
+    // After the owner's first tab, "המודעות שלי" (spec 0009a).
     const links = screen.getAllByRole('link');
-    expect(links.indexOf(link)).toBeLessThan(
+    expect(links.indexOf(link)).toBeGreaterThan(
       links.indexOf(screen.getByRole('link', { name: he.header.myListings })),
     );
     view.unmount();
@@ -163,7 +182,7 @@ describe('AuthMenu', () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
       expect(link).toHaveAccessibleName(he.header.chat);
-      expect(screen.getByRole('link', { name: he.header.myApplications })).toBeVisible();
+      expect(screen.getByRole('link', { name: he.nav.applications })).toBeVisible();
       expect(screen.getByRole('button', { name: he.header.logout })).toBeVisible();
       view.unmount();
       vi.unstubAllGlobals();
@@ -209,17 +228,17 @@ describe('AuthMenu', () => {
     }
   });
   it('ac10_profile_link', async () => {
-    // A seeker: "my profile" links to /me/profile, after "my applications" and "likes".
+    // A seeker: "פרופיל" links to /me/profile, last: after "מועמדויות" and "צ'אט".
     mockApi({
       'GET /me': [json(noa)],
       [LIST]: [json([])],
       'GET /me/likes': [json({ liked_me: [], mine: [] })],
     });
     let view = renderRoutes('/', menu);
-    const profile = await screen.findByRole('link', { name: he.header.myProfile });
+    const profile = await screen.findByRole('link', { name: he.nav.profile });
     expect(profile).toHaveAttribute('href', '/me/profile');
     const links = screen.getAllByRole('link');
-    const applications = screen.getByRole('link', { name: he.header.myApplications });
+    const applications = screen.getByRole('link', { name: he.nav.applications });
     expect(links.indexOf(profile)).toBe(links.indexOf(applications) + 2);
     view.unmount();
     vi.unstubAllGlobals();
@@ -229,7 +248,7 @@ describe('AuthMenu', () => {
       mockApi({ 'GET /me': [me], [LIST]: [json([])] });
       view = renderRoutes('/', menu);
       expect(await screen.findAllByRole('link')).not.toHaveLength(0);
-      expect(screen.queryByRole('link', { name: he.header.myProfile })).toBeNull();
+      expect(screen.queryByRole('link', { name: he.nav.profile })).toBeNull();
       view.unmount();
       vi.unstubAllGlobals();
     }

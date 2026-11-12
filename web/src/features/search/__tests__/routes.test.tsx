@@ -15,8 +15,13 @@ const loggedOut = () => json({ detail: 'unauthenticated' }, 401);
 
 describe('routes', () => {
   it('ac1_public_routes_and_static_new_wins', async () => {
-    // /search renders for a visitor, a seeker and an owner, with no redirect.
-    for (const me of [loggedOut, () => json(seeker), () => json(owner)]) {
+    // /search renders for a visitor, a seeker and an owner, with no redirect. The header's search
+    // link is "חיפוש דירות" for a visitor and the "חיפוש" tab when signed in (spec 0009a).
+    for (const [me, name] of [
+      [loggedOut, he.header.search],
+      [() => json(seeker), he.nav.search],
+      [() => json(owner), he.nav.search],
+    ] as const) {
       const api = mockApi({ 'GET /me': [me()], 'GET /listings': [json(page([]))] });
       const view = renderRoutes('/search', <AppRoutes />);
       expect(await screen.findByRole('heading', { level: 1, name: he.search.title })).toBeVisible();
@@ -25,19 +30,20 @@ describe('routes', () => {
         expect(api.calls('GET /me')).toHaveLength(1);
       });
       expect(currentPath()).toBe('/search');
-      const link = within(screen.getByRole('banner')).getByRole('link', {
-        name: he.header.search,
-      });
+      const link = await within(screen.getByRole('banner')).findByRole('link', { name });
       expect(link).toHaveAttribute('href', '/search');
       expect(link).toHaveAttribute('aria-current', 'page');
       view.unmount();
       vi.unstubAllGlobals();
     }
 
-    // The header link is there on other pages too, not marked current.
+    // The header link is there on other pages too (not `/`, whose seeker CTA is the same link),
+    // not marked current.
     mockApi({ 'GET /me': [loggedOut()], 'GET /areas': [json([])] });
-    let view = renderRoutes('/', <AppRoutes />);
-    const link = within(screen.getByRole('banner')).getByRole('link', { name: he.header.search });
+    let view = renderRoutes('/login', <AppRoutes />);
+    const link = await within(screen.getByRole('banner')).findByRole('link', {
+      name: he.header.search,
+    });
     expect(link).not.toHaveAttribute('aria-current');
     view.unmount();
     vi.unstubAllGlobals();

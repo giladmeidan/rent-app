@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router';
 
 import { ApplicantsPage } from '../features/applicants/ApplicantsPage';
 import { MyApplicationsPage } from '../features/applications/MyApplicationsPage';
-import { AreasList } from '../features/areas/AreasList';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireOwner } from '../features/auth/RequireOwner';
 import { RequireSeeker } from '../features/auth/RequireSeeker';
@@ -14,6 +13,7 @@ import { ChatThreadPage } from '../features/chat/ChatThreadPage';
 import { FlatmatesPage } from '../features/flatmates/FlatmatesPage';
 import { JoinFlatPage } from '../features/flatmates/JoinFlatPage';
 import { MyFlatsPage } from '../features/flatmates/MyFlatsPage';
+import { HomeRoute } from '../features/landing/HomeRoute';
 import { MyLikesPage } from '../features/likes/MyLikesPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
@@ -49,7 +49,7 @@ export function AppRoutes() {
         />
       )}
       <Route element={<Layout />}>
-        <Route index element={<AreasList />} />
+        <Route index element={<HomeRoute />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="signup" element={<SignupPage />} />
         <Route path="search" element={<SearchPage />} />

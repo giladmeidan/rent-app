@@ -19,7 +19,7 @@ const TONES: Record<BadgeTone, string> = {
   // The brand's badges ("new").
   accent: 'bg-accent-soft text-accent-strong',
   neutral: 'bg-surface-subtle text-ink-muted',
-  // Counts and the high-score pill; it is the screen's accent-filled element.
+  // Counts (the nav and likes count badge); it is the screen's accent-filled element.
   solid: 'min-w-5 bg-accent text-on-ink tabular-nums',
   inverse: 'bg-ink text-on-ink',
   warning: 'bg-surface-subtle text-warning',

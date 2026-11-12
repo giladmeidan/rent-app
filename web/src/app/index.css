@@ -17,7 +17,34 @@ body {
 
 /* A field focused by Tab never sits under the listing wizard's sticky footer (WCAG 2.4.11). */
 html:has([data-sticky-footer]) {
-  scroll-padding-bottom: 96px;
+  scroll-padding-block-end: 96px;
+}
+
+/* The signed-in bottom tab bar (spec 0009a): --bottom-nav-h is the visible bar's height without the
+   safe-area inset, and 0 when no bar shows. The bar, the page's bottom padding and the scroll
+   padding all read it, so they cannot drift apart. From lg the nav sits in the top bar. */
+:root {
+  --bottom-nav-h: 0px;
+}
+
+/* 1024px mirrors Tailwind's `lg` breakpoint (the media query cannot read the theme). */
+@media not all and (min-width: 1024px) {
+  :root:has([data-bottom-nav]:not([data-hidden-mobile])) {
+    --bottom-nav-h: 4rem;
+    /* A control focused by Tab is never hidden under the bar (WCAG 2.4.11). */
+    scroll-padding-block-end: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+  }
+
+  /* Today's pb-8, kept above the bar. */
+  :root:has([data-bottom-nav]:not([data-hidden-mobile])) main {
+    padding-block-end: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 2rem);
+  }
+
+  /* An installed app has no browser bar: the bar grows by the inset and pads its tabs above it. */
+  [data-bottom-nav] {
+    block-size: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+    padding-block-end: env(safe-area-inset-bottom);
+  }
 }
 
 /* Animations and transitions stop for people who asked the system for less motion. */
