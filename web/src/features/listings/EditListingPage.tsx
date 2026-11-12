@@ -4,14 +4,16 @@ import { useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Card } from '../../components/Card';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
-import { BackToMine, ListingWizard } from './ListingWizard';
+import { ListingWizard } from './ListingWizard';
 import { isPastExpiry } from './StatusBadge';
 import { useMyListings } from './useMyListings';
 
-const section = 'flex flex-col';
+const section = 'flex flex-col items-center';
 
 /**
  * `/me/listings/:id/edit`: the wizard in edit mode for one of the owner's listings, found in
@@ -48,63 +50,59 @@ export function EditListingPage() {
           : 'listings.edit.title',
     ),
   );
-  // Loading and a failed list keep the page's <h1>: its text needs no data.
-  const title = <h1 className="text-start text-2xl font-extrabold">{t('listings.edit.title')}</h1>;
+  const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+  // Loading and a failed list keep the page's <h1>: its text needs no data. The back link needs no
+  // guard there: no form is shown.
+  const title = <PageHeader title={t('listings.edit.title')} back={back} />;
 
   // A cached list is used while it refetches, and kept if that refetch fails: the owner may be
   // typing in the form.
   if (listings.data === undefined) {
-    if (listings.isPending) {
-      return (
-        <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
-          {title}
-          <Loading>
-            <Skeleton />
-          </Loading>
-        </PageContainer>
-      );
-    }
     return (
-      <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
-        {title}
-        <ErrorState onRetry={() => listings.refetch()} />
+      <PageContainer as="section" width="wide" className={section}>
+        <div className="flex w-full max-w-narrow flex-col gap-4">
+          {title}
+          {listings.isPending ? (
+            <Loading>
+              <Skeleton />
+            </Loading>
+          ) : (
+            <ErrorState onRetry={() => listings.refetch()} />
+          )}
+        </div>
       </PageContainer>
     );
   }
 
   if (listing === undefined) {
     return (
-      <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
-        <BackToMine />
-        <h1
-          ref={notFoundHeading}
-          tabIndex={-1}
-          className="text-start text-2xl font-extrabold focus:outline-none"
-        >
-          {t('listings.edit.notFound')}
-        </h1>
+      <PageContainer as="section" width="wide" className={section}>
+        <div className="flex w-full max-w-narrow flex-col gap-4">
+          <PageHeader back={back} title={t('listings.edit.notFound')} titleRef={notFoundHeading} />
+        </div>
       </PageContainer>
     );
   }
 
   if (readOnly) {
     return (
-      <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
-        <BackToMine />
-        <h1
-          ref={expiredHeading}
-          tabIndex={-1}
-          className="text-start text-2xl font-extrabold focus:outline-none"
-        >
-          {t('listings.edit.expiredTitle')}
-        </h1>
-        <p className="text-start text-[15px] text-ink-muted">{t('listings.edit.expiredBody')}</p>
+      <PageContainer as="section" width="wide" className={section}>
+        <div className="flex w-full max-w-narrow flex-col gap-4">
+          <PageHeader
+            back={back}
+            title={t('listings.edit.expiredTitle')}
+            titleRef={expiredHeading}
+          />
+          <Card padding="md">
+            <p className="text-body text-ink-muted">{t('listings.edit.expiredBody')}</p>
+          </Card>
+        </div>
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer as="section" width="narrow" className={section}>
+    <PageContainer as="section" width="wide">
       <ListingWizard key={listing.id} listing={listing} />
     </PageContainer>
   );

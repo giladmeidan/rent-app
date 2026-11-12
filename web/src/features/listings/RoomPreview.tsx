@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
+import { Card } from '../../components/Card';
+import { Tag } from '../../components/Tag';
 import { LIFESTYLE_KEYS } from '../lifestyle/keys';
 import { withUnknownAges } from '../rooms/flatmates';
 import type { ListingInBody } from './api';
@@ -50,20 +52,18 @@ export function RoomPreview({ body }: Props) {
 
   return (
     <>
-      <ul
-        aria-label={t('listings.room.title')}
-        className="flex flex-wrap gap-2 rounded-2xl border border-border bg-surface px-4 py-[14px]"
-      >
-        {chips.map((chip) => (
-          <li
-            key={chip}
-            className="rounded-full border border-border bg-surface-subtle px-3 py-[6px] text-[13px] font-semibold"
-          >
-            {chip}
-          </li>
-        ))}
-      </ul>
-      {showsPrivate && <p className="text-sm text-ink-muted">{t('listings.room.privacyNote')}</p>}
+      <Card padding="md">
+        <ul aria-label={t('listings.room.title')} className="flex flex-wrap gap-2">
+          {chips.map((chip) => (
+            <Tag key={chip} tone="neutral" as="li">
+              {chip}
+            </Tag>
+          ))}
+        </ul>
+      </Card>
+      {showsPrivate && (
+        <p className="text-body-sm text-ink-muted">{t('listings.room.privacyNote')}</p>
+      )}
     </>
   );
 }

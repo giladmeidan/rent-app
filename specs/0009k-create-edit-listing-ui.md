@@ -1,7 +1,7 @@
 ---
 id: 0009k
 title: The listing wizard (new and edit) looks like CreateListing.dc.html on a phone and gets a designed desktop layout, built from the 0009d kit and tokens, with every behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Tag, Field + TextInput/Textarea/Select, PageContainer, PageHeader + BackLink, useConfirm), the token scale, the restyled ChoiceGroup / Switch / Skeleton / EmptyState / ErrorState, the full-width shell, the page-width table and the colour swap in every listings file
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Opus/medium: no auth, money or data, but ~11 source files and ~6 test files must stay green
@@ -470,3 +470,12 @@ leaves no colour literal); 84 is 0009o's; 52 and 55 are 0009t's.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009k — the listing wizard (new and edit) on the kit, with a desktop side stepper   PR open, not merged
+Shipped: `/listings/new` and `/me/listings/:id/edit` show CreateListing.dc.html's wizard on a phone (white band with compact title, stepper and progress bar; Fredoka step h2 with "שלב N מתוך 4"; details in five titled groups; one amenities switch card; sticky "חזרה" / "הבא" footer) and, at ≥ 1024 px, a sticky stepper card beside a 42 rem form. Edit's leave guard uses the kit dialog instead of `window.confirm`; a publish hands `{ published: true }` to my listings for 0009o's celebration. Same steps, fields, validation, requests and errors. Demo: owner → פרסום מודעה → walk the 4 steps at 390 and 1440 → edit a listing, change the price, click "חזרה למודעות שלי".
+Tests: +7 unit cases (AC1 ×2, AC2, AC3, AC4, AC7, AC7b) + 1 AC6 case; AC5's guard test rewritten for the dialog; aria-invalid assertion updates as listed. +1 e2e `test.step` in `ac12_owner_edits_listing` (AC9, 1440 and 390). 30 screenshots in `web/screens/0009k/` (15 states × mobile / desktop, AC11).
+Findings (ux only, quick route; one round): 0 blockers, 0 majors, 3 minors: 2 fixed (desktop step 1's lone "הבא" now at the inline end; edit loading / error states get the back link), 1 logged (the kit's `sm` button is ~32 px tall, so "ניקוי" is not a 44 px target by itself; FOLLOWUPS, a kit size). 4 nits dropped. The reviewer confirmed 768 px (band and footer full width, content 480 centred) and `/me/profile` at 390 (7 reserved clear rows), and that the mid-page sticky bars in full-page captures are a scroll artefact.
+Behaviour stayed unchanged, so no reviewers were added. No `dangerouslySetInnerHTML` / `innerHTML` / linkify in the diff.
+AC10 grep: `PreferencesStep.tsx:19 group-aria-[invalid=true]` (attribute variant), `ListingWizard.tsx lg:grid-cols-[theme(spacing.72)_minmax(0,theme(maxWidth.2xl))]` and `pb-[max(theme(spacing.6),env(safe-area-inset-bottom))]` (both listed).
+Coder choices kept: the stepper label at `lg` is `lg:text-label` (14 px / 500), not `lg:text-sm`, which keeps the current step's weight; the desktop footer adds `lg:pb-3`; `TypeStep.tsx` is unchanged (ChoiceGroup is already full width); `TextInput` already had `self-stretch` on main; `RoomFields.test` reads the privacy note after the new Card.
+Checks on the final head (with main at 0009e + 0009g merged): make lint / test (api 476, web 517) / i18n-check / build-web green; local make e2e 22/22 green. Changed in PRODUCT.md: nothing.

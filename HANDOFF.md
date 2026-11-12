@@ -22,8 +22,8 @@ worktree) in a turn Gilad wrote, and sends each its "go" later with `SendMessage
 Overall: IN_PROGRESS
 
 Current focus:
-**Slice 9 + 9b** — 21 specs `0009a`–`0009u` (no `0009n`). Merged 13/21: 0009a, b, c, d, e, f, g, h, i, l, qa, qb, t.
-In flight: 0009m and 0009k (just started).
+**Slice 9 + 9b** — 21 specs `0009a`–`0009u` (no `0009n`). Merged 14/21: 0009a, b, c, d, e, f, g, h, i, k, l, qa, qb, t.
+In flight: 0009m (fix round, PR next).
 **Gilad (2026-11-12): start no new builds after 0009k** — finish the four in flight, then stop.
 Not started (worktrees prepared, `in-progress` locks): 0009j, 0009o, 0009p, 0009r, 0009s, 0009u.
 Alembic head on `main` still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.

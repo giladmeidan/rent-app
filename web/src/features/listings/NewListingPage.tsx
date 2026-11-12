@@ -9,7 +9,7 @@ export function NewListingPage() {
   // The wizard's <h1>.
   usePageTitle(t('listings.new.title'));
   return (
-    <PageContainer as="section" width="narrow" className="flex flex-col">
+    <PageContainer as="section" width="wide">
       <ListingWizard />
     </PageContainer>
   );
