@@ -113,7 +113,7 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
 
   await test.step('ac12 the visitor finds the room, filters by type and opens it', async () => {
     // A visitor gets no flatmate ages and no lifestyle answers (PRODUCT.md "Rooms", room privacy).
-    const twoFlatmates = he.rooms.flatmates.many.replace('{{count}}', '2');
+    const twoFlatmates = he.rooms.flatmates_two;
     const roomCard = page.getByRole('article').filter({ hasText: roomStreet });
     await page.goto('/search');
     await expect(card).toHaveCount(1);

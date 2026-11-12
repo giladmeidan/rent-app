@@ -8,6 +8,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Switch } from '../../components/Switch';
 import { addDays, formatIls, formatRooms } from './format';
+import { furnishedLabel } from './furnished';
 import {
   AVAILABLE_FROM_MAX_DAYS,
   LIMITS,
@@ -340,11 +341,10 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
       <ChoiceGroup
         legend={t('listings.fields.furnished')}
         name="furnished"
-        options={[
-          { value: 'none', label: t('listings.furnished.none') },
-          { value: 'partial', label: t('listings.furnished.partial') },
-          { value: 'full', label: t('listings.furnished.full') },
-        ]}
+        options={(['none', 'partial', 'full'] as const).map((value) => ({
+          value,
+          label: furnishedLabel(t, value, form.listing_type),
+        }))}
         value={form.furnished}
         onChange={(furnished) => onChange({ furnished })}
       />

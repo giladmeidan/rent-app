@@ -139,7 +139,12 @@ describe('ListingWizard', () => {
     const card = screen.getByRole('article');
     expect(
       within(card).getByRole('heading', {
-        name: i18n.t('listings.card.title', { rooms: '3.5', street: 'כצנלסון', city: 'גבעתיים' }),
+        name: i18n.t('listings.card.title', {
+          count: 3.5,
+          rooms: '3.5',
+          street: 'כצנלסון',
+          city: 'גבעתיים',
+        }),
       }),
     ).toBeVisible();
     expect(within(card).getByText('7,200 ₪')).toBeVisible();
@@ -189,6 +194,33 @@ describe('ListingWizard', () => {
     await vi.waitFor(() => {
       expect(screen.getAllByRole('article')).toHaveLength(2);
     });
+  });
+
+  it('ac3_room_preview_flatmates', async () => {
+    const r = he.listings.room;
+    const chips = () =>
+      within(screen.getByRole('list', { name: r.title }))
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent);
+    const back = () => fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    await toPreferences(testQueryClient(), 'room');
+    // Two flatmates, one age given: the missing one is "?".
+    fireEvent.change(screen.getByLabelText(r.flatmatesCount), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(r.ageOf.replace('{{n}}', '1')), {
+      target: { value: '30' },
+    });
+    fireEvent.click(nextButton());
+    expect(chips()).toEqual([
+      '2 \u05e9\u05d5\u05ea\u05e4\u05d9\u05dd \u05d1\u05d3\u05d9\u05e8\u05d4 (30, ?)',
+    ]);
+    // One flatmate aged 30.
+    back();
+    fireEvent.change(screen.getByLabelText(r.flatmatesCount), { target: { value: '1' } });
+    fireEvent.click(nextButton());
+    expect(chips()).toEqual([
+      '\u05d0\u05d3\u05dd \u05d0\u05d7\u05d3 \u05d1\u05d3\u05d9\u05e8\u05d4 (30)',
+    ]);
   });
 
   it('ac5_publish_errors', async () => {

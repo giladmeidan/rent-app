@@ -9,6 +9,7 @@ import {
   areasLoaded,
   change,
   chooseApartmentAndContinue,
+  chooseTypeAndContinue,
   errorFor,
   field,
   nextButton,
@@ -100,6 +101,40 @@ describe('DetailsStep', () => {
       i18n.t('listings.errors.tooLong', { max: 80 }),
     );
     expect(api.calls('POST /listings')).toHaveLength(0);
+  });
+
+  it('ac4_furnished_choice_by_type', async () => {
+    const choices = () =>
+      within(screen.getByRole('group', { name: f.furnished }))
+        .getAllByRole('radio')
+        .map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent);
+    for (const [type, labels] of [
+      [
+        he.listings.type.room,
+        [
+          '\u05dc\u05d0 \u05de\u05e8\u05d5\u05d4\u05d8',
+          '\u05de\u05e8\u05d5\u05d4\u05d8 \u05d7\u05dc\u05e7\u05d9\u05ea',
+          '\u05de\u05e8\u05d5\u05d4\u05d8',
+        ],
+      ],
+      [
+        he.listings.type.apartment,
+        [
+          '\u05dc\u05d0 \u05de\u05e8\u05d5\u05d4\u05d8\u05ea',
+          '\u05de\u05e8\u05d5\u05d4\u05d8\u05ea \u05d7\u05dc\u05e7\u05d9\u05ea',
+          '\u05de\u05e8\u05d5\u05d4\u05d8\u05ea',
+        ],
+      ],
+    ] as const) {
+      mockApi({ 'GET /areas': [json([gushDan])] });
+      const view = renderWizard();
+      chooseTypeAndContinue(type);
+      await areasLoaded();
+      expect(choices()).toEqual(labels);
+      for (const label of labels) expect(screen.getByRole('radio', { name: label })).toBeVisible();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('price_reentry_by_keyboard_selects_value', async () => {

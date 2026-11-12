@@ -142,7 +142,7 @@ const rows: Row[] = [
     kind: 'differ',
     listing: { accepted_households: ['couple', 'family'] },
     profile: { household: 'roommates' },
-    reason: 'בעל הדירה מחפש זוג או משפחה',
+    reason: 'בעלי הדירה מחפשים זוג או משפחה',
     short: 'משק בית אחר',
   },
   {
@@ -151,7 +151,7 @@ const rows: Row[] = [
     kind: 'differ',
     listing: { accepted_households: ['single', 'couple', 'roommates'] },
     profile: { household: 'family' },
-    reason: 'בעל הדירה מחפש יחיד/ה, זוג או שותפים',
+    reason: 'בעלי הדירה מחפשים יחיד/ה, זוג או שותפים',
     short: 'משק בית אחר',
   },
   {
@@ -169,7 +169,7 @@ const rows: Row[] = [
     kind: 'differ',
     listing: { min_contract_months: 12 },
     profile: { contract_months: 6 },
-    reason: 'בעל הדירה מבקש חוזה של 12 חודשים לפחות',
+    reason: 'בעלי הדירה מבקשים חוזה של 12 חודשים לפחות',
     short: 'חוזה קצר מדי',
   },
   {
@@ -259,7 +259,7 @@ const rows: Row[] = [
     kind: 'differ',
     listing: { smoking_allowed: false },
     profile: { smoker: true },
-    reason: 'בעל הדירה מבקש ללא מעשנים',
+    reason: 'בעלי הדירה מבקשים ללא מעשנים',
     short: 'ללא מעשנים',
   },
   {
@@ -322,7 +322,7 @@ const lifestyleRows: Row[] = [
       lifestyle: { cleanliness: 1, guests: 3, night: 1, social: 3 },
     },
     profile: { lifestyle: { cleanliness: 3, guests: 1, night: 3, social: 1 } },
-    reason: `אורח החיים שונה: ${topics(['ניקיון', 'אורחים', 'שעות לילה'])}`,
+    reason: `אורח החיים שונה: ${topics(['ניקיון', 'אורחים', 'שעת שינה'])}`,
     short: 'אורח חיים שונה',
   },
   {
@@ -452,7 +452,7 @@ const ownerRows: OwnerRow[] = [
     criterion: 'contract',
     kind: 'agree',
     profile: { contract_months: 12 },
-    reason: 'מחפשים חוזה לשנה',
+    reason: 'מחפשים חוזה של שנה',
     short: 'חוזה מתאים',
   },
   {
@@ -460,7 +460,7 @@ const ownerRows: OwnerRow[] = [
     criterion: 'contract',
     kind: 'agree',
     profile: { contract_months: 24 },
-    reason: 'מחפשים חוזה לשנתיים',
+    reason: 'מחפשים חוזה של שנתיים',
     short: 'חוזה ארוך טווח',
   },
   {
@@ -468,7 +468,7 @@ const ownerRows: OwnerRow[] = [
     criterion: 'contract',
     kind: 'agree',
     profile: { contract_months: 36 },
-    reason: 'מחפשים חוזה ל3 שנים ומעלה',
+    reason: 'מחפשים חוזה של 3 שנים ומעלה',
     short: 'חוזה ארוך טווח',
   },
   {
@@ -476,7 +476,7 @@ const ownerRows: OwnerRow[] = [
     criterion: 'contract',
     kind: 'differ',
     profile: { contract_months: 6 },
-    reason: 'מחפשים חוזה לחצי שנה בלבד',
+    reason: 'מחפשים חוזה של חצי שנה בלבד',
     short: 'חוזה קצר',
   },
   {
@@ -512,7 +512,7 @@ const ownerRows: OwnerRow[] = [
     kind: 'agree',
     profile: { parking_needed: 2 },
     spots: 1,
-    reason: 'ביקשו 2 חניות, בדירה יש 1',
+    reason: 'ביקשו 2 חניות, בדירה יש מקום אחד',
     short: 'חניה',
   },
   {
@@ -521,7 +521,7 @@ const ownerRows: OwnerRow[] = [
     kind: 'differ',
     profile: { parking_needed: 2 },
     spots: 1,
-    reason: 'ביקשו 2 חניות, בדירה יש 1',
+    reason: 'ביקשו 2 חניות, בדירה יש מקום אחד',
     short: 'חסרה חניה',
   },
   {
@@ -620,6 +620,16 @@ describe('reasons', () => {
       row.reason,
     );
     expect(ownerShort(row.criterion, row.kind, applicant, i18n.t)).toBe(row.short);
+  });
+
+  it('ac3_owner_parking_shortfall_one_spot', () => {
+    // Two asked and one spot: the spots read `listing.parking`, on both paths (spec 0009b).
+    const applicant = applicantProfile({ parking_needed: 2 });
+    for (const kind of ['agree', 'differ'] as const) {
+      expect(ownerReason('parking', kind, applicant, 1, i18n.t)).toBe(
+        '\u05d1\u05d9\u05e7\u05e9\u05d5 2 \u05d7\u05e0\u05d9\u05d5\u05ea, \u05d1\u05d3\u05d9\u05e8\u05d4 \u05d9\u05e9 \u05de\u05e7\u05d5\u05dd \u05d0\u05d7\u05d3',
+      );
+    }
   });
 
   it('ac6_owner_copy: every criterion and side has a row', () => {

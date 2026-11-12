@@ -235,6 +235,26 @@ describe('AuthMenu', () => {
     }
   });
 
+  it('ac3_likes_badge_forms', async () => {
+    const room = () => ({ listing: {}, liked_at: '2026-11-11T09:00:00Z' });
+    const forms: [number, string][] = [
+      [1, '\u05d7\u05d3\u05e8 \u05d0\u05d7\u05d3 \u05d0\u05d4\u05d1 \u05d0\u05d5\u05ea\u05da'],
+      [2, '2 \u05d7\u05d3\u05e8\u05d9\u05dd \u05d0\u05d4\u05d1\u05d5 \u05d0\u05d5\u05ea\u05da'],
+    ];
+    for (const [count, text] of forms) {
+      mockApi({
+        'GET /me': [json(noa)],
+        [LIST]: [json([])],
+        'GET /me/likes': [json({ liked_me: Array.from({ length: count }, room), mine: [] })],
+      });
+      const view = renderRoutes('/', menu);
+      const link = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
+      expect(await within(link).findByText(text)).toHaveClass('sr-only');
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('ac6_likes_link', async () => {
     const room = () => ({ listing: {}, liked_at: '2026-11-11T09:00:00Z' });
     // Two rooms liked the seeker: the link, the badge number, and the sr-only sentence.
@@ -259,7 +279,7 @@ describe('AuthMenu', () => {
       'GET /me/likes': [json({ liked_me: [room()], mine: [] })],
     });
     view = renderRoutes('/', menu);
-    expect(await screen.findByText(he.likes.badgeLabelOne)).toBeInTheDocument();
+    expect(await screen.findByText(i18n.t('likes.badgeLabel', { count: 1 }))).toBeInTheDocument();
     view.unmount();
     vi.unstubAllGlobals();
 

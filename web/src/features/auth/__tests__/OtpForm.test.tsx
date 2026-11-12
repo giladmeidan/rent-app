@@ -10,7 +10,7 @@ import { empty, json, mockApi, renderAt } from './harness';
 // `flush` runs pending timers due now and lets the mocked fetch promises settle instead.
 const flush = () => act(() => vi.advanceTimersByTimeAsync(0));
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
-const resendIn = (seconds: number) => i18n.t('auth.resendIn', { seconds });
+const resendIn = (seconds: number) => i18n.t('auth.resendIn', { count: seconds });
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -22,6 +22,27 @@ afterEach(() => {
 });
 
 describe('OtpForm', () => {
+  it('ac3_resend_countdown_singular', async () => {
+    mockApi({ 'POST /auth/otp/request': [empty(204)] });
+    renderAt('/login', <OtpForm withProfile={false} />);
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    expect(
+      screen.getByRole('button', {
+        name: '\u05e9\u05dc\u05d9\u05d7\u05d4 \u05d7\u05d5\u05d6\u05e8\u05ea \u05d1\u05e2\u05d5\u05d3 30 \u05e9\u05e0\u05d9\u05d5\u05ea',
+      }),
+    ).toBeDisabled();
+    await advance(29_000);
+    expect(
+      screen.getByRole('button', {
+        name: '\u05e9\u05dc\u05d9\u05d7\u05d4 \u05d7\u05d5\u05d6\u05e8\u05ea \u05d1\u05e2\u05d5\u05d3 \u05e9\u05e0\u05d9\u05d9\u05d4',
+      }),
+    ).toBeDisabled();
+  });
+
   it('ac8_resend_cooldown_and_rate_limit', async () => {
     const api = mockApi({
       'POST /auth/otp/request': [empty(204), empty(204), json({ detail: 'rate_limited' }, 429)],

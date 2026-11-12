@@ -74,6 +74,7 @@ const liveRegion = () => document.querySelector('[aria-live="polite"]');
 const pinLabel = (listing: ListingPublic) =>
   i18n.t('search.map.pin', {
     title: i18n.t('listings.card.title', {
+      count: listing.rooms,
       rooms: formatRooms(listing.rooms),
       street: listing.street,
       city: listing.city,
@@ -220,7 +221,7 @@ describe('SearchMap', () => {
     await vi.waitFor(() => {
       expect(mapRegion()).toHaveAttribute('aria-busy', 'false');
     });
-    expect(liveRegion()).toHaveTextContent(he.search.countOne);
+    expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -233,7 +234,7 @@ describe('SearchMap', () => {
       expect(api.calls(SEARCH)).toHaveLength(2);
     });
     expect(query(sent(api, 1))).toEqual(query(sent(api, 0)));
-    expect(await screen.findByText(he.search.countOne)).toBeVisible();
+    expect(await screen.findByText(i18n.t('search.count', { count: 1 }))).toBeVisible();
     expect(mapRegion()).toBeInTheDocument();
     view.unmount();
     vi.unstubAllGlobals();
@@ -252,7 +253,7 @@ describe('SearchMap', () => {
     view = render('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
-      expect(liveRegion()).toHaveTextContent('3 דירות');
+      expect(liveRegion()).toHaveTextContent('3 מודעות');
     });
     view.unmount();
     vi.unstubAllGlobals();
@@ -358,8 +359,8 @@ describe('SearchMap', () => {
     expect(second?.text).toBe(`${formatIls(5000)} ${he.listings.units.ils}`);
     expect(second?.label).toBe(pinLabel(unscored));
     // The map's count line never says how it is sorted.
-    expect(liveRegion()?.textContent).toBe('2 דירות');
-    expect(liveRegion()).not.toHaveTextContent('ממוינות לפי התאמה');
+    expect(liveRegion()?.textContent).toBe('2 מודעות');
+    expect(liveRegion()).not.toHaveTextContent('לפי התאמה');
 
     // The selected pin's card has the badge and the chips.
     fireEvent.click(screen.getByRole('button', { name: `${pinLabel(scored)}, התאמה 87%` }));

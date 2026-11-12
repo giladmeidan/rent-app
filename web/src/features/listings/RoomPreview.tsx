@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { LIFESTYLE_KEYS } from '../lifestyle/keys';
+import { withUnknownAges } from '../rooms/flatmates';
 import type { ListingInBody } from './api';
 import { useGenderPreferenceLabels } from './RoomFields';
 
@@ -28,22 +29,15 @@ export function RoomPreview({ body }: Props) {
   const count = body.flatmates_count;
   if (count !== null) {
     // A copy: `body` is the caller's.
-    const ages = [...body.flatmate_ages].sort((a, b) => a - b);
-    const [age] = ages;
-    if (ages.length > 0) showsPrivate = true;
-    if (count === 1) {
-      chips.push(
-        age === undefined
-          ? t('listings.roomPreview.flatmatesOne')
-          : t('listings.roomPreview.flatmatesOneAge', { age }),
-      );
-    } else {
-      chips.push(
-        ages.length === 0
-          ? t('listings.roomPreview.flatmates', { count })
-          : t('listings.roomPreview.flatmatesAges', { count, ages: ages.join(', ') }),
-      );
-    }
+    const known = [...body.flatmate_ages].sort((a, b) => a - b);
+    if (known.length > 0) showsPrivate = true;
+    // A missing age shows as "?" after the known ones (spec 0009b).
+    const ages = withUnknownAges(t, known, count);
+    chips.push(
+      ages.length === 0
+        ? t('listings.roomPreview.flatmates', { count })
+        : t('listings.roomPreview.flatmatesAges', { count, ages: ages.join(', ') }),
+    );
   }
   const answered = LIFESTYLE_KEYS.filter((key) => body.lifestyle[key] !== undefined).length;
   if (answered > 0) {
