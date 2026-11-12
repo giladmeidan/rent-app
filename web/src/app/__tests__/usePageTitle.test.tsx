@@ -8,6 +8,7 @@ import { application } from '../../features/applications/__tests__/fixtures';
 import { deferred, json, mockApi, renderRoutes } from '../../features/auth/__tests__/harness';
 import { thread } from '../../features/chat/__tests__/fixtures';
 import { gushDan, seeker } from '../../features/listings/__tests__/fixtures';
+import { page } from '../../features/search/__tests__/fixtures';
 import i18n from '../i18n';
 import { AppRoutes } from '../routes';
 import { usePageTitle } from '../usePageTitle';
@@ -45,7 +46,7 @@ describe('usePageTitle', () => {
     hook.unmount();
     expect(document.title).toBe(he.app.title);
 
-    // Through the routes: /me/applications, then a chat thread, then `/` (which sets no title).
+    // Through the routes: /me/applications, then a chat thread, then `/`.
     const room = thread();
     const listing = deferred();
     const missing = crypto.randomUUID();
@@ -59,6 +60,7 @@ describe('usePageTitle', () => {
       'GET /me/profile': [() => json({ detail: 'seeker_profile_not_found' }, 404)],
       [`GET /conversations/${room.id}`]: [() => json(room)],
       [`GET /listings/${missing}`]: [listing.promise],
+      'GET /listings': [() => json(page([]))],
     });
     renderRoutes(
       '/me/applications',
@@ -85,7 +87,8 @@ describe('usePageTitle', () => {
     await screen.findByRole('heading', { level: 1, name: he.listing.notFound });
     expect(document.title).toBe(titled(he.listing.notFound));
 
-    // Back on /me/applications, then `/`: the app's name, never the last page's title.
+    // Back on /me/applications, then `/`, which sends a seeker to the search (spec 0009a): its
+    // title, never the last page's.
     await act(async () => {
       await router.navigate('/me/applications');
     });
@@ -95,7 +98,7 @@ describe('usePageTitle', () => {
     await act(async () => {
       await router.navigate('/');
     });
-    await screen.findByRole('heading', { name: he.areas.heading });
-    expect(document.title).toBe(he.app.title);
+    await screen.findByRole('heading', { level: 1, name: he.search.title });
+    expect(document.title).toBe(titled(he.search.title));
   });
 });

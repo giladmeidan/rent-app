@@ -25,6 +25,9 @@ type CommonProps = {
   fullWidth?: boolean;
   /** A leading node, hidden from assistive tech. */
   icon?: ReactNode;
+  /** A trailing node (a chevron), hidden from assistive tech; the label then sits at the start
+   * and the node at the end (`justify-between`). */
+  end?: ReactNode;
   /** Layout only (margins, placement, width); never colour, size or padding. */
   className?: string;
 };
@@ -52,15 +55,26 @@ export type ButtonAsLink = CommonProps &
 
 export type ButtonProps = ButtonAsButton | ButtonAsLink;
 
-function content(icon: ReactNode, children: ReactNode) {
-  return (
+const present = (node: ReactNode) => node !== undefined && node !== null;
+
+function content(icon: ReactNode, children: ReactNode, end: ReactNode) {
+  const lead = (
     <>
-      {icon !== undefined && icon !== null && (
+      {present(icon) && (
         <span aria-hidden="true" className="inline-flex shrink-0">
           {icon}
         </span>
       )}
       {children}
+    </>
+  );
+  if (!present(end)) return lead;
+  return (
+    <>
+      <span className="inline-flex items-center gap-2">{lead}</span>
+      <span aria-hidden="true" className="inline-flex shrink-0">
+        {end}
+      </span>
     </>
   );
 }
@@ -75,15 +89,22 @@ export const Button = forwardRef(function Button(
   ref: ForwardedRef<HTMLButtonElement | HTMLAnchorElement>,
 ) {
   if (props.to !== undefined) {
-    const { variant, size, shape, fullWidth, icon, className, children, ...rest } = props;
-    const classes = buttonClasses({ variant, size, shape, fullWidth, iconOnly: children == null });
+    const { variant, size, shape, fullWidth, icon, end, className, children, ...rest } = props;
+    const classes = buttonClasses({
+      variant,
+      size,
+      shape,
+      fullWidth,
+      iconOnly: children == null,
+      between: present(end),
+    });
     return (
       <Link
         ref={ref as ForwardedRef<HTMLAnchorElement>}
         {...rest}
         className={cx(classes, className)}
       >
-        {content(icon, children)}
+        {content(icon, children, end)}
       </Link>
     );
   }
@@ -93,6 +114,7 @@ export const Button = forwardRef(function Button(
     shape,
     fullWidth,
     icon,
+    end,
     className,
     children,
     busy = false,
@@ -100,7 +122,14 @@ export const Button = forwardRef(function Button(
     onClick,
     ...rest
   } = props;
-  const classes = buttonClasses({ variant, size, shape, fullWidth, iconOnly: children == null });
+  const classes = buttonClasses({
+    variant,
+    size,
+    shape,
+    fullWidth,
+    iconOnly: children == null,
+    between: present(end),
+  });
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (busy) {
       // Stays enabled and focusable (focus is never dropped), but neither clicks nor submits.
@@ -119,7 +148,7 @@ export const Button = forwardRef(function Button(
       onClick={handleClick}
       className={cx(classes, className)}
     >
-      {content(icon, children)}
+      {content(icon, children, end)}
     </button>
   );
 });

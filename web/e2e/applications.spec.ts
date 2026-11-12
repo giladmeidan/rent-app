@@ -98,7 +98,10 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(section.getByText(he.applications.count_one)).toBeVisible();
 
   // "My applications": one card for this listing; withdraw it.
-  await page.getByRole('banner').getByRole('link', { name: he.header.myApplications }).click();
+  await page
+    .getByRole('navigation', { name: he.nav.label })
+    .getByRole('link', { name: he.nav.applications, exact: true })
+    .click();
   await expect(page).toHaveURL('/me/applications');
   const card = page.getByRole('article');
   await expect(card).toHaveCount(1);

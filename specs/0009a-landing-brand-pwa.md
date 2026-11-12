@@ -1,7 +1,7 @@
 ---
 id: 0009a
 title: A visitor opens `/` and gets the homie landing page (hero, the hello turtle, two role CTAs, an example match card, "איך זה עובד", a true trust strip) in Fredoka + Rubik, under a header with the homie lockup; a signed-in owner or seeker goes straight to their home, with a bottom tab bar on mobile and a top-bar nav on desktop
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (0009d's shell half; it depends on 0009d, the kit + tokens): the full-width shell, the page roots and the kit in web/src/components/ (Button, Card, Tag, Badge, PageContainer). 0009h rewrites Layout.tsx and every page root, and its notes ask 0009a to depend on it (orchestrator, 2026-11-12: the landing and the header are built from the kit)
 reviewers: [code, qa, ux]   # ux: new landing screen and the header/tab bar vs Main / Search / Inbox / InboxDesktop artboards; qa: CTAs, redirects, nav at 390 / 1280 px; no security: no auth, data or API change (the PWA and its service worker are 0009e)
 estimate: 1 coder run   # coder Opus/high: the header and nav change every page and about 15 test files (Speed rule 6, "when in doubt, the stronger one"). If it overflows, the signed-in nav + tab bar becomes its own spec (verifier)
@@ -57,7 +57,9 @@ description, font preload) and the build check are **`0009e`**, which depends on
     `EXAMPLE_SCORE = 91`.
 - `web/src/features/listings/ListingCard.tsx`: **one** heading prop, `headingLevel?: 2 | 3 | 'none'`
   (default `2`). `'none'` renders the title as a `<p>`. 0009c adds `2 | 3` (0009c, ListingCard bullet), and
-  whichever spec lands second adds its value to the same prop. The landing passes `'none'`, so the example adds
+  whichever spec lands second adds its value to the same prop. *Amended: 0009c's existing
+  `titleAs: 'h2' | 'h3' | 'p'` is the one heading prop; wherever this spec says `headingLevel` /
+  `'none'` (here, UI and AC3) read `titleAs="p"`.* The landing passes `'none'`, so the example adds
   no heading to the page outline. 0009i restyles this card; this spec touches only the prop.
 - `web/src/features/areas/AreasList.tsx` and `__tests__/AreasList.test.tsx` are deleted. This resolves
   FOLLOWUPS line 14 (AreasList's loading list). What stays:
@@ -240,7 +242,7 @@ and from the brand tokens. It uses no colour literal, no arbitrary `[Npx]` class
 - Cards have a `border` and no shadow: the artboard's card shadow goes (brand "Shape").
 - Colour follows the brand rules:
   - `ink` on `surface`, with `ink-muted` for secondary text;
-  - exactly **one accent-filled element** on the page, the example card's match badge;
+  - at most **one accent-filled element** on the page (amended: 0009i made the match badge accent-soft, so the landing has none);
   - the primary CTA is `ink` with `on-ink` text;
   - accent text appears only on `surface`, and on `accent-soft` it is `accent-strong`.
 - Icons are outline icons with a 2 px stroke, round caps and `currentColor` (`ink` / `ink-muted`).

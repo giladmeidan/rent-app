@@ -11,7 +11,8 @@ const read = (file: string) => readFileSync(join(src, file), 'utf8');
 
 /** Every routed page (spec 0009h §2), by the component `app/routes.tsx` imports. */
 const PAGES: Record<string, { file: string; width: Width }> = {
-  AreasList: { file: 'features/areas/AreasList.tsx', width: 'default' },
+  // `/`: its pending state; the landing itself is in INNER.
+  HomeRoute: { file: 'features/landing/HomeRoute.tsx', width: 'default' },
   LoginPage: { file: 'features/auth/LoginPage.tsx', width: 'narrow' },
   SignupPage: { file: 'features/auth/SignupPage.tsx', width: 'narrow' },
   SearchPage: { file: 'features/search/SearchPage.tsx', width: 'wide' },
@@ -36,6 +37,11 @@ const GUARDS: Record<string, { file: string; width: Width }> = {
   RequireOwner: { file: 'features/auth/RequireOwner.tsx', width: 'default' },
   RequireSeeker: { file: 'features/auth/RequireSeeker.tsx', width: 'default' },
   RequireUser: { file: 'features/auth/RequireUser.tsx', width: 'default' },
+};
+
+/** Page roots a routed component renders, rather than routes.tsx itself (spec 0009a). */
+const INNER: Record<string, { file: string; width: Width }> = {
+  LandingPage: { file: 'features/landing/LandingPage.tsx', width: 'wide' },
 };
 
 /** The opening `<PageContainer …>` tags of a file (to their `>`, skipping `{…}` expressions). */
@@ -83,7 +89,7 @@ function classText(tag: string, file: string): string {
 describe('page roots', () => {
   it('ac4_page_roots_use_page_container', () => {
     const wrong: string[] = [];
-    for (const [name, { file, width }] of Object.entries({ ...PAGES, ...GUARDS })) {
+    for (const [name, { file, width }] of Object.entries({ ...PAGES, ...GUARDS, ...INNER })) {
       const text = read(file);
       const tags = openingTags(text);
       // (a) A PageContainer, at the table's width.

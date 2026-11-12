@@ -35,7 +35,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
     .toMatch(/^\d{6}$/);
   await codeInput.fill(code ?? '');
   await page.getByRole('button', { name: he.auth.verify }).click();
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL('/me/listings');
   await expect(header.getByRole('link', { name: he.header.myListings })).toBeVisible();
 
   // The wizard.
