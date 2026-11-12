@@ -1,10 +1,18 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { Route, Routes } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
-import { deferred, json, mockApi, renderAt, renderRoutes } from '../../auth/__tests__/harness';
+import {
+  deferred,
+  json,
+  mockApi,
+  renderAt,
+  renderRoutes,
+  testQueryClient,
+} from '../../auth/__tests__/harness';
 import { MyListingsPage } from '../MyListingsPage';
 import { listing, withoutCounts } from './fixtures';
 
@@ -197,6 +205,84 @@ describe('MyListingsPage', () => {
     expect(await screen.findByText(he.listings.edit.saved)).toHaveAttribute('role', 'status');
     view.unmount();
   });
+  it('ac4_saved_announced_once', async () => {
+    const live = listing();
+    mockApi({
+      'GET /me/listings': [() => json([live])],
+      [`PATCH /listings/${live.id}`]: [json({ ...live, status: 'paused' })],
+    });
+    /** The page's own status line (the location probe below is not a status). */
+    const statusLine = () => {
+      const line = document.querySelector('p[role="status"]');
+      if (line === null) throw new Error('no status line');
+      return line;
+    };
+    function Probe() {
+      const location = useLocation();
+      const navigate = useNavigate();
+      return (
+        <>
+          <span data-testid="probe">
+            {location.pathname} {JSON.stringify(location.state)}
+          </span>
+          <button type="button" onClick={() => void navigate(-1)}>
+            history-back
+          </button>
+        </>
+      );
+    }
+    const tree = (entries: Parameters<typeof MemoryRouter>[0]['initialEntries']) => (
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter initialEntries={entries} initialIndex={(entries?.length ?? 1) - 1}>
+          <Routes>
+            <Route path="/me/listings" element={<MyListingsPage />} />
+            <Route path="/edit" element={<p>edit</p>} />
+          </Routes>
+          <Probe />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Animation frames run only when the test says so.
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      frames.push(callback),
+    );
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const runFrames = () =>
+      act(() => {
+        for (const frame of frames.splice(0)) frame(0);
+      });
+
+    // Arriving with `state.saved`: the line is mounted empty, and filled a frame later.
+    let view = rtlRender(tree(['/edit', { pathname: '/me/listings', state: { saved: true } }]));
+    expect(statusLine()).toHaveTextContent('');
+    // Empty, it is visually hidden (no gap in the header), but mounted.
+    expect(statusLine()).toHaveClass('sr-only');
+    expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
+    expect(frames.length).toBeGreaterThan(0);
+    runFrames();
+    expect(statusLine()).toHaveTextContent(he.listings.edit.saved);
+    expect(statusLine()).not.toHaveClass('sr-only');
+    // The history entry was replaced with `state: null`: Back goes to the page before it.
+    expect(screen.getByTestId('probe')).toHaveTextContent('/me/listings null');
+    // A pause clears the line.
+    fireEvent.click(await screen.findByRole('button', { name: he.listings.actions.pause }));
+    await vi.waitFor(() => {
+      expect(statusLine()).toHaveTextContent('');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/edit');
+    view.unmount();
+
+    // Mounting again at /me/listings with `state: null` (a reload): the line stays empty.
+    view = rtlRender(tree([{ pathname: '/me/listings', state: null }]));
+    expect(await screen.findByRole('article')).toBeVisible();
+    runFrames();
+    expect(statusLine()).toHaveTextContent('');
+    view.unmount();
+  });
+
   it('ac7_applicants_link', async () => {
     const first = listing({ applicant_count: 12, new_applicant_count: 5 });
     const second = listing({ status: 'paused', applicant_count: 3, new_applicant_count: 0 });

@@ -276,6 +276,11 @@ export function FlatmatesPage() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   // A removal turns the link off (0008d): the invite block remounts and drops a shown link.
   const [removals, setRemovals] = useState(0);
+  // A removal takes its row (and button) away: focus goes to the list's heading (spec 0009t).
+  const listTitleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (removals > 0) listTitleRef.current?.focus();
+  }, [removals]);
   const notFound = listings.data !== undefined && (listing === undefined || !isRoom);
   usePageTitle(t(notFound ? 'flatmates.notFound' : 'flatmates.title'));
 
@@ -355,7 +360,12 @@ export function FlatmatesPage() {
         active={listing.flatmate_invite_active}
         onDisabled={() => headingRef.current?.focus()}
       />
-      <h2 id={listTitleId} className="text-start text-lg font-bold">
+      <h2
+        ref={listTitleRef}
+        id={listTitleId}
+        tabIndex={-1}
+        className="text-start text-lg font-bold focus:outline-none"
+      >
         {t('flatmates.list.title')}
       </h2>
       {list}

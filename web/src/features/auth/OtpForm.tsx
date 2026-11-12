@@ -119,6 +119,9 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const [step2Error, setStep2Error] = useState<Step2Error>(null);
   const [resendDeadline, setResendDeadline] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  // The verify step's status line (spec 0009t): "code resent" after a resend, "you can resend"
+  // when a cooldown ends, empty otherwise. The visible countdown stays silent.
+  const [resendStatus, setResendStatus] = useState<'resent' | 'ready' | null>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -133,6 +136,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const askProfile = withProfile || profileNeeded;
 
   function startCooldown() {
+    setResendStatus(null);
     setResendDeadline(Date.now() + RESEND_COOLDOWN_S * 1000);
     setSecondsLeft(RESEND_COOLDOWN_S);
   }
@@ -143,7 +147,10 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
     const timer = setInterval(() => {
       const left = Math.max(0, Math.ceil((resendDeadline - Date.now()) / 1000));
       setSecondsLeft(left);
-      if (left === 0) clearInterval(timer);
+      if (left === 0) {
+        clearInterval(timer);
+        setResendStatus('ready');
+      }
     }, 1000);
     return () => clearInterval(timer);
   }, [resendDeadline]);
@@ -239,10 +246,15 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
 
   function onResend() {
     setStep2Error(null);
+    setResendStatus(null);
     resend.mutate(email.trim(), {
       onSuccess: (result) => {
-        if (result.kind === 'ok') startCooldown();
-        else setStep2Error(result.kind === 'tooMany' ? result : { kind: 'failed' });
+        if (result.kind === 'ok') {
+          startCooldown();
+          setResendStatus('resent');
+          // The cooldown disables the focused resend button: focus goes back to the code.
+          codeRef.current?.focus();
+        } else setStep2Error(result.kind === 'tooMany' ? result : { kind: 'failed' });
       },
     });
   }
@@ -440,6 +452,13 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
           {t('auth.changeEmail')}
         </button>
       </div>
+      <p role="status" className="sr-only">
+        {resendStatus === 'resent'
+          ? t('auth.codeResent')
+          : resendStatus === 'ready'
+            ? t('auth.resendReady')
+            : ''}
+      </p>
     </form>
   );
 }

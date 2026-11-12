@@ -82,7 +82,9 @@
     "hint": {
       "chooseRole": "כדי להמשיך, צריך לבחור מה מתאים לך",
       "enterCode": "צריך להקליד את כל 6 הספרות מהאימייל"
-    }
+    },
+    "codeResent": "שלחנו קוד חדש",
+    "resendReady": "אפשר לשלוח קוד חדש"
   },
   "listings": {
     "new": {
@@ -306,7 +308,8 @@
       "unavailable": "המפה לא זמינה בדפדפן הזה. אפשר לראות את התוצאות ברשימה.",
       "pin": "{{title}}, {{price}} ₪ לחודש",
       "pinMatch": ", התאמה {{score}}%",
-      "pinTextMatch": "{{price}} ₪ · {{score}}%"
+      "pinTextMatch": "{{price}} ₪ · {{score}}%",
+      "updating": "התוצאות מתעדכנות…"
     }
   },
   "listing": {

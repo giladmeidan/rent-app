@@ -24,17 +24,24 @@ export function EditListingPage() {
   const { id } = useParams();
   const listings = useMyListings();
   const expiredHeading = useRef<HTMLHeadingElement>(null);
+  const notFoundHeading = useRef<HTMLHeadingElement>(null);
   const now = new Date();
   const listing = listings.data?.find((l) => l.id === id);
   const readOnly = listing !== undefined && isPastExpiry(listing, now);
+  const notFound = listings.data !== undefined && listing === undefined;
   // Focus the explanation on arrival (the hook runs before any early return).
   useEffect(() => {
     if (readOnly) expiredHeading.current?.focus();
   }, [readOnly]);
+  // Not found, on arrival or after a save answered 404 (the wizard drops the listing from the
+  // cache): the heading takes focus, after RouteFocus has focused <main> (spec 0009t).
+  useEffect(() => {
+    if (notFound) notFoundHeading.current?.focus();
+  }, [notFound]);
   // The page owns the tab's title in every state: its <h1> (the wizard's is the edit title).
   usePageTitle(
     t(
-      listings.data !== undefined && listing === undefined
+      notFound
         ? 'listings.edit.notFound'
         : readOnly
           ? 'listings.edit.expiredTitle'
@@ -69,7 +76,13 @@ export function EditListingPage() {
     return (
       <PageContainer as="section" width="narrow" className={`${section} gap-4`}>
         <BackToMine />
-        <h1 className="text-start text-2xl font-extrabold">{t('listings.edit.notFound')}</h1>
+        <h1
+          ref={notFoundHeading}
+          tabIndex={-1}
+          className="text-start text-2xl font-extrabold focus:outline-none"
+        >
+          {t('listings.edit.notFound')}
+        </h1>
       </PageContainer>
     );
   }

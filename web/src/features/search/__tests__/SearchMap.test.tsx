@@ -1,8 +1,9 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
+import { emptyStateBox } from '../../../components/EmptyState';
 import {
   failMap,
   lastProps,
@@ -225,7 +226,7 @@ describe('SearchMap', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Failure: ErrorState under the map; retry asks for the same box.
+    // Failure: ErrorState above the map; retry asks for the same box.
     api = mockApi({ [SEARCH]: [json({ detail: 'boom' }, 500), json(page([located()]))] });
     view = render('/search?view=map');
     moveTo(BOX);
@@ -239,12 +240,12 @@ describe('SearchMap', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Empty: the map's own empty state; the count line stays empty.
+    // Empty: the count line holds the map's empty state (spec 0009t).
     mockApi({ [SEARCH]: [json({ items: [], total: 0 })] });
     view = render('/search?view=map');
     moveTo(BOX);
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();
-    expect(liveRegion()).toHaveTextContent('');
+    expect(liveRegion()).toHaveTextContent(he.search.map.empty);
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -450,5 +451,119 @@ describe('SearchMap', () => {
         .getAllByRole('listitem')
         .map((li) => li.textContent)[0],
     ).toBe(he.rooms.card.similarAge);
+  });
+
+  it('ac5_states_above_map_and_updating_pill', async () => {
+    /** Whether `a` comes before `b` in the document. */
+    const before = (a: Element, b: Element) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    // Empty: the one live count line, above the map, holds the empty text in the empty box.
+    mockApi({ [SEARCH]: [json({ items: [], total: 0 })] });
+    let view = render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(he.search.map.empty);
+    });
+    const line = liveRegion();
+    if (line === null) throw new Error('no count line');
+    expect(line.tagName).toBe('P');
+    expect(line).toHaveClass(...emptyStateBox.split(' '));
+    expect(screen.getAllByText(he.search.map.empty)).toEqual([line]);
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+    expect(before(line, mapRegion())).toBe(true);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A count is not in the empty box.
+    mockApi({ [SEARCH]: [json(page([located()]))] });
+    view = render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    });
+    expect(liveRegion()).not.toHaveClass('border');
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Error: ErrorState comes before the map region.
+    mockApi({ [SEARCH]: [json({ detail: 'boom' }, 500)] });
+    view = render('/search?view=map');
+    moveTo(BOX);
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText(he.common.error)).toBeVisible();
+    expect(before(alert, mapRegion())).toBe(true);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Updating: the pill shows through the `overlay` prop while the first answer and a moved box's
+    // answer (placeholder data) are pending, and is gone when each lands.
+    const first = deferred();
+    const next = deferred();
+    mockApi({ [SEARCH]: [first.promise, next.promise] });
+    render('/search?view=map');
+    moveTo(BOX);
+    const pill = await screen.findByTestId('map-updating');
+    expect(pill).toHaveTextContent(he.search.map.updating);
+    expect(pill).toHaveAttribute('aria-hidden', 'true');
+    expect(lastProps().overlay).toBeTruthy();
+    first.resolve(json(page([located()])));
+    await vi.waitFor(() => {
+      expect(screen.queryByTestId('map-updating')).toBeNull();
+    });
+    moveTo(OTHER_BOX);
+    expect(await screen.findByTestId('map-updating')).toHaveTextContent(he.search.map.updating);
+    // Meanwhile the count line keeps the previous count.
+    expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    await act(async () => {
+      next.resolve(json(page([located(), located()])));
+      await settle();
+    });
+    expect(screen.queryByTestId('map-updating')).toBeNull();
+    expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 2 }));
+  });
+
+  it('ac3_focus_after_show_list', async () => {
+    // The map cannot be shown: "show the list" removes its own button, so focus moves to the
+    // toggle's list button, now pressed.
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    render('/search?view=map');
+    failMap();
+    const show = within(screen.getByTestId('map-unavailable')).getByRole('button', {
+      name: he.search.view.list,
+    });
+    act(() => show.focus());
+    fireEvent.click(show);
+    expect(currentPath()).toBe('/search');
+    const list = toggle().getByRole('button', { name: he.search.view.list });
+    await vi.waitFor(() => {
+      expect(list).toHaveFocus();
+    });
+    expect(list).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('map-unavailable')).toBeNull();
+  });
+
+  it('ac3_focus_after_apply_in_map_view', async () => {
+    // In map view, an Apply that changes the URL focuses the map's count line, which keeps the
+    // previous count until the new answer lands.
+    mockApi({ [SEARCH]: [json(page([located()])), json(page([located(), located()]))] });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^מסננים/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: he.search.feature.pets }));
+    const apply = screen.getByRole('button', { name: he.search.apply });
+    act(() => apply.focus());
+    fireEvent.click(apply);
+    expect(currentPath()).toBe('/search?pets=true&view=map');
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 2 }));
+    });
   });
 });

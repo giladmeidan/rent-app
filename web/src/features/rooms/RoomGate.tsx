@@ -18,7 +18,7 @@ export function RoomGate({ listing }: { listing: ListingDetail }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-start gap-3">
-      <p className="text-start text-[15px]">
+      <p tabIndex={-1} className="text-start text-[15px] focus:outline-none">
         {t('rooms.apply.roomSectionRequired', {
           who: genderPreferenceLabel(t, listing.gender_preference),
         })}

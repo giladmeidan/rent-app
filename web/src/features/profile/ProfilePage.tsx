@@ -97,6 +97,14 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     if (roomEntry) roomHeading.current?.focus();
   }, [roomEntry]);
 
+  // An in-page save (no `next` navigation follows): the "saved" line takes focus, which also
+  // scrolls it into view (spec 0009t). It is mounted with its text, so focus is its announcement.
+  const savedRef = useRef<HTMLParagraphElement>(null);
+  const stays = safeNext(params.get('next')) === '/';
+  useEffect(() => {
+    if (saved && stays) savedRef.current?.focus();
+  }, [saved, stays]);
+
   const today = todayInIsrael();
   const fieldId = (name: FieldName) => `${id}-${name}`;
   const errorId = (name: FieldName) => `${fieldId(name)}-error`;
@@ -496,7 +504,12 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
             {t('profile.save')}
           </button>
           {saved && (
-            <p role="status" className="text-start text-[15px] font-bold text-accent-strong">
+            <p
+              ref={savedRef}
+              tabIndex={-1}
+              role="status"
+              className="text-start text-[15px] font-bold text-accent-strong focus:outline-none"
+            >
               {t('profile.saved')}
             </p>
           )}

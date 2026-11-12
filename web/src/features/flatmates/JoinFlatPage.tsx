@@ -6,6 +6,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
+import { focusMainIfLost } from '../../components/focus';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from '../auth/next';
@@ -165,6 +166,16 @@ function JoinFlow() {
   // Same-tick guard: `join.isPending` is render state, so a fast double click would send twice.
   const inFlight = useRef(false);
 
+  // A final answer removes the join button (`spent`): its failure line takes focus, or `#main`
+  // when the answer has no line (an unknown 409, spec 0009t).
+  const failureRef = useRef<HTMLParagraphElement>(null);
+  const spent = join.isError && isFinal(join.error);
+  useEffect(() => {
+    if (!spent) return;
+    if (failureRef.current !== null) failureRef.current.focus();
+    else focusMainIfLost();
+  }, [spent]);
+
   function onJoin() {
     if (token === null || inFlight.current) return;
     inFlight.current = true;
@@ -268,8 +279,7 @@ function JoinFlow() {
   }
 
   const failure = join.isError && !expired ? failureOf(join.error) : null;
-  // A final answer ends the flow: no button to press again.
-  const spent = join.isError && isFinal(join.error);
+  // A final answer ends the flow (`spent`): no button to press again.
   return (
     <Frame>
       <div className={card}>
@@ -287,7 +297,12 @@ function JoinFlow() {
         )}
         {failure !== null && failure !== 'other' && (
           <>
-            <p role="alert" className={`${message} text-danger`}>
+            <p
+              ref={failureRef}
+              tabIndex={-1}
+              role="alert"
+              className={`${message} text-danger focus:outline-none`}
+            >
               {t(COPY[failure])}
             </p>
             <WayOut failure={failure} />

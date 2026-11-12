@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -130,5 +130,33 @@ describe('MyFlatsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
     reset(view);
+  });
+
+  it('ac3_focus_after_leave', async () => {
+    // The left flat's row (and its button) is gone: focus is on the page's <h1>.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage([() => json([A, B]), () => json([B])], { [leaveRoute(A)]: [() => empty()] });
+    const items = await screen.findAllByRole('listitem');
+    const leave = within(items[0] as HTMLElement).getByRole('button', {
+      name: he.flatmates.mine.leave,
+    });
+    act(() => leave.focus());
+    fireEvent.click(leave);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { level: 1, name: he.flatmates.mine.title }),
+      ).toHaveFocus();
+    });
+  });
+
+  it('ac3_failed_leave_keeps_the_row_and_no_heading_focus', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage([() => json([A])], { [leaveRoute(A)]: [() => json({ detail: 'x' }, 500)] });
+    fireEvent.click(await screen.findByRole('button', { name: he.flatmates.mine.leave }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(
+      screen.getByRole('heading', { level: 1, name: he.flatmates.mine.title }),
+    ).not.toHaveFocus();
   });
 });

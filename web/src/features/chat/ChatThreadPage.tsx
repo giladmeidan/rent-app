@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router';
 
@@ -105,6 +105,30 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   // The caller's own sent message, scrolled to once it is the last bubble.
   const [sentId, setSentId] = useState<string | null>(null);
   const lastId = messages.at(-1)?.id;
+  // The composer had focus (spec 0009t): set on focus inside it, cleared only when focus moves to
+  // an element outside it. A click on "send" disables the button while pending, so focus is on
+  // <body> already when the chat closes; a ref cleared on every blur would miss that.
+  const composerHadFocus = useRef(false);
+  const closedRef = useRef<HTMLParagraphElement>(null);
+  const couldSend = useRef(thread.can_send);
+
+  // The chat closed under the composer: the closed note replaces it and takes focus, only when
+  // focus was lost with the composer (on <body>); focus the person moved elsewhere stays there.
+  useEffect(() => {
+    const closed = couldSend.current && !thread.can_send;
+    couldSend.current = thread.can_send;
+    if (!closed || !composerHadFocus.current) return;
+    composerHadFocus.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body) closedRef.current?.focus();
+  }, [thread.can_send]);
+
+  const onComposerBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget;
+    if (next instanceof Element && !event.currentTarget.contains(next)) {
+      composerHadFocus.current = false;
+    }
+  };
 
   // On the first render of messages and after the caller's own send only: a pushed message does
   // not move the page.
@@ -150,10 +174,13 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
       {thread.truncated && (
         <p className="text-start text-sm text-ink-muted">{t('chat.thread.truncated')}</p>
       )}
-      {messages.length === 0 ? (
-        <p className="text-start text-[15px] text-ink-muted">{t('chat.thread.empty')}</p>
-      ) : (
-        // A polite live region: messages pushed in are announced (keyed by id: only new ones).
+      {/* One flex item: the log is mounted even with no messages (so a first pushed message is
+          announced, spec 0009t), and an empty log adds no gap. */}
+      <div className="flex flex-col">
+        {messages.length === 0 && (
+          <p className="text-start text-[15px] text-ink-muted">{t('chat.thread.empty')}</p>
+        )}
+        {/* A polite live region: messages pushed in are announced (keyed by id: only new ones). */}
         <div role="log" aria-label={t('chat.thread.log')}>
           <ol className="flex flex-col gap-2">
             {messages.map((message, i) => {
@@ -193,13 +220,23 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
             })}
           </ol>
         </div>
-      )}
+      </div>
       {thread.can_send ? (
-        <Composer conversationId={id} onSent={(message) => setSentId(message.id)} />
+        <div
+          className="contents"
+          onFocus={() => {
+            composerHadFocus.current = true;
+          }}
+          onBlur={onComposerBlur}
+        >
+          <Composer conversationId={id} onSent={(message) => setSentId(message.id)} />
+        </div>
       ) : (
         <p
+          ref={closedRef}
           role="status"
-          className="rounded-2xl border border-border bg-surface px-4 py-3 text-start text-[15px] text-ink-muted"
+          tabIndex={-1}
+          className="rounded-2xl border border-border bg-surface px-4 py-3 text-start text-[15px] text-ink-muted focus:outline-none"
         >
           {t('chat.thread.closed')}
         </p>
