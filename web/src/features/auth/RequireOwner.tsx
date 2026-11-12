@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from './next';
 import { useMe } from './useMe';
@@ -15,14 +16,16 @@ export function RequireOwner() {
   if (me.isPending)
     return (
       <PageContainer>
-        <Skeleton />
+        <Loading>
+          <Skeleton />
+        </Loading>
       </PageContainer>
     );
   // A failed /me (network, 5xx) is not a logout: offer a retry and stay on the page.
   if (me.data === undefined)
     return (
       <PageContainer>
-        <ErrorState onRetry={() => void me.refetch()} />
+        <ErrorState page onRetry={() => void me.refetch()} />
       </PageContainer>
     );
   if (me.data === null) return <Navigate to={loginWithNext(location)} replace />;

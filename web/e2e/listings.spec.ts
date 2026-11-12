@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { expectNoAxeViolations } from './a11y';
 import { latestCode, signUpOwner, uniqueEmail } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -40,6 +41,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   // The wizard.
   await page.goto('/listings/new');
   await expect(page.getByRole('heading', { level: 1, name: he.listings.new.title })).toBeVisible();
+  await expectNoAxeViolations(page, 'wizard step 1');
   await page.getByText(he.listings.type.apartment, { exact: true }).click();
   await page.getByRole('button', { name: he.listings.next }).click();
 
@@ -84,6 +86,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(card).toContainText('כצנלסון');
   await expect(card.getByText(/7,200\s*₪/)).toBeVisible();
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.live);
+  await expectNoAxeViolations(page, '/me/listings');
 
   // The public page shows the preference (before pausing: a paused listing is a 404 there).
   await page.goto('/listings/' + id);

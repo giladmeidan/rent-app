@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
@@ -124,18 +126,19 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
 /** `/me/applications`, seekers only (`RequireSeeker`): each application with its status. */
 export function MyApplicationsPage() {
   const { t } = useTranslation();
+  usePageTitle(t('applications.mine.title'));
   const applications = useMyApplications();
 
   let body;
   if (applications.isPending) {
     body = (
-      <ul aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-        {[0, 1, 2].map((i) => (
-          <li key={i}>
-            <Skeleton />
-          </li>
-        ))}
-      </ul>
+      <Loading>
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} />
+          ))}
+        </div>
+      </Loading>
     );
   } else if (applications.isError && applications.data === undefined) {
     // Only when nothing is cached: a failed background refetch keeps the list on the page.

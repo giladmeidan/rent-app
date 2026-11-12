@@ -76,14 +76,22 @@ const appliedText = (app: MyApplicationOut) =>
 const cards = () => screen.getAllByRole('article');
 
 describe('MyApplicationsPage', () => {
+  it('ac3_page_title', async () => {
+    renderPage([json([application()])]);
+    await screen.findByRole('heading', { level: 1, name: he.applications.mine.title });
+    expect(document.title).toBe(
+      i18n.t('app.pageTitle', { page: he.applications.mine.title, app: he.app.title }),
+    );
+  });
+
   it('ac7_my_applications_states', async () => {
-    // Pending: three skeleton rows in a busy list.
+    // Pending: three skeleton rows in a busy block.
     const pending = deferred();
     let { view } = renderPage([pending.promise]);
     await screen.findByRole('heading', { level: 1, name: he.applications.mine.title });
-    const busy = screen.getByRole('list', { name: he.common.loading });
+    const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(within(busy).getAllByTestId('skeleton')).toHaveLength(3);
+    expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(3);
     view.unmount();
     vi.unstubAllGlobals();
 

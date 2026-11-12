@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { cardTitle } from '../listings/cardTitle';
 import { useLeaveFlat, useMyFlats, type MyFlatOut } from './api';
@@ -66,15 +68,16 @@ function FlatRow({ flat }: { flat: MyFlatOut }) {
 export function MyFlatsPage() {
   const { t } = useTranslation();
   const flats = useMyFlats();
+  usePageTitle(t('flatmates.mine.title'));
 
   let body;
   if (flats.data === undefined) {
     body = flats.isError ? (
       <ErrorState onRetry={() => void flats.refetch()} />
     ) : (
-      <div aria-busy="true" aria-label={t('common.loading')}>
+      <Loading>
         <Skeleton />
-      </div>
+      </Loading>
     );
   } else if (flats.data.length === 0) {
     body = <EmptyState message={t('flatmates.mine.empty')} />;

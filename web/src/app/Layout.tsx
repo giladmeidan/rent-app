@@ -2,8 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet } from 'react-router';
 
 import { PageContainer } from '../components/PageContainer';
+import { SkipLink } from '../components/SkipLink';
 import { AuthMenu } from '../features/auth/AuthMenu';
 import { ChatStreamProvider } from '../features/chat/ChatStreamProvider';
+import { RouteFocus } from './RouteFocus';
 
 /**
  * The shell on every route: brand and the search link at the inline start, the auth menu at the
@@ -14,6 +16,8 @@ export function Layout() {
   const { t } = useTranslation();
   return (
     <ChatStreamProvider>
+      <SkipLink />
+      <RouteFocus />
       <header className="pb-2 pt-[18px]">
         <PageContainer width="wide">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -53,7 +57,7 @@ export function Layout() {
           <p className="mt-1 text-ink-muted">{t('app.tagline')}</p>
         </PageContainer>
       </header>
-      <main className="pb-8 pt-6">
+      <main id="main" tabIndex={-1} className="pb-8 pt-6 focus:outline-none">
         <Outlet />
       </main>
     </ChatStreamProvider>

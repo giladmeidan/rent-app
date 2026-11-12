@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { ApiError, type MyListingOut } from './api';
 import { LISTING_CAP } from './constants';
@@ -121,6 +123,7 @@ function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date;
 
 export function MyListingsPage() {
   const { t } = useTranslation();
+  usePageTitle(t('listings.mine.title'));
   const listings = useMyListings();
   const location = useLocation();
   // Set by the edit wizard's save (`navigate(…, { state: { saved: true } })`).
@@ -133,13 +136,13 @@ export function MyListingsPage() {
   let body;
   if (listings.isPending) {
     body = (
-      <ul aria-busy="true" aria-label={t('common.loading')} className="flex flex-col gap-3">
-        {[0, 1, 2].map((i) => (
-          <li key={i}>
-            <Skeleton />
-          </li>
-        ))}
-      </ul>
+      <Loading>
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} />
+          ))}
+        </div>
+      </Loading>
     );
   } else if (listings.isError) {
     body = <ErrorState onRetry={() => void listings.refetch()} />;

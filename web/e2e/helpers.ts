@@ -180,3 +180,21 @@ export async function likePerson(
   const { application_id } = (await liked.json()) as { application_id: string | null };
   return application_id;
 }
+
+// A 1x1 transparent PNG: every OSM tile is answered locally, so a run never calls OpenStreetMap.
+export const TILE = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64',
+);
+
+/** Every OSM tile (MapLibre's workers included) is the 1x1 PNG, except the first `failing`
+ * requests, answered 500. Routed on the page's context, so every page in it is covered. */
+export async function routeTiles(page: Page, failing = 0) {
+  let seen = 0;
+  await page.context().route('https://tile.openstreetmap.org/**', (route) => {
+    seen += 1;
+    return seen <= failing
+      ? route.fulfill({ status: 500, body: '' })
+      : route.fulfill({ status: 200, contentType: 'image/png', body: TILE });
+  });
+}

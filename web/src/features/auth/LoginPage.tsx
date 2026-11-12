@@ -2,12 +2,14 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useSearchParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { usePageTitle } from '../../app/usePageTitle';
 import { safeNext } from './next';
 import { OtpForm } from './OtpForm';
 import { useMe } from './useMe';
 
 export function LoginPage() {
   const { t } = useTranslation();
+  usePageTitle(t('auth.login.title'));
   const me = useMe();
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));

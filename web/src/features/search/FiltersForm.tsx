@@ -130,7 +130,7 @@ const label = 'text-sm font-bold';
 const box =
   'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft has-[[aria-invalid=true]]:border-danger';
 const bare =
-  'min-w-0 flex-1 border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
+  'min-h-[44px] min-w-0 flex-1 self-stretch border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
 const control =
   'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
 const fieldError = 'text-sm font-semibold text-danger';

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
 import { ProfileNudge } from '../match/ProfileNudge';
 import { useProfile } from '../profile/useProfile';
@@ -23,6 +24,7 @@ const focusRing =
  */
 export function SearchPage() {
   const { t } = useTranslation();
+  usePageTitle(t('search.title'));
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseFilters(searchParams);
   const { view, ...filtersWithoutView } = filters;

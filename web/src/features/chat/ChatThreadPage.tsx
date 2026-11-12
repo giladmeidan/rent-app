@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { usePageTitle } from '../../app/usePageTitle';
 import { hasStatus } from '../applications/api';
 import { ErrorState } from '../../components/ErrorState';
+import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { formatDay } from '../flatmates/format';
 import { cardTitle } from '../listings/cardTitle';
@@ -12,7 +14,6 @@ import { formatIls } from '../listings/format';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
 import { formatMessageTime } from './format';
-import { Loading } from './Loading';
 import { isThreadNotFound, useThread } from './useThread';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -216,7 +217,7 @@ function Removed() {
     ref.current?.focus();
   }, []);
   return (
-    <h1 ref={ref} tabIndex={-1} className="text-start text-2xl font-extrabold">
+    <h1 ref={ref} tabIndex={-1} className="text-start text-2xl font-extrabold focus:outline-none">
       {t('chat.removed')}
     </h1>
   );
@@ -231,19 +232,33 @@ export function ChatThreadPage() {
   const valid = UUID.test(raw);
   const id = raw.toLowerCase();
   const thread = useThread(id, valid);
+  // Removed first: a send's 404 then a 404 refetch leaves the old thread cached, and that cached
+  // thread then means "no longer in this chat"; with nothing cached a 404 is plain not found.
+  const removed = valid && thread.data !== undefined && hasStatus(thread.error, 404);
+  const notFound = !removed && (!valid || isThreadNotFound(thread.error));
+  // The tab is named after the state's <h1>; while the thread loads, the app alone.
+  usePageTitle(
+    removed
+      ? t('chat.removed')
+      : notFound
+        ? t('chat.thread.notFound')
+        : thread.data !== undefined
+          ? thread.data.other_name
+          : thread.isError
+            ? t('common.error')
+            : undefined,
+  );
 
   if (valid && raw !== id) return <Navigate to={`/chat/${id}`} replace />;
 
   let body;
-  // Removed first: a send's 404 then a 404 refetch leaves the old thread cached, and that cached
-  // thread then means "no longer in this chat"; with nothing cached a 404 is plain not found.
-  if (valid && thread.data !== undefined && hasStatus(thread.error, 404)) {
+  if (removed) {
     body = <Removed />;
-  } else if (!valid || isThreadNotFound(thread.error)) {
+  } else if (notFound) {
     body = <h1 className="text-start text-2xl font-extrabold">{t('chat.thread.notFound')}</h1>;
   } else if (thread.data === undefined) {
     body = thread.isError ? (
-      <ErrorState onRetry={() => void thread.refetch()} />
+      <ErrorState page onRetry={() => void thread.refetch()} />
     ) : (
       <Loading>
         <Skeleton />
