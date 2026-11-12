@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 import { usePageTitle } from '../../app/usePageTitle';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { focusRing } from '../../components/focusRing';
 import { Loading } from '../../components/Loading';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -20,6 +22,8 @@ import { LikeRoomButton } from './LikeRoomButton';
 import { MutualBanner } from './MutualBanner';
 import { useMyLikes } from './useMyLikes';
 
+type GoneReason = 'gone' | 'alreadyApplied';
+
 function RoomList({
   items,
   like,
@@ -27,6 +31,7 @@ function RoomList({
   empty,
   onMutual,
   onToMine,
+  onGone,
 }: {
   items: LikedRoomOut[];
   like: LikeStateOut;
@@ -36,6 +41,8 @@ function RoomList({
   onMutual: (applicationId: string) => void;
   /** A card left its place for (or from) "mine": an unlike, or a like that is not mutual. */
   onToMine: () => void;
+  /** A failed like or unlike takes the card out of the lists (spec 0009g). */
+  onGone: (reason: GoneReason) => void;
 }) {
   const today = todayInIsrael();
   if (items.length === 0) return empty;
@@ -63,6 +70,7 @@ function RoomList({
                 onMutual={onMutual}
                 onUnliked={onToMine}
                 onLikedNotMutual={onToMine}
+                onGone={onGone}
               />
             </div>
           </ListingCard>
@@ -80,6 +88,23 @@ export function MyLikesPage() {
   const profile = useProfile().data ?? undefined;
   // Kept here, not in the lists: the card that made the match leaves them on the refetch.
   const [mutualId, setMutualId] = useState<string | null>(null);
+  // Why a card left after a failed like or unlike (spec 0009g): page state, so it outlives the
+  // refetch that drops the card. `tick` makes the same reason twice take focus again.
+  const [gone, setGone] = useState<{ reason: GoneReason; tick: number } | null>(null);
+  const goneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (gone === null) return;
+    goneRef.current?.focus();
+    goneRef.current?.scrollIntoView({ block: 'center' });
+  }, [gone]);
+  const onGone = (reason: GoneReason) => {
+    setMutualId(null);
+    setGone((old) => ({ reason, tick: (old?.tick ?? 0) + 1 }));
+  };
+  const onMutual = (applicationId: string) => {
+    setGone(null);
+    setMutualId(applicationId);
+  };
   // After a successful unlike, or a like that only moved the card to "mine" (spec 0009t): the
   // card's button leaves, so focus goes to the "mine" heading once the lists are refetched. A
   // failed like or unlike never sets this.
@@ -106,7 +131,7 @@ export function MyLikesPage() {
       </Loading>
     );
   } else if (likes.isError && likes.data === undefined) {
-    body = <ErrorState onRetry={() => void likes.refetch()} />;
+    body = <ErrorState onRetry={() => likes.refetch()} />;
   } else {
     body = (
       <>
@@ -117,8 +142,9 @@ export function MyLikesPage() {
           <RoomList
             items={likes.data.liked_me}
             like={{ liked_by_me: false, liked_me: true }}
-            onMutual={setMutualId}
+            onMutual={onMutual}
             onToMine={toMine}
+            onGone={onGone}
             profile={profile}
             empty={
               <EmptyState
@@ -145,8 +171,9 @@ export function MyLikesPage() {
           <RoomList
             items={likes.data.mine}
             like={{ liked_by_me: true, liked_me: false }}
-            onMutual={setMutualId}
+            onMutual={onMutual}
             onToMine={toMine}
+            onGone={onGone}
             profile={profile}
             empty={
               <EmptyState
@@ -163,6 +190,31 @@ export function MyLikesPage() {
   return (
     <PageContainer width="wide" className="flex flex-col gap-6">
       <PageHeader title={t('likes.title')} />
+      {/* Always mounted, so the text change is announced; it takes focus when set. Empty, it is
+          `sr-only` (out of the flow), so it adds no gap under the <h1>. */}
+      <div
+        ref={goneRef}
+        role="alert"
+        tabIndex={-1}
+        className={
+          gone === null
+            ? 'sr-only'
+            : 'flex flex-wrap items-center gap-x-3 rounded-lg bg-surface-subtle px-4 py-3 text-start text-body font-semibold text-warning focus:outline-none'
+        }
+      >
+        {gone?.reason === 'gone' && <span>{t('likes.errors.gone')}</span>}
+        {gone?.reason === 'alreadyApplied' && (
+          <>
+            <span>{t('likes.errors.alreadyApplied')}</span>
+            <Link
+              to="/me/applications"
+              className={`inline-flex min-h-[44px] items-center rounded underline underline-offset-4 ${focusRing}`}
+            >
+              {t('applications.viewMine')}
+            </Link>
+          </>
+        )}
+      </div>
       {mutualId !== null && (
         <div className="flex flex-col gap-3">
           <MutualBanner applicationId={mutualId} />

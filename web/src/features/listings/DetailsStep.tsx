@@ -147,7 +147,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
       <>
         <p className="text-label">{t('listings.fields.area')}</p>
         {areas.isError ? (
-          <ErrorState onRetry={() => void areas.refetch()} />
+          <ErrorState onRetry={() => areas.refetch()} />
         ) : (
           <EmptyState message={t('areas.empty')} />
         )}

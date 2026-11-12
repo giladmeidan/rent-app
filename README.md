@@ -119,6 +119,10 @@ so after 5 s it cancels the open streams and the browsers reconnect.
 | `make i18n-check` | fails, printing `file:line`, on hardcoded Hebrew or English (≥ 2 Latin words) in `web/src/**/*.tsx` and on `t('key')` keys missing from `web/src/locales/he.json`. Test files and `locales/` are skipped; the English check also skips JSX attributes other than `title`/`placeholder`/`aria-label`/`alt` (Hebrew fails in any attribute); put `// i18n-ignore-next-line` above a line that is a false positive |
 | `make e2e` | Playwright smoke suite against the running stack (`make dev` first): installs Chromium, waits up to 90 s for `/health` and the web, then runs `web/e2e/` |
 | `make build-web` | production build of the web (`tsc --noEmit`, `vite build` with the PWA manifest and service worker) into `web/dist` |
+| `make build-check` | checks `web/dist` against itself (`web/scripts/build-check.mjs`): the PWA manifest and its icons, `index.html`'s title, description, theme colour, favicons and font preload, and the service worker (precache of build files only, one navigation route, no runtime caching). Run `make build-web` first |
+| `make icons` | installs Playwright's Chromium and renders `web/icons/*.svg` into `web/public/icons/*.png` and `web/public/favicon.svg` (`web/scripts/make-icons.mjs`); the outputs are committed |
+| `make preview-web` | serves `web/dist` with `vite preview` on port 4173 (not the dev port), service worker included; needs `make build-web` first |
+| `make audit-web` | `pnpm audit --prod` for the web's runtime dependencies |
 
 The web targets install `web/node_modules` with `pnpm install --frozen-lockfile` when pnpm's `web/node_modules/.modules.yaml` is missing or older
 than `web/package.json` / `web/pnpm-lock.yaml`.
@@ -154,7 +158,7 @@ api/            FastAPI app (app/), Alembic migrations (alembic/), scripts/, tes
 web/            Vite + React + TS app: src/{app,features,components,locales,api}, e2e/, scripts/
 infra/          docker-compose.yml, Dockerfile.api, Dockerfile.web
 specs/          one spec per slice + PRODUCT.md
-.github/        CI: api (ruff, mypy --strict, pytest) and web (client, i18n-check, eslint, prettier, tsc, vitest, build) on every PR push;
+.github/        CI: api (ruff, mypy --strict, pytest) and web (client, i18n-check, eslint, prettier, tsc, vitest, build, build-check) on every PR push;
                 e2e (compose + playwright) only on PRs labelled `ready-to-merge` and on pushes to main; Markdown/specs/design-only changes run no CI
 ```
 

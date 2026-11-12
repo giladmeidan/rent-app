@@ -176,7 +176,7 @@ export function MyListingsPage() {
       </Loading>
     );
   } else if (listings.isError) {
-    body = <ErrorState onRetry={() => void listings.refetch()} />;
+    body = <ErrorState onRetry={() => listings.refetch()} />;
   } else if (listings.data.length === 0) {
     body = <EmptyState message={t('listings.mine.empty')} />;
   } else {

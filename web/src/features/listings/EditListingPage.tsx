@@ -66,7 +66,7 @@ export function EditListingPage() {
               <Skeleton />
             </Loading>
           ) : (
-            <ErrorState onRetry={() => void listings.refetch()} />
+            <ErrorState onRetry={() => listings.refetch()} />
           )}
         </div>
       </PageContainer>

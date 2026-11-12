@@ -22,43 +22,41 @@ worktree) in a turn Gilad wrote, and sends each its "go" later with `SendMessage
 Overall: IN_PROGRESS
 
 Current focus:
-**Slice 9 + 9b (landing, polish, homie brand, UI restyle)** — 21 specs `0009a`–`0009u` (no `0009n`), all on `main`.
-Merged: 0009b, 0009c, 0009d, 0009f, 0009h (5/21). In flight: 0009t (built locally, not pushed). The other 15 are
-`in-progress` (locked) with prepared worktrees but no session yet. Alembic head on `main` is still `0012`
-(Slice 9 is web-only, plus one CORS line). Spec status on `main` is the source of truth; `git log` beats this file.
+**Slice 9 + 9b** — 21 specs `0009a`–`0009u` (no `0009n`). Merged 13/21: 0009a, b, c, d, e, f, g, h, i, l, qa, qb, t.
+In flight: 0009m and 0009k (just started).
+**Gilad (2026-11-12): start no new builds after 0009k** — finish the four in flight, then stop.
+Not started (worktrees prepared, `in-progress` locks): 0009j, 0009o, 0009p, 0009r, 0009s, 0009u.
+Alembic head on `main` still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-12 (Slice 9 orchestrator session, after 0009h merged at 0e07d07)
+2026-11-12 ~20:30 (orchestrator session `local_2b79d58f-319e-4151-9049-06dfc8b883e9`, after #52 merged)
 
 ## Current Work
-- **0009t** (a11y focus + announcements + map landmark) — session "Build 0009t a11y focus + map"
-  (`local_3a53eb12-ef08-4ccf-aab4-aeb4895bec09`), worktree `../rent-app-0009t` (branch at 5ec8f7c, stack up on
-  WEB_PORT 5210). All ACs green, lint/test/i18n green; ux and code reviews in (0 blockers/majors), qa review was
-  still running. **Decided by Gilad: (c)** (relayed to the session; it pushes next). Was a Speed rule 9 question: overlapping map pins fail axe `target-size` on
-  `/search?view=map`. Options: (a) cluster pins into an "N מודעות" bubble (small spec), (b) offset/hide overlapping
-  pins, (c) WCAG 2.5.8 "essential" exception scoped to `.maplibregl-marker` only. Orchestrator + spec session
-  recommend **(c) now, (a) logged in FOLLOWUPS**. Until answered the page-wide `disableRules: ['target-size']`
-  (added by 0009c) stays. 0009g waits for 0009t's PR.
-- **Ready now, not started** (deps merged): 0009a landing+nav, 0009i search, 0009k wizard, 0009l inbox (phone),
-  0009m login/signup UI, 0009o my listings, 0009qa seeker lists, 0009r profile, 0009s chat. Recommended order:
-  0009i and 0009l first (they unblock 0009j and 0009p/0009u), then 0009a (unblocks 0009e).
-- **Waiting on deps**: 0009e ← 0009a; 0009g ← 0009t; 0009j ← 0009i; 0009p, 0009u ← 0009l; 0009qb ← 0009qa.
-- Every remaining spec has a worktree `../rent-app-<id>` on branch `spec/<file-stem>` cut from 1601481 (old: the
-  session must `git fetch && git merge origin/main` first), with `.env` = `COMPOSE_PROJECT_NAME=rent-app-<id>` +
-  its own `DB_PORT` (5480–5500), `REDIS_PORT` (6430–6450), `API_PORT` (8050–8070), `WEB_PORT` (5191–5211).
-- **Starting a build**: `start_session` with `cwd` = the worktree, `use_worktree: false`, initiation `user_asked`,
-  only in a turn Gilad wrote (the app refuses it from automated turns). Brief template = the one used for 0009f/0009h/
-  0009t (search this session's transcript): START NOW, merge origin/main, route (full = spec's `reviewers:`; quick =
-  `[ux]` + Sonnet coder + a raw-HTML grep), `.env` values, parallel siblings (append keys at block ends, keep both
-  sides of `he.json` / `pageWidths.test.ts` / `helpers.ts` / FOLLOWUPS conflicts), report PR + CI + digest, `make down`.
-- Merge routine (orchestrator): `gh pr checks N` all green incl. `e2e` → `gh pr merge N --merge --match-head-commit
-  <sha>` → in `../rent-app-orch` set the spec `status: done` and push to main → `git worktree remove`, delete the
-  local and remote branch. When `main` moves, test-merge the next PR; a conflicting PR goes back to its session to
-  merge main and push once (0009h needed this after 0009f).
-- Main checkout `../rent-app` (at 4f00e1f) still has someone's uncommitted demo-seed work (`Makefile`,
-  `infra/docker-compose.yml`, `api/scripts/seed_demo.py`) and its shared `rent-app` stack is **running** (web 5180).
-  It added load during parallel builds; leave it to its owner (or ask Gilad to stop it).
-- Finished build sessions (0009b/c/d/f/h, infra-webport) can be archived.
+- Orchestrator = session `local_2b79d58f-319e-4151-9049-06dfc8b883e9` ("Specs and handoff continuation"). All
+  in-flight build sessions report to it. The older orchestrator `local_f7f3bc91-…` is retired.
+- **0009e** PWA install — PR #53, head 7ce7176 (orchestrator's docs-only FOLLOWUPS union merge with 0009qb on top of
+  the green 9dde1ba). Merge on green `api`/`web`/`e2e`. Session `local_c0b47c3e-e380-47cb-967b-6a58410de2dd`.
+- **0009g** state polish (app-wide 401 + drafts + skeleton) — 4 reviews in, 0 blockers/majors; fix round then one
+  push. Session `local_757c81c0-8201-4a41-833d-0f0259b0d31b`, worktree `../rent-app-0009g`.
+- **0009m** login/signup UI (full route + security) — session `local_314d34cd-ebdd-4e40-aae9-28eb6020abd6`.
+- **0009k** listing wizard UI (quick route) — session `local_e396dd9a-7102-43db-8c85-c3a4d87fb39d`.
+- Not started, deps all merged: 0009j (← 0009i), 0009o, 0009p and 0009u (← 0009l), 0009r, 0009s. **0009s should
+  start only after 0009g merges** (it builds on 0009g's chat drafts; same `ChatThreadPage` / `Composer`).
+- Remaining worktrees `../rent-app-<id>` are on branches cut from 1601481 with their own `.env` ports; the session
+  must `git fetch && git merge origin/main` first and **rebuild the web container** (0009a added
+  `@fontsource-variable/*`).
+- **GitGuardian incident 40007526**: a fake invite token in `web/e2e/screens/fixtures-flatmates.ts` (0009qb, now on
+  main) re-flags in any merge commit that brings main in. Gilad: PRs whose *only* finding is that incident may merge
+  on green api/web/e2e. Clean fix: mark it false positive in the GitGuardian dashboard (asked Gilad). Force-push is
+  denied, so history rewrites are out.
+- Starting a build: `start_session` with `cwd` = worktree, `use_worktree: false`, `user_asked`, only in a turn Gilad
+  wrote. Brief template = the 0009m / 0009k briefs in the orchestrator transcript.
+- Merge routine: `gh pr checks N` green (api, web, e2e) → `gh pr merge N --merge --match-head-commit <sha>` → in
+  `../rent-app-orch` (detached on origin/main) set `status: done`, push `HEAD:main` → after the session's
+  `make down`, `git worktree remove --force ../rent-app-<id>`, delete local + remote branch. A FOLLOWUPS-only conflict
+  the orchestrator union-merges on the spec branch itself (done for 0009t and 0009e).
+- Main checkout `../rent-app` (at 4f00e1f, stale) still holds someone's uncommitted demo-seed work and its `rent-app`
+  stack restarted with Docker after the reboot (web 5180). Leave it to its owner.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -81,31 +79,30 @@ Last updated:
   `0012_flatmates`, invite links, group chats, 409 `declined`); 0008e Flatmates web — PR #39 (d62fb0e,
   `/me/listings/:id/flatmates`, `/flatmates/join#<token>`); 0008f Group chat web — PR #40 (e72dbe5, member line,
   sender names, `/me/flats` with leave). Local e2e on the final heads: 10, 11, 12, 11, 13, 14 tests green.
-- [x] Slice 9 so far (orchestrator-merged): 0009b Hebrew copy pass — PR #42 (3948cad); 0009d UI kit + brand tokens —
-  PR #43 (4c55f02); 0009c a11y baseline — PR #44 (55e5286); 0009f state copy — PR #45 (d5ec214); 0009h full-width
-  shell + colour swap — PR #46 (0e07d07). Infra: per-worktree `WEB_PORT` — PR #41 (948c6d5).
+- [x] Slice 9 so far (orchestrator-merged): 0009b Hebrew copy — #42; 0009d UI kit — #43; 0009c a11y baseline — #44;
+  0009f state copy — #45; 0009h full-width shell — #46; 0009l inbox — #47 (e7f422a, adds `make screens`);
+  0009i search — #48 (f2a2882); 0009t a11y focus + map, Gilad's (c) pins-only target-size exemption — #49 (f92b9ac);
+  0009qa seeker lists — #50 (25c639a, adds an age chip on liked rooms, FOLLOWUPS 183); 0009a landing + header/nav +
+  self-hosted fonts — #51 (5869fdc); 0009qb flatmates — #52 (f0ebfd3, merged with GitGuardian red on Gilad's OK). Infra: per-worktree `WEB_PORT` — PR #41 (948c6d5).
 - [x] CI e2e re-enabled (2026-11-12): `main`'s full suite green in CI (run 43227959268); #45 and #46 merged with CI e2e green.
 - [x] Gilad's decisions are in `specs/PRODUCT.md` (rows "Listings", "Search", "Applications", "Chat", "Matching",
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. **Merge 0009t** once its PR is green (Gilad chose (c), relayed); then 0009g is ready.
-2. **Start the next builds, max 3 at a time** (Gilad): 0009i + 0009l first, then 0009a, then the rest of the ready
-   list; as each PR opens/merges, start its dependants (0009j, 0009p, 0009u, 0009e, 0009qb, 0009g).
-3. Merge each PR on green CI (api + web + e2e), mark `done`, clean up (Current Work → merge routine). Expect
-   `he.json` / `pageWidths.test.ts` conflicts as the 9b screens land in parallel.
-4. **Supervise CI e2e** (Gilad): look at the `e2e` job on every merge; on a runner/infra failure,
-   `gh variable set E2E_IN_CI --body off`, tell Gilad, and go back to local `make e2e`.
-5. FOLLOWUPS from Slice 9 so far: brand-voice sweep of ~45 remaining slash-form lines in `he.json` (0009b); map
-   desktop list pairing (0009i split); chat sender key for same-name runs (0009c); map pin clustering if (c) is chosen.
-6. **Gilad's open Slice 8 decisions** (shipped on the recommendation, FOLLOWUPS "pending decision"): 0008a Q1 person-card
-   score inference, Q2 people-browse rate limit; 0008f empty `/chat` copy for a new flatmate (0009f added a line).
-7. **Re-apply after a decline** — its own later spec (PRODUCT.md "Applications").
-8. Pre-launch follow-ups in `specs/FOLLOWUPS.md` (view counter throttle, owner PATCH rate limit, body-size cap, room
-   privacy pass, `about_me` moderation, `room_pairs` pruning, chat events on join/leave/remove).
-9. Housekeeping: archive finished build sessions; remove `../rent-app-0008-spec` and `../rent-app-0009-spec`
-   (planning worktrees, commits on main); decide on `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; refresh this
-   handoff when Slice 9 ends.
+1. Merge PR #53 (0009e) on green CI; mark done; clean up after its `make down`.
+2. Merge 0009g, 0009m, 0009k as their PRs go green (expect `he.json` / FOLLOWUPS conflicts; a second-to-merge PR
+   goes back to its session to merge main and push once).
+3. **Do not start further builds** (Gilad, 2026-11-12) until Gilad says so. When he does: 0009s after 0009g merges;
+   then 0009j, 0009o, 0009p, 0009r, 0009u, max 3 at a time.
+4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
+5. **Supervise CI e2e** on every merge; on a runner failure `gh variable set E2E_IN_CI --body off` and tell Gilad.
+6. FOLLOWUPS from Slice 9: map pin clustering (0009t), map desktop list pairing (0009i), range tags "3–4" render
+   4–3 under RTL bidi — a native reader's call (0009i), brand-voice sweep of slash forms (0009b), tabs row has no
+   scroll cue at 390 (0009l).
+7. Gilad's open Slice 8 decisions (FOLLOWUPS "pending decision"): person-card score inference, people-browse rate
+   limit; re-apply after decline (own later spec).
+8. Housekeeping: archive finished build sessions (0009b/c/d/f/h/i/l/t/a/qa/qb, infra-webport); remove the planning
+   worktrees `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -205,13 +202,13 @@ Last updated:
 - Join, leave and remove publish no chat event; open threads refresh their members on window focus only.
 - A resumed listing whose `expires_at` has passed returns `status: "active"` (the web shows it as expired).
 - An owner can accumulate unlimited paused listings; no total-rows cap yet.
-- `/search` desktop is one 640 px column, not the artboard's side panel + grid; one-off hex colours (FOLLOWUPS).
 - `/areas` blocks on a *hung* Postgres via pooled connections; `/` has no `<h1>`.
 - Design artboards reference a missing `design/screens-v1/support.js`.
 - GitHub branch protection unavailable on this plan.
 - Local parallel `make e2e` flakes under heavy load (0009h saw 5 failures at load ~30 with four stacks up); CI e2e is
   the gate now, local e2e is optional.
-- The map's axe `target-size` rule is disabled page-wide on `/search?view=map` until 0009t lands (pins overlap).
+- GitGuardian incident 40007526 (fake fixture token) flags every PR that merges main until marked false positive.
+- The Mac rebooted under load on 2026-11-12 (~17:26); Docker Desktop does not auto-start — `open -a Docker`.
 
 ## Environment & Commands
 Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; some shells default to 20) + `pnpm`, `gh`
@@ -234,6 +231,9 @@ shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.en
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-12 (evening) — Orchestrator session `local_2b79d58f…`: took over from `local_f7f3bc91…`; merged 0009l,
+  0009t, 0009i, 0009qa, 0009a, 0009qb (PRs #47–#52); started 0009e/g/m/k. Gilad: 0009qb merged with a GitGuardian
+  false positive, same OK for that incident on later PRs; no new builds after 0009k. Mac rebooted mid-session.
 - 2026-11-12 — Slice 9 orchestrator session: locked all 21 Slice 9 specs, prepared 21 worktrees, built and merged
   0009b/d/c/f/h (PRs #42–#46) plus the `WEB_PORT` infra PR #41. Gilad: quick route for cosmetic specs, max 3 builds at
   a time, separate web ports, CI e2e back on under supervision, 0009b slash forms (a), 0009f offline fail-fast (a).
