@@ -1362,7 +1362,8 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
       ({ view } = renderPage([json([long])]));
       await screen.findByRole('article');
       const message = within(cardOf('L')).getByTestId('applicant-message');
-      expect(message).toHaveClass('line-clamp-4');
+      const block = message.firstElementChild;
+      expect(block).toHaveClass('line-clamp-4');
       const toggle = within(cardOf('L')).getByRole('button', { name: he.common.showMore });
       expect(toggle).toHaveAttribute('aria-expanded', 'false');
       expect(toggle).toHaveAttribute('aria-controls', message.id);
@@ -1370,9 +1371,10 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
       // The text node holds the whole message; no link, no markup.
       expect(message.textContent).toBe(LONG);
       expect(message.querySelector('a, b')).toBeNull();
+      expect(message.querySelectorAll('*')).toHaveLength(1);
 
       fireEvent.click(toggle);
-      expect(message).not.toHaveClass('line-clamp-4');
+      expect(block).not.toHaveClass('line-clamp-4');
       expect(within(cardOf('L')).getByRole('button', { name: he.common.showLess })).toHaveAttribute(
         'aria-expanded',
         'true',

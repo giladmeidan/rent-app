@@ -9,7 +9,6 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button } from './Button';
-import { cx } from './cx';
 
 export type ClampedTextProps = {
   /** How many lines show while collapsed. */
@@ -18,7 +17,7 @@ export type ClampedTextProps = {
   id: string;
   /** The id of the element that names what this text is about (the toggle's description). */
   describedBy?: string;
-  /** Goes on the `<p>`: `dir`, `data-testid` and its look. */
+  /** Goes on the `<p>`: `dir`, `data-testid` and its look (a box, padding). */
   textProps?: HTMLAttributes<HTMLParagraphElement> & { 'data-testid'?: string };
   /** Text only: it is rendered as a React child, never as HTML. */
   children: string;
@@ -35,7 +34,7 @@ const CLAMP = { 2: 'line-clamp-2', 4: 'line-clamp-4' } as const;
  */
 export function ClampedText({ lines, id, describedBy, textProps, children }: ClampedTextProps) {
   const { t } = useTranslation();
-  const ref = useRef<HTMLParagraphElement>(null);
+  const ref = useRef<HTMLSpanElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
 
@@ -59,13 +58,12 @@ export function ClampedText({ lines, id, describedBy, textProps, children }: Cla
 
   return (
     <div className="flex flex-col items-start gap-1">
-      <p
-        {...textProps}
-        ref={ref}
-        id={id}
-        className={cx(textProps?.className, !expanded && CLAMP[lines])}
-      >
-        {children}
+      {/* The clamp sits on an inner block, not on the `<p>`: a clamped element that also has vertical
+          padding shows the next line's top inside that padding. */}
+      <p {...textProps} id={id}>
+        <span ref={ref} className={expanded ? 'block' : CLAMP[lines]}>
+          {children}
+        </span>
       </p>
       {(overflows || expanded) && (
         <Button

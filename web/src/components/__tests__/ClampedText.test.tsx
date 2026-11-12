@@ -44,10 +44,13 @@ describe('ClampedText', () => {
     expect(text.id).toBe('msg');
     expect(text.tagName).toBe('P');
     expect(text).toHaveAttribute('dir', 'auto');
-    expect(text).toHaveClass('self-stretch', 'line-clamp-4');
+    expect(text).toHaveClass('self-stretch');
+    // The clamp is on the inner block (so the paragraph's padding never shows a cut line).
+    const block = text.firstElementChild as HTMLElement;
+    expect(block).toHaveClass('line-clamp-4');
     // The whole text is there, as text: never HTML or a link.
     expect(text.textContent).toBe(TEXT);
-    expect(text.children).toHaveLength(0);
+    expect(block.children).toHaveLength(0);
 
     // Overflowing: the toggle shows, collapsed, naming the text.
     const toggle = screen.getByRole('button', { name: he.common.showMore });
@@ -57,14 +60,14 @@ describe('ClampedText', () => {
 
     // A click removes the clamp, expands and flips the label.
     fireEvent.click(toggle);
-    expect(text).not.toHaveClass('line-clamp-4');
+    expect(block).not.toHaveClass('line-clamp-4');
     const less = screen.getByRole('button', { name: he.common.showLess });
     expect(less).toHaveAttribute('aria-expanded', 'true');
     expect(text.textContent).toBe(TEXT);
 
     // And back.
     fireEvent.click(less);
-    expect(text).toHaveClass('line-clamp-4');
+    expect(block).toHaveClass('line-clamp-4');
     expect(screen.getByRole('button', { name: he.common.showMore })).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -77,7 +80,7 @@ describe('ClampedText', () => {
         {TEXT}
       </ClampedText>,
     );
-    expect(two.container.querySelector('#m2')).toHaveClass('line-clamp-2');
+    expect(two.container.querySelector('#m2')?.firstElementChild).toHaveClass('line-clamp-2');
     two.unmount();
 
     // Equal heights: it fits, so no button.
