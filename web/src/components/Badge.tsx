@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 import { cx } from './cx';
 
-export type BadgeTone = 'accent' | 'neutral' | 'solid' | 'inverse' | 'warning';
+export type BadgeTone = 'accent' | 'neutral' | 'solid' | 'inverse' | 'warning' | 'success';
 export type BadgeSize = 'sm' | 'md';
 
-export type BadgeProps = {
+export type BadgeProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children' | 'className'> & {
   tone?: BadgeTone;
   size?: BadgeSize;
   /** Screen-reader text; the visible children are then hidden from assistive tech. */
@@ -23,6 +23,8 @@ const TONES: Record<BadgeTone, string> = {
   solid: 'min-w-5 bg-accent text-on-ink tabular-nums',
   inverse: 'bg-ink text-on-ink',
   warning: 'bg-surface-subtle text-warning',
+  // A positive status: success text on a bordered surface, always with its check icon and words.
+  success: 'gap-1 border border-border bg-surface text-success',
 };
 
 const SIZES: Record<BadgeSize, string> = {
@@ -31,9 +33,17 @@ const SIZES: Record<BadgeSize, string> = {
 };
 
 /** A count, "new", or a score pill. */
-export function Badge({ tone = 'accent', size = 'sm', srLabel, className, children }: BadgeProps) {
+export function Badge({
+  tone = 'accent',
+  size = 'sm',
+  srLabel,
+  className,
+  children,
+  ...rest
+}: BadgeProps) {
   return (
     <span
+      {...rest}
       className={cx(
         'inline-flex items-center justify-center whitespace-nowrap rounded-full',
         SIZES[size],
@@ -41,6 +51,7 @@ export function Badge({ tone = 'accent', size = 'sm', srLabel, className, childr
         className,
       )}
     >
+      {tone === 'success' && <CheckIcon />}
       {srLabel === undefined ? (
         children
       ) : (
@@ -50,5 +61,25 @@ export function Badge({ tone = 'accent', size = 'sm', srLabel, className, childr
         </>
       )}
     </span>
+  );
+}
+
+/** The success tone's leading mark: an outline check, decorative (the words carry the meaning). */
+function CheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      <path d="M5 12l5 5 9-10" />
+    </svg>
   );
 }

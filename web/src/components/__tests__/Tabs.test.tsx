@@ -184,4 +184,31 @@ describe('Tabs', () => {
     expect(second).toHaveAttribute('tabIndex', '-1');
     expect(first).toHaveAttribute('aria-selected', 'false');
   });
+
+  it('scrollable_underline', () => {
+    const items = VALUES.map((v) => ({ value: v, label: labelOf(v) }));
+    const props = {
+      label: he.applicants.filter.label,
+      items,
+      value: 'all' as Value,
+      onChange: () => {},
+      panelId: 'p',
+    };
+    const { rerender } = render(<Tabs {...props} scrollable />);
+    // One row that scrolls inside itself; each tab keeps its width.
+    const list = screen.getByRole('tablist');
+    expect(list).toHaveClass('flex-nowrap', 'overflow-x-auto', 'border-b');
+    expect(list).not.toHaveClass('flex-wrap');
+    for (const el of screen.getAllByRole('tab')) {
+      expect(el).toHaveClass('shrink-0', 'whitespace-nowrap');
+    }
+    // Without it: wraps, as before.
+    rerender(<Tabs {...props} />);
+    expect(screen.getByRole('tablist')).toHaveClass('flex-wrap');
+    expect(screen.getByRole('tablist')).not.toHaveClass('overflow-x-auto');
+    for (const el of screen.getAllByRole('tab')) expect(el).not.toHaveClass('shrink-0');
+    // The pill variant ignores it.
+    rerender(<Tabs {...props} variant="pill" scrollable />);
+    expect(screen.getByRole('tablist')).not.toHaveClass('overflow-x-auto');
+  });
 });

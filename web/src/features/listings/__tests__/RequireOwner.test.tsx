@@ -34,7 +34,8 @@ const TITLES = {
   '/listings/new': he.listings.new.title,
   '/me/listings': he.listings.mine.title,
   [EDIT]: he.listings.edit.title,
-  [APPLICANTS]: he.applicants.title,
+  // The inbox's <h1> is the eyebrow "מועמדויות עבור" and the listing's title.
+  [APPLICANTS]: new RegExp(`^${he.applicants.titleFor}`),
   [PEOPLE]: he.people.title,
   [FLATMATES]: he.flatmates.title,
 };

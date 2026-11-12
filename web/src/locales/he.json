@@ -25,7 +25,9 @@
     "inHours_other": "בעוד {{count}} שעות",
     "inDays_one": "בעוד יום",
     "inDays_two": "בעוד יומיים",
-    "inDays_other": "בעוד {{count}} ימים"
+    "inDays_other": "בעוד {{count}} ימים",
+    "showMore": "הצגת עוד",
+    "showLess": "הצגת פחות"
   },
   "header": {
     "login": "כניסה",
@@ -536,7 +538,8 @@
       "yes": "כן",
       "no": "לא"
     },
-    "mutual": "התאמה הדדית"
+    "mutual": "התאמה הדדית",
+    "titleFor": "מועמדויות עבור"
   },
   "people": {
     "title": "מחפשים חדר",
@@ -844,6 +847,9 @@
           "differ": "אורח חיים שונה"
         }
       }
+    },
+    "ring": {
+      "label": "התאמה"
     }
   },
   "rooms": {
