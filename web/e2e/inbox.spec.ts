@@ -43,6 +43,11 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   await expect(link).toBeVisible();
   await expect(link.getByText(he.applicants.newBadge_one)).toBeVisible();
 
+  // The inbox steps below run the stacked (phone) layout, with today's selectors; the desktop
+  // layout (0009u) has its own step at the end, and `flatmates.spec.ts` / `people.spec.ts` cover
+  // it at the default 1280x720.
+  await page.setViewportSize({ width: 390, height: 844 });
+
   // The inbox: the seeker's name (not the owner's) and message.
   await link.click();
   await expect(page).toHaveURL(`/me/listings/${id}/applicants`);
@@ -202,6 +207,41 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
       (el) => el.parentElement?.parentElement?.querySelector('h2') !== null,
     );
     expect(inTopRow).toBe(true);
+  });
+
+  // The desktop layout (0009u): a card grid beside the selected applicant's pane.
+  await test.step('desktop 1440x900', async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/me/listings/${roomId}/applicants`);
+    const pane = page.getByRole('complementary', { name: he.applicants.pane.label });
+    await expect(pane.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
+    await expect(pane.getByText(ROOM_LINE, { exact: true })).toBeVisible();
+    await expect(pane.getByTestId('pane-message')).toHaveText(MESSAGE);
+    await expect(pane.getByText(he.match.owner.budget.agree, { exact: true })).toBeVisible();
+
+    // The questionnaire answers stay behind "עוד פרטים".
+    const paneMore = pane.getByRole('button', { name: he.applicants.more });
+    await expect(paneMore).toHaveAttribute('aria-expanded', 'false');
+    await paneMore.click();
+    await expect(paneMore).toHaveAttribute('aria-expanded', 'true');
+    await expect(pane.getByText(he.applicants.room.differs, { exact: true })).toBeVisible();
+
+    // The compact card has no disclosures; its name button is the selected one.
+    await expect(applicant.getByRole('button', { name: he.applicants.why })).toHaveCount(0);
+    await expect(applicant.getByRole('button', { name: he.applicants.more })).toHaveCount(0);
+    await expect(applicant.getByRole('button', { name: SEEKER_NAME })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    const fits = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    );
+    expect(fits).toBe(true);
+
+    // The apartment's inbox: the declined applicant, and no link in the pane.
+    await page.goto(`/me/listings/${id}/applicants`);
+    await expect(pane.getByTestId('pane-status')).toHaveText(he.applicants.status.declined);
+    await expect(pane.getByRole('link')).toHaveCount(0);
   });
   await seekerContext.close();
 });
