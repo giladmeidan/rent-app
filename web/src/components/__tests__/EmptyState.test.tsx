@@ -35,17 +35,15 @@ describe('EmptyState', () => {
     );
   });
 
-  it('action_renders_after_message', () => {
-    const { container } = render(
-      <EmptyState message={message} action={<a href="/search">{he.applications.mine.search}</a>} />,
+  it('renders an action below the message, and nothing when there is none', () => {
+    const view = render(
+      <EmptyState message={message} pose="search" action={<button type="button">act</button>} />,
     );
-    const text = screen.getByText(message);
-    const link = screen.getByRole('link', { name: he.applications.mine.search });
-    expect(link.parentElement).toBe(text.parentElement);
-    expect(text.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(classesOf(text.parentElement)).toEqual(
-      expect.arrayContaining(['flex', 'flex-col', 'items-start', 'gap-3']),
-    );
-    expect(container.querySelector('img')).toBeNull();
+    const action = screen.getByRole('button', { name: 'act' });
+    expect(action.parentElement?.previousElementSibling).toBe(screen.getByText(message));
+    view.unmount();
+    const bare = render(<EmptyState message={message} pose="search" />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(bare.container.querySelector('p')?.nextElementSibling).toBeNull();
   });
 });

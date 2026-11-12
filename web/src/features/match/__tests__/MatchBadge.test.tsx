@@ -20,12 +20,17 @@ describe('MatchBadge', () => {
       const badge = screen.getByText(`התאמה ${String(score)}%`);
       // "87%" is one number run: no `dir` attribute.
       expect(badge).not.toHaveAttribute('dir');
+      // The test id and bucket are on the badge element itself, which is a `Badge size="md"`.
+      expect(badge).toHaveAttribute('data-testid', 'match-badge');
+      expect(badge).toHaveAttribute('data-bucket', expected);
+      expect(badge).toHaveClass('text-label', 'rounded-full');
       if (accent) {
-        expect(badge).toHaveClass('bg-accent', 'text-on-ink');
+        expect(badge).toHaveClass('bg-accent-soft', 'text-accent-strong');
         expect(badge).not.toHaveClass('bg-surface-subtle');
+        expect(badge).not.toHaveClass('bg-accent');
       } else {
         expect(badge).toHaveClass('bg-surface-subtle', 'text-ink-muted');
-        expect(badge).not.toHaveClass('bg-accent');
+        expect(badge).not.toHaveClass('bg-accent-soft');
       }
       view.unmount();
     }

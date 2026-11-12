@@ -13,8 +13,7 @@ export const emptyStateBox =
 
 /**
  * An empty list or result, in a card. With a `pose`, the mascot (120px) sits above the message,
- * centred, with the brand's space-8 around it. An `action` (a button or a link) follows the
- * message inside the card.
+ * centred, with the brand's space-8 around it. An `action` (a `Button`) sits below the message.
  */
 export function EmptyState({
   message,
@@ -25,15 +24,18 @@ export function EmptyState({
   pose?: MascotPose;
   action?: ReactNode;
 }) {
-  const hasAction = action !== undefined && action !== null;
-  let layout: string | undefined;
-  if (pose !== undefined) layout = 'flex flex-col items-center gap-3 py-8 text-center';
-  else if (hasAction) layout = 'flex flex-col items-start gap-3';
   return (
-    <Card padding="md" className={layout}>
+    <Card
+      padding="md"
+      className={
+        pose === undefined ? undefined : 'flex flex-col items-center gap-3 py-8 text-center'
+      }
+    >
       {pose !== undefined && <Mascot pose={pose} width={120} />}
       <p className="text-body text-ink-muted">{message}</p>
-      {hasAction && action}
+      {action !== undefined && action !== null && action !== false && (
+        <div className={pose === undefined ? 'mt-3' : undefined}>{action}</div>
+      )}
     </Card>
   );
 }

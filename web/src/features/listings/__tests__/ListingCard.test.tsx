@@ -2,9 +2,11 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import { publicListing } from '../../search/__tests__/fixtures';
 import type { ListingPublic } from '../api';
+import { formatDate } from '../format';
 import { ListingCard } from '../ListingCard';
 
 const TODAY = '2026-11-11';
@@ -25,10 +27,15 @@ function renderCard(overrides: Partial<ListingPublic>) {
     title: () => card.getByRole('link').textContent,
     // The facts line is the paragraph right after the title.
     factsLine: () => heading.nextElementSibling?.textContent ?? '',
-    chips: () =>
-      within(card.getByTestId('listing-chips'))
-        .getAllByRole('listitem')
-        .map((li) => li.textContent),
+    // The room chips only; `[]` when the list is absent (no chip to show).
+    chips: () => {
+      const list = card.queryByTestId('listing-chips');
+      return list === null
+        ? []
+        : within(list)
+            .getAllByRole('listitem')
+            .map((li) => li.textContent);
+    },
   };
 }
 
@@ -92,14 +99,16 @@ describe('ListingCard', () => {
     expect(c.card.queryByText(he.listings.card.room)).toBeNull();
     expect(c.factsLine().startsWith('קומה 2 מתוך 4')).toBe(true);
     expect(c.factsLine()).not.toContain('שותפ');
-    expect(c.chips()).toEqual([he.listings.card.noElevator, he.listings.furnished.none]);
+    expect(c.chips()).toEqual([]);
+    expect(c.factsLine()).toContain(he.listings.card.noElevator);
+    expect(c.factsLine()).toContain(he.listings.furnished.none);
   });
 
   it('ac3_parking_and_flatmates_forms', () => {
     // What the card shows, wherever it shows it.
     const shown = () => screen.getByRole('article').textContent;
     let c = renderCard({ parking_spots: 1 });
-    expect(c.chips()).toContain('\u05d7\u05e0\u05d9\u05d4');
+    expect(c.factsLine()).toContain('\u05d7\u05e0\u05d9\u05d4');
     expect(shown()).not.toContain('\u05d7\u05e0\u05d9\u05d5\u05ea');
     c.view.unmount();
     c = renderCard({ parking_spots: 2 });
@@ -128,11 +137,11 @@ describe('ListingCard', () => {
     ] as const;
     for (const [furnished, text] of forms) {
       const c = room({ furnished });
-      expect(c.chips()).toContain(text);
+      expect(c.factsLine()).toContain(text);
       c.view.unmount();
     }
     const c = renderCard({ listing_type: 'apartment', furnished: 'full' });
-    expect(c.chips()).toContain('\u05de\u05e8\u05d5\u05d4\u05d8\u05ea');
+    expect(c.factsLine()).toContain('\u05de\u05e8\u05d5\u05d4\u05d8\u05ea');
     c.view.unmount();
   });
 
@@ -150,13 +159,10 @@ describe('ListingCard', () => {
       </MemoryRouter>,
     );
     const chips = within(screen.getByTestId('listing-chips')).getAllByRole('listitem');
-    expect(chips.map((li) => li.textContent)).toEqual([
-      he.rooms.card.similarAge,
-      'לנשים בלבד',
-      he.listings.card.noElevator,
-      he.listings.furnishedRoom.none,
-    ]);
+    expect(chips.map((li) => li.textContent)).toEqual([he.rooms.card.similarAge, 'לנשים בלבד']);
     expect(chips[0]).toHaveClass('bg-accent-soft', 'text-accent-strong');
+    // The elevator and furnishing facts read in the facts line, not as chips.
+    expect(screen.getByTestId('listing-facts')).toHaveTextContent(he.listings.card.noElevator);
     view.unmount();
 
     // On an apartment, the birth year adds nothing.
@@ -166,5 +172,106 @@ describe('ListingCard', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByText(he.rooms.card.similarAge)).toBeNull();
+  });
+
+  it('ac4_card_anatomy', () => {
+    const entry = new Date(`${TODAY}T00:00:00Z`);
+    entry.setUTCDate(entry.getUTCDate() + 30);
+    const available = entry.toISOString().slice(0, 10);
+    const base = {
+      floor: 3,
+      total_floors: 5,
+      size_sqm: 95,
+      elevator: true,
+      parking_spots: 1,
+      furnished: 'partial' as const,
+      pets_allowed: true,
+      available_from: available,
+    };
+    const apartment = publicListing({ city: 'תל אביב', street: 'הרצל', rooms: 3, ...base });
+    const view = render(
+      <MemoryRouter>
+        <ListingCard
+          listing={apartment}
+          today={TODAY}
+          to={`/listings/${apartment.id}`}
+          badge={<span data-testid="the-badge">התאמה 87%</span>}
+        />
+      </MemoryRouter>,
+    );
+    const article = screen.getByRole('article');
+    // Today's stack layout is the default.
+    expect(article).toHaveAttribute('data-layout', 'stack');
+    expect(within(article).getAllByRole('link')).toHaveLength(1);
+    const facts = screen.getByRole('heading', { level: 2 }).nextElementSibling;
+    expect(facts).toBe(screen.getByTestId('listing-facts'));
+    // The facts, in order, with their separators aria-hidden.
+    const items = [...(facts?.querySelectorAll('span > span:not([aria-hidden])') ?? [])].map(
+      (el) => el.textContent,
+    );
+    expect(items).toEqual([
+      'קומה 3 מתוך 5',
+      '95 מ״ר',
+      he.listings.card.elevator,
+      he.listings.card.parking_one,
+      he.listings.furnished.partial,
+      he.listings.card.pets,
+      i18n.t('listings.card.availableFrom', { date: formatDate(available) }),
+    ]);
+    // No chip list on an apartment; the badge sits in the price row.
+    expect(screen.queryByTestId('listing-chips')).toBeNull();
+    const badge = screen.getByTestId('the-badge');
+    expect(badge.parentElement).toBe(within(article).getByText(/₪/).closest('p')?.parentElement);
+    view.unmount();
+
+    // A women-only room, ages given, for a seeker born 28 years ago.
+    const year = new Date().getUTCFullYear();
+    const room = publicListing({
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 2,
+      flatmate_ages: [27, 30],
+    });
+    const rooms = render(
+      <MemoryRouter>
+        <ListingCard
+          listing={room}
+          today={TODAY}
+          to={`/listings/${room.id}`}
+          seekerBirthYear={year - 28}
+          layout="row"
+        />
+      </MemoryRouter>,
+    );
+    const card = screen.getByRole('article');
+    expect(card).toHaveAttribute('data-layout', 'row');
+    expect(within(card).getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByTestId('listing-facts').textContent?.startsWith('2 שותפים (27, 30)')).toBe(
+      true,
+    );
+    const chips = within(screen.getByTestId('listing-chips')).getAllByRole('listitem');
+    expect(chips.map((li) => li.textContent)).toEqual([he.rooms.card.similarAge, 'לנשים בלבד']);
+    expect(chips[0]).toHaveClass('bg-accent-soft', 'text-accent-strong');
+    expect(chips[1]).toHaveClass('bg-surface-subtle', 'text-ink');
+    // The room pill is in the photo box (the neutral tag, at the top inline-start corner).
+    const pill = within(card).getByText(he.listings.card.room);
+    expect(pill).toHaveClass('absolute', 'start-2', 'top-2', 'bg-surface-subtle');
+    expect(pill.parentElement).toHaveClass('aspect-[16/10]');
+    rooms.unmount();
+
+    // A visitor's response has no ages: none anywhere on the card.
+    const visitor = publicListing({
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 2,
+      flatmate_ages: [],
+    });
+    render(
+      <MemoryRouter>
+        <ListingCard listing={visitor} today={TODAY} to={`/listings/${visitor.id}`} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('article').textContent).toContain('2 שותפים');
+    expect(screen.getByRole('article').textContent).not.toContain('(');
   });
 });

@@ -487,7 +487,8 @@ describe('MyApplicationsPage', () => {
     const message = await screen.findByText(he.applications.mine.empty);
     const search = screen.getByRole('link', { name: he.applications.mine.search });
     expect(search).toHaveAttribute('href', '/search');
-    expect(search.parentElement).toBe(message.parentElement);
+    // Inside the same Card as the message (EmptyState wraps the action in a div).
+    expect(search.closest('div')?.parentElement).toBe(message.parentElement);
     view.unmount();
     vi.unstubAllGlobals();
 

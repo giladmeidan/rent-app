@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Button } from '../../components/Button';
 import { EmptyState, emptyStateBox } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM, roundBbox, type Bbox } from '../../components/map/config';
@@ -24,10 +25,6 @@ type Props = {
   /** The count line, focused by the page after a filter change (spec 0009t). */
   countRef?: Ref<HTMLParagraphElement>;
 };
-
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-border-strong bg-surface px-5 text-[15px] font-semibold ${focusRing}`;
 
 /**
  * The map view of `/search`: the filters' results inside the visible box as price pins. The box is
@@ -104,7 +101,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
         ref={countRef}
         tabIndex={-1}
         aria-live="polite"
-        className={`focus:outline-none ${empty ? emptyStateBox : 'min-h-[1.5em] text-sm font-bold'}`}
+        className={`focus:outline-none ${empty ? emptyStateBox : 'min-h-6 text-label lg:text-h3'}`}
       >
         {count}
       </p>
@@ -112,9 +109,9 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
       {unavailable ? (
         <div data-testid="map-unavailable" className="flex flex-col items-start gap-3">
           <EmptyState message={t('search.map.unavailable')} />
-          <button type="button" onClick={onShowList} className={secondary}>
+          <Button variant="secondary" onClick={onShowList}>
             {t('search.view.list')}
-          </button>
+          </Button>
         </div>
       ) : (
         <MapCanvas
@@ -141,11 +138,12 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
           }}
           onMoveEnd={(box) => setBbox(roundBbox(box))}
           onError={() => setUnavailable(true)}
-          className="h-[60vh] min-h-[360px] rounded-2xl border border-border"
+          // The map keeps today's height at every width (no token fits a viewport-relative height).
+          className="h-[60vh] min-h-[360px] rounded-lg border border-border"
         />
       )}
       {selected !== undefined && (
-        <div ref={cardRef}>
+        <div ref={cardRef} className="max-w-md">
           <ListingCard
             listing={selected}
             today={todayInIsrael()}
