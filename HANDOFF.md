@@ -34,7 +34,7 @@ Last updated:
 - **0009t** (a11y focus + announcements + map landmark) — session "Build 0009t a11y focus + map"
   (`local_3a53eb12-ef08-4ccf-aab4-aeb4895bec09`), worktree `../rent-app-0009t` (branch at 5ec8f7c, stack up on
   WEB_PORT 5210). All ACs green, lint/test/i18n green; ux and code reviews in (0 blockers/majors), qa review was
-  still running. **Blocked on Gilad (Speed rule 9)**: overlapping map pins fail axe `target-size` on
+  still running. **Decided by Gilad: (c)** (relayed to the session; it pushes next). Was a Speed rule 9 question: overlapping map pins fail axe `target-size` on
   `/search?view=map`. Options: (a) cluster pins into an "N מודעות" bubble (small spec), (b) offset/hide overlapping
   pins, (c) WCAG 2.5.8 "essential" exception scoped to `.maplibregl-marker` only. Orchestrator + spec session
   recommend **(c) now, (a) logged in FOLLOWUPS**. Until answered the page-wide `disableRules: ['target-size']`
@@ -89,8 +89,7 @@ Last updated:
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. **Answer/relay 0009t's map-pin question** (Current Work). On Gilad's answer, SendMessage the 0009t session; it
-   finishes fixes, pushes, CI (incl. e2e) → merge → then 0009g is ready.
+1. **Merge 0009t** once its PR is green (Gilad chose (c), relayed); then 0009g is ready.
 2. **Start the next builds, max 3 at a time** (Gilad): 0009i + 0009l first, then 0009a, then the rest of the ready
    list; as each PR opens/merges, start its dependants (0009j, 0009p, 0009u, 0009e, 0009qb, 0009g).
 3. Merge each PR on green CI (api + web + e2e), mark `done`, clean up (Current Work → merge routine). Expect
