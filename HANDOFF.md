@@ -22,28 +22,43 @@ worktree) in a turn Gilad wrote, and sends each its "go" later with `SendMessage
 Overall: IN_PROGRESS
 
 Current focus:
-Slices 1–8 merged. **Slice 8 (people browse + mutual likes, flatmates group chats) complete** — `0008a`–`0008f`,
-PRs #35–#40, last merge e72dbe5, all specs `done` (f86149c). Alembic head on `main` is `0012`. Slice 9 is not
-specced yet. Spec status on `main` is the source of truth; `git log` beats this file.
+**Slice 9 + 9b (landing, polish, homie brand, UI restyle)** — 21 specs `0009a`–`0009u` (no `0009n`), all on `main`.
+Merged: 0009b, 0009c, 0009d, 0009f, 0009h (5/21). In flight: 0009t (built locally, not pushed). The other 15 are
+`in-progress` (locked) with prepared worktrees but no session yet. Alembic head on `main` is still `0012`
+(Slice 9 is web-only, plus one CORS line). Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-12 (Slice 8 orchestrator session, after Slice 8 merged)
+2026-11-12 (Slice 9 orchestrator session, after 0009h merged at 0e07d07)
 
 ## Current Work
-- Nothing in flight. All 0008a–0008f worktrees, local and remote branches and stacks are removed; no open PRs.
-  The six build sessions (`build-0008a` … `build-0008f`) are finished and can be archived.
-- The orchestrator's detached `main` checkout `../rent-app-orch` is kept for docs commits (`git fetch` +
-  `git checkout --detach origin/main` before each; push with `git push origin HEAD:main`).
-- `../rent-app-0008-spec` (branch `docs/0008-planning`, b0ecec5) is the finished Slice 8 planning worktree; its
-  commits are on `main`. Safe to remove (`git worktree remove ../rent-app-0008-spec`, `git branch -D docs/0008-planning`).
-- **CI e2e is switched off** (Gilad, 2026-11-11): GitHub runners could not install Playwright's browser deps, so
-  `.github/workflows/ci.yml`'s `e2e` job is gated on repo variable `E2E_IN_CI` (set to `off`). Every web spec runs
-  `make e2e` locally and reports it in its digest; a merge needs `api` + `web` green in CI plus local e2e green
-  (Speed rules 7–8). PRs #22–#40 merged without a CI e2e run, and `main` itself has never run the full suite as
-  one; the closest is 0008f's local 14/14 on the final combined code.
-- Uncommitted in the main checkout `../rent-app` (at 4f00e1f, far behind `main`), not from the orchestrator:
-  `Makefile`, `infra/docker-compose.yml`, `api/scripts/seed_demo.py` (someone's demo-seed work). Its shared stack
-  publishes web on **127.0.0.1:5180**. Leave them to their owner.
+- **0009t** (a11y focus + announcements + map landmark) — session "Build 0009t a11y focus + map"
+  (`local_3a53eb12-ef08-4ccf-aab4-aeb4895bec09`), worktree `../rent-app-0009t` (branch at 5ec8f7c, stack up on
+  WEB_PORT 5210). All ACs green, lint/test/i18n green; ux and code reviews in (0 blockers/majors), qa review was
+  still running. **Blocked on Gilad (Speed rule 9)**: overlapping map pins fail axe `target-size` on
+  `/search?view=map`. Options: (a) cluster pins into an "N מודעות" bubble (small spec), (b) offset/hide overlapping
+  pins, (c) WCAG 2.5.8 "essential" exception scoped to `.maplibregl-marker` only. Orchestrator + spec session
+  recommend **(c) now, (a) logged in FOLLOWUPS**. Until answered the page-wide `disableRules: ['target-size']`
+  (added by 0009c) stays. 0009g waits for 0009t's PR.
+- **Ready now, not started** (deps merged): 0009a landing+nav, 0009i search, 0009k wizard, 0009l inbox (phone),
+  0009m login/signup UI, 0009o my listings, 0009qa seeker lists, 0009r profile, 0009s chat. Recommended order:
+  0009i and 0009l first (they unblock 0009j and 0009p/0009u), then 0009a (unblocks 0009e).
+- **Waiting on deps**: 0009e ← 0009a; 0009g ← 0009t; 0009j ← 0009i; 0009p, 0009u ← 0009l; 0009qb ← 0009qa.
+- Every remaining spec has a worktree `../rent-app-<id>` on branch `spec/<file-stem>` cut from 1601481 (old: the
+  session must `git fetch && git merge origin/main` first), with `.env` = `COMPOSE_PROJECT_NAME=rent-app-<id>` +
+  its own `DB_PORT` (5480–5500), `REDIS_PORT` (6430–6450), `API_PORT` (8050–8070), `WEB_PORT` (5191–5211).
+- **Starting a build**: `start_session` with `cwd` = the worktree, `use_worktree: false`, initiation `user_asked`,
+  only in a turn Gilad wrote (the app refuses it from automated turns). Brief template = the one used for 0009f/0009h/
+  0009t (search this session's transcript): START NOW, merge origin/main, route (full = spec's `reviewers:`; quick =
+  `[ux]` + Sonnet coder + a raw-HTML grep), `.env` values, parallel siblings (append keys at block ends, keep both
+  sides of `he.json` / `pageWidths.test.ts` / `helpers.ts` / FOLLOWUPS conflicts), report PR + CI + digest, `make down`.
+- Merge routine (orchestrator): `gh pr checks N` all green incl. `e2e` → `gh pr merge N --merge --match-head-commit
+  <sha>` → in `../rent-app-orch` set the spec `status: done` and push to main → `git worktree remove`, delete the
+  local and remote branch. When `main` moves, test-merge the next PR; a conflicting PR goes back to its session to
+  merge main and push once (0009h needed this after 0009f).
+- Main checkout `../rent-app` (at 4f00e1f) still has someone's uncommitted demo-seed work (`Makefile`,
+  `infra/docker-compose.yml`, `api/scripts/seed_demo.py`) and its shared `rent-app` stack is **running** (web 5180).
+  It added load during parallel builds; leave it to its owner (or ask Gilad to stop it).
+- Finished build sessions (0009b/c/d/f/h, infra-webport) can be archived.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -66,42 +81,32 @@ Last updated:
   `0012_flatmates`, invite links, group chats, 409 `declined`); 0008e Flatmates web — PR #39 (d62fb0e,
   `/me/listings/:id/flatmates`, `/flatmates/join#<token>`); 0008f Group chat web — PR #40 (e72dbe5, member line,
   sender names, `/me/flats` with leave). Local e2e on the final heads: 10, 11, 12, 11, 13, 14 tests green.
+- [x] Slice 9 so far (orchestrator-merged): 0009b Hebrew copy pass — PR #42 (3948cad); 0009d UI kit + brand tokens —
+  PR #43 (4c55f02); 0009c a11y baseline — PR #44 (55e5286); 0009f state copy — PR #45 (d5ec214); 0009h full-width
+  shell + colour swap — PR #46 (0e07d07). Infra: per-worktree `WEB_PORT` — PR #41 (948c6d5).
+- [x] CI e2e re-enabled (2026-11-12): `main`'s full suite green in CI (run 43227959268); #45 and #46 merged with CI e2e green.
 - [x] Gilad's decisions are in `specs/PRODUCT.md` (rows "Listings", "Search", "Applications", "Chat", "Matching",
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. **Gilad's open Slice 8 decisions** (shipped on the recommendation, logged in `specs/FOLLOWUPS.md` as "pending
-   decision"):
-   - 0008a Q1: a person card's score reads the listing's live household / contract / parking / smoking / pets, so
-     an owner editing a room can infer those hidden seeker fields. Shipped (a) accept; alternatives were (b) freeze
-     every listing-side match input on `room_pairs`, (c) score cards only on shown criteria.
-   - 0008a Q2: `GET /listings/{id}/people` has no rate limit; recommendation (a) a per-owner limiter (~120/h,
-     600/day, 429 `rate_limited`) as a small follow-up spec; 0008b would then handle a 429 on browse.
-   - 0008f: copy for the empty `/chat` page of a new flatmate (FOLLOWUPS 0008f `ChatListPage.tsx`).
-2. **Re-apply after a decline** (Gilad 2026-11-11): a later slice gives a declined seeker one more chance at the
-   same room (re-apply, then join once shortlisted), with a limit still to design (once, after a month, or once
-   ever). Its own spec; until then a decline is final and blocks joining (FOLLOWUPS 0008d line, PRODUCT.md
-   "Applications").
-3. **Slice 9** — spec it (`/spec`), one verifier round each, then pre-start every build session in a turn Gilad
-   writes; each waits for a "go" sent as its `depends_on` PRs open. Ask Gilad whether the orchestrator merges
-   (delegation was per slice: 7 and 8).
-4. **When CI e2e is fixed** (Gilad says so): `gh variable delete E2E_IN_CI`, drop the temporary sentences from
-   Speed rules 7–8, run `main`'s e2e and fix anything it finds before any deploy.
-5. **e2e capacity**: `make e2e` now runs `E2E_SHARDS ?= 3` Playwright shards and clears the `rl:*` Redis keys before
-   each, because one run sends more OTPs than the 10-per-IP-per-15-min limit. 3 shards fit ~25 sign-ups; add a
-   shard or a dev-only limit override when the suite outgrows it (FOLLOWUPS 0008b). The older load flakes
-   (`map.spec::ac8`, `applications.spec::ac9` under load ~20) still pass serially (FOLLOWUPS 0007e).
-6. **Pre-launch follow-ups** (`specs/FOLLOWUPS.md`, ~195 lines, 33 from Slice 8): unthrottled public view counter;
-   owner `PATCH /listings` rate limit; a 422 / body-size cap; room privacy (b) and the 0008a probe in the pre-launch
-   privacy pass; `about_me` moderation (phones/URLs); `room_pairs` growth and pruning; no chat event on
-   join/leave/remove.
-7. **Shared stack**: `DB_PORT=5434 REDIS_PORT=6380 make migrate` in the main checkout once its owner syncs it
-   (main is at `0012`).
-8. **Gilad's older open decisions** (builds used the recommendation): `0003c` Q1–Q3; `0003d` Q1–Q2; `0003b` 1–3;
-   `0002c` photos (R2 bucket, limits); branch protection (GitHub Pro or public repo).
-9. Housekeeping: archive finished build sessions (0001b … 0008f) if Gilad wants; remove `../rent-app-0008-spec`;
-   remove `../rent-app-orch` when no orchestrator needs it; decide on `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`;
-   "דירתי" vs "דירה" naming (Slice 9).
+1. **Answer/relay 0009t's map-pin question** (Current Work). On Gilad's answer, SendMessage the 0009t session; it
+   finishes fixes, pushes, CI (incl. e2e) → merge → then 0009g is ready.
+2. **Start the next builds, max 3 at a time** (Gilad): 0009i + 0009l first, then 0009a, then the rest of the ready
+   list; as each PR opens/merges, start its dependants (0009j, 0009p, 0009u, 0009e, 0009qb, 0009g).
+3. Merge each PR on green CI (api + web + e2e), mark `done`, clean up (Current Work → merge routine). Expect
+   `he.json` / `pageWidths.test.ts` conflicts as the 9b screens land in parallel.
+4. **Supervise CI e2e** (Gilad): look at the `e2e` job on every merge; on a runner/infra failure,
+   `gh variable set E2E_IN_CI --body off`, tell Gilad, and go back to local `make e2e`.
+5. FOLLOWUPS from Slice 9 so far: brand-voice sweep of ~45 remaining slash-form lines in `he.json` (0009b); map
+   desktop list pairing (0009i split); chat sender key for same-name runs (0009c); map pin clustering if (c) is chosen.
+6. **Gilad's open Slice 8 decisions** (shipped on the recommendation, FOLLOWUPS "pending decision"): 0008a Q1 person-card
+   score inference, Q2 people-browse rate limit; 0008f empty `/chat` copy for a new flatmate (0009f added a line).
+7. **Re-apply after a decline** — its own later spec (PRODUCT.md "Applications").
+8. Pre-launch follow-ups in `specs/FOLLOWUPS.md` (view counter throttle, owner PATCH rate limit, body-size cap, room
+   privacy pass, `about_me` moderation, `room_pairs` pruning, chat events on join/leave/remove).
+9. Housekeeping: archive finished build sessions; remove `../rent-app-0008-spec` and `../rent-app-0009-spec`
+   (planning worktrees, commits on main); decide on `/Users/giladmeidan/rent_app/qa-live-2026-11-10/`; refresh this
+   handoff when Slice 9 ends.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -124,8 +129,8 @@ Last updated:
   `components/`, `locales/he.json`, generated `api/schema.d.ts` (git-ignored, `make client`). `web/e2e/`: `smoke`,
   `auth`, `listings`, `search`, `map`, `applications`, `inbox`, `people`, `likes`, `flatmates` + `helpers.ts`.
 - `infra/docker-compose.yml`: db, redis, api, worker, web; ports on `127.0.0.1`, overridable via
-  `DB_PORT`/`REDIS_PORT`/`API_PORT`; **web is always 5173**; `COMPOSE_PROJECT_NAME` isolates a worktree's stack.
-- CI: `api` and `web` on every PR push; `e2e` only with the `ready-to-merge` label and on `main` (off for now);
+  `DB_PORT`/`REDIS_PORT`/`API_PORT`; web on `WEB_PORT` (default 5173); `COMPOSE_PROJECT_NAME` isolates a worktree's stack.
+- CI: `api` and `web` on every PR push; `e2e` only with the `ready-to-merge` label and on `main`;
   docs-only changes run nothing. A PR in conflict with `main` gets no `pull_request` run at all.
 
 ## Important Files
@@ -148,7 +153,7 @@ Last updated:
 - Search (Gilad, 2026-11-10): public, OSM tiles now / Protomaps on R2 later, newest-first default, no owner name,
   street without house number.
 - Text safety (0002d): no `unicodedata2`; Unicode 16/17 marks cannot be capped on Python 3.12 — accepted gap.
-- Web: product name "דירה" and system font until Slice 9; react-router 7.18.5 library mode. Tooling `uv` / `pnpm`
+- Web: (before Slice 9: product name "דירה", system font); react-router 7.18.5 library mode. Tooling `uv` / `pnpm`
   (Node 22), TypeScript 5.9.
 - Spec branches are updated by merging `origin/main` (force push is denied); append-only `FOLLOWUPS.md` conflicts
   keep both sides. The orchestrator may make that docs-only union merge on a spec branch itself.
@@ -171,7 +176,14 @@ Last updated:
   `gh pr merge N --merge --match-head-commit <full sha>` only after `api` + `web` are green on that head and local
   e2e is green (any spec touching web runtime code, API specs included), and holds merges while GitHub Actions is
   down (Gilad, 2026-11-11).
-- CI e2e is off while GitHub runners are broken (`E2E_IN_CI=off`); revert only on Gilad's word.
+- CI e2e is back on (Gilad 2026-11-12, "keep it under supervision"): merges need `api` + `web` + `e2e` green in CI;
+  local `make e2e` optional. Fallback: `gh variable set E2E_IN_CI --body off`.
+- Brand (Slice 9, Gilad): product name homie / `הומי`; `design/brand/` beats `design/screens-v1/` for colour, type,
+  shape, voice; Fredoka + Rubik self-hosted; no slash forms in copy (plural/infinitive/noun). See
+  `specs/0009-brand-amendment.md` and PRODUCT.md "Slice 9 copy + UX".
+- Offline (0009f, Gilad): requests fail fast (`networkMode: 'always'`) and show "אין חיבור לאינטרנט"; an action
+  started offline is not replayed on reconnect.
+- 0009b slash forms (Gilad): neutral replacements for 0009b's own strings; the rest is a FOLLOWUPS sweep.
 
 ## Constraints
 - Speed rules 1–10 in `CLAUDE.md`: one session per spec, one review round, **one push per spec** (re-push only for a
@@ -181,13 +193,14 @@ Last updated:
 - Refresh this handoff only at the end of a spec, on Gilad's request, or after a big slice rewrite.
 - Orchestrator never writes application code; agents never push to `main` (orchestrator docs commits excepted).
   Never `git stash` in a shared checkout; never start/stop another checkout's compose stack.
-- Web port 5173 is one session at a time; the orchestrator hands it out ("needs 5173" / "5173 is yours" /
-  "released") after `lsof -nP -iTCP:5173 -sTCP:LISTEN`.
+- Each worktree has its own `WEB_PORT` (PR #41); no 5173 handout any more.
+- **At most 3 build sessions at a time** (Gilad 2026-11-12); start the next ready spec as one finishes.
+- **Quick route** (Gilad 2026-11-12, Speed rule 4): a cosmetic, behaviour-unchanged UI spec gets one `ux` reviewer
+  and a Sonnet coder (0009h kept Opus/medium). The 10 quick-route specs have `reviewers: [ux]` in their frontmatter.
 - When writing specs through the shell, `\uXXXX` escapes in tool input get decoded into real characters; build
   escapes in code and check the file for invisible characters afterwards.
 
 ## Known Issues
-- `main` has never run the full e2e suite in CI (CI e2e off since #22).
 - People browse has no rate limit, and the person-card score lets an owner infer hidden seeker fields by editing
   the room (pending Gilad, Next Steps 1).
 - Join, leave and remove publish no chat event; open threads refresh their members on window focus only.
@@ -197,13 +210,15 @@ Last updated:
 - `/areas` blocks on a *hung* Postgres via pooled connections; `/` has no `<h1>`.
 - Design artboards reference a missing `design/screens-v1/support.js`.
 - GitHub branch protection unavailable on this plan.
-- Local parallel `make e2e` flakes under heavy load (map attribution, applications timeout); serial passes.
+- Local parallel `make e2e` flakes under heavy load (0009h saw 5 failures at load ~30 with four stacks up); CI e2e is
+  the gate now, local e2e is optional.
+- The map's axe `target-size` rule is disabled page-wide on `/search?view=map` until 0009t lands (pins overlap).
 
 ## Environment & Commands
 Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; some shells default to 20) + `pnpm`, `gh`
 logged in.
 
-    make dev        # db+redis → migrate → seed → api+worker+web → waits on /health and :5173
+    make dev        # db+redis → migrate → seed → api+worker+web → waits on /health and :$WEB_PORT
     make dev-api    # same without web
     make down       # compose down -v, empties .outbox/
     make test       # pytest + vitest      make lint   # ruff, mypy --strict, eslint, prettier, tsc
@@ -214,12 +229,16 @@ logged in.
     make e2e        # playwright against the stack, E2E_SHARDS (default 3) shards, rl:* flushed before each
 
 Env var names: see `.env.example`. A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and
-unique `DB_PORT`/`REDIS_PORT`/`API_PORT`; Slice 8 used 5470–5475 / 6420–6425 / 8040–8045 (start above those). The
+unique `DB_PORT`/`REDIS_PORT`/`API_PORT`; Slice 9 uses 5480–5500 / 6430–6450 / 8050–8070 and `WEB_PORT` 5191–5211 (start above those). The
 shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.env` file, so pass
-`DB_PORT=5434 REDIS_PORT=6380` to `make migrate` there. Web at http://localhost:5173 (must be `localhost` — CORS).
+`DB_PORT=5434 REDIS_PORT=6380` to `make migrate` there. Web at http://localhost:$WEB_PORT (must be `localhost` — CORS; `WEB_ORIGIN` follows `WEB_PORT`).
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-12 — Slice 9 orchestrator session: locked all 21 Slice 9 specs, prepared 21 worktrees, built and merged
+  0009b/d/c/f/h (PRs #42–#46) plus the `WEB_PORT` infra PR #41. Gilad: quick route for cosmetic specs, max 3 builds at
+  a time, separate web ports, CI e2e back on under supervision, 0009b slash forms (a), 0009f offline fail-fast (a).
+  Open: 0009t map-pin question.
 - 2026-11-11/12 — Slice 8 orchestrator session (Gilad delegated merging): locked 0008a–0008f, pre-started six build
   sessions in their own worktrees; 0008b ∥ 0008c ∥ 0008d after 0008a's PR, then 0008e, then 0008f; merged PRs
   #35–#40. Gilad chose: declined applicants cannot join (409 `declined`), re-apply after decline later, hold merges
