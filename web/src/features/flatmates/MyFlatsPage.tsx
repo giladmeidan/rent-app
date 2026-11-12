@@ -12,7 +12,7 @@ import { formatDay } from './format';
 const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const action = `inline-flex min-h-[44px] items-center justify-center self-start rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
+const action = `inline-flex min-h-[44px] items-center justify-center self-start rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 function FlatRow({ flat }: { flat: MyFlatOut }) {
   const { t } = useTranslation();
@@ -32,14 +32,14 @@ function FlatRow({ flat }: { flat: MyFlatOut }) {
   }
 
   return (
-    <li className="flex flex-col gap-2 rounded-2xl border border-line bg-white p-4">
+    <li className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">
       <span id={titleId} dir="auto" className="text-start text-[17px] font-bold">
         {cardTitle(t, flat.listing)}
       </span>
-      <span dir="auto" className="text-start text-sm text-muted">
+      <span dir="auto" className="text-start text-sm text-ink-muted">
         {t('flatmates.mine.owner', { name: flat.owner_name })}
       </span>
-      <span className="text-start text-sm text-muted">
+      <span className="text-start text-sm text-ink-muted">
         {t('flatmates.mine.joinedAt', { date: formatDay(flat.joined_at) })}
       </span>
       <button
@@ -53,7 +53,7 @@ function FlatRow({ flat }: { flat: MyFlatOut }) {
         {t('flatmates.mine.leave')}
       </button>
       {leave.isError && (
-        <p role="alert" className="text-sm font-semibold text-[#B91C1C]">
+        <p role="alert" className="text-sm font-semibold text-danger">
           {t('common.error')}
         </p>
       )}
@@ -91,7 +91,7 @@ export function MyFlatsPage() {
     <section className={section}>
       <Link
         to="/chat"
-        className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+        className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
       >
         {t('flatmates.mine.back')}
       </Link>

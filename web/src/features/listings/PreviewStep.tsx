@@ -18,9 +18,9 @@ type Props = {
   onBackToDetails: () => void;
 };
 
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+const fieldError = 'text-sm font-semibold text-danger';
 const secondary =
-  'min-h-[44px] self-start rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+  'min-h-[44px] self-start rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 /** Step 4: the card exactly as "my listings" will render it, a room's flatmates and questionnaire,
  * the owner's preferences as the listing page shows them, and the publish errors. */
@@ -28,7 +28,7 @@ export function PreviewStep({ body, today, error, onRetry, onBackToDetails }: Pr
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-muted">{t('listings.preview.hint')}</p>
+      <p className="text-ink-muted">{t('listings.preview.hint')}</p>
       <ListingCard listing={body} today={today} />
       {body.listing_type === 'room' && <RoomPreview body={body} />}
       <OwnerPreferences listing={body} />

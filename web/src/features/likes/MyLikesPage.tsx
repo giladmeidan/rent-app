@@ -77,7 +77,7 @@ export function MyLikesPage() {
                 <EmptyState message={t('likes.likedMeEmpty')} />
                 <Link
                   to="/me/profile?section=room"
-                  className={`inline-flex min-h-[44px] items-center rounded text-accent-text underline underline-offset-4 ${focusRing}`}
+                  className={`inline-flex min-h-[44px] items-center rounded text-accent-strong underline underline-offset-4 ${focusRing}`}
                 >
                   {t('likes.toProfile')}
                 </Link>

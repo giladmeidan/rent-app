@@ -21,10 +21,10 @@ describe('MatchBadge', () => {
       // "87%" is one number run: no `dir` attribute.
       expect(badge).not.toHaveAttribute('dir');
       if (accent) {
-        expect(badge).toHaveClass('bg-accent', 'text-white');
-        expect(badge).not.toHaveClass('bg-[#E7E5E4]');
+        expect(badge).toHaveClass('bg-accent', 'text-on-ink');
+        expect(badge).not.toHaveClass('bg-surface-subtle');
       } else {
-        expect(badge).toHaveClass('bg-[#E7E5E4]', 'text-[#44403C]');
+        expect(badge).toHaveClass('bg-surface-subtle', 'text-ink-muted');
         expect(badge).not.toHaveClass('bg-accent');
       }
       view.unmount();

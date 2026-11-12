@@ -6,7 +6,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Skeleton } from '../../components/Skeleton';
 import { fetchAreas } from './api';
 
-const card = 'break-words rounded-2xl border border-line bg-white px-4 py-[14px]';
+const card = 'break-words rounded-2xl border border-border bg-surface px-4 py-[14px]';
 
 export function AreasList() {
   const { t } = useTranslation();

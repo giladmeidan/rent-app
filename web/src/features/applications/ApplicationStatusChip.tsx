@@ -7,17 +7,17 @@ type Props =
   { viewer?: 'seeker'; status: ApplicationStatus } | { viewer: 'owner'; status: ApplicantStatus };
 
 const seekerTone: Record<ApplicationStatus, string> = {
-  submitted: 'bg-accent-tint text-accent-text',
-  shortlisted: 'bg-accent text-white',
-  declined: 'bg-line text-muted',
-  withdrawn: 'bg-line text-muted',
+  submitted: 'bg-accent-soft text-accent-strong',
+  shortlisted: 'bg-accent text-on-ink',
+  declined: 'bg-border text-ink-muted',
+  withdrawn: 'bg-border text-ink-muted',
 };
 
 // Inbox.dc.html: "חדש" is amber, "ברשימה הקצרה" accent.
 const ownerTone: Record<ApplicantStatus, string> = {
-  submitted: 'bg-warn text-warn-text',
-  shortlisted: 'bg-accent-tint text-accent-text',
-  declined: 'bg-line text-muted',
+  submitted: 'bg-surface-subtle text-warning',
+  shortlisted: 'bg-accent-soft text-accent-strong',
+  declined: 'bg-border text-ink-muted',
 };
 
 /** One pill per application status (`StatusBadge`'s anatomy), in the seeker's or the owner's words. */

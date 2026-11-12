@@ -16,13 +16,13 @@ export function MutualBanner({ applicationId }: { applicationId: string }) {
   return (
     <div
       role="status"
-      className="flex flex-col items-start gap-2 rounded-2xl border border-accent-tint bg-accent-tint px-4 py-[14px]"
+      className="flex flex-col items-start gap-2 rounded-2xl border border-accent-soft bg-accent-soft px-4 py-[14px]"
     >
-      <p className="text-start text-[15px] font-bold text-accent-text">{t('likes.mutual')}</p>
+      <p className="text-start text-[15px] font-bold text-accent-strong">{t('likes.mutual')}</p>
       <Link
         ref={chat}
         to={`/chat/${applicationId}`}
-        className={`inline-flex min-h-[44px] items-center rounded-full bg-accent px-4 text-[15px] font-bold text-white ${focusRing}`}
+        className={`inline-flex min-h-[44px] items-center rounded-full bg-accent px-4 text-[15px] font-bold text-on-ink ${focusRing}`}
       >
         {t('likes.toChat')}
       </Link>

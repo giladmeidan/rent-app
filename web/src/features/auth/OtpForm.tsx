@@ -70,12 +70,12 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
 
 const label = 'text-sm font-bold';
 const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const fieldError = 'text-sm font-semibold text-danger';
 const primary =
-  'min-h-[52px] w-full rounded-[14px] bg-accent text-base font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50';
+  'min-h-[52px] w-full rounded-[14px] bg-accent text-base font-bold text-on-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50';
 const secondary =
-  'min-h-[44px] rounded-full px-3 text-sm font-semibold text-accent-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:text-muted';
+  'min-h-[44px] rounded-full px-3 text-sm font-semibold text-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:text-ink-muted';
 
 type Props = {
   /** Signup: step 1 collects role and name too. Login: email only; the profile is asked for only
@@ -328,7 +328,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
 
   return (
     <form noValidate onSubmit={onVerifySubmit} className="flex flex-col gap-[22px]">
-      <p className="text-muted">
+      <p className="text-ink-muted">
         {/* First-strong isolates keep an email that ends in a digit or symbol in LTR order. */}
         {t('auth.code.sentTo', { email: `⁨${email.trim()}⁩` })}
       </p>

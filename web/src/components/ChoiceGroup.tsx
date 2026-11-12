@@ -47,7 +47,7 @@ export function ChoiceGroup<T extends string | number>({
             />
             <label
               htmlFor={`${id}-${String(option.value)}`}
-              className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-tint peer-checked:font-bold peer-checked:text-accent-text peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-aria-[invalid=true]:border-[#B91C1C]"
+              className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-bold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-aria-[invalid=true]:border-danger"
             >
               {option.label}
             </label>
@@ -55,7 +55,7 @@ export function ChoiceGroup<T extends string | number>({
         ))}
       </div>
       {error !== undefined && (
-        <p id={errorId} role="alert" className="mt-[6px] text-sm font-semibold text-[#B91C1C]">
+        <p id={errorId} role="alert" className="mt-[6px] text-sm font-semibold text-danger">
           {error}
         </p>
       )}

@@ -60,11 +60,11 @@ export function OwnerPreferences({ listing }: Props) {
       <h2 id={headingId} className="text-[17px] font-extrabold">
         {t('listing.ownerLooksFor.title')}
       </h2>
-      <ul className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white px-4 py-[14px]">
+      <ul className="flex flex-wrap gap-2 rounded-2xl border border-border bg-surface px-4 py-[14px]">
         {chips.map((chip) => (
           <li
             key={chip}
-            className="rounded-full border border-[#E7E5E4] bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold"
+            className="rounded-full border border-border bg-surface-subtle px-3 py-[6px] text-[13px] font-semibold"
           >
             {chip}
           </li>

@@ -128,12 +128,12 @@ function toFilters(values: Values): FormFilters {
 const legend = 'mb-2 text-sm font-bold';
 const label = 'text-sm font-bold';
 const box =
-  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-tint has-[[aria-invalid=true]]:border-[#B91C1C]';
+  'flex min-h-[48px] items-center gap-[6px] rounded-xl border-[1.5px] border-border-strong bg-surface px-3 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft has-[[aria-invalid=true]]:border-danger';
 const bare =
   'min-w-0 flex-1 border-0 bg-transparent text-start text-base font-semibold text-ink outline-none';
 const control =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const fieldError = 'text-sm font-semibold text-danger';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
@@ -192,7 +192,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
   const priceInput = (name: 'price_min' | 'price_max', text: string) => (
     <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
       <div className={box}>
-        <label htmlFor={fieldId(name)} className="shrink-0 text-sm text-muted">
+        <label htmlFor={fieldId(name)} className="shrink-0 text-sm text-ink-muted">
           {text}
         </label>
         <input
@@ -204,7 +204,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
           onChange={(e) => set({ [name]: e.target.value.replace(/\D/g, '') })}
           className={bare}
         />
-        <span className="shrink-0 text-sm text-muted">{t('listings.units.ils')}</span>
+        <span className="shrink-0 text-sm text-ink-muted">{t('listings.units.ils')}</span>
       </div>
       {errorText(name)}
     </div>
@@ -212,7 +212,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
 
   const roomsSelect = (name: 'rooms_min' | 'rooms_max', text: string) => (
     <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
-      <label htmlFor={fieldId(name)} className="text-sm text-muted">
+      <label htmlFor={fieldId(name)} className="text-sm text-ink-muted">
         {text}
       </label>
       <select
@@ -261,7 +261,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
     <form
       noValidate
       onSubmit={submit}
-      className="flex flex-col gap-[22px] rounded-2xl border border-line bg-white p-4"
+      className="flex flex-col gap-[22px] rounded-2xl border border-border bg-surface p-4"
     >
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.type.legend')}</legend>
@@ -270,7 +270,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
           {typeBox('room', t('search.type.room'))}
         </div>
         {oneType && (
-          <p id={typeHintId} className="text-xs text-muted">
+          <p id={typeHintId} className="text-xs text-ink-muted">
             {t('search.type.hint')}
           </p>
         )}
@@ -304,7 +304,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
           onChange={(e) => set({ available_by: e.target.value })}
           className={control}
         />
-        <p id={`${fieldId('available_by')}-hint`} className="text-xs text-muted">
+        <p id={`${fieldId('available_by')}-hint`} className="text-xs text-ink-muted">
           {t('search.availableByHint')}
         </p>
       </div>
@@ -323,7 +323,7 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
               />
               <label
                 htmlFor={fieldId(feature)}
-                className="flex min-h-[44px] cursor-pointer items-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-[14px] text-[14px] font-medium peer-checked:border-accent peer-checked:bg-accent-tint peer-checked:font-semibold peer-checked:text-accent-text peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+                className="flex min-h-[44px] cursor-pointer items-center rounded-full border-[1.5px] border-border-strong bg-surface px-[14px] text-[14px] font-medium peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
               >
                 {featureLabels[feature]}
               </label>
@@ -335,14 +335,14 @@ export function FiltersForm({ filters, onApply, onClear }: Props) {
       <div className="flex gap-3">
         <button
           type="submit"
-          className={`flex min-h-[48px] flex-[1.6] items-center justify-center rounded-[14px] bg-accent px-4 text-base font-bold text-white ${focusRing}`}
+          className={`flex min-h-[48px] flex-[1.6] items-center justify-center rounded-[14px] bg-accent px-4 text-base font-bold text-on-ink ${focusRing}`}
         >
           {t('search.apply')}
         </button>
         <button
           type="button"
           onClick={clear}
-          className={`flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-bold ${focusRing}`}
+          className={`flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-bold ${focusRing}`}
         >
           {t('search.clear')}
         </button>

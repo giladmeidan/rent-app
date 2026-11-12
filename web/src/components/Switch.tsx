@@ -36,11 +36,11 @@ export function Switch({ label, checked, onChange, describedBy }: Props) {
         />
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-full bg-[#D6D3D1] transition-colors peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+          className="pointer-events-none absolute inset-0 rounded-full bg-border-strong transition-colors peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
         />
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute start-[3px] top-[3px] h-[26px] w-[26px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all peer-checked:start-[23px]"
+          className="pointer-events-none absolute start-[3px] top-[3px] h-[26px] w-[26px] rounded-full bg-surface shadow-thumb transition-all peer-checked:start-[23px]"
         />
       </span>
     </div>

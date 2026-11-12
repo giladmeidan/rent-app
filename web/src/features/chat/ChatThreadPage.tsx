@@ -24,7 +24,7 @@ function BackToChats() {
   return (
     <Link
       to="/chat"
-      className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       <svg
         aria-hidden="true"
@@ -63,7 +63,7 @@ function Bubble({ message }: { message: MessageOut }) {
         </span>
         <time
           dateTime={message.created_at}
-          className={`ms-auto text-[12px] ${mine ? 'text-white' : 'text-muted'}`}
+          className={`ms-auto text-[12px] ${mine ? 'text-on-ink' : 'text-ink-muted'}`}
         >
           {formatMessageTime(message.created_at)}
         </time>
@@ -87,7 +87,7 @@ function MemberLine({ members }: { members: ThreadOut['members'] }) {
       role="group"
       aria-label={t('chat.members')}
       title={full}
-      className="line-clamp-2 text-start text-sm text-muted [overflow-wrap:anywhere]"
+      className="line-clamp-2 text-start text-sm text-ink-muted [overflow-wrap:anywhere]"
     >
       {full}
     </p>
@@ -123,33 +123,33 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
         <span dir="auto">{thread.other_name}</span>
       </h1>
       {group && <MemberLine members={thread.members} />}
-      <p className="flex flex-wrap items-center gap-x-2 text-start text-sm text-muted">
+      <p className="flex flex-wrap items-center gap-x-2 text-start text-sm text-ink-muted">
         <span>
           {cardTitle(t, listing)} · {formatIls(listing.price_ils)} {t('listings.units.ils')}
         </span>
         <Link
           to={owner ? `/me/listings/${listing.id}/applicants` : `/listings/${listing.id}`}
-          className={`inline-flex min-h-[44px] items-center rounded font-semibold text-accent-text underline underline-offset-4 ${focusRing}`}
+          className={`inline-flex min-h-[44px] items-center rounded font-semibold text-accent-strong underline underline-offset-4 ${focusRing}`}
         >
           {owner ? t('chat.thread.toApplicants') : t('chat.thread.toListing')}
         </Link>
       </p>
       <p
         role="note"
-        className="rounded-2xl bg-warn px-4 py-3 text-start text-[15px] font-semibold leading-relaxed text-warn-text"
+        className="rounded-2xl bg-surface-subtle px-4 py-3 text-start text-[15px] font-semibold leading-relaxed text-warning"
       >
         {t('chat.thread.warning')}
       </p>
       {thread.visible_from !== null && (
-        <p className="text-start text-sm text-muted">
+        <p className="text-start text-sm text-ink-muted">
           {t('chat.joinedNote', { date: formatDay(thread.visible_from) })}
         </p>
       )}
       {thread.truncated && (
-        <p className="text-start text-sm text-muted">{t('chat.thread.truncated')}</p>
+        <p className="text-start text-sm text-ink-muted">{t('chat.thread.truncated')}</p>
       )}
       {messages.length === 0 ? (
-        <p className="text-start text-[15px] text-muted">{t('chat.thread.empty')}</p>
+        <p className="text-start text-[15px] text-ink-muted">{t('chat.thread.empty')}</p>
       ) : (
         // A polite live region: messages pushed in are announced (keyed by id: only new ones).
         <div role="log" aria-label={t('chat.thread.log')}>
@@ -174,14 +174,14 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
                     <span
                       data-testid="sender-name"
                       dir="auto"
-                      className="text-start text-sm text-muted"
+                      className="text-start text-sm text-ink-muted"
                     >
                       {message.sender_name}
                     </span>
                   )}
                   <div
                     className={`rounded-2xl px-3 py-2 ${
-                      message.mine ? 'bg-accent text-white' : 'border border-line bg-white'
+                      message.mine ? 'bg-accent text-on-ink' : 'border border-border bg-surface'
                     }`}
                   >
                     <Bubble message={message} />
@@ -197,7 +197,7 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
       ) : (
         <p
           role="status"
-          className="rounded-2xl border border-line bg-white px-4 py-3 text-start text-[15px] text-muted"
+          className="rounded-2xl border border-border bg-surface px-4 py-3 text-start text-[15px] text-ink-muted"
         >
           {t('chat.thread.closed')}
         </p>

@@ -14,11 +14,11 @@ import { useLikePerson, useUnlikePerson } from './useLikePerson';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const disclosure = `inline-flex min-h-[44px] items-center gap-1 self-start rounded-xl text-sm font-semibold text-accent-text ${focusRing}`;
+const fieldError = 'text-sm font-semibold text-danger';
+const disclosure = `inline-flex min-h-[44px] items-center gap-1 self-start rounded-xl text-sm font-semibold text-accent-strong ${focusRing}`;
 const chip = 'rounded-full px-[10px] py-1 text-xs font-semibold';
-const agreeChip = `${chip} bg-accent-tint text-accent-text`;
-const differChip = `${chip} bg-warn text-warn-text`;
+const agreeChip = `${chip} bg-accent-soft text-accent-strong`;
+const differChip = `${chip} bg-surface-subtle text-warning`;
 const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
 
 export type Mutual = { name: string; applicationId: string };
@@ -107,12 +107,12 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
     <li>
       <article
         aria-labelledby={headingId}
-        className="flex flex-col gap-3 rounded-[20px] border border-line bg-white p-4"
+        className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-4"
       >
         <div className="flex items-start gap-3">
           <div
             aria-hidden="true"
-            className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-tint text-[17px] font-extrabold text-accent-text"
+            className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-soft text-[17px] font-extrabold text-accent-strong"
           >
             {Array.from(name)[0] ?? ''}
           </div>
@@ -128,23 +128,23 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
               {person.liked_me && (
                 <span
                   data-testid="person-liked-me"
-                  className="rounded-full bg-warn px-2 py-[2px] text-[12px] font-bold text-warn-text"
+                  className="rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-bold text-warning"
                 >
                   {t('people.likedMe')}
                 </span>
               )}
             </div>
-            <p className="text-start text-[13px] text-[#44403C]">
+            <p className="text-start text-[13px] text-ink-muted">
               {person.age === null
                 ? gender
                 : t('applicants.room.line', { gender, age: person.age })}
             </p>
             {areaNames.length > 0 && (
-              <p className="text-start text-[13px] text-[#44403C]">
+              <p className="text-start text-[13px] text-ink-muted">
                 {t('people.areas', { areas: conjunction.format(areaNames) })}
               </p>
             )}
-            <p className="text-start text-[13px] text-[#44403C]">
+            <p className="text-start text-[13px] text-ink-muted">
               {t('people.moveIn', { date: formatDate(moveIn) })}
               {person.move_in_flexible && <> {t('applicants.flexible')}</>}
             </p>
@@ -152,7 +152,7 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
         </div>
         {person.about_me !== null && person.about_me !== '' && (
           <div className="flex flex-col gap-1">
-            <p className="text-start text-[13px] font-bold text-muted">{t('people.aboutMe')}</p>
+            <p className="text-start text-[13px] font-bold text-ink-muted">{t('people.aboutMe')}</p>
             {/* Free text from a seeker: React children only, line breaks kept, direction from its
                 first strong character. */}
             <p
@@ -194,7 +194,7 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
                 </li>
               ))}
               {match.differs !== null && (
-                <li className="flex items-center gap-[10px] text-sm text-[#44403C]">
+                <li className="flex items-center gap-[10px] text-sm text-ink-muted">
                   <DifferIcon />
                   <span>{line(match.differs, 'differ')}</span>
                 </li>
@@ -237,8 +237,8 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
             onClick={() => void toggle()}
             className={`inline-flex min-h-[44px] items-center justify-center gap-1 rounded-xl px-4 text-[15px] font-bold aria-disabled:opacity-60 ${focusRing} ${
               person.liked_by_me
-                ? 'border-[1.5px] border-accent bg-accent-tint text-accent-text'
-                : 'bg-accent text-white'
+                ? 'border-[1.5px] border-accent bg-accent-soft text-accent-strong'
+                : 'bg-accent text-on-ink'
             }`}
           >
             {t('people.like')}

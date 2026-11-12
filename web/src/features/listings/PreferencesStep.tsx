@@ -9,12 +9,12 @@ import type { FieldError, FieldErrors, FieldName, ListingForm } from './validate
 
 const label = 'text-sm font-bold';
 const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint aria-[invalid=true]:border-[#B91C1C]';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
-const card = 'flex flex-col divide-y divide-[#F0EEEB] rounded-2xl border border-line bg-white';
+  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
+const fieldError = 'text-sm font-semibold text-danger';
+const card = 'flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface';
 // ChoiceGroup's segmented button, for a checkbox.
 const segment =
-  'flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-tint peer-checked:font-bold peer-checked:text-accent-text peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent group-aria-[invalid=true]:border-[#B91C1C]';
+  'flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-bold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent group-aria-[invalid=true]:border-danger';
 
 const CONTRACT_OPTIONS: readonly ContractMonths[] = [6, 12, 24, 36];
 
@@ -66,7 +66,7 @@ export function PreferencesStep({ form, onChange, errors, fieldId }: Props) {
         <h2 className="text-start text-xl font-extrabold">
           {room ? t('listings.prefs.titleRoom') : t('listings.prefs.title')}
         </h2>
-        <p className="text-sm text-muted">{t('listings.prefs.hint')}</p>
+        <p className="text-sm text-ink-muted">{t('listings.prefs.hint')}</p>
       </div>
 
       <fieldset

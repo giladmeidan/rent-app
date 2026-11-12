@@ -5,13 +5,13 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div
       role="alert"
-      className="flex flex-col items-start gap-3 rounded-2xl border border-line bg-white px-4 py-[14px]"
+      className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-surface px-4 py-[14px]"
     >
       <p>{t('common.error')}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="min-h-[44px] rounded-full bg-accent px-5 font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="min-h-[44px] rounded-full bg-accent px-5 font-semibold text-on-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         {t('common.retry')}
       </button>

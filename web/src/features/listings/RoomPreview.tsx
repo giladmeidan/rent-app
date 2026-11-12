@@ -52,18 +52,18 @@ export function RoomPreview({ body }: Props) {
     <>
       <ul
         aria-label={t('listings.room.title')}
-        className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white px-4 py-[14px]"
+        className="flex flex-wrap gap-2 rounded-2xl border border-border bg-surface px-4 py-[14px]"
       >
         {chips.map((chip) => (
           <li
             key={chip}
-            className="rounded-full border border-[#E7E5E4] bg-[#F5F5F4] px-3 py-[6px] text-[13px] font-semibold"
+            className="rounded-full border border-border bg-surface-subtle px-3 py-[6px] text-[13px] font-semibold"
           >
             {chip}
           </li>
         ))}
       </ul>
-      {showsPrivate && <p className="text-sm text-muted">{t('listings.room.privacyNote')}</p>}
+      {showsPrivate && <p className="text-sm text-ink-muted">{t('listings.room.privacyNote')}</p>}
     </>
   );
 }

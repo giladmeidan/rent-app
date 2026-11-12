@@ -19,14 +19,14 @@ export function LikesNavLink() {
   return (
     <Link
       to="/me/likes"
-      className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-[10px] text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-[10px] text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       {t('header.likes')}
       {count > 0 && (
         <>
           <span
             aria-hidden="true"
-            className="min-w-[22px] rounded-full bg-warn px-[6px] py-[1px] text-center text-[12px] font-bold text-warn-text"
+            className="min-w-[22px] rounded-full bg-surface-subtle px-[6px] py-[1px] text-center text-[12px] font-bold text-warning"
           >
             {count}
           </span>{' '}

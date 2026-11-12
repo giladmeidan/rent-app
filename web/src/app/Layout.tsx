@@ -27,7 +27,8 @@ export function Layout() {
                   height="18"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#FFFFFF"
+                  stroke="currentColor"
+                  className="text-on-ink"
                   strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -40,7 +41,7 @@ export function Layout() {
             </Link>
             <NavLink
               to="/search"
-              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-[current=page]:text-accent-text aria-[current=page]:underline aria-[current=page]:underline-offset-4"
+              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-[10px] text-[15px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-[current=page]:text-accent-strong aria-[current=page]:underline aria-[current=page]:underline-offset-4"
             >
               {t('header.search')}
             </NavLink>
@@ -48,7 +49,7 @@ export function Layout() {
               <AuthMenu />
             </div>
           </div>
-          <p className="mt-1 text-muted">{t('app.tagline')}</p>
+          <p className="mt-1 text-ink-muted">{t('app.tagline')}</p>
         </header>
         <main className="pb-8 pt-6">
           <Outlet />

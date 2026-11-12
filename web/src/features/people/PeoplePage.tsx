@@ -22,7 +22,7 @@ function Back() {
   return (
     <Link
       to="/me/listings"
-      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       {t('people.back')}
     </Link>
@@ -121,7 +121,9 @@ export function PeoplePage() {
         <EmptyState message={t('people.empty')} />
       ) : (
         <>
-          <p className="text-start text-sm text-muted">{t('people.count', { count: lastTotal })}</p>
+          <p className="text-start text-sm text-ink-muted">
+            {t('people.count', { count: lastTotal })}
+          </p>
           <ul className="flex flex-col gap-3">
             {items.map((person) => (
               <PersonCard
@@ -146,7 +148,7 @@ export function PeoplePage() {
               onClick={() => void people.fetchNextPage()}
               disabled={people.isFetchingNextPage}
               aria-busy={people.isFetchingNextPage}
-              className={`inline-flex min-h-[44px] items-center justify-center self-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
+              className={`inline-flex min-h-[44px] items-center justify-center self-center rounded-xl border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
             >
               {t('people.loadMore')}
             </button>
@@ -169,7 +171,7 @@ export function PeoplePage() {
         className={
           mutual === null
             ? undefined
-            : 'flex flex-wrap items-center gap-3 rounded-2xl bg-accent-tint px-4 py-3 text-start text-[15px] font-semibold text-accent-text focus:outline-none'
+            : 'flex flex-wrap items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3 text-start text-[15px] font-semibold text-accent-strong focus:outline-none'
         }
       >
         {mutual !== null && (
@@ -188,7 +190,7 @@ export function PeoplePage() {
         className={
           alert === null
             ? undefined
-            : 'rounded-2xl bg-warn px-4 py-3 text-start text-[15px] font-semibold text-warn-text focus:outline-none'
+            : 'rounded-2xl bg-surface-subtle px-4 py-3 text-start text-[15px] font-semibold text-warning focus:outline-none'
         }
       >
         {alert?.kind === 'alreadyApplied' && (

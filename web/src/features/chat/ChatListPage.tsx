@@ -15,7 +15,8 @@ import { useConversations } from './useConversations';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const pill = 'flex-none rounded-full bg-warn px-2 py-[2px] text-[12px] font-bold text-warn-text';
+const pill =
+  'flex-none rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-bold text-warning';
 
 function ConversationRow({ conversation }: { conversation: ConversationOut }) {
   const { t } = useTranslation();
@@ -39,11 +40,11 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
     <li>
       <Link
         to={`/chat/${conversation.id}`}
-        className={`flex min-h-[44px] items-start gap-3 rounded-[20px] border border-line bg-white p-4 ${focusRing}`}
+        className={`flex min-h-[44px] items-start gap-3 rounded-[20px] border border-border bg-surface p-4 ${focusRing}`}
       >
         <span
           aria-hidden="true"
-          className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-tint text-[17px] font-extrabold text-accent-text"
+          className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-soft text-[17px] font-extrabold text-accent-strong"
         >
           {Array.from(conversation.other_name)[0] ?? ''}
         </span>
@@ -53,25 +54,25 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
               {conversation.other_name}
             </span>
             {conversation.my_role === 'flatmate' && (
-              <span className="flex-none rounded-full bg-accent-tint px-2 py-[2px] text-[12px] font-semibold text-accent-text">
+              <span className="flex-none rounded-full bg-accent-soft px-2 py-[2px] text-[12px] font-semibold text-accent-strong">
                 {t('chat.flatmateChip')}
               </span>
             )}
             {conversation.member_count > 2 && (
-              <span className="flex-none rounded-full bg-[#F5F5F4] px-2 py-[2px] text-[12px] font-semibold text-muted">
+              <span className="flex-none rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-semibold text-ink-muted">
                 {t('chat.group', { count: conversation.member_count })}
               </span>
             )}
             {mark}
             {!conversation.can_send && (
-              <span className="flex-none rounded-full bg-[#F5F5F4] px-2 py-[2px] text-[12px] font-semibold text-muted">
+              <span className="flex-none rounded-full bg-surface-subtle px-2 py-[2px] text-[12px] font-semibold text-ink-muted">
                 {t('chat.list.closed')}
               </span>
             )}
           </span>
-          <span className="truncate text-[13px] text-muted">{cardTitle(t, listing)}</span>
+          <span className="truncate text-[13px] text-ink-muted">{cardTitle(t, listing)}</span>
           {last === null ? (
-            <span className="text-[15px] text-muted">{t('chat.list.noMessages')}</span>
+            <span className="text-[15px] text-ink-muted">{t('chat.list.noMessages')}</span>
           ) : (
             <span className="flex min-w-0 items-baseline gap-2">
               {/* Another person's free text: a text node only, never HTML or a link. */}
@@ -82,7 +83,7 @@ function ConversationRow({ conversation }: { conversation: ConversationOut }) {
               >
                 {last.mine ? t('chat.list.you', { body: last.body }) : last.body}
               </span>
-              <time dateTime={last.created_at} className="flex-none text-[13px] text-muted">
+              <time dateTime={last.created_at} className="flex-none text-[13px] text-ink-muted">
                 {formatMessageTime(last.created_at)}
               </time>
             </span>
@@ -155,14 +156,14 @@ export function ChatListPage() {
         {flats.data !== undefined && flats.data.length > 0 && (
           <Link
             to="/me/flats"
-            className={`inline-flex min-h-[44px] items-center rounded font-semibold text-accent-text underline underline-offset-4 ${focusRing}`}
+            className={`inline-flex min-h-[44px] items-center rounded font-semibold text-accent-strong underline underline-offset-4 ${focusRing}`}
           >
             {t('chat.myFlats')}
           </Link>
         )}
       </div>
       {joined && (
-        <p role="status" className="text-start text-sm font-semibold text-accent-text">
+        <p role="status" className="text-start text-sm font-semibold text-accent-strong">
           {t('flatmates.join.done')}
         </p>
       )}

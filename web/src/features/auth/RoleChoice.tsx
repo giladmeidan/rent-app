@@ -39,7 +39,7 @@ export function RoleChoice({ value, onChange, firstRadioRef }: Props) {
             />
             <label
               htmlFor={`${id}-${role}`}
-              className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-tint peer-checked:font-bold peer-checked:text-accent-text peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+              className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-center text-[15px] font-semibold peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-bold peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
             >
               {role === 'owner' ? t('auth.role.owner') : t('auth.role.seeker')}
             </label>

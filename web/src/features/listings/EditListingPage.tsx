@@ -68,7 +68,7 @@ export function EditListingPage() {
         >
           {t('listings.edit.expiredTitle')}
         </h1>
-        <p className="text-start text-[15px] text-muted">{t('listings.edit.expiredBody')}</p>
+        <p className="text-start text-[15px] text-ink-muted">{t('listings.edit.expiredBody')}</p>
       </section>
     );
   }

@@ -5,13 +5,14 @@ const circle = 'flex size-6 shrink-0 items-center justify-center rounded-full';
 
 export function AgreeIcon() {
   return (
-    <span aria-hidden="true" className={`${circle} bg-accent-tint`}>
+    <span aria-hidden="true" className={`${circle} bg-accent-soft`}>
       <svg
         width="14"
         height="14"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#0B5F52"
+        stroke="currentColor"
+        className="text-accent-strong"
         strokeWidth="3"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -24,13 +25,14 @@ export function AgreeIcon() {
 
 export function DifferIcon() {
   return (
-    <span aria-hidden="true" className={`${circle} bg-warn`}>
+    <span aria-hidden="true" className={`${circle} bg-surface-subtle`}>
       <svg
         width="14"
         height="14"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#92400E"
+        stroke="currentColor"
+        className="text-warning"
         strokeWidth="3"
         strokeLinecap="round"
         strokeLinejoin="round"

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  @apply bg-bg font-sans text-ink;
+  @apply bg-surface font-sans text-ink;
 }
 
 /* MapLibre's controls (spec 0003d). The attribution is Latin text: in RTL it would read

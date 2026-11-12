@@ -22,13 +22,13 @@ import { useSetApplicantStatus } from './useSetApplicantStatus';
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+const fieldError = 'text-sm font-semibold text-danger';
 const button = `inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 text-[15px] disabled:opacity-60 ${focusRing}`;
-const primary = `${button} bg-accent font-bold text-white`;
-const secondary = `${button} border-[1.5px] border-accent bg-accent-tint font-bold text-accent-text`;
-const outline = `${button} border-[1.5px] border-[#D6D3D1] bg-white font-semibold`;
-const disclosure = `inline-flex min-h-[44px] items-center gap-1 self-start rounded-xl text-sm font-semibold text-accent-text ${focusRing}`;
-const iconLink = `inline-flex min-h-[44px] w-11 flex-none items-center justify-center rounded-xl border-[1.5px] border-[#D6D3D1] bg-white ${focusRing}`;
+const primary = `${button} bg-accent font-bold text-on-ink`;
+const secondary = `${button} border-[1.5px] border-accent bg-accent-soft font-bold text-accent-strong`;
+const outline = `${button} border-[1.5px] border-border-strong bg-surface font-semibold`;
+const disclosure = `inline-flex min-h-[44px] items-center gap-1 self-start rounded-xl text-sm font-semibold text-accent-strong ${focusRing}`;
+const iconLink = `inline-flex min-h-[44px] w-11 flex-none items-center justify-center rounded-xl border-[1.5px] border-border-strong bg-surface ${focusRing}`;
 
 /** What the page does once a change is settled (it owns focus, the announcement and the alert). */
 export type CardOutcome =
@@ -124,12 +124,12 @@ export function ApplicantCard({
     <li>
       <article
         aria-labelledby={headingId}
-        className="flex flex-col gap-3 rounded-[20px] border border-line bg-white p-4"
+        className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-4"
       >
         <div className="flex items-start gap-3">
           <div
             aria-hidden="true"
-            className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-tint text-[17px] font-extrabold text-accent-text"
+            className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-soft text-[17px] font-extrabold text-accent-strong"
           >
             {Array.from(name)[0] ?? ''}
           </div>
@@ -146,17 +146,17 @@ export function ApplicantCard({
               {match !== null ? (
                 <MatchBadge score={match.score} />
               ) : (
-                <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-[#F5F5F4] px-[10px] py-[6px] text-[13px] font-semibold text-muted">
+                <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-subtle px-[10px] py-[6px] text-[13px] font-semibold text-ink-muted">
                   {t('match.noScore')}
                 </span>
               )}
             </div>
-            <p className="text-start text-[13px] text-muted">
+            <p className="text-start text-[13px] text-ink-muted">
               {t('applicants.appliedAt', { date: appliedOn(applicant.created_at) })}
             </p>
             {room !== null && <RoomLine room={room} />}
             {profile !== null && (
-              <p className="text-start text-[13px] text-[#44403C]">
+              <p className="text-start text-[13px] text-ink-muted">
                 {t('applicants.summary', {
                   household: householdName(profile.household, t),
                   date: applicantMoveIn(profile),
@@ -173,7 +173,7 @@ export function ApplicantCard({
           // A mutual match has no message: the tag stands where it would be.
           <p
             data-testid="applicant-mutual"
-            className="inline-flex self-start rounded-full bg-accent-tint px-[10px] py-1 text-xs font-semibold text-accent-text"
+            className="inline-flex self-start rounded-full bg-accent-soft px-[10px] py-1 text-xs font-semibold text-accent-strong"
           >
             {t('applicants.mutual')}
           </p>
@@ -213,7 +213,7 @@ export function ApplicantCard({
                     </li>
                   ))}
                   {match.differs !== null && (
-                    <li className="flex items-center gap-[10px] text-sm text-[#44403C]">
+                    <li className="flex items-center gap-[10px] text-sm text-ink-muted">
                       <DifferIcon />
                       <span>{ownerReason(match.differs, 'differ', profile, spots, t)}</span>
                     </li>
@@ -326,7 +326,7 @@ function RoomLine({ room }: { room: ApplicantRoom }) {
   const { t } = useTranslation();
   const gender = t(`profile.room.gender.${room.gender}`);
   return (
-    <p className="text-start text-[13px] text-[#44403C]">
+    <p className="text-start text-[13px] text-ink-muted">
       {room.age === null ? gender : t('applicants.room.line', { gender, age: room.age })}
     </p>
   );
@@ -375,9 +375,9 @@ function ProfileFacts({ profile }: { profile: ApplicantProfileOut }) {
       {rows.map((row) => (
         <div
           key={row.key}
-          className="flex min-w-0 flex-col gap-[2px] rounded-xl bg-[#F5F5F4] px-3 py-[10px]"
+          className="flex min-w-0 flex-col gap-[2px] rounded-xl bg-surface-subtle px-3 py-[10px]"
         >
-          <dt className="text-xs text-muted">{row.label}</dt>
+          <dt className="text-xs text-ink-muted">{row.label}</dt>
           <dd className="text-sm font-bold">{row.value}</dd>
         </div>
       ))}

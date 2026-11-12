@@ -17,19 +17,19 @@ import {
 import { formatDay } from './format';
 
 const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
-const card = 'flex flex-col gap-3 rounded-2xl border border-line bg-white p-4';
+const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[48px] items-center justify-center self-start rounded-[14px] bg-accent px-5 text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
-const action = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
-const fieldError = 'text-sm font-semibold text-[#B91C1C]';
+const primary = `inline-flex min-h-[48px] items-center justify-center self-start rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const action = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
+const fieldError = 'text-sm font-semibold text-danger';
 
 function Back() {
   const { t } = useTranslation();
   return (
     <Link
       to="/me/listings"
-      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-text ${focusRing}`}
+      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
     >
       {t('flatmates.back')}
     </Link>
@@ -75,16 +75,16 @@ function InviteUrl({ url }: { url: string }) {
           dir="ltr"
           value={url}
           onFocus={(event) => event.currentTarget.select()}
-          className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border-[1.5px] border-[#D6D3D1] bg-white px-3 text-start text-sm text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-tint"
+          className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-start text-sm text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft"
         />
         <button type="button" onClick={() => void copy()} className={action}>
           {t('flatmates.invite.copy')}
         </button>
       </div>
-      <p role="status" className="text-sm font-semibold text-accent-text">
+      <p role="status" className="text-sm font-semibold text-accent-strong">
         {copied ? t('flatmates.invite.copied') : ''}
       </p>
-      <p className="rounded-xl bg-warn px-3 py-2 text-start text-sm font-semibold text-warn-text">
+      <p className="rounded-xl bg-surface-subtle px-3 py-2 text-start text-sm font-semibold text-warning">
         {t('flatmates.invite.onceWarning')}
       </p>
     </div>
@@ -223,7 +223,7 @@ function FlatmateRow({
   }
 
   return (
-    <li className="flex flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
+    <li className="flex flex-col gap-2 border-t border-border pt-3 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-col">
           <span
@@ -233,7 +233,7 @@ function FlatmateRow({
           >
             {name}
           </span>
-          <span className="text-start text-sm text-muted">
+          <span className="text-start text-sm text-ink-muted">
             {t('flatmates.list.joinedAt', { date: formatDay(flatmate.joined_at) })}
           </span>
         </div>

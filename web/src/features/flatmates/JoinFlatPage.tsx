@@ -15,10 +15,10 @@ import { clearInviteToken, isInviteToken, readInviteToken, stashInviteToken } fr
 
 const JOIN_PATH = '/flatmates/join';
 const section = 'mx-auto flex w-full max-w-[480px] flex-col gap-4';
-const card = 'flex flex-col gap-3 rounded-2xl border border-line bg-white p-4';
+const card = 'flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const primary = `inline-flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
 const message = 'text-start text-[15px] font-semibold';
 
 /** The copy for an answer the page shows as text; `other` is an `ErrorState`. */
@@ -216,7 +216,7 @@ function JoinFlow() {
   const title = (
     <div className="flex flex-col gap-1">
       <p className="text-start text-lg font-bold">{cardTitle(t, listing)}</p>
-      <p dir="auto" className="text-start text-[15px] text-muted">
+      <p dir="auto" className="text-start text-[15px] text-ink-muted">
         {t('flatmates.join.invitedBy', { owner })}
       </p>
     </div>
@@ -230,7 +230,7 @@ function JoinFlow() {
           <p className={message}>{t('flatmates.join.member')}</p>
           <Link
             to="/chat"
-            className={`inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-text underline ${focusRing}`}
+            className={`inline-flex min-h-[44px] items-center self-start rounded-full text-[15px] font-semibold text-accent-strong underline ${focusRing}`}
           >
             {t('flatmates.join.toChats')}
           </Link>
@@ -258,7 +258,7 @@ function JoinFlow() {
           </button>
         )}
         {failure !== null && failure !== 'other' && (
-          <p role="alert" className={`${message} text-[#B91C1C]`}>
+          <p role="alert" className={`${message} text-danger`}>
             {t(COPY[failure])}
           </p>
         )}

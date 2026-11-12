@@ -168,18 +168,23 @@ export function ApplicantsPage() {
       declined: t('applicants.filter.declined', { count: counts.declined }),
     };
     const stats = [
-      { key: 'total', value: counts.all, label: t('applicants.stats.total'), tone: 'bg-[#F5F5F4]' },
+      {
+        key: 'total',
+        value: counts.all,
+        label: t('applicants.stats.total'),
+        tone: 'bg-surface-subtle',
+      },
       {
         key: 'shortlisted',
         value: counts.shortlisted,
         label: t('applicants.stats.shortlisted'),
-        tone: 'bg-accent-tint text-accent-text',
+        tone: 'bg-accent-soft text-accent-strong',
       },
       {
         key: 'new',
         value: counts.submitted,
         label: t('applicants.stats.new'),
-        tone: 'bg-[#F5F5F4]',
+        tone: 'bg-surface-subtle',
       },
     ];
     const filtered = list.filter((a) => matches(filter, a));
@@ -204,7 +209,7 @@ export function ApplicantsPage() {
         <div
           role="group"
           aria-label={t('applicants.filter.label')}
-          className="flex flex-wrap gap-1 border-b border-line"
+          className="flex flex-wrap gap-1 border-b border-border"
         >
           {FILTERS.map((f) => (
             <button
@@ -221,8 +226,8 @@ export function ApplicantsPage() {
               }}
               className={`min-h-[44px] border-b-[2.5px] px-[14px] text-sm ${
                 filter === f
-                  ? 'border-accent font-bold text-accent-text'
-                  : 'border-transparent font-semibold text-muted'
+                  ? 'border-accent font-bold text-accent-strong'
+                  : 'border-transparent font-semibold text-ink-muted'
               } ${focusRing}`}
             >
               {filterLabel[f]}
@@ -242,8 +247,8 @@ export function ApplicantsPage() {
               onClick={() => setSort(s)}
               className={`min-h-[44px] rounded-full border-[1.5px] px-[14px] text-[13px] ${
                 sort === s
-                  ? 'border-accent bg-accent-tint font-bold text-accent-text'
-                  : 'border-[#D6D3D1] bg-white font-semibold text-muted'
+                  ? 'border-accent bg-accent-soft font-bold text-accent-strong'
+                  : 'border-border-strong bg-surface font-semibold text-ink-muted'
               } ${focusRing}`}
             >
               {sortLabel[s]}
@@ -284,12 +289,12 @@ export function ApplicantsPage() {
           {t('applicants.title')}
         </h1>
         <p className="text-start font-bold">{cardTitle(t, listing)}</p>
-        <p className="text-start text-sm text-muted">
+        <p className="text-start text-sm text-ink-muted">
           {formatIls(listing.price_ils)} {t('listings.units.ils')}
         </p>
       </div>
       {gone && (
-        <p role="alert" className="text-sm font-semibold text-[#B91C1C]">
+        <p role="alert" className="text-sm font-semibold text-danger">
           {t('applicants.errors.gone')}
         </p>
       )}
