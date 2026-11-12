@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
+import { Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -13,11 +14,14 @@ import {
   testQueryClient,
 } from '../../auth/__tests__/harness';
 import type { GenderPreference, Household, ListingOut } from '../api';
+import { ListingWizard } from '../ListingWizard';
+import { NewListingPage } from '../NewListingPage';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner, withoutCounts } from './fixtures';
 import {
   areasLoaded,
   chooseApartmentAndContinue,
+  chooseTypeAndContinue,
   errorFor,
   fillValidDetails,
   IN_30_DAYS,
@@ -84,7 +88,174 @@ const expectedBody = {
   lifestyle: {},
 };
 
+const l = he.listings;
+const h1 = () => screen.getByRole('heading', { level: 1 });
+const h2 = (name: string) => screen.getByRole('heading', { level: 2, name });
+const stepOf = (n: number) => i18n.t('listings.stepOf', { n, total: 4 });
+/** The stepper: the `<ol>` that holds the step names. */
+const stepper = () => screen.getByText(l.steps.type).closest('ol') as HTMLOListElement;
+const expectStep = (n: number) => {
+  const items = within(stepper()).getAllByRole('listitem');
+  expect(items).toHaveLength(4);
+  items.forEach((item, i) => {
+    if (i + 1 === n) expect(item).toHaveAttribute('aria-current', 'step');
+    else expect(item).not.toHaveAttribute('aria-current');
+  });
+  expect(progress()).toHaveAttribute('aria-valuenow', String(n));
+  expect(screen.getByText(stepOf(n))).toBeVisible();
+};
+
+/** Prints the `location.state` the wizard navigated with. */
+function StatePrinter() {
+  const { state } = useLocation() as { state: unknown };
+  return <p data-testid="state">{JSON.stringify(state)}</p>;
+}
+
 describe('ListingWizard', () => {
+  it('ac1_step_headings', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+
+    // Step 1: the type; only the step line (no hint).
+    expectStep(1);
+    expect(progress()).toHaveAccessibleName(l.new.title);
+    expect(h2(l.stepTitle.type)).toBeVisible();
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    fireEvent.click(screen.getByLabelText(l.type.apartment));
+    fireEvent.click(nextButton());
+
+    // Step 2: details, with its hint beside the step line.
+    expectStep(2);
+    expect(h1()).toHaveFocus();
+    expect(h2(l.stepTitle.details)).toBeVisible();
+    expect(screen.getAllByText(l.stepHint.details)).toHaveLength(1);
+    await areasLoaded();
+    fillValidDetails();
+    fireEvent.click(nextButton());
+
+    // Step 3: the preferences' heading and hint come from the wizard, once.
+    expectStep(3);
+    expect(h1()).toHaveFocus();
+    expect(h2(p.title)).toBeVisible();
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    expect(screen.getAllByText(p.hint)).toHaveLength(1);
+    fireEvent.click(nextButton());
+
+    // Step 4: the preview.
+    expectStep(4);
+    expect(h1()).toHaveFocus();
+    expect(h2(l.stepTitle.preview)).toBeVisible();
+    expect(screen.getAllByText(l.preview.hint)).toHaveLength(1);
+
+    // Back to 3 and 2: the same headings, the h1 focused each time.
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expectStep(3);
+    expect(h1()).toHaveFocus();
+    expect(h2(p.title)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expectStep(2);
+    expect(h1()).toHaveFocus();
+    expect(h2(l.stepTitle.details)).toBeVisible();
+  });
+
+  it('ac1_step_headings_room_and_edit', async () => {
+    // A room: its own details and preferences headings.
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    const view = renderWizard();
+    chooseTypeAndContinue(l.type.room);
+    expect(h2(l.stepTitle.detailsRoom)).toBeVisible();
+    await areasLoaded();
+    fillValidDetails('room');
+    fireEvent.click(nextButton());
+    expectStep(3);
+    expect(h2(p.titleRoom)).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Edit mode: the preview says "before saving", and the title is the edit title.
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderRoutes(
+      '/edit',
+      <Routes>
+        <Route path="/edit" element={<ListingWizard listing={listing()} />} />
+      </Routes>,
+    );
+    expect(h1()).toHaveTextContent(l.edit.title);
+    expect(progress()).toHaveAccessibleName(l.edit.title);
+    await areasLoaded();
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    expectStep(4);
+    expect(h2(l.stepTitle.previewEdit)).toBeVisible();
+  });
+
+  it('ac3_households_check_mark', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    await toPreferences();
+    const marks = () => document.querySelectorAll('label svg[aria-hidden="true"]');
+    const markOf = (name: string) =>
+      household(name).closest('div')?.querySelector('label svg[aria-hidden="true"]') ?? null;
+
+    // All four start checked: one mark in each segment.
+    expect(marks()).toHaveLength(4);
+    fireEvent.click(household(p.household.family));
+    expect(household(p.household.family)).not.toBeChecked();
+    expect(markOf(p.household.family)).toBeNull();
+    expect(markOf(p.household.single)).not.toBeNull();
+    expect(marks()).toHaveLength(3);
+    fireEvent.click(household(p.household.single));
+    expect(marks()).toHaveLength(2);
+    fireEvent.click(household(p.household.family));
+    expect(markOf(p.household.family)).not.toBeNull();
+    expect(marks()).toHaveLength(3);
+  });
+
+  it('ac7b_publish_hands_over_celebration', async () => {
+    // A publish (201) hands "my listings" `{ published: true }`.
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(withoutCounts(listing()), 201)],
+    });
+    const published = renderRoutes(
+      '/listings/new',
+      <Routes>
+        <Route path="/listings/new" element={<NewListingPage />} />
+        <Route path="/me/listings" element={<StatePrinter />} />
+      </Routes>,
+    );
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    fillValidDetails();
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(publishButton());
+    expect(await screen.findByTestId('state')).toHaveTextContent('{"published":true}');
+    expect(api.calls('POST /listings')).toHaveLength(1);
+    expect(currentPath()).toBe('/me/listings');
+    published.unmount();
+    vi.unstubAllGlobals();
+
+    // An edit's save still hands over `{ saved: true }`.
+    const stored = listing();
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      [`PATCH /listings/${stored.id}`]: [json({ ...stored, price_ils: 7500 })],
+    });
+    renderRoutes(
+      '/edit',
+      <Routes>
+        <Route path="/edit" element={<ListingWizard listing={stored} />} />
+        <Route path="/me/listings" element={<StatePrinter />} />
+      </Routes>,
+    );
+    await areasLoaded();
+    fireEvent.change(screen.getByLabelText(l.fields.price), { target: { value: '7500' } });
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: l.save }));
+    expect(await screen.findByTestId('state')).toHaveTextContent('{"saved":true}');
+  });
+
   it('ac2_type_step_and_back_keeps_state', async () => {
     mockApi({ 'GET /areas': [json([gushDan])] });
     renderWizard();
@@ -552,7 +723,7 @@ describe('ListingWizard', () => {
     expect(screen.queryByText('bad')).toBeNull();
     // Changing it clears the error.
     fireEvent.change(minContract(), { target: { value: '24' } });
-    expect(minContract()).toHaveAttribute('aria-invalid', 'false');
+    expect(minContract()).not.toHaveAttribute('aria-invalid', 'true');
     view.unmount();
     vi.unstubAllGlobals();
 

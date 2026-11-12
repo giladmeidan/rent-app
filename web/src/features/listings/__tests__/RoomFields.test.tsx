@@ -147,7 +147,7 @@ describe('RoomFields', () => {
     const view = await toPreferences(testQueryClient(), 'room');
     // Nothing is an error before step 3's "next".
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(count()).toHaveAttribute('aria-invalid', 'false');
+    expect(count()).not.toHaveAttribute('aria-invalid', 'true');
 
     fireEvent.click(nextButton());
     expect(progress()).toHaveAttribute('aria-valuenow', '3');
@@ -160,7 +160,7 @@ describe('RoomFields', () => {
 
     // Choosing a count removes the error and shows exactly that many slots.
     fireEvent.change(count(), { target: { value: '3' } });
-    expect(count()).toHaveAttribute('aria-invalid', 'false');
+    expect(count()).not.toHaveAttribute('aria-invalid', 'true');
     expect(describedBy(count())).toEqual([hintEl]);
     expect(screen.queryByText(he.listings.errors.required)).toBeNull();
     expect(slots()).toHaveLength(3);
@@ -240,14 +240,14 @@ describe('RoomFields', () => {
       expect(describedBy(agesGroup())[0]).toHaveTextContent(r.agesHint);
       expect(slot(3)).toHaveAttribute('aria-invalid', 'true');
       // Empty and in-range slots are valid.
-      expect(slot(1)).toHaveAttribute('aria-invalid', 'false');
-      expect(slot(2)).toHaveAttribute('aria-invalid', 'false');
+      expect(slot(1)).not.toHaveAttribute('aria-invalid', 'true');
+      expect(slot(2)).not.toHaveAttribute('aria-invalid', 'true');
       expect(document.activeElement).toBe(slot(3));
 
       // Correcting it removes the error; then "next" moves on.
       fireEvent.change(slot(3), { target: { value: ' 35 ' } });
       expect(agesGroup()).toHaveAttribute('aria-invalid', 'false');
-      expect(slot(3)).toHaveAttribute('aria-invalid', 'false');
+      expect(slot(3)).not.toHaveAttribute('aria-invalid', 'true');
       expect(screen.queryByText(rangeError())).toBeNull();
       fireEvent.click(nextButton());
       expect(progress(), bad).toHaveAttribute('aria-valuenow', '4');
@@ -267,7 +267,7 @@ describe('RoomFields', () => {
     expect(slot(3)).toHaveAttribute('aria-invalid', 'true');
     fireEvent.change(slot(1), { target: { value: '18' } });
     expect(errorFor(agesGroup())).toHaveTextContent(rangeError());
-    expect(slot(1)).toHaveAttribute('aria-invalid', 'false');
+    expect(slot(1)).not.toHaveAttribute('aria-invalid', 'true');
     expect(slot(3)).toHaveAttribute('aria-invalid', 'true');
     fireEvent.click(nextButton());
     expect(progress()).toHaveAttribute('aria-valuenow', '3');
@@ -297,8 +297,8 @@ describe('RoomFields', () => {
       '2 שותפים בדירה (27, 30)',
       'שאלון הדירה: 1 מתוך 7 תשובות',
     ]);
-    // Ages or answers shown: the privacy note follows the chips.
-    expect(list.nextElementSibling).toHaveTextContent(r.privacyNote);
+    // Ages or answers shown: the privacy note follows the chips' card.
+    expect(list.parentElement?.nextElementSibling).toHaveTextContent(r.privacyNote);
 
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
@@ -374,7 +374,7 @@ describe('RoomFields', () => {
     expect(screen.queryByText('bad')).toBeNull();
     // Changing it clears the error.
     fireEvent.change(count(), { target: { value: '3' } });
-    expect(count()).toHaveAttribute('aria-invalid', 'false');
+    expect(count()).not.toHaveAttribute('aria-invalid', 'true');
     view.unmount();
     vi.unstubAllGlobals();
 

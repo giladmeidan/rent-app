@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
@@ -103,6 +103,8 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
 });
 
 test('ac12_owner_edits_listing', async ({ page }) => {
+  // Two viewport steps and a reload on top of the edit and the room flow (FOLLOWUPS: e2e under load).
+  test.slow();
   const f = he.listings.fields;
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   await signUpOwner(page);
@@ -250,5 +252,45 @@ test('ac12_owner_edits_listing', async ({ page }) => {
       flatmate_ages: [27, 30],
     });
     expect(saved?.lifestyle).toEqual({ cleanliness: 3 });
+  });
+
+  // Spec 0009k AC9, on the same owner (no new signup): the wizard's layout at a desktop and a phone.
+  await test.step('0009k wizard at 1440 and 390', async () => {
+    const toDetails = async () => {
+      await page.goto('/listings/new');
+      await page.getByText(he.listings.type.apartment, { exact: true }).click();
+      await page.getByRole('button', { name: he.listings.next }).click();
+      const heading = page.getByRole('heading', { level: 2, name: he.listings.stepTitle.details });
+      await expect(heading).toBeVisible();
+      return heading;
+    };
+    const box = async (locator: Locator) => {
+      const found = await locator.boundingBox();
+      expect(found).not.toBeNull();
+      return found as { x: number; y: number; width: number; height: number };
+    };
+    const stepper = page.locator('ol').filter({ hasText: he.listings.steps.type }).first();
+    const next = page.getByRole('button', { name: he.listings.next });
+
+    // 1440: the stepper is a side card at the inline start (the right, in RTL), beside the form.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    let heading = await toDetails();
+    const side = await box(stepper);
+    const title = await box(heading);
+    expect(side.x).toBeGreaterThanOrEqual(title.x + title.width - 2);
+    expect(title.width).toBeLessThanOrEqual(672);
+    await expect(next).toBeInViewport();
+
+    // 390: the stepper sits above the heading, and the sticky bar keeps "next" at the viewport's
+    // bottom while step 2 scrolls.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    heading = await toDetails();
+    const top = await box(stepper);
+    expect(top.y + top.height).toBeLessThanOrEqual((await box(heading)).y);
+    await expect(next).toBeInViewport();
+    const button = await box(next);
+    expect(844 - (button.y + button.height)).toBeLessThanOrEqual(40);
+    expect(button.y + button.height).toBeLessThanOrEqual(844);
   });
 });
