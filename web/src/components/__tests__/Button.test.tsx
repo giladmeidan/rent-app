@@ -145,4 +145,46 @@ describe('Button', () => {
       buttonClasses({ variant: 'soft', size: 'sm', shape: 'pill', fullWidth: true }),
     );
   });
+
+  it('end_slot_between', () => {
+    // Without `end`: centred, and the same classes and children as before (spec 0009a AC10).
+    const plain = render(<Button icon={<svg data-testid="lead" />}>{label}</Button>);
+    const button = screen.getByRole('button', { name: label });
+    expect(button.className).toBe(buttonClasses());
+    // The default button, as on main before 0009a: a literal, so a class regression fails.
+    expect(button.className).toBe(
+      'inline-flex items-center justify-center gap-2 text-center transition-colors motion-reduce:transition-none disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 bg-ink text-on-ink hover:bg-ink/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent min-h-tap text-body font-medium px-4 rounded-md',
+    );
+    expect(classesOf(button)).toContain('justify-center');
+    expect(classesOf(button)).not.toContain('justify-between');
+    expect(button.children).toHaveLength(1);
+    expect(screen.getByTestId('lead').parentElement?.parentElement).toBe(button);
+    plain.unmount();
+
+    // With `end`, as a link: the trailing node is hidden from assistive tech and sits last; the
+    // content goes to the two ends; the name is the label alone.
+    render(
+      <MemoryRouter>
+        <Button
+          to="/search"
+          size="lg"
+          icon={<svg data-testid="lead" />}
+          end={<svg data-testid="chevron" />}
+        >
+          {he.header.search}
+        </Button>
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole('link', { name: he.header.search });
+    expect(classesOf(link)).toContain('justify-between');
+    expect(classesOf(link)).not.toContain('justify-center');
+    expect(link.className).toBe(buttonClasses({ size: 'lg', between: true }));
+    const trailing = screen.getByTestId('chevron').parentElement;
+    expect(trailing).toHaveAttribute('aria-hidden', 'true');
+    expect(link.lastElementChild).toBe(trailing);
+    // The leading icon and the label stay together at the start.
+    const lead = link.firstElementChild;
+    expect(lead?.contains(screen.getByTestId('lead'))).toBe(true);
+    expect(lead).toHaveTextContent(he.header.search);
+  });
 });

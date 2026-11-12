@@ -274,4 +274,17 @@ describe('ListingCard', () => {
     expect(screen.getByRole('article').textContent).toContain('2 שותפים');
     expect(screen.getByRole('article').textContent).not.toContain('(');
   });
+
+  it('ac3_heading_level_none', () => {
+    // `titleAs="p"` (0009a's "none"; the one heading prop, shared with 0009c): no heading at all.
+    const listing = publicListing({ city: 'תל אביב', street: 'הרצל', rooms: 3 });
+    const view = render(<ListingCard listing={listing} today={TODAY} titleAs="p" />);
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(screen.getByText(/הרצל/).tagName).toBe('P');
+    view.unmount();
+
+    // The default is still an <h2>.
+    render(<ListingCard listing={listing} today={TODAY} />);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('הרצל');
+  });
 });

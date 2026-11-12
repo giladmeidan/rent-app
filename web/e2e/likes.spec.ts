@@ -47,6 +47,47 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
 
   // A seeker fills the profile with the room section, shows themselves, and saves.
   await signUp(page, 'seeker', { name });
+
+  // Spec 0009a AC9: at 390x844 the seeker's nav is the bottom tab bar; at 1280x800 it is in the
+  // top bar. The viewport is restored for the rest of the test.
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const banner = page.getByRole('banner');
+  const tabBar = page.getByRole('navigation', { name: he.nav.label });
+  await expect(tabBar).toBeVisible();
+  const tabs = tabBar.getByRole('link');
+  await expect(tabs).toHaveCount(5);
+  const tops = await Promise.all(
+    (await tabs.all()).map(async (tab) => (await tab.boundingBox())?.y ?? -100),
+  );
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
+  const bar = (await tabBar.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+  expect(Math.abs(bar.y + bar.height - 844)).toBeLessThan(1);
+  const brand = (await banner
+    .getByRole('link', { name: he.app.title, exact: true })
+    .boundingBox()) ?? {
+    y: 0,
+    height: 0,
+  };
+  const logout = (await banner.getByRole('button', { name: he.header.logout }).boundingBox()) ?? {
+    y: 1000,
+    height: 0,
+  };
+  expect(brand.y < logout.y + logout.height && logout.y < brand.y + brand.height).toBe(true);
+  const mainPadding = await page
+    .locator('main')
+    .evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom));
+  expect(mainPadding).toBeGreaterThanOrEqual(bar.height);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const topNav = banner.getByRole('navigation', { name: he.nav.label });
+  await expect(topNav).toBeVisible();
+  expect((await topNav.boundingBox())?.y ?? 1000).toBeLessThan(100);
+  if (viewport !== null) await page.setViewportSize(viewport);
   await page.goto('/me/profile');
   await expect(page.getByRole('heading', { level: 1, name: he.profile.title })).toBeVisible();
   await page.getByLabel(he.profile.fields.budget).fill('7500');
@@ -83,7 +124,9 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
 
   // The seeker's header shows "לייקים" with one room that liked them.
   await page.goto('/search');
-  const nav = page.getByRole('link', { name: new RegExp(he.header.likes) });
+  const nav = page
+    .getByRole('navigation', { name: he.nav.label })
+    .getByRole('link', { name: new RegExp(he.header.likes) });
   await expect(nav).toContainText(he.likes.badgeLabel_one);
   await nav.click();
   await expect(page).toHaveURL('/me/likes');

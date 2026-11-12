@@ -25,7 +25,7 @@ test('ac7_signup_via_outbox_and_logout', async ({ page }) => {
   await codeInput.fill(code ?? '');
   await page.getByRole('button', { name: he.auth.verify }).click();
 
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL('/me/listings');
   await expect(header.getByText(he.header.greeting.replace('{{name}}', name))).toBeVisible();
   await expect(header.getByRole('link', { name: he.header.login })).toHaveCount(0);
 

@@ -65,11 +65,14 @@ test('ac11_dialog_tabs_brand_in_browser', async ({ page }) => {
   const fonts = await page.evaluate(async () => {
     await document.fonts.ready;
     const title = document.querySelector('h1') as HTMLElement;
-    // The h1's own (Hebrew) text has been drawn in Fredoka 600.
-    const titleLoaded = document.fonts.check('600 24px Fredoka', title.textContent ?? '');
+    // The h1's own (Hebrew) text has been drawn in Fredoka 600 (the variable file, spec 0009a).
+    const titleLoaded = document.fonts.check(
+      '600 24px "Fredoka Variable"',
+      title.textContent ?? '',
+    );
     // `check` without text tests a space, which is in the Latin subset; a Hebrew-only page may
     // not have needed it yet, so ask for it first (a missing or broken file still fails `check`).
-    await document.fonts.load('600 24px Fredoka');
+    await document.fonts.load('600 24px "Fredoka Variable"');
     await document.fonts.ready;
     // The faces actually loaded from the app's own origin.
     const loaded = [...document.fonts]
@@ -80,14 +83,14 @@ test('ac11_dialog_tabs_brand_in_browser', async ({ page }) => {
       h1: getComputedStyle(title).fontFamily,
       body: getComputedStyle(document.body).fontFamily,
       titleLoaded,
-      fredoka: document.fonts.check('600 24px Fredoka'),
+      fredoka: document.fonts.check('600 24px "Fredoka Variable"'),
     };
   });
-  expect(fonts.h1).toMatch(/^Fredoka\b/);
+  expect(fonts.h1).toMatch(/^"Fredoka Variable"/);
   expect(fonts.body).toMatch(/^"Rubik Variable"/);
   expect(fonts.titleLoaded).toBe(true);
   expect(fonts.fredoka).toBe(true);
-  expect(fonts.loaded).toEqual(expect.arrayContaining(['Fredoka', 'Rubik Variable']));
+  expect(fonts.loaded).toEqual(expect.arrayContaining(['Fredoka Variable', 'Rubik Variable']));
 
   // ---- A phone: no horizontal scroll ----
   await page.setViewportSize({ width: 390, height: 844 });
