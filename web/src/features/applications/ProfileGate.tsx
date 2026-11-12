@@ -10,7 +10,9 @@ export function ProfileGate({ listingId }: { listingId: string }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-start gap-3">
-      <p className="text-start text-[15px]">{t('applications.profileRequired')}</p>
+      <p tabIndex={-1} className="text-start text-[15px] focus:outline-none">
+        {t('applications.profileRequired')}
+      </p>
       <Link
         to={`/me/profile?next=${encodeURIComponent(`/listings/${listingId}`)}`}
         className={`${primary} w-full`}

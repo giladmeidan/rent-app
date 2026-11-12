@@ -1,10 +1,11 @@
-import { useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { focusMainIfLost } from '../../components/focus';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { cardTitle } from '../listings/cardTitle';
@@ -27,6 +28,31 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
   const { listing } = application;
   // Same-tick guard: a double click sends one request (a second would answer 409).
   const inFlight = useRef(false);
+  // Where focus goes once the withdraw button is gone (spec 0009t): the title link after a 200,
+  // the card's alert after a 409 whose refetch hides the button, `#main` after a 404 drops the card.
+  // Once per withdraw (`submittedAt`).
+  const titleRef = useRef<HTMLAnchorElement>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
+  const handledAt = useRef(0);
+  const gone = useRef(false);
+  const withdrawable = isWithdrawable(application.status);
+  const { isSuccess, isError, error, submittedAt } = withdraw;
+  const conflict = isError && hasStatus(error, 409);
+
+  useEffect(() => {
+    if (withdrawable || submittedAt === handledAt.current) return;
+    if (isSuccess) titleRef.current?.focus();
+    else if (conflict) alertRef.current?.focus();
+    else return;
+    handledAt.current = submittedAt;
+  }, [withdrawable, isSuccess, conflict, submittedAt]);
+
+  useLayoutEffect(
+    () => () => {
+      if (gone.current) focusMainIfLost();
+    },
+    [],
+  );
 
   function onWithdraw() {
     if (inFlight.current) return;
@@ -34,6 +60,9 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
     withdraw.mutate(undefined, {
       onSettled: () => {
         inFlight.current = false;
+      },
+      onError: (failure) => {
+        if (hasStatus(failure, 404)) gone.current = true;
       },
     });
   }
@@ -54,6 +83,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
         </div>
         <h2 id={titleId} className="break-words text-lg font-bold leading-snug">
           <Link
+            ref={titleRef}
             to={`/listings/${listing.id}`}
             className={`inline-flex min-h-[44px] items-center rounded text-accent-text underline underline-offset-4 ${focusRing}`}
           >
@@ -85,7 +115,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             </p>
           </div>
         )}
-        {(isWithdrawable(application.status) || withdraw.isError) && (
+        {(withdrawable || withdraw.isError) && (
           <div className="flex flex-col items-start gap-2 pt-1">
             {application.status === 'shortlisted' && (
               // The chat opens on shortlist (0005a); its id is the application's.
@@ -97,7 +127,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
                 {t('applications.chat')}
               </Link>
             )}
-            {isWithdrawable(application.status) && (
+            {withdrawable && (
               <button
                 type="button"
                 onClick={onWithdraw}
@@ -111,7 +141,12 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             )}
             {/* A 401 clears the session and RequireSeeker leaves the page. */}
             {withdraw.isError && !hasStatus(withdraw.error, 401) && (
-              <p role="alert" className={fieldError}>
+              <p
+                ref={alertRef}
+                tabIndex={-1}
+                role="alert"
+                className={`${fieldError} focus:outline-none`}
+              >
                 {t('common.error')}
               </p>
             )}

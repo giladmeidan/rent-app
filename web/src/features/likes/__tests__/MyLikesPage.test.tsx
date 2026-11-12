@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup as unmount, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -128,5 +128,63 @@ describe('MyLikesPage', () => {
       );
       expect(card.queryByRole('heading', { level: 2 })).toBeNull();
     }
+  });
+
+  it('ac2_focus_after_unlike', async () => {
+    const mineHeading = () => screen.getByRole('heading', { level: 2, name: he.likes.mine });
+
+    // A successful unlike: the card leaves "mine", focus is on its heading.
+    const a = likedRoom();
+    const b = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([], [a, b])), json(myLikes([], [b]))],
+      [`DELETE /listings/${a.listing.id}/like`]: [empty()],
+    });
+    let mine = within(await screen.findByRole('region', { name: he.likes.mine }));
+    let button = within(mine.getAllByRole('article')[0] as HTMLElement).getByRole('button', {
+      name: he.likes.liked,
+    });
+    act(() => button.focus());
+    fireEvent.click(button);
+    await vi.waitFor(() => {
+      expect(within(section(he.likes.mine)).getAllByRole('article')).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(mineHeading()).toHaveFocus();
+    });
+    expect(mineHeading()).toHaveAttribute('id', 'likes-mine');
+    unmount();
+    vi.unstubAllGlobals();
+
+    // A like back that comes back non-mutual moves the card to "mine": the same heading.
+    const c = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([c], [])), json(myLikes([], [c]))],
+      [`PUT /listings/${c.listing.id}/like`]: [json({ liked: true, application_id: null })],
+    });
+    const likedMe = within(await screen.findByRole('region', { name: he.likes.likedMe }));
+    button = likedMe.getByRole('button', { name: he.likes.like });
+    act(() => button.focus());
+    fireEvent.click(button);
+    expect(await screen.findByText(he.likes.likedMeEmpty)).toBeVisible();
+    await vi.waitFor(() => {
+      expect(mineHeading()).toHaveFocus();
+    });
+    unmount();
+    vi.unstubAllGlobals();
+
+    // A 404 on unlike never focuses the heading.
+    const d = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([], [d])), json(myLikes([], []))],
+      [`DELETE /listings/${d.listing.id}/like`]: [json({ detail: 'not_found' }, 404)],
+    });
+    mine = within(await screen.findByRole('region', { name: he.likes.mine }));
+    button = mine.getByRole('button', { name: he.likes.liked });
+    act(() => button.focus());
+    fireEvent.click(button);
+    expect(await screen.findByText(he.likes.mineEmpty)).toBeVisible();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mineHeading()).not.toHaveFocus();
   });
 });

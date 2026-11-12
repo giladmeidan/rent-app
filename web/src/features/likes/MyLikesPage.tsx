@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -22,11 +22,14 @@ function RoomList({
   like,
   empty,
   onMutual,
+  onToMine,
 }: {
   items: LikedRoomOut[];
   like: LikeStateOut;
   empty: ReactNode;
   onMutual: (applicationId: string) => void;
+  /** A card left its place for (or from) "mine": an unlike, or a like that is not mutual. */
+  onToMine: () => void;
 }) {
   const today = todayInIsrael();
   if (items.length === 0) return empty;
@@ -38,7 +41,13 @@ function RoomList({
           <ListingCard listing={listing} today={today} to={`/listings/${listing.id}`} titleAs="h3">
             {/* Above the card's stretched link, so a click reaches the button. */}
             <div className="relative z-10">
-              <LikeRoomButton listingId={listing.id} like={like} onMutual={onMutual} />
+              <LikeRoomButton
+                listingId={listing.id}
+                like={like}
+                onMutual={onMutual}
+                onUnliked={onToMine}
+                onLikedNotMutual={onToMine}
+              />
             </div>
           </ListingCard>
         </li>
@@ -54,6 +63,19 @@ export function MyLikesPage() {
   const likes = useMyLikes();
   // Kept here, not in the lists: the card that made the match leaves them on the refetch.
   const [mutualId, setMutualId] = useState<string | null>(null);
+  // After a successful unlike, or a like that only moved the card to "mine" (spec 0009t): the
+  // card's button leaves, so focus goes to the "mine" heading once the lists are refetched. A
+  // failed like or unlike never sets this.
+  const focusMine = useRef(false);
+  const mineRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!focusMine.current || likes.isFetching) return;
+    focusMine.current = false;
+    mineRef.current?.focus();
+  }, [likes.isFetching, likes.dataUpdatedAt]);
+  const toMine = () => {
+    focusMine.current = true;
+  };
 
   let body;
   if (likes.isPending) {
@@ -78,6 +100,7 @@ export function MyLikesPage() {
             items={likes.data.liked_me}
             like={{ liked_by_me: false, liked_me: true }}
             onMutual={setMutualId}
+            onToMine={toMine}
             empty={
               <div className="flex flex-col items-start gap-2">
                 <EmptyState message={t('likes.likedMeEmpty')} />
@@ -92,13 +115,19 @@ export function MyLikesPage() {
           />
         </section>
         <section className="flex flex-col gap-3" aria-labelledby="likes-mine">
-          <h2 id="likes-mine" className="text-start text-xl font-extrabold">
+          <h2
+            ref={mineRef}
+            id="likes-mine"
+            tabIndex={-1}
+            className="text-start text-xl font-extrabold focus:outline-none"
+          >
             {t('likes.mine')}
           </h2>
           <RoomList
             items={likes.data.mine}
             like={{ liked_by_me: true, liked_me: false }}
             onMutual={setMutualId}
+            onToMine={toMine}
             empty={<EmptyState message={t('likes.mineEmpty')} />}
           />
         </section>

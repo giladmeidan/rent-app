@@ -274,6 +274,67 @@ describe('MyApplicationsPage', () => {
     }
   });
 
+  it('ac2_focus_after_withdraw', async () => {
+    // 200: the button is gone, focus is on that card's title link.
+    const app = to('L1', { status: 'submitted' });
+    const other = to('L2', { status: 'submitted' });
+    let { view } = renderPage([json([app, other])], {
+      [withdrawRoute(app)]: [json({ ...app, status: 'withdrawn' })],
+    });
+    await screen.findAllByRole('button', { name: he.applications.withdraw });
+    let button = within(cards()[0] as HTMLElement).getByRole('button');
+    act(() => button.focus());
+    fireEvent.click(button);
+    const title = within(cards()[0] as HTMLElement).getByRole('link', { name: titleOf(app) });
+    await vi.waitFor(() => {
+      expect(title).toHaveFocus();
+    });
+    expect(within(cards()[0] as HTMLElement).queryByRole('button')).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // 409 not_withdrawable, the refetch answering `declined`: the card's alert line.
+    ({ view } = renderPage([json([app, other]), json([{ ...app, status: 'declined' }, other])], {
+      [withdrawRoute(app)]: [json({ detail: 'not_withdrawable' }, 409)],
+    }));
+    await screen.findAllByRole('button', { name: he.applications.withdraw });
+    button = within(cards()[0] as HTMLElement).getByRole('button');
+    act(() => button.focus());
+    fireEvent.click(button);
+    const alert = await within(cards()[0] as HTMLElement).findByRole('alert');
+    await vi.waitFor(() => {
+      expect(alert).toHaveFocus();
+    });
+    expect(screen.getAllByTestId('application-status')[0]).toHaveTextContent(
+      he.applications.status.declined,
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // 404, the refetch dropping the card: focus falls back to <main>.
+    mockApi({
+      'GET /me': [json(seeker)],
+      [MINE]: [json([app, other]), json([other])],
+      [withdrawRoute(app)]: [json({ detail: 'not_found' }, 404)],
+    });
+    renderRoutes(
+      PATH,
+      <main id="main" tabIndex={-1}>
+        {routes}
+      </main>,
+    );
+    await screen.findAllByRole('button', { name: he.applications.withdraw });
+    button = within(cards()[0] as HTMLElement).getByRole('button');
+    act(() => button.focus());
+    fireEvent.click(button);
+    await vi.waitFor(() => {
+      expect(cards()).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByRole('main')).toHaveFocus();
+    });
+  });
+
   it('ac10_chat_link_on_shortlisted', async () => {
     const shortlisted = to('L1', { status: 'shortlisted' });
     const submitted = to('L2', { status: 'submitted' });

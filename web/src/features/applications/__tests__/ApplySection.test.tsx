@@ -742,4 +742,134 @@ describe('ApplySection', () => {
     expect(api.calls(LISTING)).toHaveLength(2);
     expect(api.calls(MINE)).toHaveLength(1);
   });
+
+  it('ac1_focus_after_submit_outcomes', async () => {
+    const MISFIT = i18n.t('rooms.apply.misfit');
+    const room =
+      (overrides: Parameters<typeof listingDetail>[0] = {}) =>
+      () =>
+        json(listingDetail({ id: 'A', listing_type: 'room', flatmates_count: 2, ...overrides }));
+    /** The paragraph that opens the gate whose link is `link`. */
+    const gateLine = async (link: string) => {
+      const found = await (await section()).findByRole('link', { name: link });
+      const line = found.parentElement?.querySelector('p');
+      if (line === null || line === undefined) throw new Error('no gate line');
+      return line;
+    };
+
+    // 201: the "sent" status line.
+    renderSeeker([json([])], { [APPLY]: [json(application(), 201)] });
+    type(await openForm(), MESSAGE);
+    send();
+    const sentLine = await (await section()).findByRole('status');
+    expect(sentLine).toHaveTextContent(he.applications.sent);
+    await vi.waitFor(() => {
+      expect(sentLine).toHaveFocus();
+    });
+    cleanup();
+
+    // 409 room_gender_mismatch: the misfit line.
+    renderSeeker([json([])], {
+      [LISTING]: [room({ gender_preference: 'any', room_fit: null })],
+      [PROFILE]: [json(profile({ gender: 'man', flatmate_gender: 'women' }))],
+      [APPLY]: [json({ detail: 'room_gender_mismatch' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    const misfit = await (await section()).findByText(MISFIT);
+    await vi.waitFor(() => {
+      expect(misfit).toHaveFocus();
+    });
+    cleanup();
+
+    // 409 seeker_gender_required, the listing refetch answering a women-only room: the room
+    // gate's paragraph.
+    renderSeeker([json([])], {
+      [LISTING]: [
+        room({ gender_preference: 'any', room_fit: null }),
+        room({ gender_preference: 'women', room_fit: null }),
+      ],
+      [PROFILE]: [json(profile({ gender: null }))],
+      [APPLY]: [json({ detail: 'seeker_gender_required' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    const roomGate = await gateLine(he.rooms.apply.fillRoomSection);
+    await vi.waitFor(() => {
+      expect(roomGate).toHaveFocus();
+    });
+    cleanup();
+
+    // The same, the listing refetch answering `room_fit: false`: the misfit line.
+    renderSeeker([json([])], {
+      [LISTING]: [
+        room({ gender_preference: 'any', room_fit: null }),
+        room({ gender_preference: 'women', room_fit: false }),
+      ],
+      [PROFILE]: [json(profile({ gender: null }))],
+      [APPLY]: [json({ detail: 'seeker_gender_required' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    const refetchedMisfit = await (await section()).findByText(MISFIT);
+    await vi.waitFor(() => {
+      expect(refetchedMisfit).toHaveFocus();
+    });
+    cleanup();
+
+    // 409 seeker_profile_required: the profile gate's paragraph.
+    renderSeeker([json([])], {
+      [PROFILE]: [json(profile()), json({ detail: 'seeker_profile_not_found' }, 404)],
+      [APPLY]: [json({ detail: 'seeker_profile_required' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    const profileGate = await gateLine(he.applications.fillProfile);
+    expect(profileGate).toHaveTextContent(he.applications.profileRequired);
+    await vi.waitFor(() => {
+      expect(profileGate).toHaveFocus();
+    });
+    cleanup();
+
+    // 409 already_applied: the applied block's first line (not the "sent" line).
+    const existing = application({ status: 'submitted' });
+    renderSeeker([json([]), json([existing])], {
+      [APPLY]: [json({ detail: 'already_applied' }, 409)],
+    });
+    type(await openForm(), MESSAGE);
+    send();
+    const appliedLine = await (await section()).findByText(appliedText(existing));
+    await vi.waitFor(() => {
+      expect(appliedLine).toHaveFocus();
+    });
+    expect(screen.queryByText(he.applications.sent)).toBeNull();
+    cleanup();
+
+    // 404: the unavailable alert.
+    renderSeeker([json([])], { [APPLY]: [json({ detail: 'not_found' }, 404)] });
+    type(await openForm(), MESSAGE);
+    send();
+    const unavailable = await screen.findByRole('alert');
+    expect(unavailable).toHaveTextContent(he.applications.errors.unavailable);
+    await vi.waitFor(() => {
+      expect(unavailable).toHaveFocus();
+    });
+    cleanup();
+
+    // Negative: a misfit room and the profile gate shown on mount take no focus.
+    renderSeeker([json([])], {
+      [LISTING]: [room({ gender_preference: 'women', room_fit: false })],
+    });
+    let s = await settled();
+    const mountedMisfit = s.getByText(MISFIT);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mountedMisfit).not.toHaveFocus();
+    cleanup();
+
+    renderSeeker([json([])], { [PROFILE]: [json({ detail: 'seeker_profile_not_found' }, 404)] });
+    s = await settled();
+    const mountedGate = await s.findByText(he.applications.profileRequired);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mountedGate).not.toHaveFocus();
+  });
 });

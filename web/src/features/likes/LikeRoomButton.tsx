@@ -17,13 +17,24 @@ type Props = {
   onMutual: (applicationId: string) => void;
   /** The listing page's one-line hint under an idle button. */
   showHint?: boolean;
+  /** Called after a successful unlike (spec 0009t: "my likes" then moves focus). */
+  onUnliked?: () => void;
+  /** Called after a successful like that did not make the pair mutual. */
+  onLikedNotMutual?: () => void;
 };
 
 /**
  * The room like toggle (`aria-pressed`), with the "the lister liked you" line above it. It is
  * disabled while its request runs. A like never refetches the listing (`useLikeRoom`).
  */
-export function LikeRoomButton({ listingId, like, onMutual, showHint = false }: Props) {
+export function LikeRoomButton({
+  listingId,
+  like,
+  onMutual,
+  showHint = false,
+  onUnliked,
+  onLikedNotMutual,
+}: Props) {
   const { t } = useTranslation();
   const location = useLocation();
   const liking = useLikeRoom(listingId);
@@ -44,13 +55,14 @@ export function LikeRoomButton({ listingId, like, onMutual, showHint = false }: 
     };
     if (pressed) {
       liking.reset();
-      unliking.mutate(undefined, { onSettled: settled });
+      unliking.mutate(undefined, { onSettled: settled, onSuccess: () => onUnliked?.() });
     } else {
       unliking.reset();
       liking.mutate(undefined, {
         onSettled: settled,
         onSuccess: (result) => {
           if (result.application_id !== null) onMutual(result.application_id);
+          else onLikedNotMutual?.();
         },
       });
     }
