@@ -59,10 +59,17 @@ type Branch =
 const FOCUSED_BRANCHES = new Set<Branch>(['applied', 'misfit', 'roomGate', 'profileGate']);
 
 /**
- * The empty state: the apply button, and the message form it discloses. `onSubmitted` runs before
- * every request, so the section can move focus to whatever replaces the form (spec 0009t).
+ * The empty state: the apply button, and the message form it discloses. `onSubmitted(true)` runs
+ * before every request, so the section can move focus to whatever replaces the form (spec 0009t);
+ * `onSubmitted(false)` after an answer that keeps the form, so a later swap takes no focus.
  */
-function ApplyForm({ apply, onSubmitted }: { apply: Apply; onSubmitted: () => void }) {
+function ApplyForm({
+  apply,
+  onSubmitted,
+}: {
+  apply: Apply;
+  onSubmitted: (submitted: boolean) => void;
+}) {
   const { t } = useTranslation();
   const id = useId();
   const formId = `${id}-form`;
@@ -98,7 +105,7 @@ function ApplyForm({ apply, onSubmitted }: { apply: Apply; onSubmitted: () => vo
     inFlight.current = true;
     lastBody.current = body;
     setServerErr(null);
-    onSubmitted();
+    onSubmitted(true);
     apply.mutate(body, {
       onSettled: () => {
         inFlight.current = false;
@@ -108,6 +115,7 @@ function ApplyForm({ apply, onSubmitted }: { apply: Apply; onSubmitted: () => vo
         // and a room's `seeker_gender_required` / `room_gender_mismatch`) are the hook's: the
         // controls it swaps in are the feedback.
         if (hasStatus(error, 401) || hasStatus(error, 409)) return;
+        onSubmitted(false);
         // 404 removes the form; every other error keeps it, with focus back on the text.
         if (hasStatus(error, 404)) {
           setUnavailable(true);
@@ -407,8 +415,8 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     controls = (
       <ApplyForm
         apply={apply}
-        onSubmitted={() => {
-          submitted.current = true;
+        onSubmitted={(value) => {
+          submitted.current = value;
         }}
       />
     );

@@ -257,10 +257,13 @@ describe('MyListingsPage', () => {
     // Arriving with `state.saved`: the line is mounted empty, and filled a frame later.
     let view = rtlRender(tree(['/edit', { pathname: '/me/listings', state: { saved: true } }]));
     expect(statusLine()).toHaveTextContent('');
+    // Empty, it is visually hidden (no gap in the header), but mounted.
+    expect(statusLine()).toHaveClass('sr-only');
     expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
     expect(frames.length).toBeGreaterThan(0);
     runFrames();
     expect(statusLine()).toHaveTextContent(he.listings.edit.saved);
+    expect(statusLine()).not.toHaveClass('sr-only');
     // The history entry was replaced with `state: null`: Back goes to the page before it.
     expect(screen.getByTestId('probe')).toHaveTextContent('/me/listings null');
     // A pause clears the line.

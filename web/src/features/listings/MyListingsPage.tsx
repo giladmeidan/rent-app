@@ -213,7 +213,8 @@ export function MyListingsPage() {
             {t('listings.mine.count', { live, cap: LISTING_CAP })}
           </p>
         )}
-        <p role="status" className="text-sm font-semibold text-accent-text">
+        {/* Visually hidden while empty (out of the flow, so no gap), never unmounted. */}
+        <p role="status" className={saved ? 'text-sm font-semibold text-accent-text' : 'sr-only'}>
           {saved ? t('listings.edit.saved') : ''}
         </p>
       </div>

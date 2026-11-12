@@ -718,6 +718,8 @@ describe('ChatThreadPage', () => {
     fireEvent.change(textarea(), { target: { value: 'hi' } });
     act(() => sendButton().focus());
     fireEvent.click(sendButton());
+    // The pending send disables the button: the browser blurs it to <body> (no related target).
+    fireEvent.blur(sendButton(), { relatedTarget: null });
     note = await closedNote();
     await waitFor(() => {
       expect(note).toHaveFocus();

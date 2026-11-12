@@ -19,6 +19,7 @@ import { owner, seeker } from '../../listings/__tests__/fixtures';
 import { profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
+import { MY_APPLICATIONS_KEY } from '../useMyApplications';
 import { application } from './fixtures';
 
 afterEach(() => {
@@ -854,6 +855,25 @@ describe('ApplySection', () => {
     await vi.waitFor(() => {
       expect(unavailable).toHaveFocus();
     });
+    cleanup();
+
+    // Negative: a 500 keeps the form; a later swap (the list refetched from elsewhere now holds an
+    // application) is not this submit's outcome and takes no focus.
+    const elsewhere = application({ status: 'submitted' });
+    const kept = testQueryClient();
+    renderSeeker(
+      [json([]), json([elsewhere])],
+      { [APPLY]: [json({ detail: 'boom' }, 500)] },
+      0,
+      kept,
+    );
+    type(await openForm(), MESSAGE);
+    send();
+    expect(await screen.findByRole('button', { name: he.common.retry })).toBeVisible();
+    await act(() => kept.invalidateQueries({ queryKey: MY_APPLICATIONS_KEY }));
+    const swapped = await (await section()).findByText(appliedText(elsewhere));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(swapped).not.toHaveFocus();
     cleanup();
 
     // Negative: a misfit room and the profile gate shown on mount take no focus.
