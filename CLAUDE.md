@@ -39,7 +39,7 @@ and delegates. It never writes application code itself. Delegation chain:
    cannot install Playwright's deps, so CI's `e2e` job is switched off (repo variable `E2E_IN_CI=off`) and every
    spec that touches the web runs `make e2e` on its final local head and reports the result in its digest. This
    lasts until Gilad says CI e2e is fixed; then `gh variable delete E2E_IN_CI` and this sentence goes. Each
-   worktree sets its own `WEB_PORT` (`WEB_ORIGIN` follows it); check `lsof -nP -iTCP:$WEB_PORT -sTCP:LISTEN` is empty before `make dev` / `make e2e`.
+   worktree sets its own `WEB_PORT` (`WEB_ORIGIN` follows it; delete any old `WEB_ORIGIN=` line from a worktree `.env` when setting `WEB_PORT`); check `lsof -nP -iTCP:$WEB_PORT -sTCP:LISTEN` is empty before `make dev` / `make e2e`.
    The spec is
    pushed **once**, when it is finished (build + review fixes), with the PR opened and the `ready-to-merge`
    label added at that push so the full CI runs once. A further push is allowed only to fix a CI failure.

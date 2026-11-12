@@ -52,3 +52,13 @@ def test_dotenv_warns_about_lines_it_cannot_parse(tmp_path: Path) -> None:
     assert "API_PORT=[8000]" in result.stdout
     assert ".env line 2 ignored" in result.stderr
     assert ".env line 3 ignored" in result.stderr
+
+
+def test_web_origin_follows_web_port_unless_set(tmp_path: Path) -> None:
+    result = _make_show(tmp_path, b"WEB_PORT=5199\n")
+    assert "WEB_ORIGIN=[http://localhost:5199]" in result.stdout
+
+    other = tmp_path / "b"
+    other.mkdir()
+    result = _make_show(other, b"WEB_PORT=5199\nWEB_ORIGIN=http://localhost:3000\n")
+    assert "WEB_ORIGIN=[http://localhost:3000]" in result.stdout
