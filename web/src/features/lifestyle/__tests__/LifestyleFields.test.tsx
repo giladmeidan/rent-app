@@ -45,6 +45,31 @@ function Controlled({
 }
 
 describe('LifestyleFields', () => {
+  it('ac4_clear_row_reserved', () => {
+    const spy = vi.fn();
+    render(<Controlled initial={{ cleanliness: 2 }} spy={spy} />);
+    const rows = () => screen.getAllByTestId('lifestyle-clear-row');
+    // One row per question, answered or not; a "ניקוי" button only in the answered one.
+    expect(rows()).toHaveLength(LIFESTYLE_KEYS.length);
+    const clear = screen.getByRole('button', { name: clearName(questions('seeker')[0] ?? '') });
+    expect(clear).toHaveTextContent(he.lifestyle.clear);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(rows()[0]).toContainElement(clear);
+    const height = rows()[1]?.className;
+
+    // Answering another question keeps every row in place and adds a button to that row only.
+    fireEvent.click(radio(questions('seeker')[1] ?? '', he.lifestyle.guests.answer['1']));
+    expect(rows()).toHaveLength(LIFESTYLE_KEYS.length);
+    expect(within(rows()[1] as HTMLElement).getByRole('button')).toBeVisible();
+    expect(rows()[1]?.className).toBe(height);
+
+    // Clearing removes the button and keeps the row.
+    fireEvent.click(clear);
+    expect(rows()).toHaveLength(LIFESTYLE_KEYS.length);
+    expect(within(rows()[0] as HTMLElement).queryByRole('button')).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
   it('ac3_fields_both_perspectives_pick_and_clear', () => {
     // Seeker: the title (an h3 by default), the nudge, seven groups with three radios, none checked.
     let view = render(<LifestyleFields value={{}} onChange={() => {}} perspective="seeker" />);

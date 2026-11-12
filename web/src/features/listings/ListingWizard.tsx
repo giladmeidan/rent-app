@@ -1,9 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, Navigate, useNavigate, type LinkProps } from 'react-router';
+import { Navigate, useNavigate, type LinkProps } from 'react-router';
 
 import type { UserOut } from '../../api/client';
+import { Button } from '../../components/Button';
+import { useConfirm } from '../../components/Dialog';
+import { BackLink, PageHeader } from '../../components/PageHeader';
 import { fetchAreas } from '../areas/api';
 import { ME_KEY } from '../auth/useMe';
 import { ApiError, type ListingOut, type MyListingOut } from './api';
@@ -74,9 +77,6 @@ function serverFieldErrors(error: Error): FieldErrors {
   return found;
 }
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-
 function CheckIcon() {
   return (
     <svg
@@ -86,7 +86,6 @@ function CheckIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      className="text-on-ink"
       strokeWidth="3"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -96,31 +95,11 @@ function CheckIcon() {
   );
 }
 
-/** The link back to "my listings" (the edit wizard and the edit page's not-found state). */
+/** The link back to "my listings", kept for the importers outside the wizard (the inbox's
+ * `ApplicantsPage`); a thin wrapper over the kit's `BackLink`. */
 export function BackToMine({ onClick }: { onClick?: LinkProps['onClick'] }) {
   const { t } = useTranslation();
-  return (
-    <Link
-      to="/me/listings"
-      onClick={onClick}
-      className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
-    >
-      <svg
-        aria-hidden="true"
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M9 6l6 6-6 6" />
-      </svg>
-      {t('listings.edit.backToMine')}
-    </Link>
-  );
+  return <BackLink to="/me/listings" label={t('listings.edit.backToMine')} onClick={onClick} />;
 }
 
 type Props = {
@@ -139,6 +118,7 @@ export function ListingWizard({ listing }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const [confirm, dialog] = useConfirm();
 
   // The listing as it was when the page opened. Every diff is against this, never the live prop:
   // a background refetch must neither overwrite what the owner typed nor add another tab's
@@ -299,7 +279,7 @@ export function ListingWizard({ listing }: Props) {
       clearServerErrors();
       create.mutate(toListingIn(current), {
         ...settle,
-        onSuccess: () => navigate('/me/listings'),
+        onSuccess: () => navigate('/me/listings', { state: { published: true } }),
       });
       return;
     }
@@ -360,174 +340,229 @@ export function ListingWizard({ listing }: Props) {
     t('listings.steps.preview'),
   ];
 
+  const room = form.listing_type === 'room';
+  let heading: string;
+  let hint: string | null = null;
+  if (step === 1) {
+    heading = t('listings.stepTitle.type');
+  } else if (step === 2) {
+    heading = t(room ? 'listings.stepTitle.detailsRoom' : 'listings.stepTitle.details');
+    hint = t('listings.stepHint.details');
+  } else if (step === 3) {
+    heading = t(room ? 'listings.prefs.titleRoom' : 'listings.prefs.title');
+    hint = t('listings.prefs.hint');
+  } else {
+    heading = t(editing ? 'listings.stepTitle.previewEdit' : 'listings.stepTitle.preview');
+    hint = t('listings.preview.hint');
+  }
+
+  const chevron = (path: string) => (
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="ltr:rotate-180"
+    >
+      <path d={path} />
+    </svg>
+  );
+
   return (
-    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4">
-        {editing && (
-          <BackToMine
-            onClick={(event) => {
-              if (dirty && !window.confirm(t('listings.edit.leaveConfirm'))) {
-                event.preventDefault();
+    <>
+      <form
+        noValidate
+        onSubmit={onSubmit}
+        className="flex flex-col gap-6 lg:grid lg:grid-cols-[theme(spacing.72)_minmax(0,theme(maxWidth.2xl))] lg:justify-center lg:gap-x-8 lg:gap-y-6"
+      >
+        <div className="-mx-4 -mt-6 border-b border-border bg-surface px-4 pb-4 pt-3 md:-mx-6 md:px-6 lg:contents">
+          <div className="mx-auto flex w-full max-w-narrow flex-col gap-4 lg:contents">
+            <PageHeader
+              size="compact"
+              title={editing ? t('listings.edit.title') : t('listings.new.title')}
+              titleRef={headingRef}
+              titleId={`${id}-title`}
+              back={
+                editing
+                  ? {
+                      to: '/me/listings',
+                      label: t('listings.edit.backToMine'),
+                      onClick: (event) => {
+                        // A clean form leaves; a dirty one asks first (the link is followed only
+                        // once the dialog resolves `true`).
+                        if (!dirty) return;
+                        event.preventDefault();
+                        void confirm({
+                          title: t('listings.edit.leaveConfirm'),
+                          confirmLabel: t('listings.edit.leave'),
+                          cancelLabel: t('listings.edit.stay'),
+                          tone: 'danger',
+                        }).then((leave) => {
+                          if (leave) void navigate('/me/listings');
+                        });
+                      },
+                    }
+                  : undefined
               }
-            }}
-          />
-        )}
-        <h1
-          ref={headingRef}
-          id={`${id}-title`}
-          tabIndex={-1}
-          className="text-start text-2xl font-extrabold focus:outline-none"
-        >
-          {editing ? t('listings.edit.title') : t('listings.new.title')}
-        </h1>
-        <ol className="flex items-start justify-between gap-1">
-          {steps.map((name, i) => {
-            const n = i + 1;
-            const done = n < step;
-            const isCurrent = n === step;
-            return (
-              <li
-                key={name}
-                aria-current={isCurrent ? 'step' : undefined}
-                className="flex flex-1 flex-col items-center gap-[6px]"
+              className="lg:col-span-2"
+            />
+            <div className="flex flex-col gap-4 lg:sticky lg:top-6 lg:col-start-1 lg:row-start-2 lg:self-start lg:rounded-lg lg:border lg:border-border lg:bg-surface lg:p-6">
+              <ol className="flex items-start justify-between gap-1 lg:flex-col lg:items-stretch lg:gap-3">
+                {steps.map((name, i) => {
+                  const n = i + 1;
+                  const done = n < step;
+                  const isCurrent = n === step;
+                  return (
+                    <li
+                      key={name}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      className="flex flex-1 flex-col items-center gap-2 lg:flex-none lg:flex-row lg:items-center lg:gap-3"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                          done
+                            ? 'bg-ink text-on-ink'
+                            : isCurrent
+                              ? 'border-2 border-accent bg-surface text-caption font-semibold text-accent'
+                              : 'border-2 border-border-strong bg-surface text-caption text-ink-muted'
+                        }`}
+                      >
+                        {done ? <CheckIcon /> : n}
+                      </span>
+                      <span
+                        className={`text-caption lg:text-label ${
+                          isCurrent
+                            ? 'font-semibold text-ink lg:font-semibold'
+                            : done
+                              ? 'text-ink'
+                              : 'text-ink-muted'
+                        }`}
+                      >
+                        {name}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+              <div
+                role="progressbar"
+                aria-valuenow={step}
+                aria-valuemin={1}
+                aria-valuemax={4}
+                aria-labelledby={`${id}-title`}
+                className="flex h-1 overflow-hidden rounded-full bg-border"
               >
-                <span
-                  aria-hidden="true"
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-[13px] ${
-                    done
-                      ? 'bg-accent'
-                      : isCurrent
-                        ? 'border-[2.5px] border-accent bg-surface font-extrabold text-accent-strong'
-                        : 'border-2 border-border-strong bg-surface font-bold text-ink-muted'
-                  }`}
-                >
-                  {done ? <CheckIcon /> : n}
-                </span>
-                <span
-                  className={`text-xs ${
-                    done
-                      ? 'font-semibold text-accent-strong'
-                      : isCurrent
-                        ? 'font-bold text-ink'
-                        : 'font-medium text-ink-muted'
-                  }`}
-                >
-                  {name}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-        <div
-          role="progressbar"
-          aria-valuenow={step}
-          aria-valuemin={1}
-          aria-valuemax={4}
-          aria-labelledby={`${id}-title`}
-          className="flex h-1 overflow-hidden rounded-full bg-border"
-        >
-          <div
-            className="rounded-full bg-accent transition-[width]"
-            style={{ width: `${String((step / 4) * 100)}%` }}
-          />
+                <div
+                  className="rounded-full bg-accent transition-all motion-reduce:transition-none"
+                  style={{ width: `${String((step / 4) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div
-        onBlur={() => {
-          if (step === 2 && attempted) setErrors(validate(current, today));
-        }}
-      >
-        {step === 1 && (
-          <TypeStep
-            value={form.listing_type}
-            onChange={(listing_type) => update({ listing_type })}
-          />
-        )}
-        {step === 2 && (
-          <DetailsStep
-            form={current}
-            onChange={update}
-            errors={{ ...serverErrors, ...errors }}
-            areas={areas}
-            today={today}
-            fieldId={fieldId}
-          />
-        )}
-        {step === 3 && (
-          <PreferencesStep
-            form={current}
-            onChange={update}
-            errors={{ ...serverErrors, ...errors }}
-            fieldId={fieldId}
-          />
-        )}
-        {step === 4 && (
-          <PreviewStep
-            body={toListingIn(current)}
-            today={today}
-            // A 404 while editing unmounts the wizard (the page shows "not found").
-            error={failure === 'notFound' ? 'failed' : failure}
-            onRetry={publish}
-            onBackToDetails={() => {
-              // The chosen area was deactivated: offer the current list.
-              void queryClient.invalidateQueries({ queryKey: ['areas'] });
-              goTo(2);
+        <div className="flex flex-col gap-6 lg:col-start-2 lg:row-start-2">
+          <div
+            onBlur={() => {
+              if (step === 2 && attempted) setErrors(validate(current, today));
             }}
-          />
-        )}
-      </div>
-
-      <div
-        data-sticky-footer
-        className="sticky bottom-0 -mx-4 flex gap-[10px] border-t border-border bg-surface px-4 pb-[22px] pt-3"
-      >
-        {step > 1 && (
-          <button
-            type="button"
-            onClick={() => goTo((step - 1) as Step)}
-            className={`flex min-h-[52px] flex-1 items-center justify-center gap-[6px] rounded-[14px] border-[1.5px] border-border-strong bg-surface text-[15px] font-bold ${focusRing}`}
+            className="mx-auto flex w-full max-w-narrow flex-col gap-6 lg:max-w-none"
           >
-            <svg
-              aria-hidden="true"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-            {t('common.back')}
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={(step === 1 && form.listing_type === null) || active.isPending}
-          aria-busy={active.isPending}
-          className={`flex min-h-[52px] flex-[1.6] items-center justify-center gap-[6px] rounded-[14px] bg-accent text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
-        >
-          {step < 4 ? t('listings.next') : editing ? t('listings.save') : t('listings.publish')}
-          {step < 4 && (
-            <svg
-              aria-hidden="true"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-          )}
-        </button>
-      </div>
-    </form>
+            <div className="flex flex-col gap-1">
+              <h2 className="font-display text-h2">{heading}</h2>
+              <p className="text-body-sm text-ink-muted">
+                <span>{t('listings.stepOf', { n: step, total: 4 })}</span>
+                {hint !== null && (
+                  <>
+                    {' · '}
+                    <span>{hint}</span>
+                  </>
+                )}
+              </p>
+            </div>
+            {step === 1 && (
+              <TypeStep
+                value={form.listing_type}
+                onChange={(listing_type) => update({ listing_type })}
+              />
+            )}
+            {step === 2 && (
+              <DetailsStep
+                form={current}
+                onChange={update}
+                errors={{ ...serverErrors, ...errors }}
+                areas={areas}
+                today={today}
+                fieldId={fieldId}
+              />
+            )}
+            {step === 3 && (
+              <PreferencesStep
+                form={current}
+                onChange={update}
+                errors={{ ...serverErrors, ...errors }}
+                fieldId={fieldId}
+              />
+            )}
+            {step === 4 && (
+              <PreviewStep
+                body={toListingIn(current)}
+                today={today}
+                // A 404 while editing unmounts the wizard (the page shows "not found").
+                error={failure === 'notFound' ? 'failed' : failure}
+                onRetry={publish}
+                onBackToDetails={() => {
+                  // The chosen area was deactivated: offer the current list.
+                  void queryClient.invalidateQueries({ queryKey: ['areas'] });
+                  goTo(2);
+                }}
+              />
+            )}
+          </div>
+
+          <div
+            data-sticky-footer
+            className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-surface px-4 pt-3 pb-[max(theme(spacing.6),env(safe-area-inset-bottom))] md:-mx-6 md:px-6 lg:bottom-4 lg:mx-0 lg:rounded-lg lg:border lg:px-4 lg:pb-3"
+          >
+            <div className="mx-auto flex w-full max-w-narrow gap-3 lg:max-w-none lg:justify-between">
+              {step > 1 && (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  type="button"
+                  onClick={() => goTo((step - 1) as Step)}
+                  icon={chevron('M9 6l6 6-6 6')}
+                  className="basis-2/5 lg:flex-none lg:basis-auto"
+                >
+                  {t('common.back')}
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                size="lg"
+                type="submit"
+                disabled={(step === 1 && form.listing_type === null) || active.isPending}
+                aria-busy={active.isPending}
+                className="flex-1 lg:min-w-48 lg:flex-none"
+              >
+                {step < 4
+                  ? t('listings.next')
+                  : editing
+                    ? t('listings.save')
+                    : t('listings.publish')}
+                {step < 4 && chevron('M15 6l-6 6 6 6')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </form>
+      {dialog}
+    </>
   );
 }
