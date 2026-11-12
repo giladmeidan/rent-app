@@ -1,13 +1,16 @@
 import { useTranslation } from 'react-i18next';
 
+import { useOnline } from './useOnline';
+
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
+  const online = useOnline();
   return (
     <div
       role="alert"
       className="flex flex-col items-start gap-3 rounded-2xl border border-line bg-white px-4 py-[14px]"
     >
-      <p>{t('common.error')}</p>
+      <p>{online ? t('common.error') : t('common.offline')}</p>
       <button
         type="button"
         onClick={onRetry}
