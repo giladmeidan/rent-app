@@ -1,7 +1,7 @@
 ---
 id: 0009h
 title: The app fills the screen on desktop (a full-width shell; forms at 480 px, content at 720 px, wide pages up to 1400 px) and every colour in the code is a homie brand token
-status: in-progress
+status: done
 depends_on: [0009d]   # 0009d: the brand tokens and deprecated aliases (web/tailwind.config.ts), PageContainer, Card, Button, Mascot, focusRing, cx and the coverage test this spec widens
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Opus/medium). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run (upper end)   # coder Opus/medium: ~60 files, mostly a mechanical rename, but reconciling ErrorState / Layout / the coverage test with 0009c / 0009g needs judgement (verifier)
