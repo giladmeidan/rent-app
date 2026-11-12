@@ -27,7 +27,7 @@ export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web
+.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e screens build-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -130,6 +130,13 @@ e2e: web/node_modules/.modules.yaml
 	  $(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'; \
 	  $(PNPM) exec playwright test --shard=$$i/$(E2E_SHARDS) || status=1; \
 	done; exit $$status
+
+## screens: the visual check - screenshot scripts (web/e2e/screens/*.screens.ts, every API call mocked)
+## against the running compose stack's web (`make dev` first), into web/screens/<spec>/ (git-ignored)
+screens: web/node_modules/.modules.yaml
+	$(PNPM) exec playwright install chromium
+	$(call wait_for,$(WEB_URL),90,web)
+	$(PNPM) exec playwright test --config playwright.screens.config.ts
 
 ## build-web: production build (tsc --noEmit, vite build with the PWA manifest and service worker) into web/dist
 build-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts
