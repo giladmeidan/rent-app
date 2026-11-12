@@ -25,7 +25,8 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('i18n-check', () => {
+// Each case spawns the checker in a fresh node process; a busy machine or CI runner overruns vitest's 5 s default.
+describe('i18n-check', { timeout: 30_000 }, () => {
   it('ac5_fails_on_hardcoded_hebrew', () => {
     const { status, output } = runOn({
       'features/Hello.tsx': 'export const Hello = () => <p>שלום</p>;\n',
