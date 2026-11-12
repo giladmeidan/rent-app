@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import {
   empty,
@@ -86,6 +87,14 @@ const offsets = (api: ReturnType<typeof mockApi>) =>
   api.calls(PEOPLE).map((c) => new URL(c.request.url).searchParams.get('offset'));
 
 describe('PeoplePage', () => {
+  it('ac3_people_count_one', async () => {
+    renderPage([page([person({ display_name: 'P1' })], 1)]);
+    await screen.findAllByRole('article');
+    expect(
+      screen.getByText('\u05e4\u05e8\u05d5\u05e4\u05d9\u05dc \u05d0\u05d7\u05d3'),
+    ).toBeVisible();
+  });
+
   it('ac1_cards', async () => {
     const p1 = person({
       display_name: 'P1',
@@ -103,7 +112,7 @@ describe('PeoplePage', () => {
       'P1',
       'P2',
     ]);
-    expect(screen.getByText(he.people.count.replace('{{count}}', '2'))).toBeVisible();
+    expect(screen.getByText(i18n.t('people.count', { count: 2 }))).toBeVisible();
 
     const one = within(cardOf('P1'));
     expect(one.getByText(he.people.likedMe)).toBeVisible();

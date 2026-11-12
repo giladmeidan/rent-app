@@ -41,7 +41,7 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const card = page.getByRole('article').filter({ hasText: street });
   const link = card.getByRole('link', { name: withCount(he.applicants.link, 1) });
   await expect(link).toBeVisible();
-  await expect(link.getByText(withCount(he.applicants.newBadge, 1))).toBeVisible();
+  await expect(link.getByText(he.applicants.newBadge_one)).toBeVisible();
 
   // The inbox: the seeker's name (not the owner's) and message.
   await link.click();

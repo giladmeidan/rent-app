@@ -341,6 +341,24 @@ describe('ChatThreadPage', () => {
     expect(textarea()).toHaveFocus();
   });
 
+  it('ac3_composer_remaining_forms', async () => {
+    const T = thread({ messages: [message({ body: 'hello' })] });
+    const { view } = renderThread(T, [json(T)]);
+    expect(await h1(T.other_name)).toBeVisible();
+    // The API's limit is 2000 characters.
+    fireEvent.change(textarea(), { target: { value: 'a'.repeat(1999) } });
+    expect(
+      screen.getByText('\u05e0\u05d5\u05ea\u05e8 \u05ea\u05d5 \u05d0\u05d7\u05d3'),
+    ).toBeVisible();
+    fireEvent.change(textarea(), { target: { value: 'a'.repeat(2000) } });
+    expect(
+      screen.getByText(
+        '\u05dc\u05d0 \u05e0\u05d5\u05ea\u05e8\u05d5 \u05ea\u05d5\u05d5\u05d9\u05dd',
+      ),
+    ).toBeVisible();
+    reset(view);
+  });
+
   it('ac7_send_errors', async () => {
     const T = thread({ messages: [message({ body: 'hello' })] });
 

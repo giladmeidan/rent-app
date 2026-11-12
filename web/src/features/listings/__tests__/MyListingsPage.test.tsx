@@ -58,7 +58,7 @@ describe('MyListingsPage', () => {
     const cards = screen.getAllByRole('article');
     expect(cards.map((card) => within(card).getByRole('heading').textContent)).toEqual(
       [live, paused, expired].map((l) =>
-        i18n.t('listings.card.title', { rooms: '3', street: l.street, city: l.city }),
+        i18n.t('listings.card.title', { count: 3, rooms: '3', street: l.street, city: l.city }),
       ),
     );
     const [liveCard, pausedCard, expiredCard] = cards as [HTMLElement, HTMLElement, HTMLElement];
@@ -156,7 +156,12 @@ describe('MyListingsPage', () => {
     expect(cards).toHaveLength(4);
     [live, paused, expired, pausedExpired].forEach((l, i) => {
       const card = cards[i] as HTMLElement;
-      const title = i18n.t('listings.card.title', { rooms: '3', street: l.street, city: l.city });
+      const title = i18n.t('listings.card.title', {
+        count: 3,
+        rooms: '3',
+        street: l.street,
+        city: l.city,
+      });
       if (i < 2) {
         const link = within(card).getByRole('link', { name: he.listings.actions.edit });
         expect(link).toHaveAttribute('href', `/me/listings/${l.id}/edit`);
@@ -229,7 +234,12 @@ describe('MyListingsPage', () => {
         expect(link).toHaveAccessibleName(i18n.t('applicants.link', { count: l.applicant_count }));
       }
       expect(link).toHaveClass('min-h-[44px]');
-      const title = i18n.t('listings.card.title', { rooms: '3', street: l.street, city: l.city });
+      const title = i18n.t('listings.card.title', {
+        count: 3,
+        rooms: '3',
+        street: l.street,
+        city: l.city,
+      });
       const describedBy = document.getElementById(link.getAttribute('aria-describedby') ?? '');
       expect(describedBy).toHaveTextContent(title);
     });
@@ -269,7 +279,9 @@ describe('MyListingsPage', () => {
     ).toHaveClass('bg-warn', 'text-warn-text');
     const b = peopleLink(cOne as HTMLElement);
     expect(b).toHaveAttribute('href', `/me/listings/${one.id}/people`);
-    expect(within(b as HTMLElement).getByText(he.listings.mine.peopleLikedOne)).toBeVisible();
+    expect(
+      within(b as HTMLElement).getByText(i18n.t('listings.mine.peopleLiked', { count: 1 })),
+    ).toBeVisible();
     const c = peopleLink(cNone as HTMLElement);
     expect(c).toHaveAttribute('href', `/me/listings/${none.id}/people`);
     expect((c as HTMLElement).querySelector('span')).toBeNull();
@@ -279,6 +291,29 @@ describe('MyListingsPage', () => {
       expect(peopleLink(card as HTMLElement)).toBeUndefined();
     }
   });
+
+  it('ac3_badges_one_two_many', async () => {
+    const one = listing({ listing_type: 'room', new_applicant_count: 1, liked_me_count: 1 });
+    const two = listing({ listing_type: 'room', new_applicant_count: 2, liked_me_count: 3 });
+    mockApi({ 'GET /me/listings': [json([one, two])] });
+    render();
+    const [cOne, cTwo] = (await screen.findAllByRole('article')) as HTMLElement[];
+    expect(
+      within(cOne as HTMLElement).getByText('\u05d7\u05d3\u05e9\u05d4 \u05d0\u05d7\u05ea'),
+    ).toBeVisible();
+    expect(within(cTwo as HTMLElement).getByText('2 \u05d7\u05d3\u05e9\u05d5\u05ea')).toBeVisible();
+    expect(
+      within(cOne as HTMLElement).getByText(
+        '\u05d0\u05d3\u05dd \u05d0\u05d7\u05d3 \u05d0\u05d4\u05d1 \u05d0\u05ea \u05d4\u05d7\u05d3\u05e8',
+      ),
+    ).toBeVisible();
+    expect(
+      within(cTwo as HTMLElement).getByText(
+        '3 \u05d0\u05d4\u05d1\u05d5 \u05d0\u05ea \u05d4\u05d7\u05d3\u05e8',
+      ),
+    ).toBeVisible();
+  });
+
   it('ac5_flatmates_link', async () => {
     const live = listing({ listing_type: 'room', flatmate_count: 2 });
     const paused = listing({ listing_type: 'room', status: 'paused', flatmate_count: 0 });

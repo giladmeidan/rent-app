@@ -12,7 +12,9 @@
     "loading": "טוען…",
     "error": "משהו השתבש",
     "retry": "נסו שוב",
-    "back": "חזרה"
+    "back": "חזרה",
+    "cancel": "ביטול",
+    "confirm": "אישור"
   },
   "header": {
     "login": "כניסה",
@@ -52,7 +54,9 @@
     },
     "verify": "כניסה",
     "resend": "שליחה חוזרת",
-    "resendIn": "שליחה חוזרת בעוד {{seconds}} שניות",
+    "resendIn_one": "שליחה חוזרת בעוד שנייה",
+    "resendIn_two": "שליחה חוזרת בעוד 2 שניות",
+    "resendIn_other": "שליחה חוזרת בעוד {{count}} שניות",
     "changeEmail": "החלפת אימייל",
     "noAccountYet": "עוד אין חשבון עם האימייל הזה. עוד שני פרטים ונסיים:",
     "errors": {
@@ -111,7 +115,10 @@
       "optional": "לא חובה",
       "choose": "בחירה…",
       "description": "על הדירה",
-      "charsLeft": "נשארו {{count}} תווים"
+      "charsLeft_zero": "לא נותרו תווים",
+      "charsLeft_one": "נותר תו אחד",
+      "charsLeft_two": "נותרו 2 תווים",
+      "charsLeft_other": "נותרו {{count}} תווים"
     },
     "units": {
       "sqm": "מ״ר",
@@ -125,7 +132,7 @@
     },
     "errors": {
       "required": "שדה חובה",
-      "range": "הערך צריך להיות בין {{min}} ל-{{max}}",
+      "range": "הערך צריך להיות בין {{min}} ל־{{max}}",
       "floors": "מספר הקומות בבניין לא יכול להיות קטן מהקומה",
       "tooLong": "עד {{max}} תווים",
       "dateRange": "התאריך צריך להיות בשנתיים הקרובות",
@@ -171,24 +178,31 @@
       "ageOf": "שותף/ה {{n}}"
     },
     "roomPreview": {
-      "for": "מתאים ל: {{who}}",
-      "flatmates": "{{count}} שותפים בדירה",
-      "flatmatesAges": "{{count}} שותפים בדירה ({{ages}})",
-      "flatmatesOne": "שותף/ה אחד/ת בדירה",
-      "flatmatesOneAge": "שותף/ה אחד/ת בדירה ({{age}})",
-      "lifestyle": "שאלון הדירה: נענו {{count}} מתוך {{total}}"
+      "for": "ל{{who}} בלבד",
+      "flatmates_one": "אדם אחד בדירה",
+      "flatmates_two": "2 שותפים בדירה",
+      "flatmates_other": "{{count}} שותפים בדירה",
+      "flatmatesAges_one": "אדם אחד בדירה ({{ages}})",
+      "flatmatesAges_two": "2 שותפים בדירה ({{ages}})",
+      "flatmatesAges_other": "{{count}} שותפים בדירה ({{ages}})",
+      "lifestyle": "שאלון הדירה: {{count}} מתוך {{total}} תשובות"
     },
     "card": {
-      "title": "{{rooms}} חדרים, רחוב {{street}}, {{city}}",
-      "roomTitle": "חדר ב־{{rooms}} חדרים, רחוב {{street}}, {{city}}",
+      "title_one": "חדר אחד, רחוב {{street}}, {{city}}",
+      "title_two": "{{rooms}} חדרים, רחוב {{street}}, {{city}}",
+      "title_other": "{{rooms}} חדרים, רחוב {{street}}, {{city}}",
+      "roomTitle_one": "חדר בדירת חדר אחד, רחוב {{street}}, {{city}}",
+      "roomTitle_two": "חדר ב־{{rooms}} חדרים, רחוב {{street}}, {{city}}",
+      "roomTitle_other": "חדר ב־{{rooms}} חדרים, רחוב {{street}}, {{city}}",
       "floorOf": "קומה {{floor}} מתוך {{total}}",
       "floor": "קומה {{floor}}",
       "availableFrom": "כניסה {{date}}",
       "immediate": "כניסה מיידית",
       "elevator": "מעלית",
       "noElevator": "ללא מעלית",
-      "parkingOne": "חניה",
-      "parkingMany": "{{count}} חניות",
+      "parking_one": "חניה",
+      "parking_two": "2 חניות",
+      "parking_other": "{{count}} חניות",
       "pets": "חיות מחמד",
       "room": "חדר בדירת שותפים"
     },
@@ -198,8 +212,9 @@
       "empty": "עוד אין לכם מודעות. המודעה הראשונה לוקחת שתי דקות.",
       "count": "{{live}} מתוך {{cap}} מודעות פעילות",
       "people": "מחפשים חדר",
-      "peopleLiked": "{{count}} אהבו את החדר",
-      "peopleLikedOne": "אחד/ת אהב/ה את החדר",
+      "peopleLiked_one": "אדם אחד אהב את החדר",
+      "peopleLiked_two": "2 אהבו את החדר",
+      "peopleLiked_other": "{{count}} אהבו את החדר",
       "flatmates": "שותפים בדירה ({{count}})"
     },
     "status": {
@@ -211,6 +226,11 @@
       "pause": "השהיה",
       "resume": "הפעלה מחדש",
       "edit": "עריכה"
+    },
+    "furnishedRoom": {
+      "none": "לא מרוהט",
+      "partial": "מרוהט חלקית",
+      "full": "מרוהט"
     }
   },
   "search": {
@@ -229,11 +249,11 @@
     "to": "עד",
     "any": "הכול",
     "availableBy": "תאריך כניסה",
-    "availableByHint": "דירות שאפשר להיכנס אליהן עד התאריך הזה",
+    "availableByHint": "דירות וחדרים שאפשר להיכנס אליהם עד התאריך הזה",
     "features": "מאפיינים",
     "feature": {
       "pets": "חיות מחמד",
-      "furnished": "מרוהטת",
+      "furnished": "ריהוט",
       "elevator": "מעלית",
       "parking": "חניה"
     },
@@ -246,11 +266,12 @@
       "price_asc": "מחיר: מהנמוך לגבוה",
       "price_desc": "מחיר: מהגבוה לנמוך"
     },
-    "count": "{{count}} דירות",
-    "countOne": "דירה אחת",
-    "sortedByMatch": " · ממוינות לפי התאמה",
-    "empty": "לא מצאנו דירות שמתאימות לחיפוש. אפשר להרחיב את המסננים.",
-    "more": "עוד דירות",
+    "count_one": "מודעה אחת",
+    "count_two": "2 מודעות",
+    "count_other": "{{count}} מודעות",
+    "sortedByMatch": " · לפי התאמה",
+    "empty": "לא מצאנו מודעות שמתאימות לחיפוש. אפשר להרחיב את המסננים.",
+    "more": "עוד מודעות",
     "errors": {
       "priceOrder": "המחיר המינימלי גבוה מהמקסימלי",
       "roomsOrder": "מספר החדרים המינימלי גבוה מהמקסימלי"
@@ -262,8 +283,8 @@
     },
     "map": {
       "label": "מפת התוצאות",
-      "empty": "אין דירות באזור הזה. אפשר להזיז את המפה או לשנות את המסננים.",
-      "tooMany": "מוצגות {{shown}} מתוך {{total}} דירות. אפשר להתקרב כדי לראות את כולן.",
+      "empty": "אין מודעות באזור הזה. אפשר להזיז את המפה או לשנות את המסננים.",
+      "tooMany": "מוצגות {{shown}} מתוך {{total}} מודעות. אפשר להתקרב כדי לראות את כולן.",
       "unavailable": "המפה לא זמינה בדפדפן הזה. אפשר לראות את התוצאות ברשימה.",
       "pin": "{{title}}, {{price}} ₪ לחודש",
       "pinMatch": ", התאמה {{score}}%",
@@ -275,8 +296,9 @@
     "notFound": "המודעה לא נמצאה או שכבר אינה פעילה",
     "yes": "יש",
     "no": "אין",
-    "parkingOne": "מקום אחד",
-    "parkingMany": "{{count}} מקומות",
+    "parking_one": "מקום אחד",
+    "parking_two": "2 מקומות",
+    "parking_other": "{{count}} מקומות",
     "allowed": "מותר",
     "notAllowed": "לא מותר",
     "location": "מיקום",
@@ -284,7 +306,7 @@
     "locationHint": "המיקום המדויק יישלח לאחר אישור",
     "mapLabel": "מפת המיקום המשוער",
     "ownerLooksFor": {
-      "title": "מה בעל הדירה מחפש",
+      "title": "מה בעלי הדירה מחפשים",
       "noSmokers": "ללא מעשנים",
       "minContract": "חוזה ל{{label}} לפחות"
     }
@@ -299,12 +321,11 @@
   },
   "applications": {
     "heading": "הגשת מועמדות",
-    "count": {
-      "zero": "עוד אין מועמדים. אפשר להיות הראשונים",
-      "one": "מועמד/ת אחד/ת הגיש/ה מועמדות",
-      "many": "{{count}} מועמדים הגישו מועמדות"
-    },
-    "apply": "הגש/י מועמדות",
+    "count_zero": "עוד אין מועמדים. אפשר להיות הראשונים",
+    "count_one": "הוגשה מועמדות אחת",
+    "count_two": "2 מועמדים הגישו מועמדות",
+    "count_other": "{{count}} מועמדים הגישו מועמדות",
+    "apply": "הגשת מועמדות",
     "loginPrompt": "כדי להגיש מועמדות צריך להתחבר",
     "form": {
       "label": "הודעה לבעלי הדירה",
@@ -326,8 +347,8 @@
     "withdraw": "ביטול המועמדות",
     "mine": {
       "title": "המועמדויות שלי",
-      "empty": "עוד לא הגשת מועמדות לאף דירה",
-      "search": "לחיפוש דירות"
+      "empty": "עוד לא הגשת אף מועמדות",
+      "search": "לחיפוש דירות וחדרים"
     },
     "errors": {
       "rateLimited": "הגשת הרבה מועמדויות בזמן קצר. אפשר לנסות שוב מאוחר יותר",
@@ -386,7 +407,7 @@
       "fields": {
         "gender": "המגדר שלי",
         "birthYear": "שנת לידה (לא חובה)",
-        "flatmates": "עם מי אני מעדיפ/ה לגור?"
+        "flatmates": "עם מי הכי נוח לי לגור?"
       },
       "gender": {
         "woman": "אישה",
@@ -412,8 +433,9 @@
     "likedMeEmpty": "עוד אין חדרים שאהבו אותך. כדאי להפעיל 'להציג אותי' בפרופיל.",
     "mineEmpty": "עוד לא אהבת חדרים.",
     "toProfile": "לפרופיל",
-    "badgeLabel": "{{count}} חדרים אהבו אותך",
-    "badgeLabelOne": "חדר אחד אהב אותך",
+    "badgeLabel_one": "חדר אחד אהב אותך",
+    "badgeLabel_two": "2 חדרים אהבו אותך",
+    "badgeLabel_other": "{{count}} חדרים אהבו אותך",
     "errors": {
       "roomSection": "כדי לאהוב חדר צריך למלא בפרופיל את החלק של חיפוש חדר",
       "alreadyApplied": "כבר הגשת מועמדות לחדר הזה",
@@ -431,15 +453,15 @@
     },
     "filter": {
       "label": "סינון מועמדויות",
-      "all": "הכל ({{count}})",
+      "all": "הכול ({{count}})",
       "new": "חדשות ({{count}})",
       "shortlisted": "רשימה קצרה ({{count}})",
       "declined": "נדחו ({{count}})"
     },
     "status": {
-      "submitted": "חדש",
+      "submitted": "חדשה",
       "shortlisted": "ברשימה הקצרה",
-      "declined": "נדחה"
+      "declined": "נדחתה"
     },
     "actions": {
       "shortlist": "לרשימה הקצרה",
@@ -454,9 +476,11 @@
     "errors": {
       "gone": "המועמדות הזו בוטלה על ידי המועמד/ת"
     },
-    "statusChanged": "{{name}}: {{status}}",
+    "statusChanged": "המועמדות של {{name}}: {{status}}",
     "link": "מועמדויות ({{count}})",
-    "newBadge": "{{count}} חדשות",
+    "newBadge_one": "חדשה אחת",
+    "newBadge_two": "2 חדשות",
+    "newBadge_other": "{{count}} חדשות",
     "sort": {
       "label": "מיון",
       "match": "לפי התאמה",
@@ -468,7 +492,7 @@
     "more": "עוד פרטים",
     "room": {
       "line": "{{gender}} · גיל {{age}}",
-      "summary": "{{same}} מתוך {{shared}} תשובות זהות לדירה",
+      "summary": "תשובות זהות לדירה: {{same}} מתוך {{shared}}",
       "theirs": "תשובה שלהם: {{answer}}",
       "flat": "בדירה: {{answer}}",
       "differs": "שונה מהדירה",
@@ -489,8 +513,9 @@
   },
   "people": {
     "title": "מחפשים חדר",
-    "count": "{{count}} מחפשים",
-    "countOne": "מחפש/ת אחד/ת",
+    "count_one": "פרופיל אחד",
+    "count_two": "2 מחפשים",
+    "count_other": "{{count}} מחפשים",
     "loadMore": "טעינת עוד",
     "empty": "עדיין אין מחפשים שמתאימים לחדר. כשמחפשים יפתחו את הפרופיל לשותפים או יאהבו את החדר, הם יופיעו כאן.",
     "notFound": "המודעה לא נמצאה",
@@ -537,7 +562,7 @@
       "emptySeeker": "אין עדיין שיחות. שיחה נפתחת כשבעלי הדירה מוסיפים אותך לרשימה הקצרה.",
       "you": "את/ה: {{body}}",
       "noMessages": "עוד אין הודעות",
-      "new": "חדש",
+      "new": "חדשה",
       "unread": "הודעות שלא נקראו: {{count}}",
       "closed": "סגורה"
     },
@@ -557,10 +582,13 @@
     "composer": {
       "label": "הודעה",
       "send": "שליחה",
-      "sending": "שולח…",
+      "sending": "בשליחה…",
       "viewing": "הצעת סיור",
-      "viewingTemplate": "אשמח לתאם סיור בדירה. מתי נוח לך?",
-      "remaining": "נותרו {{count}} תווים"
+      "viewingTemplate": "אשמח לתאם סיור בדירה. מתי נוח לכם?",
+      "remaining_zero": "לא נותרו תווים",
+      "remaining_one": "נותר תו אחד",
+      "remaining_two": "נותרו 2 תווים",
+      "remaining_other": "נותרו {{count}} תווים"
     },
     "errors": {
       "invalid": "ההודעה מכילה תווים שאי אפשר לשלוח.",
@@ -589,7 +617,7 @@
     "card": {
       "title": "ההתאמה שלך",
       "score": "{{score}}%",
-      "basis": "על בסיס הפרופיל שלך והעדפות בעל הדירה",
+      "basis": "על בסיס הפרופיל שלך והעדפות בעלי הדירה",
       "edit": "עריכת הפרופיל"
     },
     "nudge": "רוצה לראות ציון התאמה לכל דירה? ממלאים פרופיל קצר פעם אחת.",
@@ -611,11 +639,11 @@
       },
       "household": {
         "agree": "מתאים ל{{household}} — כמוך",
-        "differ": "בעל הדירה מחפש {{households}}"
+        "differ": "בעלי הדירה מחפשים {{households}}"
       },
       "contract": {
         "agree": "משך החוזה שביקשת מתאים",
-        "differ": "בעל הדירה מבקש חוזה של {{months}} חודשים לפחות"
+        "differ": "בעלי הדירה מבקשים חוזה של {{months}} חודשים לפחות"
       },
       "parking": {
         "agreeNotNeeded": "לא ביקשת חניה",
@@ -627,7 +655,7 @@
       "smoking": {
         "agreeNoSmoking": "ללא מעשנים — ואת/ה לא מעשן/ת",
         "agree": "מותר לעשן",
-        "differ": "בעל הדירה מבקש ללא מעשנים"
+        "differ": "בעלי הדירה מבקשים ללא מעשנים"
       },
       "pets": {
         "agree": "חיות מחמד מותרות",
@@ -700,8 +728,8 @@
         "differ": "{{household}} — לא ברשימה שלך"
       },
       "contract": {
-        "agree": "מחפשים חוזה ל{{months}}",
-        "differ": "מחפשים חוזה ל{{months}} בלבד"
+        "agree": "מחפשים חוזה של {{months}}",
+        "differ": "מחפשים חוזה של {{months}} בלבד"
       },
       "parking": {
         "agree": "צריכים {{parking}} — יש",
@@ -772,11 +800,9 @@
       "women": "נשים",
       "men": "גברים"
     },
-    "flatmates": {
-      "one": "שותף/ה אחד/ת",
-      "many": "{{count}} שותפים",
-      "withAges": "{{flatmates}} ({{ages}})"
-    },
+    "flatmates_one": "אדם אחד בדירה",
+    "flatmates_two": "2 שותפים",
+    "flatmates_other": "{{count}} שותפים",
     "card": {
       "forGender": "ל{{who}} בלבד",
       "similarAge": "שותפים בגילך"
@@ -790,7 +816,9 @@
       "misfit": "החדר לא מתאים לפרטים שבפרופיל שלך, ולכן אי אפשר להגיש אליו מועמדות.",
       "roomSectionRequired": "החדר מיועד ל{{who}} בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.",
       "fillRoomSection": "השלמת הפרטים בפרופיל"
-    }
+    },
+    "flatmatesWithAges": "{{flatmates}} ({{ages}})",
+    "flatmateAgeUnknown": "?"
   },
   "flatmates": {
     "title": "שותפים בדירה",
@@ -873,7 +901,7 @@
       }
     },
     "night": {
-      "topic": "שעות לילה",
+      "topic": "שעת שינה",
       "question": {
         "seeker": "אני הולך/ת לישון…",
         "flat": "בדירה הולכים לישון…"
@@ -885,7 +913,7 @@
       }
     },
     "social": {
-      "topic": "חברתיות",
+      "topic": "זמן בבית",
       "question": {
         "seeker": "את הזמן בבית אני מעביר/ה…",
         "flat": "בדירה מעבירים את הזמן…"

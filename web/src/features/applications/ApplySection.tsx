@@ -269,13 +269,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
   const profile = useProfile(isSeeker);
   const apply = useApply(listing.id);
 
-  const count = listing.applicant_count;
-  const countLine =
-    count === 0
-      ? t('applications.count.zero')
-      : count === 1
-        ? t('applications.count.one')
-        : t('applications.count.many', { count });
+  const countLine = t('applications.count', { count: listing.applicant_count });
 
   const visitor = (
     <div className="flex flex-col items-start gap-3">

@@ -394,7 +394,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
           aria-busy={resend.isPending}
           className={secondary}
         >
-          {cooling ? t('auth.resendIn', { seconds: secondsLeft }) : t('auth.resend')}
+          {cooling ? t('auth.resendIn', { count: secondsLeft }) : t('auth.resend')}
         </button>
         <button type="button" onClick={onChangeEmail} className={`${secondary} underline`}>
           {t('auth.changeEmail')}

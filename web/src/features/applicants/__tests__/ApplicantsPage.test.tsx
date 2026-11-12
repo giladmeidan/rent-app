@@ -224,7 +224,7 @@ describe('ApplicantsPage', () => {
     // The listing's title and price, no view count.
     expect(
       screen.getByText(
-        i18n.t('listings.card.title', { rooms: '3', street: A.street, city: A.city }),
+        i18n.t('listings.card.title', { count: 3, rooms: '3', street: A.street, city: A.city }),
       ),
     ).toBeVisible();
     expect(screen.getByText(/7,200[\s‎‏]*₪/)).toBeVisible();
@@ -758,7 +758,7 @@ describe('ApplicantsPage', () => {
       he.match.owner.budget.agree,
       `תאריך הכניסה מתאים (${formatDate(date)})`,
       he.match.owner.area.agree,
-      'ביקשו 2 חניות, בדירה יש 1',
+      '\u05d1\u05d9\u05e7\u05e9\u05d5 2 \u05d7\u05e0\u05d9\u05d5\u05ea, \u05d1\u05d3\u05d9\u05e8\u05d4 \u05d9\u05e9 \u05de\u05e7\u05d5\u05dd \u05d0\u05d7\u05d3',
     ]);
     for (const li of items) {
       expect(li.querySelector('[aria-hidden="true"]')).not.toBeNull();
@@ -834,7 +834,7 @@ describe('ApplicantsPage', () => {
       he.match.owner.budget.agree,
       he.match.owner.area.agree,
       he.match.owner.smoking.agreeSmoker,
-      'מחפשים חוזה לחצי שנה בלבד',
+      'מחפשים חוזה של חצי שנה בלבד',
     ]);
   });
 
@@ -1056,7 +1056,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(night.textContent).not.toContain('בדירה');
     expect(within(night).queryByText(he.applicants.room.differs)).toBeNull();
 
-    expect(within(panel).getByText('1 מתוך 2 תשובות זהות לדירה')).toBeVisible();
+    expect(within(panel).getByText('תשובות זהות לדירה: 1 מתוך 2')).toBeVisible();
     expect(within(panel).queryByText(he.applicants.room.noFlatAnswers)).toBeNull();
   });
 
@@ -1167,7 +1167,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
       expect(part.textContent).not.toContain('@');
       expect(part.querySelector('a, [href]')).toBeNull();
     }
-    expect(within(panel).getByText('2 מתוך 3 תשובות זהות לדירה')).toBeVisible();
+    expect(within(panel).getByText('תשובות זהות לדירה: 2 מתוך 3')).toBeVisible();
   });
 
   it('ac8_mutual_tag', async () => {

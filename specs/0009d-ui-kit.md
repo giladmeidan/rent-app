@@ -1,7 +1,7 @@
 ---
 id: 0009d
 title: Screens can be built from the homie brand tokens (design/brand/tokens.json) and a shared UI kit (Button, Card, Tag, Badge, Field with TextInput / Textarea / Select, PageContainer, PageHeader, Tabs, Dialog, Logo, Mascot), shown on a dev-only /dev/kit page
-status: in-progress
+status: done
 depends_on: []
 reviewers: [code, qa, ux]   # ux: the kit against design/brand and the artboards' anatomy on /dev/kit; qa: keyboard, focus and RTL behaviour of Tabs / Dialog / Field; no security (no data, no endpoint); no perf (no query)
 estimate: 1 coder run (upper end, ~4 h)   # coder Opus/high: every Slice 9b screen builds on this kit, and Tabs / Dialog carry the a11y risk. If the run overflows, the coder stops and reports; it never trims an AC
@@ -623,8 +623,9 @@ All tests read their Hebrew from `he.json` / `i18n.t`, never a literal. Quoted H
   - At 1280×800, the tabs: on the underline tablist, `ArrowLeft` selects and focuses the next tab, and `End` the
     last.
   - At 1280×800, every `<img>` has `naturalWidth > 0` (the brand assets resolve).
-  - At 1280×800, `getComputedStyle(h1).fontFamily` starts with `Fredoka` and `body`'s with `"Rubik Variable"`, and
-    `document.fonts.check('600 24px Fredoka')` is true after `document.fonts.ready`.
+  - At 1280×800, `getComputedStyle(h1).fontFamily` starts with `Fredoka` and `body`'s with `"Rubik Variable"`;
+    `document.fonts.check('600 24px Fredoka', <h1 text>)` is true after `document.fonts.ready`, and the Fredoka and
+    "Rubik Variable" faces report `loaded`.
   - At 390×844, there is no horizontal scroll.
 
   — `web/e2e/kit.spec.ts::ac11_dialog_tabs_brand_in_browser`
@@ -655,6 +656,9 @@ All tests read their Hebrew from `he.json` / `i18n.t`, never a literal. Quoted H
   `unicode-range`). Preload tags are `0009e`'s. Fredoka is used for display sizes only.
 - **Input focus indicator.** The accent border plus the soft ring; `0009c` settled that it meets WCAG 1.4.11.
 - **`<dialog>` in jsdom.** The stand-in keeps the unit tests deterministic, and AC11 proves the real modal.
+- **AC11's font check (amended in review, 2026-11-12).** `document.fonts.check('600 24px Fredoka')` without text
+  tests a space, which is in Fredoka's Latin subset; Chrome never fetches that subset on a Hebrew-only page, so the
+  bare check is false there. AC11 checks the h1's own text and the loaded faces instead (code reviewer agreed).
 - **Product questions for Gilad:** none. The brand kit and the amendment decide colour, type, shape and voice.
 - **Verification.** Spec-verifier round 1 rejected with 4 majors, 14 minors and 2 info items; all are applied (see
   `0009h`'s twin note for that spec's round). The second round is waived (one verifier round, Gilad).

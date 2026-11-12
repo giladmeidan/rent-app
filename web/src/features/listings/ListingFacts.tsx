@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ListingPublic } from './api';
 import { formatIls } from './format';
+import { furnishedLabel } from './furnished';
 
 /** Listing.dc.html's facts grid as label/value pairs; arnona and vaad only when given. */
 export function ListingFacts({ listing }: { listing: ListingPublic }) {
@@ -18,17 +19,11 @@ export function ListingFacts({ listing }: { listing: ListingPublic }) {
       value:
         listing.parking_spots === 0
           ? t('listing.no')
-          : listing.parking_spots === 1
-            ? t('listing.parkingOne')
-            : t('listing.parkingMany', { count: listing.parking_spots }),
+          : t('listing.parking', { count: listing.parking_spots }),
     },
     {
       label: t('listings.fields.furnished'),
-      value: {
-        none: t('listings.furnished.none'),
-        partial: t('listings.furnished.partial'),
-        full: t('listings.furnished.full'),
-      }[listing.furnished],
+      value: furnishedLabel(t, listing.furnished, listing.listing_type),
     },
     {
       label: t('listings.fields.pets'),

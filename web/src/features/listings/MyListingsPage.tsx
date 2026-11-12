@@ -90,9 +90,7 @@ function ListingRow({ listing, now, today }: { listing: MyListingOut; now: Date;
                   <>
                     {' '}
                     <span className="rounded-full bg-warn px-2 py-[2px] text-[12px] font-bold text-warn-text">
-                      {listing.liked_me_count === 1
-                        ? t('listings.mine.peopleLikedOne')
-                        : t('listings.mine.peopleLiked', { count: listing.liked_me_count })}
+                      {t('listings.mine.peopleLiked', { count: listing.liked_me_count })}
                     </span>
                   </>
                 )}

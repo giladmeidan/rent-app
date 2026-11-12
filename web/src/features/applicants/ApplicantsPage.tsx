@@ -7,7 +7,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
-import { formatIls, formatRooms } from '../listings/format';
+import { cardTitle } from '../listings/cardTitle';
+import { formatIls } from '../listings/format';
 import { BackToMine } from '../listings/ListingWizard';
 import { useMyListings } from '../listings/useMyListings';
 import type { ApplicantOut, ApplicantStatus } from './api';
@@ -295,13 +296,7 @@ export function ApplicantsPage() {
         >
           {t('applicants.title')}
         </h1>
-        <p className="text-start font-bold">
-          {t('listings.card.title', {
-            rooms: formatRooms(listing.rooms),
-            street: listing.street,
-            city: listing.city,
-          })}
-        </p>
+        <p className="text-start font-bold">{cardTitle(t, listing)}</p>
         <p className="text-start text-sm text-muted">
           {formatIls(listing.price_ils)} {t('listings.units.ils')}
         </p>

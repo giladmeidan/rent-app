@@ -84,7 +84,7 @@ export function SearchMap({ filters, profile, onShowList }: Props) {
     if (total === 0) {
       below = <EmptyState message={t('search.map.empty')} />;
     } else if (total <= items.length) {
-      count = total === 1 ? t('search.countOne') : t('search.count', { count: total });
+      count = t('search.count', { count: total });
     } else {
       count = t('search.map.tooMany', { shown: items.length, total });
     }

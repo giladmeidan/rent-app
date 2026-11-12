@@ -138,9 +138,7 @@ export function PeoplePage() {
         <EmptyState message={t('people.empty')} />
       ) : (
         <>
-          <p className="text-start text-sm text-muted">
-            {lastTotal === 1 ? t('people.countOne') : t('people.count', { count: lastTotal })}
-          </p>
+          <p className="text-start text-sm text-muted">{t('people.count', { count: lastTotal })}</p>
           <ul className="flex flex-col gap-3">
             {items.map((person) => (
               <PersonCard

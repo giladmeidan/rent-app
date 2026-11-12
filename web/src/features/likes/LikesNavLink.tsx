@@ -30,9 +30,7 @@ export function LikesNavLink() {
           >
             {count}
           </span>{' '}
-          <span className="sr-only">
-            {count === 1 ? t('likes.badgeLabelOne') : t('likes.badgeLabel', { count })}
-          </span>
+          <span className="sr-only">{t('likes.badgeLabel', { count })}</span>
         </>
       )}
     </Link>

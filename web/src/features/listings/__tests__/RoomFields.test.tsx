@@ -293,9 +293,9 @@ describe('RoomFields', () => {
     const card = screen.getByRole('article');
     expect(card.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(roomChips()).toEqual([
-      'מתאים ל: נשים',
+      'לנשים בלבד',
       '2 שותפים בדירה (27, 30)',
-      'שאלון הדירה: נענו 1 מתוך 7',
+      'שאלון הדירה: 1 מתוך 7 תשובות',
     ]);
     // Ages or answers shown: the privacy note follows the chips.
     expect(list.nextElementSibling).toHaveTextContent(r.privacyNote);
@@ -326,7 +326,7 @@ describe('RoomFields', () => {
     fireEvent.change(count(), { target: { value: '2' } });
     fireEvent.click(nextButton());
     expect(roomChips()).toEqual(['2 שותפים בדירה']);
-    expect(screen.queryByText(/מתאים ל:/)).toBeNull();
+    expect(screen.queryByText(/בלבד/)).toBeNull();
     // A bare count: no note.
     expect(screen.queryByText(r.privacyNote)).toBeNull();
 
@@ -334,11 +334,13 @@ describe('RoomFields', () => {
     back();
     fireEvent.change(count(), { target: { value: '1' } });
     fireEvent.click(nextButton());
-    expect(roomChips()).toEqual([he.listings.roomPreview.flatmatesOne]);
+    expect(roomChips()).toEqual([i18n.t('listings.roomPreview.flatmates', { count: 1 })]);
     back();
     fireEvent.change(slot(1), { target: { value: '45' } });
     fireEvent.click(nextButton());
-    expect(roomChips()).toEqual([i18n.t('listings.roomPreview.flatmatesOneAge', { age: 45 })]);
+    expect(roomChips()).toEqual([
+      i18n.t('listings.roomPreview.flatmatesAges', { count: 1, ages: '45' }),
+    ]);
     expect(screen.getByText(r.privacyNote)).toBeInTheDocument();
     back();
     fireEvent.change(slot(1), { target: { value: '' } });
