@@ -1,9 +1,9 @@
 ---
 id: 0009j
 title: The listing page looks like Listing.dc.html on a phone — a photo band, the price and match badge, an icon facts grid, the sections as cards and a sticky apply bar — and on a desktop puts the same content in a main column beside a sticky column with the like and apply blocks
-status: verified
+status: in-progress
 depends_on: [0009d, 0009h, 0009i]   # 0009d: tokens and the kit (PageContainer, BackLink, Button, Card, Tag, Field + Textarea); 0009h: shell, page roots, the hex swap of every file here; 0009i: features/listings/facts.ts (FOLLOWUPS 42), MatchBadge's size, the `make screens` harness (its AC10), and the 390 px pin of search.spec.ts this spec's e2e step extends
-reviewers: [code, qa, ux]   # ux: a changed screen, and a desktop layout with no artboard; qa: phone and desktop flows, the sticky bar, room privacy in both layouts. No security: the page renders what GET /listings/{id} returns, unchanged (AC5 pins it). No perf: no request changes
+reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run (upper end, ~4 h)   # coder Opus/medium: styling of ~10 components plus one new phone control, with the room-privacy rule as a guard (Speed rule 6, "when in doubt, the stronger one")
 ---
 

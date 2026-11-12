@@ -1,7 +1,7 @@
 ---
 id: 0009qb
 title: The flatmates screens (invite link and members, joining a flat, my flats) look like the artboards' cards on a phone and use the width on a desktop, and their confirms are the kit's in-app dialog
-status: verified
+status: in-progress
 depends_on: [0009qa]   # 0009qa (which depends on 0009h → 0009d): the screens harness and the EmptyState / Badge / Tag additions it may add, and the shared pageWidths.test.ts / he.json edits; build from 0009qa's branch once its PR is open
 reviewers: [code, qa, ux, security]   # security: the join page's JSX is rebuilt around the invite token, a bearer secret (AC5 pins it); ux: three screens without an artboard, judged against Inbox / InboxDesktop / Main; qa: every state and the async confirm guards; no perf: no query
 estimate: 1 coder run   # coder Opus/high: the token page and the async confirm guards (verifier)

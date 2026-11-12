@@ -1,7 +1,7 @@
 ---
 id: 0009a
 title: A visitor opens `/` and gets the homie landing page (hero, the hello turtle, two role CTAs, an example match card, "איך זה עובד", a true trust strip) in Fredoka + Rubik, under a header with the homie lockup; a signed-in owner or seeker goes straight to their home, with a bottom tab bar on mobile and a top-bar nav on desktop
-status: verified
+status: in-progress
 depends_on: [0009h]   # 0009h (0009d's shell half; it depends on 0009d, the kit + tokens): the full-width shell, the page roots and the kit in web/src/components/ (Button, Card, Tag, Badge, PageContainer). 0009h rewrites Layout.tsx and every page root, and its notes ask 0009a to depend on it (orchestrator, 2026-11-12: the landing and the header are built from the kit)
 reviewers: [code, qa, ux]   # ux: new landing screen and the header/tab bar vs Main / Search / Inbox / InboxDesktop artboards; qa: CTAs, redirects, nav at 390 / 1280 px; no security: no auth, data or API change (the PWA and its service worker are 0009e)
 estimate: 1 coder run   # coder Opus/high: the header and nav change every page and about 15 test files (Speed rule 6, "when in doubt, the stronger one"). If it overflows, the signed-in nav + tab bar becomes its own spec (verifier)

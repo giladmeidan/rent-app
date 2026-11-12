@@ -26,7 +26,7 @@ and delegates. It never writes application code itself. Delegation chain:
    `REDIS_PORT`, `API_PORT`). A web half starts from the API half's branch as soon as that PR is open and
    rebases after it merges. The next slice is specced and verified while the current one builds. When two PRs
    touch the same file, the second to merge rebases.
-4. **One review round.** Reviewers are chosen by risk, not by habit: an infra/skeleton spec gets `code` only.
+4. **One review round.** Reviewers are chosen by risk, not by habit: an infra/skeleton spec gets `code` only. A cosmetic UI/UX spec whose behaviour is unchanged gets `ux` only and a Sonnet coder (Gilad, 2026-11-12).
    Blockers and majors are fixed; minors go straight to `specs/FOLLOWUPS.md` unless the fix is one line; nits
    are dropped. After the fixes the spec session checks them itself; reviewers are not re-run.
 5. **No duplicate documents.** The PR body and the review digest live on the GitHub PR only (no `PR-NNNN.md`

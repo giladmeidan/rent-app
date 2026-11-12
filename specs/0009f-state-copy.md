@@ -1,7 +1,7 @@
 ---
 id: 0009f
 title: Error, limit and dead-end screens say what happened and what to do next — offline vs error, why a button is disabled, how long to wait, and a way out of every join-flat state
-status: verified
+status: in-progress
 depends_on: [0009b]   # 0009b: the plural-aware i18n-check (the `common.in*` families need `_two`) and the same files (he.json, OtpForm, ApplySection, MyApplicationsPage, ChatListPage, reasons.ts); build from 0009b's branch once its PR is open
 reviewers: [code, qa, ux]   # ux: new copy on ten screens; qa: the states and their tests; code: the one-line CORS change and ApiError. No security: no auth logic changes, a header is only read
 estimate: 1 coder run   # coder Opus/medium (verifier: ten independent items over ~15 files is near the top of a Sonnet run; Speed rule 6 "when in doubt, the stronger one")

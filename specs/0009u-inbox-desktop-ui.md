@@ -1,9 +1,9 @@
 ---
 id: 0009u
 title: On a desktop, an owner's applicant inbox is InboxDesktop.dc.html — the stat tiles at the header's end, tabs and sort in one row, a two-column card grid and a sticky detail pane for the selected applicant — while phones keep 0009l's layout and behaviour is unchanged
-status: verified
+status: in-progress
 depends_on: [0009l]   # 0009l: the restyled card (this spec's `stacked` branch), MatchRing, ReasonList, ProfileFacts, RoomLine, DisclosureButton, the kit additions and the screenshot harness (0009l depends on 0009d + 0009h)
-reviewers: [code, qa, ux, security]   # ux: InboxDesktop.dc.html (screenshots); qa: selection, sticky pane, the breakpoint switch, every inbox step at 1280; security (narrow brief): the pane is a new place that renders the seeker's message (text only, never linkified) and room answers (room applications only, behind "עוד פרטים", PRODUCT.md "Rooms"); no perf: no query change
+reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux, security]
 estimate: 1 coder run   # coder Opus/medium: selection and focus logic, a second card branch, a new pane, the e2e desktop step; the desktop half of the verifier's 0009l split
 ---
 

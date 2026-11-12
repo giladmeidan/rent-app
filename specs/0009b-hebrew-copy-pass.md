@@ -1,7 +1,7 @@
 ---
 id: 0009b
 title: Counts read as correct Hebrew for one, two and many, every line uses the app's gender-neutral forms, and a room listing is described as a room
-status: verified
+status: in-progress
 depends_on: []
 reviewers: [code, qa, ux]   # ux: the wording tables and the conventions; qa: one/two/many on every count screen; no security or perf: text only, no API
 estimate: 1 coder run   # coder Opus/medium (verifier: the checker is CI-gating AST work; Speed rule 6 "when in doubt, the stronger one")

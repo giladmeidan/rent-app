@@ -1,7 +1,7 @@
 ---
 id: 0009t
 title: After an action removes the control a person used, focus lands on what replaced it — apply, withdraw, unlike, remove, leave, a filter change, a closing chat, a resend or a successful retry; saved, joined and resend lines are announced; and the search map is one labelled landmark with its loading, empty and error states in view
-status: verified
+status: in-progress
 depends_on: [0009c]   # 0009c: components/Loading.tsx, ErrorState's `page` prop, RouteFocus and #main (the focus fallback), the accent focus-ring rule and the axe e2e helper, whose map-landmark exemption this spec removes
 reviewers: [code, qa, ux]   # ux: focus targets, announcements, map states; qa: keyboard and screen-reader flows at 390 px, the map e2e. No security: chat only mounts its log earlier and focuses the closed note (message bodies stay text nodes), and OtpForm gains a status line and a focus call (request and verify untouched). No perf: no query change
 estimate: 1 coder run   # coder Opus/high: many small focus targets whose timing is easy to get wrong (Speed rule 6). Verifier: upper end (~3.5 h); if a split is ever needed, Scope 3 + AC5 + AC6 (the map) is the seam

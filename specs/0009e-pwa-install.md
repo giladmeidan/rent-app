@@ -1,7 +1,7 @@
 ---
 id: 0009e
 title: The app installs from the browser as a Hebrew RTL PWA named by `app.title`, with real icons and a service worker that precaches only the build's static files and never caches an API response; every page's HTML carries the title, description, theme colour and a Heebo preload; a build check proves all of it
-status: verified
+status: in-progress
 depends_on: [0009a]   # 0009a: the Rubik and Fredoka font files the preload points at, the final `app.title`, the header surface that `theme_color` matches. (0009a depends on 0009h → 0009d, which provide the `bg` / `surface` tokens read here.) Split out of 0009a by its verifier (round 1, 2026-11-12)
 reviewers: [code, qa, security, ux]   # security: the service-worker caching policy against the cookie session `rent_session`; qa: AC9's signed-in install and offline check; ux (Sonnet/medium, narrow brief): the icons, favicon and theme / background colours against Main.dc.html:24-25 and AC9's screenshots — 0009a's Risks promise the UX reviewer judges the teal → white status bar
 estimate: 1 coder run   # coder Opus/high: the caching rule is security-relevant (Speed rule 6)

@@ -1,9 +1,9 @@
 ---
 id: 0009r
 title: The seeker profile is grouped into sections, with a sticky save bar above the tab bar and, on a desktop, a section index beside the form on the listing wizard's two tracks, built from the 0009d kit and tokens, with every behaviour unchanged
-status: verified
+status: in-progress
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Field + TextInput / Textarea, PageContainer, PageHeader), the token scale, the restyled ChoiceGroup (with its `choiceSegment` export) / Switch / Skeleton / EmptyState / ErrorState, the full-width shell, the page roots and `pageWidths.test.ts`. Not 0009m: the auth half shares only he.json with this spec
-reviewers: [code, qa, ux]   # ux: a restyled screen with no artboard of its own, judged against CreateListing and 0009k's wizard; qa: validation, focus, the room section, ?next / ?section=room and the sticky bar at 390 / 1440. No security: the personal data the form shows (budget, gender, birth year, about-me) and the PUT body are unchanged, and the unedited tests pin both (AC5, AC2). No perf: no query
+reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Opus/medium (~3 h): no auth, money or data; one large source file (ProfilePage.tsx), index.css, three test files, the screenshot harness if 0009l / 0009k / 0009m have not added it
 ---
 

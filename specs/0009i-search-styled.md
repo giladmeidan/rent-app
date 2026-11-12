@@ -1,9 +1,9 @@
 ---
 id: 0009i
 title: Search fills the screen in the homie look — on a phone the Search.dc.html stack (title, active-filter chips, list/map toggle, stacked cards), on a desktop a filter side panel always open beside a grid of row cards — with behaviour unchanged
-status: verified
+status: in-progress
 depends_on: [0009d, 0009h]   # 0009d: the brand tokens and the kit (PageContainer, PageHeader, Button, Card, Tag, Badge, Field + TextInput / Select, EmptyState pose, Mascot, useIsDesktop); 0009h: the full-width shell, the page roots and the colour swap of every file here (branch from its PR)
-reviewers: [code, qa, ux]   # ux: two changed screens against two artboards and the brand kit; qa: phone and desktop flows, e2e at two viewports. No perf: the same requests, page size 20 and paging unchanged; maplibre still loads only in the map view. No security: no data, auth or API change
+reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/high). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Opus/medium: styling, ~9 coupled components (ListingCard is shared with 3 screens), four test files, one e2e file at two viewports (Speed rule 6, "when in doubt, the stronger one"). The desktop map pairing was split off to 0009n by the verifier
 ---
 
