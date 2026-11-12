@@ -310,6 +310,17 @@
       "pinMatch": ", התאמה {{score}}%",
       "pinTextMatch": "{{price}} ₪ · {{score}}%",
       "updating": "התוצאות מתעדכנות…"
+    },
+    "tags": {
+      "label": "מסננים פעילים",
+      "priceRange": "{{min}}–{{max}} ₪",
+      "priceAtLeast": "מ־{{min}} ₪",
+      "priceUpTo": "עד {{max}} ₪",
+      "rooms": "חדרים: {{range}}",
+      "roomsRange": "{{min}}–{{max}}",
+      "roomsAtLeast": "{{min}} ומעלה",
+      "roomsUpTo": "עד {{max}}",
+      "availableBy": "כניסה עד {{date}}"
     }
   },
   "listing": {
