@@ -87,7 +87,9 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
 
   // The seeker, after a reload: the header's pill, the owner's name in the list, the message.
   await seekerPage.reload();
-  const seekerChat = seekerPage.getByRole('link', { name: new RegExp(`^${he.header.chat}`) });
+  const seekerChat = seekerPage
+    .getByRole('navigation', { name: he.nav.label })
+    .getByRole('link', { name: new RegExp(`^${he.header.chat}`) });
   await expect(seekerChat).toHaveAccessibleName(
     `${he.header.chat} ${withCount(he.header.chatNew, 1)}`,
   );

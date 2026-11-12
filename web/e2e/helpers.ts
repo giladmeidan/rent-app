@@ -37,7 +37,8 @@ export const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 type SignUpOptions = {
   /** Where the signup form is opened, e.g. the listing page's `/signup?role=seeker&next=…`. */
   start?: string;
-  /** The URL expected after the code is verified. */
+  /** The URL expected after the code is verified. Default: the role's home (an owner's
+   * `/me/listings`, a seeker's `/search`), where `/` sends a signed-in person (spec 0009a). */
   expectUrl?: string;
   /** The display name, to tell two people in one test apart. */
   name?: string;
@@ -48,7 +49,11 @@ type SignUpOptions = {
 export async function signUp(
   page: Page,
   role: 'owner' | 'seeker',
-  { start = '/signup', expectUrl = '/', name = '\u05d3\u05e0\u05d4' }: SignUpOptions = {},
+  {
+    start = '/signup',
+    expectUrl = role === 'owner' ? '/me/listings' : '/search',
+    name = '\u05d3\u05e0\u05d4',
+  }: SignUpOptions = {},
 ): Promise<string> {
   const email = uniqueEmail();
   await page.goto(start);
@@ -68,7 +73,8 @@ export async function signUp(
   return email;
 }
 
-/** Signs up a fresh owner; the page ends on `/` with the session cookie set. */
+/** Signs up a fresh owner; the page ends on `/me/listings` (the owner's home, via `/`) with the
+ * session cookie set. */
 export async function signUpOwner(page: Page): Promise<string> {
   return signUp(page, 'owner');
 }

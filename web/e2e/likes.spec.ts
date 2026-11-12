@@ -72,7 +72,9 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
 
   // The seeker's header shows "לייקים" with one room that liked them.
   await page.goto('/search');
-  const nav = page.getByRole('link', { name: new RegExp(he.header.likes) });
+  const nav = page
+    .getByRole('navigation', { name: he.nav.label })
+    .getByRole('link', { name: new RegExp(he.header.likes) });
   await expect(nav).toContainText(he.likes.badgeLabel_one);
   await nav.click();
   await expect(page).toHaveURL('/me/likes');

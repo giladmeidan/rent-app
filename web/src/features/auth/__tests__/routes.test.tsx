@@ -6,6 +6,7 @@ import { AppRoutes } from '../../../app/routes';
 import he from '../../../locales/he.json';
 import { clearInviteToken } from '../../flatmates/inviteToken';
 import { gushDan } from '../../listings/__tests__/fixtures';
+import { page } from '../../search/__tests__/fixtures';
 import { currentPath, json, mockApi, noa, renderRoutes } from './harness';
 
 afterEach(() => {
@@ -15,15 +16,21 @@ afterEach(() => {
 
 describe('routes', () => {
   it('ac9_redirects', async () => {
-    // Logged in: /login and /signup send the person home.
+    // Logged in: /login and /signup send the person home, a seeker's being the search (0009a).
     for (const path of ['/login', '/signup?role=owner']) {
-      mockApi({ 'GET /me': [json(noa)], 'GET /areas': [json([])] });
+      mockApi({
+        'GET /me': [json(noa)],
+        'GET /areas': [json([])],
+        'GET /listings': [() => json(page([]))],
+        'GET /me/conversations': [() => json([])],
+        'GET /me/likes': [() => json({ liked_me: [], mine: [] })],
+      });
       const view = renderRoutes(path, <AppRoutes />);
 
       await vi.waitFor(() => {
-        expect(currentPath()).toBe('/');
+        expect(currentPath()).toBe('/search');
       });
-      expect(await screen.findByRole('heading', { name: he.areas.heading })).toBeVisible();
+      expect(await screen.findByRole('heading', { level: 1, name: he.search.title })).toBeVisible();
       expect(screen.getByText(i18n.t('header.greeting', { name: noa.display_name }))).toBeVisible();
       expect(screen.queryByLabelText(he.auth.email.label)).toBeNull();
       view.unmount();
@@ -39,12 +46,19 @@ describe('routes', () => {
     expect(currentPath()).toBe('/login');
     login.unmount();
 
-    // Unknown path: home.
+    // Unknown path: home, the landing.
     renderRoutes('/no/such/page', <AppRoutes />);
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/');
     });
-    expect(await screen.findByRole('heading', { name: he.areas.heading })).toBeVisible();
+    // The title's line break (whitespace-pre-line) reads as a space.
+    const landing = he.landing.title.replace('\n', ' ');
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: (name) => name.replace(/\s+/g, ' ') === landing,
+      }),
+    ).toBeVisible();
   });
 
   it('ac10_profile_is_seeker_only', async () => {
@@ -61,12 +75,18 @@ describe('routes', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner lands on /, a visitor on /login?next=<the page>; neither requests the profile.
+    // An owner lands on their home (via /), a visitor on /login?next=<the page>; neither requests
+    // the profile.
     for (const [me, path] of [
-      [json({ ...noa, role: 'owner' }), '/'],
+      [json({ ...noa, role: 'owner' }), '/me/listings'],
       [json({ detail: 'unauthenticated' }, 401), '/login?next=%2Fme%2Fprofile'],
     ] as const) {
-      api = mockApi({ 'GET /me': [me], 'GET /areas': [json([])] });
+      api = mockApi({
+        'GET /me': [me],
+        'GET /areas': [json([])],
+        'GET /me/listings': [json([])],
+        'GET /me/conversations': [json([])],
+      });
       view = renderRoutes('/me/profile', <AppRoutes />);
       await vi.waitFor(() => {
         expect(currentPath()).toBe(path);
@@ -118,12 +138,17 @@ describe('routes', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner lands on /, a visitor on /login; neither requests the likes.
+    // An owner lands on their home (via /), a visitor on /login; neither requests the likes.
     for (const [me, path] of [
-      [json({ ...noa, role: 'owner' }), '/'],
+      [json({ ...noa, role: 'owner' }), '/me/listings'],
       [json({ detail: 'unauthenticated' }, 401), '/login?next=%2Fme%2Flikes'],
     ] as const) {
-      api = mockApi({ 'GET /me': [me], 'GET /areas': [json([])] });
+      api = mockApi({
+        'GET /me': [me],
+        'GET /areas': [json([])],
+        'GET /me/listings': [json([])],
+        'GET /me/conversations': [json([])],
+      });
       view = renderRoutes('/me/likes', <AppRoutes />);
       await vi.waitFor(() => {
         expect(currentPath()).toBe(path);

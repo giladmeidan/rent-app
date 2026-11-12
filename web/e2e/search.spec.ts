@@ -37,7 +37,7 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     .toMatch(/^\d{6}$/);
   await codeInput.fill(code ?? '');
   await page.getByRole('button', { name: he.auth.verify }).click();
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL('/me/listings');
 
   // One listing, posted through the API with the owner's session.
   const areas = await page.request.get(API + '/areas');
