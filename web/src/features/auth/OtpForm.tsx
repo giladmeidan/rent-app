@@ -6,11 +6,15 @@ import { useNavigate } from 'react-router';
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { clearDraftsExcept } from '../../app/drafts';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { ErrorState } from '../../components/ErrorState';
+import { Field } from '../../components/Field';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
+import { TextInput } from '../../components/TextInput';
 import { useOnline } from '../../components/useOnline';
 import { safeNext } from './next';
-import { RoleChoice } from './RoleChoice';
 import { clearSession } from './useLogout';
 import { ME_KEY } from './useMe';
 
@@ -75,14 +79,8 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
   }
 }
 
-const label = 'text-sm font-bold';
-const input =
-  'min-h-[48px] w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 text-base font-semibold text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
-const fieldError = 'text-sm font-semibold text-danger';
-const primary =
-  'min-h-[52px] w-full rounded-[14px] bg-accent text-base font-bold text-on-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50';
-const secondary =
-  'min-h-[44px] rounded-full px-3 text-sm font-semibold text-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:text-ink-muted';
+/** The request errors' line (too many, a failed verify): the kit `Field`'s error text. */
+const errorText = 'text-body-sm text-danger';
 
 type Props = {
   /** Signup: step 1 collects role and name too. Login: email only; the profile is asked for only
@@ -127,7 +125,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
-  const firstRadioRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const backToEmailRef = useRef(false);
 
   const request = useMutation({ mutationFn: requestCode, gcTime: 0 });
@@ -167,7 +165,9 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   }, [step]);
 
   useEffect(() => {
-    if (profileNeeded) firstRadioRef.current?.focus();
+    // The first `role` radio in the DOM is the owner's.
+    if (profileNeeded)
+      formRef.current?.querySelector<HTMLInputElement>('input[name="role"]')?.focus();
   }, [profileNeeded]);
 
   function sendRequest() {
@@ -277,14 +277,29 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
     backToEmailRef.current = true;
   }
 
+  const roleOptions: readonly ChoiceOption<Role>[] = [
+    // Owner first: it sits at the inline start (the right, in RTL).
+    { value: 'owner', label: t('auth.role.owner') },
+    { value: 'seeker', label: t('auth.role.seeker') },
+  ];
+  const roleChoice = (
+    <ChoiceGroup
+      legend={t('auth.role.label')}
+      name="role"
+      options={roleOptions}
+      value={role}
+      onChange={setRole}
+    />
+  );
+
   const nameField = (
-    <div className="flex flex-col gap-[6px]">
-      <label htmlFor={`${id}-name`} className={label}>
-        {t('auth.name.label')}
-      </label>
-      <input
+    <Field
+      id={`${id}-name`}
+      label={t('auth.name.label')}
+      error={nameError ? t('auth.errors.nameLength') : undefined}
+    >
+      <TextInput
         ref={nameRef}
-        id={`${id}-name`}
         type="text"
         autoComplete="nickname"
         value={name}
@@ -292,16 +307,8 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
           setName(e.target.value);
           setNameError(false);
         }}
-        aria-invalid={nameError}
-        aria-describedby={nameError ? `${id}-name-error` : undefined}
-        className={`${input} text-start`}
       />
-      {nameError && (
-        <p id={`${id}-name-error`} role="alert" className={fieldError}>
-          {t('auth.errors.nameLength')}
-        </p>
-      )}
-    </div>
+    </Field>
   );
 
   const hintId = `${id}-submit-hint`;
@@ -311,16 +318,16 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
 
   if (step === 'request') {
     return (
-      <form noValidate onSubmit={onRequestSubmit} className="flex flex-col gap-[22px]">
-        {withProfile && <RoleChoice value={role} onChange={setRole} />}
+      <form noValidate onSubmit={onRequestSubmit} className="flex flex-col gap-6">
+        {withProfile && roleChoice}
         {withProfile && nameField}
-        <div className="flex flex-col gap-[6px]">
-          <label htmlFor={`${id}-email`} className={label}>
-            {t('auth.email.label')}
-          </label>
-          <input
+        <Field
+          id={`${id}-email`}
+          label={t('auth.email.label')}
+          error={emailError ? t('auth.errors.invalidEmail') : undefined}
+        >
+          <TextInput
             ref={emailRef}
-            id={`${id}-email`}
             type="email"
             dir="ltr"
             autoComplete="email"
@@ -329,32 +336,26 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
               setEmail(e.target.value);
               setEmailError(false);
             }}
-            aria-invalid={emailError}
-            aria-describedby={emailError ? `${id}-email-error` : undefined}
-            className={`${input} text-start`}
           />
-          {emailError && (
-            <p id={`${id}-email-error`} role="alert" className={fieldError}>
-              {t('auth.errors.invalidEmail')}
-            </p>
-          )}
-        </div>
+        </Field>
         {step1Error?.kind === 'tooMany' && (
-          <p role="alert" className={fieldError}>
+          <p role="alert" className={errorText}>
             {tooManyText(step1Error)}
           </p>
         )}
         {step1Error?.kind === 'failed' && <ErrorState onRetry={sendRequest} />}
-        <div className="flex flex-col gap-[6px]">
-          <button
+        <div className="flex flex-col gap-1.5">
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             type="submit"
             disabled={request.isPending || requestHint !== null}
             aria-busy={request.isPending}
             aria-describedby={requestHint !== null ? hintId : undefined}
-            className={primary}
           >
             {t('auth.sendCode')}
-          </button>
+          </Button>
           {requestHint !== null && (
             <p id={hintId} className="text-sm text-ink-muted">
               {requestHint}
@@ -370,20 +371,25 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   let verifyHint: string | null = null;
   if (!verify.isPending && !CODE_RE.test(code)) verifyHint = t('auth.hint.enterCode');
   else if (!verify.isPending && askProfile && role === null) verifyHint = t('auth.hint.chooseRole');
+  // A wrong code is the field's own error (the input is invalid); "too many" and a failure are
+  // a separate alert that describes the input without marking it invalid.
+  const codeInvalid = step2Error?.kind === 'invalidCode';
+  const codeAlertId = `${id}-code-error`;
 
   return (
-    <form noValidate onSubmit={onVerifySubmit} className="flex flex-col gap-[22px]">
-      <p className="text-ink-muted">
+    <form ref={formRef} noValidate onSubmit={onVerifySubmit} className="flex flex-col gap-6">
+      <p className="text-body text-ink-muted">
         {/* First-strong isolates keep an email that ends in a digit or symbol in LTR order. */}
         {t('auth.code.sentTo', { email: `⁨${email.trim()}⁩` })}
       </p>
-      <div className="flex flex-col gap-[6px]">
-        <label htmlFor={`${id}-code`} className={label}>
-          {t('auth.code.label')}
-        </label>
-        <input
+      <Field
+        id={`${id}-code`}
+        label={t('auth.code.label')}
+        error={codeInvalid ? t('auth.errors.invalidCode') : undefined}
+      >
+        <TextInput
           ref={codeRef}
-          id={`${id}-code`}
+          size="lg"
           type="text"
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -402,39 +408,37 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
           onChange={(e) => {
             setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6));
           }}
-          aria-invalid={step2Error?.kind === 'invalidCode'}
-          aria-describedby={step2Error !== null ? `${id}-code-error` : undefined}
-          className={`${input} text-start tracking-[0.3em]`}
+          aria-describedby={step2Error !== null && !codeInvalid ? codeAlertId : undefined}
         />
-        {step2Error !== null && (
-          <p id={`${id}-code-error`} role="alert" className={fieldError}>
-            {step2Error.kind === 'invalidCode'
-              ? t('auth.errors.invalidCode')
-              : step2Error.kind === 'tooMany'
-                ? tooManyText(step2Error)
-                : online
-                  ? t('common.error')
-                  : t('common.offline')}
-          </p>
-        )}
-      </div>
-      {profileNeeded && (
-        <div className="flex flex-col gap-[22px]">
-          <p>{t('auth.noAccountYet')}</p>
-          <RoleChoice value={role} onChange={setRole} firstRadioRef={firstRadioRef} />
-          {nameField}
-        </div>
+      </Field>
+      {step2Error !== null && step2Error.kind !== 'invalidCode' && (
+        <p id={codeAlertId} role="alert" className={errorText}>
+          {step2Error.kind === 'tooMany'
+            ? tooManyText(step2Error)
+            : online
+              ? t('common.error')
+              : t('common.offline')}
+        </p>
       )}
-      <div className="flex flex-col gap-[6px]">
-        <button
+      {profileNeeded && (
+        <Card variant="muted" padding="md" className="flex flex-col gap-6">
+          <p className="text-body">{t('auth.noAccountYet')}</p>
+          {roleChoice}
+          {nameField}
+        </Card>
+      )}
+      <div className="flex flex-col gap-1.5">
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
           type="submit"
           disabled={verify.isPending || !codeReady}
           aria-busy={verify.isPending}
           aria-describedby={verifyHint !== null ? hintId : undefined}
-          className={primary}
         >
           {t('auth.verify')}
-        </button>
+        </Button>
         {verifyHint !== null && (
           <p id={hintId} className="text-sm text-ink-muted">
             {verifyHint}
@@ -442,18 +446,18 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onResend}
           disabled={cooling || resend.isPending}
           aria-busy={resend.isPending}
-          className={secondary}
         >
           {cooling ? t('auth.resendIn', { count: secondsLeft }) : t('auth.resend')}
-        </button>
-        <button type="button" onClick={onChangeEmail} className={`${secondary} underline`}>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onChangeEmail}>
           {t('auth.changeEmail')}
-        </button>
+        </Button>
       </div>
       <p role="status" className="sr-only">
         {resendStatus === 'resent'

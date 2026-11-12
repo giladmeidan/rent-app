@@ -1,7 +1,7 @@
 ---
 id: 0009m
 title: Login and signup, with the OTP steps and the role choice, are one centred card under the homie logo and the hello turtle, in the brand kit's colours, type and voice and CreateListing's field anatomy, on a phone and on a desktop, built from the 0009d kit and tokens, with every behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Field + TextInput, PageContainer, PageHeader, and the brand amendment's Logo and Mascot), the brand token scale, the restyled ChoiceGroup / ErrorState, the full-width shell and the page roots. 0009d's planner asks every screen spec to depend on 0009h, because 0009h rewrites every page root and colour class. The profile half of this screen pair is 0009r; the two share only he.json
 reviewers: [code, qa, ux, security]   # security: OtpForm (the email-code flow) is rewritten onto the kit, and the new cross-links build a URL from the user-controlled `?next` (FOLLOWUPS line 19's rule). The review is short: the cross-link's `next` handling, and the OTP calls, state and handlers being unchanged. ux: a restyled screen with no artboard of its own, judged against CreateListing / Main; qa: OTP steps, errors, focus and redirects at 390 / 1440
 estimate: 1 coder run   # coder Opus/high (~2.5 h): OtpForm holds the OTP flow, whose behaviour must not change (Speed rule 6, "the coder on auth"); 3 source files, 3 test files, the screenshot harness if 0009l / 0009k have not added it
@@ -418,3 +418,12 @@ None. No `[…]` class value and no hex literal in the in-scope files.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009m — login and signup as one centred card under the homie wordmark and the hello turtle, on the kit   PR #56 open, not merged
+Shipped: `/login` and `/signup` are one `narrow` (480 px) column at every width: the hello turtle (96 / 112 px) and the wordmark (`h-7`), then a bordered card with the Fredoka `<h1>`, a one-line subtitle and `OtpForm` on `Field` / `TextInput` / `ChoiceGroup` / `Button` (ink 52 px primary, full width), then a login ↔ signup cross-link that carries only `safeNext`'s `next`. `RoleChoice.tsx` is deleted (ChoiceGroup). The OTP calls, state, handlers, cooldown and 429 handling are unchanged; 0009g's `/me` skeleton sits inside the card. Demo: `/login?next=%2Fme%2Flikes` → "להרשמה" keeps the next → send a code → step 2 at 390 and 1440.
+New UI and copy for Gilad's digest line: the cross-links, the turtle and wordmark above the card, the subtitles' "בחינם · בלי סיסמה" claims, and `auth.errors.invalidCode` → "הקוד לא נכון. אפשר לנסות שוב."
+Tests: +4 unit (AC1 ×2, AC2, AC3; the AC1 tables include hostile `next` shapes: `//`, `/\`, a scheme, a control character, a param/fragment injection); no existing assertion edited (AC4; two import lines gained `within`). +1 e2e `ac5_auth_layout_desktop_and_mobile` with axe at both steps. 20 screenshots in `web/screens/0009m/` (a1–a10 × mobile / desktop, AC7).
+Findings (code, qa, ux, security; one round): 0 blockers, 0 majors, 7 minors: 2 fixed (more hostile-`next` test rows; wordmark `h-8 my-2` → `h-7` so it no longer outweighs the `<h1>`), 4 logged to FOLLOWUPS (an `AuthShell` for the duplicated page structure; the kit's disabled ghost button leaves the resend countdown at ~2:1; the subtitle breaks at the maqaf at 390 px; the role labels wrap and keep a slash form), 1 duplicate. 8 nits dropped.
+Kit calls that differ from the spec text: `Mascot width={112} className="w-24 lg:w-28"`; `Logo className="h-7"` (the kit has no default size); alert lines in Field's `text-body-sm text-danger`. No local-markup fallback.
+AC6: the hex grep and the class-token grep over LoginPage / SignupPage / OtpForm print nothing.
+Checks on the final head (main at 0009e + 0009g + 0009k merged): make lint / test (api 476, web 521) / i18n-check / build-web green. Local `make e2e` 23/23 green on the pre-merge head; on the merged head `auth.spec.ts` + `a11y.spec.ts` 6/6 and the auth screens 20/20 (load ~30–46, so the full suite is left to CI). FOLLOWUPS: line 31 (RoleChoice) and line 21 (auth hex) ticked; a Slice 12 line to revisit "לאימייל" when SMS is on. Changed in PRODUCT.md: nothing.

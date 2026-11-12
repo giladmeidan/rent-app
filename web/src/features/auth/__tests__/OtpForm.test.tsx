@@ -23,6 +23,68 @@ afterEach(() => {
 });
 
 describe('OtpForm', () => {
+  it('ac3_step2_error_semantics', async () => {
+    const pendingVerify = deferred();
+    mockApi({
+      'POST /auth/otp/request': [empty(204), json({ detail: 'rate_limited' }, 429)],
+      'POST /auth/otp/verify': [
+        pendingVerify.promise,
+        () => Promise.reject(new TypeError('Failed to fetch')),
+      ],
+    });
+    renderAt('/login', <OtpForm withProfile={false} />);
+
+    const send = screen.getByRole('button', { name: he.auth.sendCode });
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(send);
+    await flush();
+
+    const code = screen.getByLabelText(he.auth.code.label);
+    const verify = screen.getByRole('button', { name: he.auth.verify });
+    // Not ready (fewer than 6 digits): the native `disabled` attribute.
+    fireEvent.change(code, { target: { value: '123' } });
+    expect(verify).toHaveAttribute('disabled');
+    fireEvent.change(code, { target: { value: '123456' } });
+    expect(verify).not.toHaveAttribute('disabled');
+
+    // Pending: disabled and busy.
+    fireEvent.click(verify);
+    await flush();
+    expect(verify).toHaveAttribute('disabled');
+    expect(verify).toHaveAttribute('aria-busy', 'true');
+
+    // A 401: the input is invalid and described by the wrong-code alert.
+    pendingVerify.resolve(json({ detail: 'invalid_code' }, 401));
+    await flush();
+    const wrongCode = screen.getByRole('alert');
+    expect(wrongCode).toHaveTextContent(he.auth.errors.invalidCode);
+    expect(code).toHaveAttribute('aria-invalid', 'true');
+    expect(code.getAttribute('aria-describedby')?.split(' ')).toContain(wrongCode.id);
+    expect(code).toHaveAccessibleDescription(he.auth.errors.invalidCode);
+    expect(verify).not.toHaveAttribute('disabled');
+
+    // A resend answering 429: the too-many alert describes the input, which is not invalid.
+    await advance(30_000);
+    fireEvent.click(screen.getByRole('button', { name: he.auth.resend }));
+    await flush();
+    const tooMany = screen.getByRole('alert');
+    expect(tooMany).toHaveTextContent(he.auth.errors.tooMany);
+    expect(code).not.toHaveAttribute('aria-invalid', 'true');
+    expect(code.getAttribute('aria-describedby')?.split(' ')).toContain(tooMany.id);
+    expect(code).toHaveAccessibleDescription(he.auth.errors.tooMany);
+
+    // A verify that throws: the generic alert, with the same semantics as the 429.
+    fireEvent.click(verify);
+    await flush();
+    const failed = screen.getByRole('alert');
+    expect(failed).toHaveTextContent(he.common.error);
+    expect(code).not.toHaveAttribute('aria-invalid', 'true');
+    expect(code.getAttribute('aria-describedby')?.split(' ')).toContain(failed.id);
+    expect(code).toHaveAccessibleDescription(he.common.error);
+  });
+
   it('ac3_resend_countdown_singular', async () => {
     mockApi({ 'POST /auth/otp/request': [empty(204)] });
     renderAt('/login', <OtpForm withProfile={false} />);
