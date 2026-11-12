@@ -440,13 +440,8 @@ describe('MyApplicationsPage', () => {
       const card = cards()[i] as HTMLElement;
       const inside = within(card);
       expect(card).toHaveClass('rounded-lg');
-      // Ended applications are the muted card; the others the default one.
-      if (app.status === 'declined' || app.status === 'withdrawn') {
-        expect(card).toHaveClass('bg-surface-subtle');
-        expect(card).not.toHaveClass('border');
-      } else {
-        expect(card).toHaveClass('bg-surface', 'border', 'border-border');
-      }
+      // Every card is the default one (the spec's fallback, taken at the ux review).
+      expect(card).toHaveClass('bg-surface', 'border', 'border-border');
       const badge = inside.getByTestId('application-status');
       expect(badge).toHaveTextContent(he.applications.status[app.status as 'submitted']);
       expect(badge).toHaveClass('rounded-full', ...tones[app.status as keyof typeof tones]);
@@ -469,10 +464,6 @@ describe('MyApplicationsPage', () => {
     expect(body.textContent).toBe(message);
     expect(body).toHaveClass('whitespace-pre-line', 'bg-surface-subtle');
     expect(body.children).toHaveLength(0);
-    // On a muted card the message box is `surface`.
-    expect(within(cards()[2] as HTMLElement).getByTestId('application-message')).toHaveClass(
-      'bg-surface',
-    );
     // The mutual card shows its tag and no message.
     const last = within(cards()[4] as HTMLElement);
     expect(last.getByTestId('application-mutual')).toHaveTextContent(he.applications.mutual);

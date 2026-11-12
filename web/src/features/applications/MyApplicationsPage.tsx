@@ -72,17 +72,13 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
     });
   }
 
-  const ended = application.status === 'declined' || application.status === 'withdrawn';
   const showActions = withdrawable || application.status === 'shortlisted';
 
   return (
     <li>
-      <Card
-        as="article"
-        padding="md"
-        variant={ended ? 'muted' : 'default'}
-        className="flex flex-col gap-3"
-      >
+      {/* Every card is the default one (ux review: a muted card hid the neutral chip and put the
+          accent title off `surface`); the chip and the declined hint carry the ended state. */}
+      <Card as="article" padding="md" className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <p className="text-h3 font-semibold">
             <span>
@@ -126,10 +122,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             {/* Plain text from the seeker: React children only, line breaks kept. */}
             <p
               data-testid="application-message"
-              className={cx(
-                'whitespace-pre-line break-words rounded-md px-3.5 py-3 text-body leading-relaxed text-ink',
-                ended ? 'bg-surface' : 'bg-surface-subtle',
-              )}
+              className="whitespace-pre-line break-words rounded-md bg-surface-subtle px-3.5 py-3 text-body leading-relaxed text-ink"
             >
               {application.message}
             </p>
