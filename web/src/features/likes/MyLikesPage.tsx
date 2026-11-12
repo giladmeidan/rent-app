@@ -1,32 +1,37 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 
-import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { ListingCard } from '../listings/ListingCard';
 import { todayInIsrael } from '../listings/format';
+import { MatchBadge } from '../match/MatchBadge';
+import { MatchChips } from '../match/MatchChips';
+import { useProfile } from '../profile/useProfile';
+import type { SeekerProfileOut } from '../profile/api';
 import type { LikedRoomOut, LikeStateOut } from './api';
 import { LikeRoomButton } from './LikeRoomButton';
 import { MutualBanner } from './MutualBanner';
 import { useMyLikes } from './useMyLikes';
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-
 function RoomList({
   items,
   like,
+  profile,
   empty,
   onMutual,
   onToMine,
 }: {
   items: LikedRoomOut[];
   like: LikeStateOut;
+  /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
+  profile: SeekerProfileOut | undefined;
   empty: ReactNode;
   onMutual: (applicationId: string) => void;
   /** A card left its place for (or from) "mine": an unlike, or a like that is not mutual. */
@@ -35,11 +40,21 @@ function RoomList({
   const today = todayInIsrael();
   if (items.length === 0) return empty;
   return (
-    <ul className="flex flex-col gap-4">
+    <ul className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
       {items.map(({ listing }) => (
         <li key={listing.id}>
           {/* `h3`: the cards sit under the section `<h2>`s. */}
-          <ListingCard listing={listing} today={today} to={`/listings/${listing.id}`} titleAs="h3">
+          <ListingCard
+            listing={listing}
+            today={today}
+            to={`/listings/${listing.id}`}
+            titleAs="h3"
+            seekerBirthYear={profile?.birth_year}
+            badge={listing.match && <MatchBadge score={listing.match.score} />}
+          >
+            {listing.match && (
+              <MatchChips match={listing.match} listing={listing} profile={profile} />
+            )}
             {/* Above the card's stretched link, so a click reaches the button. */}
             <div className="relative z-10">
               <LikeRoomButton
@@ -62,6 +77,7 @@ export function MyLikesPage() {
   const { t } = useTranslation();
   usePageTitle(t('likes.title'));
   const likes = useMyLikes();
+  const profile = useProfile().data ?? undefined;
   // Kept here, not in the lists: the card that made the match leaves them on the refetch.
   const [mutualId, setMutualId] = useState<string | null>(null);
   // After a successful unlike, or a like that only moved the card to "mine" (spec 0009t): the
@@ -82,9 +98,10 @@ export function MyLikesPage() {
   if (likes.isPending) {
     body = (
       <Loading>
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-[200px] w-full" />
-          <Skeleton className="h-[200px] w-full" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-64 w-full rounded-lg" />
+          ))}
         </div>
       </Loading>
     );
@@ -93,8 +110,8 @@ export function MyLikesPage() {
   } else {
     body = (
       <>
-        <section className="flex flex-col gap-3" aria-labelledby="likes-liked-me">
-          <h2 id="likes-liked-me" className="text-start text-xl font-extrabold">
+        <section className="flex flex-col gap-4" aria-labelledby="likes-liked-me">
+          <h2 id="likes-liked-me" className="text-start font-display text-h2">
             {t('likes.likedMe')}
           </h2>
           <RoomList
@@ -102,25 +119,26 @@ export function MyLikesPage() {
             like={{ liked_by_me: false, liked_me: true }}
             onMutual={setMutualId}
             onToMine={toMine}
+            profile={profile}
             empty={
-              <div className="flex flex-col items-start gap-2">
-                <EmptyState message={t('likes.likedMeEmpty')} />
-                <Link
-                  to="/me/profile?section=room"
-                  className={`inline-flex min-h-[44px] items-center rounded text-accent-strong underline underline-offset-4 ${focusRing}`}
-                >
-                  {t('likes.toProfile')}
-                </Link>
-              </div>
+              <EmptyState
+                pose="sleep"
+                message={t('likes.likedMeEmpty')}
+                action={
+                  <Button variant="ghost" to="/me/profile?section=room">
+                    {t('likes.toProfile')}
+                  </Button>
+                }
+              />
             }
           />
         </section>
-        <section className="flex flex-col gap-3" aria-labelledby="likes-mine">
+        <section className="flex flex-col gap-4" aria-labelledby="likes-mine">
           <h2
             ref={mineRef}
             id="likes-mine"
             tabIndex={-1}
-            className="text-start text-xl font-extrabold focus:outline-none"
+            className="text-start font-display text-h2 focus:outline-none"
           >
             {t('likes.mine')}
           </h2>
@@ -129,7 +147,13 @@ export function MyLikesPage() {
             like={{ liked_by_me: true, liked_me: false }}
             onMutual={setMutualId}
             onToMine={toMine}
-            empty={<EmptyState message={t('likes.mineEmpty')} />}
+            profile={profile}
+            empty={
+              <EmptyState
+                pose={likes.data.liked_me.length === 0 ? undefined : 'sleep'}
+                message={t('likes.mineEmpty')}
+              />
+            }
           />
         </section>
       </>
@@ -137,9 +161,13 @@ export function MyLikesPage() {
   }
 
   return (
-    <PageContainer width="narrow" className="flex flex-col gap-5">
-      <h1 className="text-start text-2xl font-extrabold">{t('likes.title')}</h1>
-      {mutualId !== null && <MutualBanner applicationId={mutualId} />}
+    <PageContainer width="wide" className="flex flex-col gap-6">
+      <PageHeader title={t('likes.title')} />
+      {mutualId !== null && (
+        <div className="flex flex-col gap-3">
+          <MutualBanner applicationId={mutualId} />
+        </div>
+      )}
       {body}
     </PageContainer>
   );

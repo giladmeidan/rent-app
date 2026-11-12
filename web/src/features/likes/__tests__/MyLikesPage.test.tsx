@@ -6,6 +6,7 @@ import he from '../../../locales/he.json';
 import { deferred, empty, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
 import { RequireSeeker } from '../../auth/RequireSeeker';
 import { seeker } from '../../listings/__tests__/fixtures';
+import { profile } from '../../profile/__tests__/fixtures';
 import { MyLikesPage } from '../MyLikesPage';
 import { likedRoom, myLikes } from './fixtures';
 
@@ -14,6 +15,7 @@ afterEach(() => {
 });
 
 const LIKES = 'GET /me/likes';
+const PROFILE = 'GET /me/profile';
 const routes = (
   <Routes>
     <Route path="/login" element={<p>login</p>} />
@@ -23,7 +25,8 @@ const routes = (
   </Routes>
 );
 const render = (replies: Parameters<typeof mockApi>[0]) => {
-  const api = mockApi({ 'GET /me': [json(seeker)], ...replies });
+  // The seeker's profile words the match chips; none by default (a 404 would also do).
+  const api = mockApi({ 'GET /me': [json(seeker)], [PROFILE]: [() => json(null)], ...replies });
   renderRoutes('/me/likes', routes);
   return api;
 };
@@ -186,5 +189,96 @@ describe('MyLikesPage', () => {
     expect(await screen.findByText(he.likes.mineEmpty)).toBeVisible();
     await new Promise((r) => setTimeout(r, 50));
     expect(mineHeading()).not.toHaveFocus();
+  });
+
+  it('ac3_grid_and_match', async () => {
+    const year = new Date().getUTCFullYear();
+    const scored = likedRoom({
+      flatmate_ages: [27, 29],
+      match: { score: 82, agrees: ['budget', 'area'], differs: null },
+    });
+    const plain = likedRoom({ flatmate_ages: [60] });
+    const mine = likedRoom();
+    const api = render({
+      [PROFILE]: [json(profile({ birth_year: year - 28 }))],
+      [LIKES]: [json(myLikes([scored, plain], [mine])), json(myLikes([plain], [mine, scored]))],
+      [`PUT /listings/${scored.listing.id}/like`]: [json({ liked: true, application_id: 'X' })],
+    });
+
+    const likedMe = within(await screen.findByRole('region', { name: he.likes.likedMe }));
+    const mineRegion = within(section(he.likes.mine));
+    // Each list is a grid of cards, one column on a phone.
+    for (const region of [likedMe, mineRegion]) {
+      const list = region.getAllByRole('list')[0] as HTMLElement;
+      expect(list).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-3');
+    }
+    expect(likedMe.getAllByRole('article')).toHaveLength(2);
+    expect(mineRegion.getAllByRole('article')).toHaveLength(1);
+    await vi.waitFor(() => {
+      expect(api.calls(PROFILE)).toHaveLength(1);
+    });
+
+    // The scored card shows the badge and chips, and the age chip; the other card has none.
+    const [first, second] = likedMe.getAllByRole('article') as [HTMLElement, HTMLElement];
+    expect(await within(first).findByTestId('match-badge')).toHaveTextContent('82');
+    expect(within(first).getByTestId('match-chips')).toBeVisible();
+    expect(within(first).getByText(he.rooms.card.similarAge)).toBeVisible();
+    expect(within(second).queryByTestId('match-badge')).toBeNull();
+    expect(within(second).queryByTestId('match-chips')).toBeNull();
+    expect(within(second).queryByText(he.rooms.card.similarAge)).toBeNull();
+    expect(mineRegion.queryByTestId('match-badge')).toBeNull();
+
+    // Liking back still shows the mutual banner with the chat link.
+    fireEvent.click(within(first).getByRole('button', { name: he.likes.like }));
+    const banner = (await screen.findByText(he.likes.mutual)).closest<HTMLElement>(
+      '[role="status"]',
+    ) as HTMLElement;
+    expect(within(banner).getByRole('link', { name: he.likes.toChat })).toHaveAttribute(
+      'href',
+      '/chat/X',
+    );
+  });
+
+  it('ac4_banner_and_one_mascot', async () => {
+    // The banner: a status on accent-soft, accent-strong text, an ink button focused on mount.
+    const a = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([a], [])), json(myLikes([], [a]))],
+      [`PUT /listings/${a.listing.id}/like`]: [json({ liked: true, application_id: 'X' })],
+    });
+    const likedMe = within(await screen.findByRole('region', { name: he.likes.likedMe }));
+    fireEvent.click(likedMe.getByRole('button', { name: he.likes.like }));
+    const text = await screen.findByText(he.likes.mutual);
+    const banner = text.closest<HTMLElement>('[role="status"]') as HTMLElement;
+    expect(banner).toHaveClass('bg-accent-soft', 'rounded-lg');
+    expect(text).toHaveClass('text-accent-strong');
+    const chat = within(banner).getByRole('link', { name: he.likes.toChat });
+    expect(chat).toHaveClass('bg-ink', 'text-on-ink');
+    expect(chat).not.toHaveClass('bg-accent');
+    await vi.waitFor(() => {
+      expect(chat).toHaveFocus();
+    });
+    unmount();
+    vi.unstubAllGlobals();
+
+    // Both sections empty: exactly one mascot, in "liked me".
+    const mascots = () => document.querySelectorAll('img[src*="homie-turtle"]');
+    render({ [LIKES]: [json(myLikes([], []))] });
+    await screen.findByText(he.likes.mineEmpty);
+    expect(mascots()).toHaveLength(1);
+    expect(
+      section(he.likes.likedMe).querySelectorAll('img[src*="homie-turtle-sleep"]'),
+    ).toHaveLength(1);
+    expect(
+      within(section(he.likes.likedMe)).getByRole('link', { name: he.likes.toProfile }),
+    ).toHaveAttribute('href', '/me/profile?section=room');
+    unmount();
+    vi.unstubAllGlobals();
+
+    // Only "mine" empty: the mascot is there.
+    render({ [LIKES]: [json(myLikes([likedRoom()], []))] });
+    await screen.findByText(he.likes.mineEmpty);
+    expect(mascots()).toHaveLength(1);
+    expect(section(he.likes.mine).querySelectorAll('img[src*="homie-turtle"]')).toHaveLength(1);
   });
 });
