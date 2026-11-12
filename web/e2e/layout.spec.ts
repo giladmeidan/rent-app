@@ -36,7 +36,7 @@ async function open(page: Page, path: string, heading: string) {
 
 const header = (page: Page) => page.locator('header > .max-w-wide');
 const narrow = (page: Page) => page.locator('main > .max-w-narrow');
-const content = (page: Page) => page.locator('main > .max-w-page');
+const wide = (page: Page) => page.locator('main > .max-w-wide');
 
 test('ac6_desktop_widths', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -60,11 +60,12 @@ test('ac6_desktop_widths', async ({ page }) => {
   expect(b.width).toBe(Math.min(1336, clientWidth - 64));
   expect(Math.abs(b.left - b.right)).toBeLessThanOrEqual(1);
 
-  // A content page (public, not found): 720px, centred.
+  // The listing page (public, not found here) is wide, for its two columns: the viewport less the
+  // lg gutters, up to 1336px, centred.
   await open(page, MISSING_LISTING, he.listing.notFound);
-  await expect(content(page)).toHaveCount(1);
-  b = await box(content(page));
-  expect(b.width).toBe(720);
+  await expect(wide(page)).toHaveCount(1);
+  b = await box(wide(page));
+  expect(b.width).toBe(Math.min(1336, clientWidth - 64));
   expect(Math.abs(b.left - b.right)).toBeLessThanOrEqual(1);
 
   // A wide screen: the header stops at 1336px, centred.
@@ -80,7 +81,7 @@ test('ac7_mobile_gutters', async ({ page }) => {
   const pages: [string, string, (p: Page) => Locator][] = [
     ['/login', he.auth.login.title, narrow],
     ['/signup', he.auth.signup.title, narrow],
-    [MISSING_LISTING, he.listing.notFound, content],
+    [MISSING_LISTING, he.listing.notFound, wide],
   ];
   for (const [path, heading, container] of pages) {
     await open(page, path, heading);

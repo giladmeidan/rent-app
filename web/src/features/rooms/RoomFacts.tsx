@@ -1,14 +1,12 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { FlatmatesIcon, PersonIcon } from '../listings/factIcons';
 import type { ListingPublic } from '../listings/api';
+import { FactCell } from '../listings/ListingFacts';
 import { LIFESTYLE_KEYS, type LifestyleAnswers } from '../lifestyle/keys';
 import { lifestyleTopic } from '../lifestyle/topic';
 import { flatmatesText, genderPreferenceLabel } from './flatmates';
-
-// The cards of `ListingFacts`' grid.
-const factCard =
-  'flex flex-col items-center gap-[6px] rounded-[14px] border border-border bg-surface px-[10px] py-3 text-center';
 
 /**
  * A room's "על החדר" on its listing page: who it is for, its flatmates and, when the room's side
@@ -20,10 +18,16 @@ export function RoomFacts({ listing }: { listing: ListingPublic }) {
   const headingId = useId();
 
   const rows = [
-    { label: t('rooms.facts.gender'), value: genderPreferenceLabel(t, listing.gender_preference) },
+    {
+      label: t('rooms.facts.gender'),
+      value: genderPreferenceLabel(t, listing.gender_preference),
+      icon: <PersonIcon />,
+    },
   ];
   const flatmates = flatmatesText(t, listing);
-  if (flatmates !== null) rows.push({ label: t('rooms.facts.flatmates'), value: flatmates });
+  if (flatmates !== null) {
+    rows.push({ label: t('rooms.facts.flatmates'), value: flatmates, icon: <FlatmatesIcon /> });
+  }
 
   const answers: LifestyleAnswers = listing.lifestyle;
   const answered = LIFESTYLE_KEYS.flatMap((key) => {
@@ -41,32 +45,26 @@ export function RoomFacts({ listing }: { listing: ListingPublic }) {
   });
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-[10px]">
-      <h2 id={headingId} className="text-[17px] font-extrabold">
+    <section aria-labelledby={headingId} className="flex flex-col gap-2.5">
+      <h2 id={headingId} className="text-h3 font-semibold">
         {t('rooms.facts.title')}
       </h2>
-      <dl data-testid="room-facts" className="grid grid-cols-2 gap-[10px] sm:grid-cols-3">
+      <dl data-testid="room-facts" className="grid grid-cols-3 gap-2.5">
         {rows.map((row) => (
-          <div key={row.label} className={factCard}>
-            <dt className="text-xs text-ink-muted">{row.label}</dt>
-            <dd className="text-sm font-bold">{row.value}</dd>
-          </div>
+          <FactCell key={row.label} icon={row.icon} label={row.label} value={row.value} />
         ))}
       </dl>
       {answered.length > 0 && (
         <>
-          <h3 className="pt-1 text-[15px] font-bold">{t('lifestyle.title.flat')}</h3>
+          <h3 className="pt-1 text-body font-medium">{t('lifestyle.title.flat')}</h3>
           <dl
             data-testid="room-lifestyle"
-            className="flex flex-col divide-y divide-border rounded-[14px] border border-border bg-surface"
+            className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface"
           >
             {answered.map((row) => (
-              <div
-                key={row.key}
-                className="flex items-center justify-between gap-3 px-[14px] py-[10px]"
-              >
-                <dt className="text-sm text-ink-muted">{row.topic}</dt>
-                <dd className="text-sm font-bold">{row.value}</dd>
+              <div key={row.key} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                <dt className="text-body-sm text-ink-muted">{row.topic}</dt>
+                <dd className="text-body-sm font-bold">{row.value}</dd>
               </div>
             ))}
           </dl>

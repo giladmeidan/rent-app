@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -109,6 +109,12 @@ describe('ListingPage', () => {
     expect(pairs[he.listings.fields.pets]).toBe(he.listing.allowed);
     expect(pairs[he.listings.fields.arnona]).toContain('480');
     expect(pairs[he.listings.fields.vaad]).toContain('150');
+    // Every fact has its decorative icon.
+    const terms = screen.getAllByRole('term');
+    expect(terms.length).toBeGreaterThan(0);
+    for (const dt of terms) {
+      expect(dt.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
+    }
     expect(
       screen.getByRole('heading', { level: 2, name: he.listings.fields.description }),
     ).toBeVisible();
@@ -384,7 +390,8 @@ describe('ListingPage', () => {
       .closest('section');
     const ownerLooksFor = screen.getByRole('region', { name: he.listing.ownerLooksFor.title });
     expect(section.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(section.nextElementSibling).toBe(apply);
+    // The apply region is in the action column, after the main column's last section.
+    expect(screen.getByTestId('listing-actions').contains(apply)).toBe(true);
     expect(location?.nextElementSibling).toBe(ownerLooksFor);
     expect(ownerLooksFor.nextElementSibling).toBe(section);
     view.unmount();
@@ -486,6 +493,9 @@ describe('ListingPage', () => {
       'העדפת מגדר: גברים',
       'שותפים בדירה: 2 שותפים (27, 30)',
     ]);
+    for (const dt of within(within(roomFacts()).getByTestId('room-facts')).getAllByRole('term')) {
+      expect(dt.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
+    }
     const lifestyleHeading = within(roomFacts()).getByRole('heading', {
       level: 3,
       name: he.lifestyle.title.flat,
@@ -534,6 +544,74 @@ describe('ListingPage', () => {
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('region', { name: he.rooms.facts.title })).toBeNull();
     expect(screen.queryByText(he.rooms.facts.title)).toBeNull();
+  });
+
+  it('ac5_room_privacy_unchanged', async () => {
+    const base = {
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 2,
+      room_fit: true,
+    } as const;
+    // What the API answers a visitor or an owner: no ages, no answers.
+    const hidden = listingDetail({ ...base, flatmate_ages: [], lifestyle: {} });
+    const flatmates = () => screen.getByTestId('room-facts');
+    const noAges = () => {
+      expect(flatmates()).not.toHaveTextContent('27');
+      expect(flatmates()).not.toHaveTextContent('30');
+      expect(screen.getByRole('region', { name: he.rooms.facts.title })).not.toHaveTextContent(
+        '27',
+      );
+      expect(screen.queryByRole('heading', { name: he.lifestyle.title.flat })).toBeNull();
+      expect(screen.queryByTestId('room-lifestyle')).toBeNull();
+    };
+
+    // A visitor.
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${hidden.id}`]: [json(hidden)],
+    });
+    let view = render(hidden.id);
+    await screen.findByRole('heading', { level: 1 });
+    noAges();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The room's owner, whose own listings cache holds the ages and answers ("my listings"):
+    // the page renders only what `GET /listings/{id}` returned.
+    const client = testQueryClient();
+    client.setQueryData(
+      ['me', 'listings'],
+      [{ ...hidden, flatmate_ages: [27, 30], lifestyle: { cleanliness: 3, kosher: 1 } }],
+    );
+    mockApi({
+      'GET /me': [json({ ...noa, role: 'owner' })],
+      [`GET /listings/${hidden.id}`]: [json(hidden)],
+    });
+    view = render(hidden.id, client);
+    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('region', { name: he.applications.headingOwner });
+    noAges();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A seeker's response holds them: both show.
+    const shown = listingDetail({
+      ...base,
+      flatmate_ages: [27, 30],
+      lifestyle: { cleanliness: 3, kosher: 1 },
+    });
+    mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [json(profile({ gender: 'woman' }))],
+      [`GET /listings/${shown.id}`]: [json(shown)],
+    });
+    render(shown.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(flatmates()).toHaveTextContent('27, 30');
+    expect(screen.getByRole('heading', { level: 3, name: he.lifestyle.title.flat })).toBeVisible();
+    expect(screen.getByTestId('room-lifestyle').querySelectorAll('dt')).toHaveLength(2);
   });
 
   it('ac11_match_card_lifestyle', async () => {
@@ -609,6 +687,216 @@ describe('ListingPage', () => {
     await screen.findByRole('button', { name: he.common.retry });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.common.error);
+  });
+
+  it('ac1_layout_columns', async () => {
+    const scored = listingDetail({
+      price_ils: 7200,
+      min_contract_months: 12,
+      available_from: inDays(30),
+      match: { score: 87, agrees: ['budget', 'move_in', 'contract'], differs: null },
+    });
+    mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [json(profile({ budget_max_ils: 7500 }))],
+      [`GET /listings/${scored.id}`]: [json(scored)],
+    });
+    render(scored.id);
+    const apply = await screen.findByRole('region', { name: he.applications.heading });
+    const article = screen.getByRole('article');
+    const main = screen.getByTestId('listing-main');
+    const actions = screen.getByTestId('listing-actions');
+    // The article holds the main column, then the action column.
+    expect(main.parentElement).toBe(article);
+    expect(actions.parentElement).toBe(article);
+    expect(main.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The location, the owner's preferences and the match card are consecutive in the main column.
+    const location = screen
+      .getByRole('heading', { level: 2, name: he.listing.location })
+      .closest('section');
+    const ownerLooksFor = screen.getByRole('region', { name: he.listing.ownerLooksFor.title });
+    const match = screen.getByRole('region', { name: he.match.card.title });
+    expect(main).toContainElement(match);
+    expect(location?.nextElementSibling).toBe(ownerLooksFor);
+    expect(ownerLooksFor.nextElementSibling).toBe(match);
+    // The match card precedes the apply region, which is in the action column.
+    expect(match.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions).toContainElement(apply);
+    expect(main).not.toContainElement(apply);
+    // The badge's parent holds the price.
+    expect(screen.getByText('התאמה 87%').parentElement).toHaveTextContent(/7,200[\s‎‏]*₪/);
+  });
+
+  describe('apply bar (0009j)', () => {
+    /** An `IntersectionObserver` that records what it watches and lets a test fire it. */
+    class FakeObserver {
+      static all: FakeObserver[] = [];
+      observed: Element[] = [];
+      constructor(
+        private callback: IntersectionObserverCallback,
+        readonly options?: IntersectionObserverInit,
+      ) {
+        FakeObserver.all.push(this);
+      }
+      observe(el: Element) {
+        this.observed.push(el);
+      }
+      unobserve() {}
+      disconnect() {
+        this.observed = [];
+      }
+      takeRecords() {
+        return [];
+      }
+      fire(isIntersecting: boolean, top: number) {
+        const entry = { isIntersecting, boundingClientRect: { top } } as IntersectionObserverEntry;
+        this.callback([entry], this as unknown as IntersectionObserver);
+      }
+    }
+    const scrollIntoView = vi.fn();
+    const stub = () => {
+      FakeObserver.all = [];
+      scrollIntoView.mockClear();
+      vi.stubGlobal('IntersectionObserver', FakeObserver);
+      HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    };
+    /** Reports the action column's position to every observer watching it. */
+    const report = (isIntersecting: boolean, top: number) =>
+      act(() => {
+        const watching = FakeObserver.all.filter((o) =>
+          o.observed.includes(screen.getByTestId('listing-actions')),
+        );
+        for (const o of watching) o.fire(isIntersecting, top);
+      });
+    const BELOW = [false, 900] as const;
+    const bar = () => screen.queryByTestId('apply-bar');
+    const room = (over: Parameters<typeof listingDetail>[0] = {}) =>
+      listingDetail({ listing_type: 'room', gender_preference: 'any', room_fit: true, ...over });
+    const owner = { ...noa, role: 'owner' as const };
+
+    it('ac3_apply_bar', async () => {
+      stub();
+      // A visitor: nothing before the first report; below the screen, the bar with one button.
+      const visitor = listingDetail();
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        [`GET /listings/${visitor.id}`]: [json(visitor)],
+      });
+      let view = render(visitor.id);
+      await screen.findByRole('heading', { level: 1 });
+      await vi.waitFor(() => {
+        expect(FakeObserver.all.some((o) => o.observed.length > 0)).toBe(true);
+      });
+      expect(FakeObserver.all[0]?.options?.rootMargin).toBe('0px 0px -96px 0px');
+      expect(bar()).toBeNull();
+      report(...BELOW);
+      const shown = screen.getByTestId('apply-bar');
+      expect(shown).toHaveAttribute('data-sticky-footer');
+      const button = within(shown).getByRole('button');
+      expect(button).toHaveAccessibleName(he.applications.apply);
+      // The jump: scrolls the action column into view, then focuses the section's heading.
+      fireEvent.click(button);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+      expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByTestId('listing-actions'));
+      expect(
+        screen.getByRole('heading', { level: 2, name: he.applications.heading }),
+      ).toHaveFocus();
+      // On screen, or scrolled past (above the viewport): no bar.
+      report(true, 300);
+      expect(bar()).toBeNull();
+      report(...BELOW);
+      expect(bar()).not.toBeNull();
+      report(false, -400);
+      expect(bar()).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      // A seeker with no application and no profile: the section shows the profile gate, and the
+      // bar is offered.
+      stub();
+      const open = listingDetail();
+      mockApi({
+        'GET /me': [json(noa)],
+        'GET /me/applications': [json([])],
+        'GET /me/profile': [json({ detail: 'seeker_profile_not_found' }, 404)],
+        [`GET /listings/${open.id}`]: [json(open)],
+      });
+      view = render(open.id);
+      await screen.findByRole('link', { name: he.applications.fillProfile });
+      await vi.waitFor(() => {
+        expect(FakeObserver.all.some((o) => o.observed.length > 0)).toBe(true);
+      });
+      report(...BELOW);
+      expect(bar()).not.toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      // No bar for: a submitted application, a misfit room, an owner, a pending list. Each waits
+      // for what the section settles on, so a bar would have been offered by then.
+      const submitted = listingDetail();
+      const misfit = room({ room_fit: false });
+      const mine = listingDetail();
+      const waiting = listingDetail();
+      const pending = deferred();
+      const seeker = (id: string, extra: Parameters<typeof mockApi>[0]) => ({
+        'GET /me': [json(noa)],
+        'GET /me/applications': [json([])],
+        'GET /me/profile': [json(profile({ gender: 'man' }))],
+        ...extra,
+        [`GET /listings/${id}`]: [json(listingFor[id])],
+      });
+      const listingFor: Record<string, ReturnType<typeof listingDetail>> = {
+        [submitted.id]: submitted,
+        [misfit.id]: misfit,
+        [mine.id]: mine,
+        [waiting.id]: waiting,
+      };
+      const cases: [string, Parameters<typeof mockApi>[0], () => Promise<unknown>][] = [
+        [
+          submitted.id,
+          seeker(submitted.id, {
+            'GET /me/applications': [
+              json([{ ...application(), listing: { ...application().listing, id: submitted.id } }]),
+            ],
+          }),
+          () => screen.findByRole('link', { name: he.applications.viewMine }),
+        ],
+        [misfit.id, seeker(misfit.id, {}), () => screen.findByText(he.rooms.apply.misfit)],
+        [
+          mine.id,
+          { ...seeker(mine.id, {}), 'GET /me': [json(owner)] },
+          () => screen.findByRole('region', { name: he.applications.headingOwner }),
+        ],
+        [
+          waiting.id,
+          seeker(waiting.id, { 'GET /me/applications': [pending.promise] }),
+          () => screen.findByRole('region', { name: he.applications.heading }),
+        ],
+      ];
+      for (const [id, routes, settled] of cases) {
+        stub();
+        mockApi(routes);
+        view = render(id);
+        await screen.findByRole('heading', { level: 1 });
+        await settled();
+        report(...BELOW);
+        expect(bar()).toBeNull();
+        view.unmount();
+        vi.unstubAllGlobals();
+      }
+
+      // No IntersectionObserver (jsdom's default): no bar, and a visitor sees no extra button.
+      vi.stubGlobal('IntersectionObserver', undefined);
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        [`GET /listings/${visitor.id}`]: [json(visitor)],
+      });
+      render(visitor.id);
+      await screen.findByRole('link', { name: he.header.login });
+      expect(bar()).toBeNull();
+      expect(screen.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    });
   });
 
   describe('likes (0008c)', () => {

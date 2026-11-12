@@ -1,12 +1,15 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 
 import { clearDraft, readDraft, writeDraft } from '../../app/drafts';
+import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { retryAfterText } from '../../components/retryAfter';
 import { Skeleton } from '../../components/Skeleton';
+import { Field } from '../../components/Field';
+import { Tag } from '../../components/Tag';
+import { Textarea } from '../../components/Textarea';
 import { useMe } from '../auth/useMe';
 import { ApiError, type ListingDetail } from '../listings/api';
 import { useProfile } from '../profile/useProfile';
@@ -23,14 +26,8 @@ const MESSAGE_MAX = 500;
 /** The counter is announced only near the limit. */
 const ANNOUNCE_BELOW = 50;
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const primary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-accent px-5 text-base font-bold text-on-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
-const secondary = `inline-flex min-h-[52px] items-center justify-center rounded-[14px] border-[1.5px] border-border-strong bg-surface px-5 text-[15px] font-bold text-ink ${focusRing}`;
-const textarea =
-  'w-full rounded-xl border-[1.5px] border-border-strong bg-surface px-3 py-3 text-start text-base text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft aria-[invalid=true]:border-danger';
-const fieldError = 'text-sm font-semibold text-danger';
-const hint = 'text-xs text-ink-muted';
+const fieldError = 'text-body-sm font-semibold text-danger';
+const hint = 'text-caption text-ink-muted';
 
 /** True when a FastAPI 422 `detail` list has an item at `loc` `["body", "message"]`. */
 function isMessageError(detail: unknown): boolean {
@@ -84,9 +81,7 @@ function ApplyForm({
   const id = useId();
   const formId = `${id}-form`;
   const fieldId = `${id}-message`;
-  const hintId = `${id}-hint`;
   const counterId = `${id}-counter`;
-  const errorId = `${id}-error`;
   const serverErrorId = `${id}-server-error`;
 
   // Read once, on mount: a saved draft opens the form with its text.
@@ -190,52 +185,53 @@ function ApplyForm({
   }
 
   const left = MESSAGE_MAX - message.length;
-  const describedBy = [
-    hintId,
-    counterId,
-    fieldErr !== null ? errorId : null,
-    serverErr !== null ? serverErrorId : null,
-  ]
+  // `Field` puts its hint and error ids first; the counter and the server error follow.
+  const describedBy = [counterId, serverErr !== null ? serverErrorId : null]
     .filter((x) => x !== null)
     .join(' ');
 
   return (
     <div className="flex flex-col gap-3">
-      <button
+      <Button
         ref={buttonRef}
-        type="button"
+        variant="primary"
+        size="lg"
+        fullWidth
         aria-expanded={open}
         aria-controls={formId}
         onClick={() => setOpen((o) => !o)}
-        className={`${primary} w-full`}
       >
         {t('applications.apply')}
-      </button>
+      </Button>
       {open && (
-        <form id={formId} noValidate onSubmit={onSubmit} className="flex flex-col gap-[6px]">
-          <label htmlFor={fieldId} className="text-sm font-bold">
-            {t('applications.form.label')}
-          </label>
-          <textarea
-            ref={fieldRef}
+        <form id={formId} noValidate onSubmit={onSubmit} className="flex flex-col gap-1.5">
+          <Field
             id={fieldId}
-            rows={5}
-            maxLength={MESSAGE_MAX}
-            value={message}
-            onChange={(e) => {
-              setMessage(e.target.value);
-              writeDraft('apply', listingId, userId, e.target.value);
-              setFieldErr(null);
-              // Retry re-sends the last body, so it is offered only while the text is unchanged.
-              setServerErr(null);
-            }}
-            aria-invalid={fieldErr !== null}
-            aria-describedby={describedBy}
-            className={textarea}
-          />
-          <p id={hintId} className={hint}>
-            {t('applications.form.hint')}
-          </p>
+            label={t('applications.form.label')}
+            hint={t('applications.form.hint')}
+            error={
+              fieldErr === null
+                ? undefined
+                : fieldErr === 'required'
+                  ? t('listings.errors.required')
+                  : t('listings.errors.invalid')
+            }
+          >
+            <Textarea
+              ref={fieldRef}
+              rows={5}
+              maxLength={MESSAGE_MAX}
+              value={message}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                writeDraft('apply', listingId, userId, e.target.value);
+                setFieldErr(null);
+                // Retry re-sends the last body, so it is offered only while the text is unchanged.
+                setServerErr(null);
+              }}
+              aria-describedby={describedBy}
+            />
+          </Field>
           <p
             id={counterId}
             className={hint}
@@ -243,13 +239,6 @@ function ApplyForm({
           >
             {t('listings.fields.charsLeft', { count: left })}
           </p>
-          {fieldErr !== null && (
-            <p id={errorId} role="alert" className={fieldError}>
-              {fieldErr === 'required'
-                ? t('listings.errors.required')
-                : t('listings.errors.invalid')}
-            </p>
-          )}
           {serverErr === 'rateLimited' && (
             <p id={serverErrorId} role="alert" className={fieldError}>
               {retryAfter !== null
@@ -268,18 +257,21 @@ function ApplyForm({
               />
             </div>
           )}
-          <div className="flex flex-wrap gap-[10px] pt-2">
-            <button
+          <div className="flex flex-wrap gap-2.5 pt-2">
+            {/* `disabled`, not the kit's `busy`: the tests pin the attribute. */}
+            <Button
               type="submit"
+              variant="primary"
+              size="lg"
               disabled={apply.isPending}
               aria-busy={apply.isPending}
-              className={`${primary} flex-[1.4]`}
+              className="flex-[1.4]"
             >
               {t('applications.form.submit')}
-            </button>
-            <button type="button" onClick={onCancel} className={`${secondary} flex-1`}>
+            </Button>
+            <Button variant="secondary" size="lg" onClick={onCancel} className="flex-1">
               {t('applications.form.cancel')}
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -294,29 +286,24 @@ function Applied({ application }: { application: MyApplicationOut }) {
     <div className="flex flex-col items-start gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {application.source === 'like' ? (
-          <p
-            data-testid="application-mutual"
-            tabIndex={-1}
-            className="rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong focus:outline-none"
-          >
-            {t('applications.mutual')}
+          <p tabIndex={-1} className="focus:outline-none">
+            <Tag tone="accent" data-testid="application-mutual">
+              {t('applications.mutual')}
+            </Tag>
           </p>
         ) : (
-          <p tabIndex={-1} className="text-start text-[15px] font-semibold focus:outline-none">
+          <p tabIndex={-1} className="text-start text-body font-semibold focus:outline-none">
             {t('applications.applied', { date: appliedOn(application.created_at) })}
           </p>
         )}
         <ApplicationStatusChip status={application.status} />
       </div>
       {application.status === 'declined' && (
-        <p className="text-start text-sm text-ink-muted">{t('applications.declinedHint')}</p>
+        <p className="text-start text-body-sm text-ink-muted">{t('applications.declinedHint')}</p>
       )}
-      <Link
-        to="/me/applications"
-        className={`inline-flex min-h-[44px] items-center rounded-full text-[15px] font-semibold text-accent-strong underline underline-offset-4 ${focusRing}`}
-      >
+      <Button variant="ghost" to="/me/applications">
         {t('applications.viewMine')}
-      </Link>
+      </Button>
     </div>
   );
 }
@@ -327,7 +314,14 @@ function Applied({ application }: { application: MyApplicationOut }) {
  * one that cannot take this seeker (`room_fit: false`), and a women- or men-only room that needs
  * the profile's room section first.
  */
-export function ApplySection({ listing }: { listing: ListingDetail }) {
+export function ApplySection({
+  listing,
+  headingRef,
+}: {
+  listing: ListingDetail;
+  /** The section's `<h2>`, for the listing page's apply bar to move focus to. */
+  headingRef?: Ref<HTMLHeadingElement>;
+}) {
   const { t } = useTranslation();
   const headingId = useId();
   const me = useMe();
@@ -349,24 +343,25 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
 
   const visitor = (
     <div className="flex flex-col items-start gap-3">
-      <p className="text-start text-[15px]">{t('applications.loginPrompt')}</p>
-      <div className="flex flex-wrap gap-[10px]">
-        <Link to={loginPath(listing.id)} className={primary}>
+      <p className="text-start text-body">{t('applications.loginPrompt')}</p>
+      <div className="flex flex-wrap gap-2.5">
+        <Button variant="primary" size="lg" to={loginPath(listing.id)}>
           {t('header.login')}
-        </Link>
-        <Link
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
           to={`/signup?role=seeker&next=${encodeURIComponent(`/listings/${listing.id}`)}`}
-          className={secondary}
         >
           {t('header.signup')}
-        </Link>
+        </Button>
       </div>
     </div>
   );
 
   const skeleton = (
     <Loading>
-      <Skeleton className="h-[52px] w-full" />
+      <Skeleton className="h-13 w-full" />
     </Loading>
   );
   const application = mine.data?.find((a) => a.listing.id === listing.id);
@@ -404,7 +399,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
           <p
             role="status"
             tabIndex={-1}
-            className="text-start text-[15px] font-bold text-accent-strong focus:outline-none"
+            className="text-start text-body font-semibold text-accent-strong focus:outline-none"
           >
             {t('applications.sent')}
           </p>
@@ -417,7 +412,7 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
     // the room's preference or the seeker's own, and the line nudges no one to change either.
     branch = 'misfit';
     controls = (
-      <p tabIndex={-1} className="text-start text-[15px] focus:outline-none">
+      <p tabIndex={-1} className="text-start text-body focus:outline-none">
         {t('rooms.apply.misfit')}
       </p>
     );
@@ -463,10 +458,15 @@ export function ApplySection({ listing }: { listing: ListingDetail }) {
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="text-[17px] font-extrabold">
+      <h2
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-h3 font-semibold focus:outline-none"
+      >
         {isOwner ? t('applications.headingOwner') : t('applications.heading')}
       </h2>
-      <p className="text-start text-[15px] text-ink-muted">{countLine}</p>
+      <p className="text-start text-body text-ink-muted">{countLine}</p>
       <div ref={controlsRef} className="contents">
         {controls}
       </div>

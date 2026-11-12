@@ -1,6 +1,8 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Card } from '../../components/Card';
+import { Tag } from '../../components/Tag';
 import type { ContractMonths, Household, ListingOut } from './api';
 import { HOUSEHOLDS } from './constants';
 
@@ -56,20 +58,19 @@ export function OwnerPreferences({ listing }: Props) {
   if (chips.length === 0) return null;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-[10px]">
-      <h2 id={headingId} className="text-[17px] font-extrabold">
+    <section aria-labelledby={headingId} className="flex flex-col gap-2.5">
+      <h2 id={headingId} className="text-h3 font-semibold">
         {t('listing.ownerLooksFor.title')}
       </h2>
-      <ul className="flex flex-wrap gap-2 rounded-2xl border border-border bg-surface px-4 py-[14px]">
-        {chips.map((chip) => (
-          <li
-            key={chip}
-            className="rounded-full border border-border bg-surface-subtle px-3 py-[6px] text-[13px] font-semibold"
-          >
-            {chip}
-          </li>
-        ))}
-      </ul>
+      <Card padding="md">
+        <ul className="flex flex-wrap gap-2">
+          {chips.map((chip) => (
+            <Tag key={chip} as="li" tone="neutral">
+              {chip}
+            </Tag>
+          ))}
+        </ul>
+      </Card>
     </section>
   );
 }
