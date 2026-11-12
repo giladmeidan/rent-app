@@ -238,7 +238,8 @@ function Thread({
                 <li
                   key={message.id}
                   ref={message.id === lastId ? lastRef : undefined}
-                  className={`flex max-w-[85%] flex-col gap-1 lg:max-w-xl ${
+                  // At lg the scroll-to-last leaves room for the sticky composer below it.
+                  className={`flex max-w-[85%] flex-col gap-1 lg:max-w-xl lg:scroll-mb-56 ${
                     message.mine ? 'self-end' : 'self-start'
                   }`}
                 >
