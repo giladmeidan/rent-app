@@ -34,4 +34,18 @@ describe('EmptyState', () => {
       expect.arrayContaining(['flex', 'flex-col', 'items-center', 'py-8', 'text-center']),
     );
   });
+
+  it('action_renders_after_message', () => {
+    const { container } = render(
+      <EmptyState message={message} action={<a href="/search">{he.applications.mine.search}</a>} />,
+    );
+    const text = screen.getByText(message);
+    const link = screen.getByRole('link', { name: he.applications.mine.search });
+    expect(link.parentElement).toBe(text.parentElement);
+    expect(text.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(classesOf(text.parentElement)).toEqual(
+      expect.arrayContaining(['flex', 'flex-col', 'items-start', 'gap-3']),
+    );
+    expect(container.querySelector('img')).toBeNull();
+  });
 });

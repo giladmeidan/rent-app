@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { Card } from './Card';
 import { Mascot, type MascotPose } from './Mascot';
 
@@ -11,18 +13,27 @@ export const emptyStateBox =
 
 /**
  * An empty list or result, in a card. With a `pose`, the mascot (120px) sits above the message,
- * centred, with the brand's space-8 around it.
+ * centred, with the brand's space-8 around it. An `action` (a button or a link) follows the
+ * message inside the card.
  */
-export function EmptyState({ message, pose }: { message: string; pose?: MascotPose }) {
+export function EmptyState({
+  message,
+  pose,
+  action,
+}: {
+  message: string;
+  pose?: MascotPose;
+  action?: ReactNode;
+}) {
+  const hasAction = action !== undefined && action !== null;
+  let layout: string | undefined;
+  if (pose !== undefined) layout = 'flex flex-col items-center gap-3 py-8 text-center';
+  else if (hasAction) layout = 'flex flex-col items-start gap-3';
   return (
-    <Card
-      padding="md"
-      className={
-        pose === undefined ? undefined : 'flex flex-col items-center gap-3 py-8 text-center'
-      }
-    >
+    <Card padding="md" className={layout}>
       {pose !== undefined && <Mascot pose={pose} width={120} />}
       <p className="text-body text-ink-muted">{message}</p>
+      {hasAction && action}
     </Card>
   );
 }
