@@ -20,7 +20,7 @@ export function Switch({ label, checked, onChange, describedBy }: Props) {
     <div className="flex items-stretch justify-between gap-3 px-4">
       <label
         htmlFor={id}
-        className="flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center py-[14px] text-[15px] font-semibold"
+        className="flex min-h-tap min-w-0 flex-1 cursor-pointer items-center py-3.5 text-body text-ink"
       >
         {label}
       </label>

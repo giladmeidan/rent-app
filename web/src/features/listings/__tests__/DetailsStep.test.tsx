@@ -43,9 +43,10 @@ describe('DetailsStep', () => {
     const empty = await screen.findByText(he.areas.empty);
     expect(screen.queryByRole('combobox', { name: f.area })).toBeNull();
     fireEvent.click(nextButton());
-    expect(within(empty.parentElement as HTMLElement).getByRole('alert')).toHaveTextContent(
-      he.listings.errors.required,
-    );
+    // The message sits in the EmptyState card; the alert is the card's sibling in the field.
+    expect(
+      within(empty.parentElement?.parentElement as HTMLElement).getByRole('alert'),
+    ).toHaveTextContent(he.listings.errors.required);
     view.unmount();
     vi.unstubAllGlobals();
 

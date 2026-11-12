@@ -1,20 +1,16 @@
 import { useTranslation } from 'react-i18next';
 
+import { Button } from './Button';
+import { Card } from './Card';
+
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <div
-      role="alert"
-      className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-surface px-4 py-[14px]"
-    >
-      <p>{t('common.error')}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="min-h-[44px] rounded-full bg-accent px-5 font-semibold text-on-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
+    <Card role="alert" padding="md" className="flex flex-col items-start gap-3">
+      <p className="text-body text-ink">{t('common.error')}</p>
+      <Button shape="pill" onClick={onRetry}>
         {t('common.retry')}
-      </button>
-    </div>
+      </Button>
+    </Card>
   );
 }
