@@ -168,7 +168,7 @@ export function PeoplePage() {
         tabIndex={-1}
         className={
           mutual === null
-            ? undefined
+            ? 'sr-only'
             : `flex flex-wrap items-center gap-3 bg-accent-soft text-accent-strong ${bannerBase}`
         }
       >
@@ -186,7 +186,7 @@ export function PeoplePage() {
         role="alert"
         tabIndex={-1}
         className={
-          alert === null ? undefined : `border border-border bg-surface text-warning ${bannerBase}`
+          alert === null ? 'sr-only' : `border border-border bg-surface text-warning ${bannerBase}`
         }
       >
         {alert !== null && (
