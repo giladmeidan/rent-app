@@ -54,4 +54,16 @@ describe('Tag', () => {
     expect(classesOf(item)).toEqual(expect.arrayContaining([...tones.neutral, ...sizes.md]));
     expect(screen.getByTestId('icon').parentElement).toHaveAttribute('aria-hidden', 'true');
   });
+
+  it('passes_html_attributes', () => {
+    render(
+      <Tag tone="accent" data-testid="mutual" aria-label="x" id="t1">
+        {he.listings.card.pets}
+      </Tag>,
+    );
+    const tag = screen.getByTestId('mutual');
+    expect(tag).toHaveAttribute('id', 't1');
+    expect(tag).toHaveAttribute('aria-label', 'x');
+    expect(classesOf(tag)).toContain('bg-accent-soft');
+  });
 });

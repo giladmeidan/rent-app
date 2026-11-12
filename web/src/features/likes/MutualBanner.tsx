@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+import { Button } from '../../components/Button';
 
 /** "A mutual match": the chat of the shortlisted application the like created. */
 export function MutualBanner({ applicationId }: { applicationId: string }) {
@@ -13,19 +11,17 @@ export function MutualBanner({ applicationId }: { applicationId: string }) {
   useEffect(() => {
     chat.current?.focus();
   }, []);
+  // The kit has no notice component: this is the one inline tint panel (spec 0009qa). The button is
+  // `ink`, so the banner adds no accent fill; its text is `accent-strong` on `accent-soft`.
   return (
     <div
       role="status"
-      className="flex flex-col items-start gap-2 rounded-2xl border border-accent-soft bg-accent-soft px-4 py-[14px]"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-accent-soft px-4 py-3.5"
     >
-      <p className="text-start text-[15px] font-bold text-accent-strong">{t('likes.mutual')}</p>
-      <Link
-        ref={chat}
-        to={`/chat/${applicationId}`}
-        className={`inline-flex min-h-[44px] items-center rounded-full bg-accent px-4 text-[15px] font-bold text-on-ink ${focusRing}`}
-      >
+      <p className="text-start text-body font-medium text-accent-strong">{t('likes.mutual')}</p>
+      <Button ref={chat} variant="primary" to={`/chat/${applicationId}`}>
         {t('likes.toChat')}
-      </Link>
+      </Button>
     </div>
   );
 }

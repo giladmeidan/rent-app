@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 import { cx } from './cx';
 
 export type TagTone = 'neutral' | 'accent' | 'warning' | 'inverse';
 export type TagSize = 'sm' | 'md';
 
-export type TagProps = {
+export type TagProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'className'> & {
   tone?: TagTone;
   size?: TagSize;
   /** A leading outline icon, hidden from assistive tech. */
@@ -38,9 +38,11 @@ export function Tag({
   as: Element = 'span',
   className,
   children,
+  ...rest
 }: TagProps) {
   return (
     <Element
+      {...rest}
       className={cx(
         'inline-flex items-center gap-1 rounded-full',
         SIZES[size],

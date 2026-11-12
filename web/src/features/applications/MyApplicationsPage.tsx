@@ -2,13 +2,19 @@ import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
-import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { cx } from '../../components/cx';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { focusMainIfLost } from '../../components/focus';
+import { focusRing } from '../../components/focusRing';
 import { Loading } from '../../components/Loading';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { Tag } from '../../components/Tag';
 import { useOnline } from '../../components/useOnline';
 import { ApiError } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
@@ -18,11 +24,6 @@ import { ApplicationStatusChip } from './ApplicationStatusChip';
 import { appliedOn, isWithdrawable } from './format';
 import { useMyApplications } from './useMyApplications';
 import { useWithdraw } from './useWithdraw';
-
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-danger';
-const action = `inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 function ApplicationCard({ application }: { application: MyApplicationOut }) {
   const { t } = useTranslation();
@@ -71,77 +72,90 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
     });
   }
 
+  const showActions = withdrawable || application.status === 'shortlisted';
+
   return (
     <li>
-      <article className="flex flex-col gap-2 rounded-2xl border border-border bg-surface px-4 pb-4 pt-[14px]">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[20px] font-extrabold tracking-[-0.3px]">
+      {/* Every card is the default one (ux review: a muted card hid the neutral chip and put the
+          accent title off `surface`); the chip and the declined hint carry the ended state. */}
+      <Card as="article" padding="md" className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-h3 font-semibold">
             <span>
               {formatIls(listing.price_ils)} {t('listings.units.ils')}
             </span>{' '}
-            <span className="text-sm font-medium tracking-normal text-ink-muted">
+            <span className="text-caption font-medium text-ink-muted">
               {t('listings.units.perMonth')}
             </span>
           </p>
           <ApplicationStatusChip status={application.status} />
         </div>
-        <h2 id={titleId} className="break-words text-lg font-bold leading-snug">
+        <h2 id={titleId} className="text-h3 leading-snug [overflow-wrap:anywhere]">
           <Link
             ref={titleRef}
             to={`/listings/${listing.id}`}
-            className={`inline-flex min-h-[44px] items-center rounded text-accent-strong underline underline-offset-4 ${focusRing}`}
+            className={cx(
+              'inline-flex min-h-tap items-center rounded text-accent underline underline-offset-4',
+              focusRing,
+            )}
           >
             {cardTitle(t, listing)}
           </Link>
         </h2>
-        <p className="text-start text-sm text-ink-muted">
-          {t('applications.applied', { date: appliedOn(application.created_at) })}
-        </p>
-        {application.status === 'declined' && (
-          <p className="text-start text-sm text-ink-muted">{t('applications.declinedHint')}</p>
-        )}
-        {application.source === 'like' ? (
-          <p
-            data-testid="application-mutual"
-            className="self-start rounded-full border border-accent-soft bg-accent-soft px-3 py-[6px] text-[13px] font-semibold text-accent-strong"
-          >
-            {t('applications.mutual')}
+        <div className="flex flex-col gap-1">
+          <p className="text-start text-caption text-ink-muted">
+            {t('applications.applied', { date: appliedOn(application.created_at) })}
           </p>
+          {application.status === 'declined' && (
+            <p className="text-start text-caption text-ink-muted">
+              {t('applications.declinedHint')}
+            </p>
+          )}
+        </div>
+        {application.source === 'like' ? (
+          <Tag tone="accent" data-testid="application-mutual" className="self-start">
+            {t('applications.mutual')}
+          </Tag>
         ) : (
           <div className="flex flex-col gap-1">
-            <p className="text-xs font-bold text-ink-muted">{t('applications.yourMessage')}</p>
+            <p className="text-label text-ink-muted">{t('applications.yourMessage')}</p>
             {/* Plain text from the seeker: React children only, line breaks kept. */}
             <p
               data-testid="application-message"
-              className="whitespace-pre-line break-words text-[15px] leading-relaxed"
+              className="whitespace-pre-line break-words rounded-md bg-surface-subtle px-3.5 py-3 text-body leading-relaxed text-ink"
             >
               {application.message}
             </p>
           </div>
         )}
-        {(withdrawable || withdraw.isError) && (
-          <div className="flex flex-col items-start gap-2 pt-1">
-            {application.status === 'shortlisted' && (
-              // The chat opens on shortlist (0005a); its id is the application's.
-              <Link
-                to={`/chat/${application.id}`}
-                aria-describedby={titleId}
-                className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-soft px-4 text-[15px] font-bold text-accent-strong ${focusRing}`}
-              >
-                {t('applications.chat')}
-              </Link>
-            )}
-            {withdrawable && (
-              <button
-                type="button"
-                onClick={onWithdraw}
-                disabled={withdraw.isPending}
-                aria-busy={withdraw.isPending}
-                aria-describedby={titleId}
-                className={action}
-              >
-                {t('applications.withdraw')}
-              </button>
+        {(showActions || withdraw.isError) && (
+          <div className="flex flex-col gap-2 pt-1">
+            {showActions && (
+              <div className="flex flex-wrap gap-2">
+                {application.status === 'shortlisted' && (
+                  // The chat opens on shortlist (0005a); its id is the application's.
+                  <Button
+                    variant="primary"
+                    to={`/chat/${application.id}`}
+                    aria-describedby={titleId}
+                    className="flex-1 lg:flex-none"
+                  >
+                    {t('applications.chat')}
+                  </Button>
+                )}
+                {withdrawable && (
+                  <Button
+                    variant="secondary"
+                    onClick={onWithdraw}
+                    disabled={withdraw.isPending}
+                    aria-busy={withdraw.isPending}
+                    aria-describedby={titleId}
+                    className="flex-1 lg:flex-none"
+                  >
+                    {t('applications.withdraw')}
+                  </Button>
+                )}
+              </div>
             )}
             {/* A 401 clears the session and RequireSeeker leaves the page. */}
             {withdraw.isError && !hasStatus(withdraw.error, 401) && (
@@ -149,7 +163,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
                 ref={alertRef}
                 tabIndex={-1}
                 role="alert"
-                className={`${fieldError} focus:outline-none`}
+                className="text-body-sm font-semibold text-danger focus:outline-none"
               >
                 {withdraw.error instanceof ApiError &&
                 withdraw.error.status === 409 &&
@@ -162,7 +176,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             )}
           </div>
         )}
-      </article>
+      </Card>
     </li>
   );
 }
@@ -177,7 +191,7 @@ export function MyApplicationsPage() {
   if (applications.isPending) {
     body = (
       <Loading>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} />
           ))}
@@ -189,15 +203,15 @@ export function MyApplicationsPage() {
     body = <ErrorState onRetry={() => void applications.refetch()} />;
   } else if (applications.data.length === 0) {
     body = (
-      <div className="flex flex-col gap-3">
-        <EmptyState message={t('applications.mine.empty')} />
-        <Link
-          to="/search"
-          className={`inline-flex min-h-[44px] items-center self-start rounded-full bg-accent px-4 text-[15px] font-semibold text-on-ink ${focusRing}`}
-        >
-          {t('applications.mine.search')}
-        </Link>
-      </div>
+      <EmptyState
+        pose="sleep"
+        message={t('applications.mine.empty')}
+        action={
+          <Button variant="primary" to="/search">
+            {t('applications.mine.search')}
+          </Button>
+        }
+      />
     );
   } else {
     body = (
@@ -210,8 +224,8 @@ export function MyApplicationsPage() {
   }
 
   return (
-    <PageContainer as="section" width="narrow" className="flex flex-col gap-4">
-      <h1 className="text-start text-2xl font-extrabold">{t('applications.mine.title')}</h1>
+    <PageContainer as="section" width="default" className="flex flex-col gap-4">
+      <PageHeader title={t('applications.mine.title')} />
       {body}
     </PageContainer>
   );
