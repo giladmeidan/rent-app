@@ -131,6 +131,24 @@ describe('PeoplePage', () => {
     expect(one.getByTestId('match-chips')).toHaveTextContent(he.match.owner.short.budget.agree);
     expect(one.getByTestId('match-chips')).toHaveTextContent(he.people.short.pets.differ);
 
+    // "למה ההתאמה?" lists sentences, not the chips' words (0009f AC8).
+    const why = one.getByRole('button', { name: he.applicants.why });
+    fireEvent.click(why);
+    const reasons = within(
+      document.getElementById(why.getAttribute('aria-controls') ?? '') as HTMLElement,
+    );
+    expect(reasons.getByText(he.match.owner.budget.agree)).toBeVisible();
+    expect(reasons.getByText(he.match.owner.area.agree)).toBeVisible();
+    // "הם לא מתאימים לכללי חיות המחמד בדירה"
+    expect(
+      reasons.getByText(
+        '\u05d4\u05dd \u05dc\u05d0 \u05de\u05ea\u05d0\u05d9\u05de\u05d9\u05dd \u05dc\u05db\u05dc\u05dc\u05d9 \u05d7\u05d9\u05d5\u05ea \u05d4\u05de\u05d7\u05de\u05d3 \u05d1\u05d3\u05d9\u05e8\u05d4',
+      ),
+    ).toBeVisible();
+    expect(reasons.queryByText(he.people.short.pets.differ)).toBeNull();
+    expect(reasons.queryByText(he.match.owner.short.budget.agree)).toBeNull();
+    fireEvent.click(why);
+
     const two = within(cardOf('P2'));
     expect(two.queryByText(he.people.likedMe)).toBeNull();
     expect(two.getByText('גבר')).toBeVisible();
