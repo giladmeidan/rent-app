@@ -104,7 +104,6 @@ export function LikeRoomButton({
       {/* `disabled` while the request runs, not the kit's `busy`: the tests pin the attribute. */}
       <Button
         variant={pressed ? 'soft' : 'secondary'}
-        shape="pill"
         aria-pressed={pressed}
         disabled={pending}
         aria-busy={pending}

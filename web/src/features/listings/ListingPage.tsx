@@ -179,9 +179,10 @@ export function ListingPage() {
           ref={actionsRef}
           data-testid="listing-actions"
           // The action column stays in view while reading; `p-1` keeps focus rings inside its
-          // scroll box, and the max height (viewport minus top and bottom 1.5 rem) lets it scroll
-          // when the open apply form is taller than the screen.
-          className="flex flex-col gap-5 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:p-1"
+          // scroll box (`-m-1` keeps the cards flush with the band's edge), and the max height
+          // (viewport minus top and bottom 1.5 rem) lets it scroll when the open apply form is
+          // taller than the screen.
+          className="flex flex-col gap-5 lg:sticky lg:top-6 lg:-m-1 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:p-1"
         >
           {mutualId !== null && isSeeker ? (
             <MutualBanner applicationId={mutualId} />
