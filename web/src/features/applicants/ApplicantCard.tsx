@@ -258,10 +258,11 @@ export function ApplicantCard({
       {applicant.source !== 'like' &&
         (compact ? (
           // A two-line preview for scanning; the pane shows the whole message, so nothing is hidden.
+          // Line breaks fold into spaces here, so a blank first line cannot leave a lone "…" line.
           <p
             dir="auto"
             data-testid="applicant-message"
-            className="line-clamp-2 whitespace-pre-line break-words text-body-sm text-ink-muted"
+            className="line-clamp-2 whitespace-normal break-words text-body-sm text-ink-muted"
           >
             {applicant.message ?? ''}
           </p>
