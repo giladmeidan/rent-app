@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 import { cx } from './cx';
 
 export type BadgeTone = 'accent' | 'neutral' | 'solid' | 'inverse' | 'warning';
 export type BadgeSize = 'sm' | 'md';
 
-export type BadgeProps = {
+export type BadgeProps = Omit<HTMLAttributes<HTMLSpanElement>, 'className' | 'children'> & {
   tone?: BadgeTone;
   size?: BadgeSize;
   /** Screen-reader text; the visible children are then hidden from assistive tech. */
@@ -31,9 +31,17 @@ const SIZES: Record<BadgeSize, string> = {
 };
 
 /** A count, "new", or a score pill. */
-export function Badge({ tone = 'accent', size = 'sm', srLabel, className, children }: BadgeProps) {
+export function Badge({
+  tone = 'accent',
+  size = 'sm',
+  srLabel,
+  className,
+  children,
+  ...rest
+}: BadgeProps) {
   return (
     <span
+      {...rest}
       className={cx(
         'inline-flex items-center justify-center whitespace-nowrap rounded-full',
         SIZES[size],

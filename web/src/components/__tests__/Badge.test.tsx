@@ -63,4 +63,17 @@ describe('Badge', () => {
     expect(visible).toHaveAttribute('aria-hidden', 'true');
     expect(visible.parentElement).toBe(sr.parentElement);
   });
+
+  it('forwards data attributes and other HTML attributes to the span', () => {
+    render(
+      <Badge data-testid="the-badge" data-bucket="high" title="t">
+        {he.chat.list.new}
+      </Badge>,
+    );
+    const badge = screen.getByTestId('the-badge');
+    expect(badge).toHaveAttribute('data-bucket', 'high');
+    expect(badge).toHaveAttribute('title', 't');
+    expect(badge).toHaveTextContent(he.chat.list.new);
+    expect(classesOf(badge)).toEqual(expect.arrayContaining(['rounded-full', 'bg-accent-soft']));
+  });
 });
