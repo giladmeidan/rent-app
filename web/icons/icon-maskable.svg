@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 280 280" width="280" height="280" role="img" xmlns:c2pa="http://c2pa.org/manifest">
-<!-- The maskable app icon: homie-app-icon.svg's artwork, unclipped on a full-bleed accent-soft square. The 232 frame is widened to 280 so the head and the house sit inside the maskable safe zone (the centre circle of 80 % diameter, radius 112). #2563EB is colors.accent.DEFAULT, #E8F0FE colors.accent.soft, #111111 colors.ink.DEFAULT, #BFD3FA colors.mascot.blush, #DDE4F1 colors.mascot.shade (web/tailwind.config.ts). make icons renders it. -->
-<g><rect x="-24" y="-24" width="280" height="280" fill="#E8F0FE"/>
-<g transform="translate(-172 -44)" fill="#FFFFFF" stroke="#111111" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-36 -95.5 520 520" width="520" height="520" role="img" xmlns:c2pa="http://c2pa.org/manifest">
+<!-- The maskable app icon: homie-app-icon.svg's whole artwork (house, chimney, legs, shadow, head), unclipped and untranslated, on a full-bleed accent-soft square. Its bounding box with strokes is x 50.5..397.5, y 52.5..276.5 (347 x 224, half-diagonal 206.5); the 520 canvas is centred on it, so the whole box sits inside the maskable safe zone (the centre circle of 80 % diameter, radius 208). #2563EB is colors.accent.DEFAULT, #E8F0FE colors.accent.soft, #111111 colors.ink.DEFAULT, #BFD3FA colors.mascot.blush, #DDE4F1 colors.mascot.shade (web/tailwind.config.ts). make icons renders it. -->
+<g><rect x="-36" y="-95.5" width="520" height="520" fill="#E8F0FE"/>
+<g fill="#FFFFFF" stroke="#111111" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
 <ellipse cx="204" cy="264" rx="150" ry="9" fill="#111111" opacity="0.08" stroke="none"></ellipse>
 <path d="M92 206 Q62 204 56 182 Q78 186 96 196 Z"></path>
 <rect x="152" y="216" width="38" height="42" rx="16" fill="#DDE4F1"></rect>
