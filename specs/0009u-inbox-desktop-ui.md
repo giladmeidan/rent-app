@@ -336,4 +336,4 @@ Coder choices kept:
 - `Card` has no `radius` prop, and it is `rounded-lg` already.
 - The cards are `<li>`s in a `<ul>` in both layouts.
 - `ChatIcon` and `reasonLines()` are exported from `ApplicantCard` for the pane.
-Checks on the final head (main at 0009m merged): make lint / test (api 476, web 526) / i18n-check / build-web green. No local e2e (Gilad 2026-11-12): CI e2e is the gate. Changed in PRODUCT.md: nothing.
+Checks on the final head (main at 0009p merged): make lint / test-web (527) / i18n-check / build-web green; api 476 green before the 0009p merge (API untouched). No local e2e (Gilad 2026-11-12): CI e2e is the gate. Changed in PRODUCT.md: nothing.
