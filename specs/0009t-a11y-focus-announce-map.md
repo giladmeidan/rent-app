@@ -364,7 +364,14 @@ RTL: the pill is centred (`inset-x-0 mx-auto`). Every class is logical. Touch ta
 - Brand amendment (2026-11-12): token names, the pill's classes and the focus-ring rule follow
   `specs/0009-brand-amendment.md`. This was applied as a spec edit, without re-running the verifier. The new
   keys already follow the brand voice (no slash forms, impersonal).
-- No open product questions.
+- **Open (build, 2026-11-12): axe `target-size` on `/search?view=map`.** The `disableRules: ['target-size']`
+  that `0009c` left on the map scan (`web/e2e/a11y.spec.ts`, and the new map scan in `map.spec.ts::ac8`) stays.
+  Reproduced on this stack: 12 listings posted the way the e2e suite posts them (all in גבעתיים, the fake
+  geocoder spreads them over the middle of one area's box) land within ~200x150 px at the Gush Dan zoom; the
+  pin buttons are 73x44 px (the chip is 73x30) and overlap their neighbours (smallest unobscured space 21x27,
+  23x12 px). Shrinking the button to the chip does not clear it (the chips themselves overlap). Clearing it
+  needs clustering, offsetting or hiding overlapping pins, or a documented WCAG 2.5.8 "essential" exception
+  scoped to the markers: a design call for Gilad (Speed rule 9), not taken by the build.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
