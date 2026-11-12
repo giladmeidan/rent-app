@@ -357,7 +357,11 @@ describe('ListingWizard', () => {
       .find((a) => a.getAttribute('href') === `/me/listings/${created.id}/applicants`);
     expect(applicantsLink).toHaveAccessibleName(i18n.t('applicants.link', { count: 0 }));
     expect(applicantsLink?.textContent).not.toContain(i18n.t('applicants.newBadge', { count: 0 }));
-    expect(applicantsLink?.querySelector('span')).toBeNull();
+    expect(
+      within(applicantsLink as HTMLElement).queryByText(
+        i18n.t('applicants.newBadge', { count: 0 }),
+      ),
+    ).toBeNull();
     expect(api.calls('GET /me/listings')).toHaveLength(1);
 
     refetch.resolve(json([{ ...created, applicant_count: 0, new_applicant_count: 0 }, older]));

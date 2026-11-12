@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { Badge, type BadgeTone } from '../../components/Badge';
 import type { ListingOut } from './api';
 
 export type ListingState = 'live' | 'paused' | 'expired';
@@ -19,10 +20,10 @@ export function isPastExpiry(listing: Pick<ListingOut, 'expires_at'>, now: Date)
   return new Date(listing.expires_at) <= now;
 }
 
-const tone: Record<ListingState, string> = {
-  live: 'bg-accent-soft text-accent-strong',
-  paused: 'bg-border text-ink-muted',
-  expired: 'bg-surface-subtle text-warning',
+const tone: Record<ListingState, BadgeTone> = {
+  live: 'accent',
+  paused: 'neutral',
+  expired: 'warning',
 };
 
 export function StatusBadge({ state }: { state: ListingState }) {
@@ -33,11 +34,8 @@ export function StatusBadge({ state }: { state: ListingState }) {
     expired: t('listings.status.expired'),
   }[state];
   return (
-    <span
-      data-testid="status-badge"
-      className={`shrink-0 rounded-full px-3 py-[5px] text-[13px] font-bold ${tone[state]}`}
-    >
+    <Badge tone={tone[state]} data-testid="status-badge" className="shrink-0">
       {label}
-    </span>
+    </Badge>
   );
 }
