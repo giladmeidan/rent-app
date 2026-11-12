@@ -22,7 +22,7 @@ open http://localhost:5173   # the Hebrew RTL shell listing the launch areas
 ```
 
 The API is published on `127.0.0.1:${API_PORT:-8000}`; the examples assume the default port.
-The web is published on `127.0.0.1:5173`; open it as `http://localhost:5173`, the only origin the API's CORS
+The web is published on `127.0.0.1:${WEB_PORT:-5173}`; open it as `http://localhost:$WEB_PORT`, the only origin the API's CORS
 allows (`WEB_ORIGIN`). The browser calls the API at `http://localhost:${API_PORT}` (`VITE_API_URL`, set by compose).
 Interactive API docs: http://localhost:8000/docs. Stop everything (and drop the data volume) with `make down`.
 
@@ -109,7 +109,7 @@ so after 5 s it cancels the open streams and the browsers reconnect.
 
 | target | what it does |
 | --- | --- |
-| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000), `worker` (arq) and `web` (Vite on 5173, source bind-mounted), and fails unless the api answers `/health` and the web answers within 60 s each (then see `docker compose -f infra/docker-compose.yml logs api` / `web`) |
+| `make dev` | `docker compose up` for `db` and `redis`, waits for Postgres to be healthy, runs `migrate` and `seed`, then starts `api` (uvicorn `--reload` on `API_PORT`, default 8000), `worker` (arq) and `web` (Vite on `WEB_PORT`, default 5173, source bind-mounted), and fails unless the api answers `/health` and the web answers within 60 s each (then see `docker compose -f infra/docker-compose.yml logs api` / `web`) |
 | `make down` | `docker compose down -v` — stops the stack and removes volumes; empties `.outbox/` |
 | `make migrate` | `alembic upgrade head` against `DATABASE_URL` |
 | `make seed` | inserts the launch areas (idempotent) |
