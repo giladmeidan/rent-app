@@ -1,7 +1,7 @@
 ---
 id: 0009p
 title: A room lister's "מחפשים חדר" page uses the inbox's card family — kit cards with the score ring in the corner, the reason chips, an "about me" box and one row of disclosures; one column on a phone, two on a desktop — with behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009l]   # 0009l: MatchRing, ReasonList, RoomLine, DisclosureButton, Badge's attribute forwarding and the screenshot harness (it depends on 0009d + 0009h, the kit and the shell). Independent of 0009u (desktop inbox): different files
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/medium). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Sonnet/medium: a mechanical restyle onto 0009l's pieces plus FOLLOWUPS 169 / 171; the third part of the 0009l / 0009u / 0009p split
