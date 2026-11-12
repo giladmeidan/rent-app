@@ -106,6 +106,8 @@ describe('pwa', () => {
     expect(workbox.globPatterns).toEqual([
       '**/*.{js,css,html}',
       'assets/rubik-{hebrew,latin}-wght-normal-*.woff2',
+      'assets/fredoka-{hebrew,latin}-wght-normal-*.woff2',
+      'assets/homie-lockup-he-*.svg',
     ]);
     expect(workbox.globIgnores).toEqual(['**/maplibre-gl-*']);
     expect(workbox.navigateFallback).toBe('index.html');

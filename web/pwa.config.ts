@@ -55,7 +55,15 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     ],
   },
   workbox: {
-    globPatterns: ['**/*.{js,css,html}', 'assets/rubik-{hebrew,latin}-wght-normal-*.woff2'],
+    // The shell's own static files: the JS, CSS and HTML, the Hebrew and Latin subsets of both brand
+    // fonts (Rubik for text, Fredoka for headings) and the header lockup, so an offline reload still
+    // draws the header and the headings. The mascot illustrations are not part of the shell.
+    globPatterns: [
+      '**/*.{js,css,html}',
+      'assets/rubik-{hebrew,latin}-wght-normal-*.woff2',
+      'assets/fredoka-{hebrew,latin}-wght-normal-*.woff2',
+      'assets/homie-lockup-he-*.svg',
+    ],
     // The lazy map library (~300 kB gzip) is fetched only when a map is shown, never precached.
     // workbox-build ignores sw.js and workbox-*.js itself.
     globIgnores: ['**/maplibre-gl-*'],
