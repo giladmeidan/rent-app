@@ -1,6 +1,6 @@
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -210,5 +210,56 @@ describe('ChatListPage', () => {
     expect(screen.getByRole('link', { name: new RegExp(stays.other_name) })).toBeVisible();
     expect(api.calls(LIST)).toHaveLength(2);
     reset(view);
+  });
+
+  it('ac4_joined_announced_once', async () => {
+    mockApi({
+      'GET /me': [() => json(seeker)],
+      [LIST]: [() => json([])],
+      'GET /me/flats': [() => json([])],
+    });
+    function Probe() {
+      return <span data-testid="state">{JSON.stringify(useLocation().state)}</span>;
+    }
+    const tree = (
+      <>
+        {routes}
+        <Probe />
+      </>
+    );
+    /** The page's own status line (the harness's location probe is an <output>). */
+    const statusLine = () => document.querySelector('p[role="status"]');
+    // Animation frames run only when the test says so.
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      frames.push(callback),
+    );
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+
+    // After a join: the line is mounted empty and filled a frame later; the entry's state is
+    // cleared.
+    let view = renderRoutes({ pathname: '/chat', state: { joined: true } }, tree);
+    await heading();
+    await waitFor(() => {
+      expect(screen.getByTestId('state')).toHaveTextContent('null');
+    });
+    expect(statusLine()).not.toBeNull();
+    expect(statusLine()).toHaveTextContent('');
+    expect(frames.length).toBeGreaterThan(0);
+    act(() => {
+      for (const frame of frames.splice(0)) frame(0);
+    });
+    expect(statusLine()).toHaveTextContent(he.flatmates.join.done);
+    expect(screen.getByTestId('state')).toHaveTextContent('null');
+    view.unmount();
+
+    // A visit without the state (a reload or Back): no line.
+    view = renderRoutes({ pathname: '/chat', state: null }, tree);
+    await heading();
+    act(() => {
+      for (const frame of frames.splice(0)) frame(0);
+    });
+    expect(screen.queryByText(he.flatmates.join.done)).toBeNull();
+    view.unmount();
   });
 });

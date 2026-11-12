@@ -138,12 +138,12 @@ describe('ChatThreadPage', () => {
     expect(log().querySelector('b')).toBeNull();
     reset(view);
 
-    // No messages: the empty line, and the warning still.
+    // No messages: the empty line, and the warning still; the log is mounted, empty (spec 0009t).
     const none = thread();
     ({ view } = renderThread(none, [json(none)]));
     expect(await screen.findByText(he.chat.thread.empty)).toBeVisible();
     expect(screen.getByRole('note')).toHaveTextContent(he.chat.thread.warning);
-    expect(screen.queryByRole('log')).toBeNull();
+    expect(within(log()).queryAllByRole('listitem')).toHaveLength(0);
     reset(view);
 
     // Truncated: says only the newest 200 are shown.
@@ -673,5 +673,67 @@ describe('ChatThreadPage', () => {
     expect(await h1(he.chat.thread.notFound)).toBeVisible();
     expect(screen.queryByText(he.chat.removed)).toBeNull();
     reset(view);
+  });
+
+  it('ac4_log_mounted_when_empty', async () => {
+    // A group thread with no messages: the log is there, empty, and the empty line outside it.
+    const T = group({ messages: [] });
+    renderThread(T, [json(T)]);
+    expect(await h1('נועה')).toBeVisible();
+    const empty = screen.getByText(he.chat.thread.empty);
+    expect(log()).toBeInTheDocument();
+    expect(log().querySelector('ol')).not.toBeNull();
+    expect(within(log()).queryAllByRole('listitem')).toHaveLength(0);
+    expect(log()).not.toContainElement(empty);
+  });
+
+  it('ac3_focus_when_chat_closes', async () => {
+    const refetch = async () => {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+    };
+    const closedNote = () => screen.findByText(he.chat.thread.closed);
+    const T = thread({ messages: [message({ body: 'hello' })] });
+    const closed = { ...T, can_send: false };
+
+    // (a) The textarea has focus and a refetch answers `can_send: false`: the closed note.
+    let { view } = renderThread(T, [() => json(T), () => json(closed)]);
+    expect(await h1(T.other_name)).toBeVisible();
+    act(() => textarea().focus());
+    await refetch();
+    let note = await closedNote();
+    await waitFor(() => {
+      expect(note).toHaveFocus();
+    });
+    expect(note).toHaveAttribute('role', 'status');
+    reset(view);
+
+    // (b) "Send" clicked, the POST answers 409 `chat_closed`, the refetch `can_send: false`.
+    ({ view } = renderThread(T, [json(T), () => json(closed)], {
+      extra: { [postRoute(T)]: [json({ detail: 'chat_closed' }, 409)] },
+    }));
+    expect(await h1(T.other_name)).toBeVisible();
+    fireEvent.change(textarea(), { target: { value: 'hi' } });
+    act(() => sendButton().focus());
+    fireEvent.click(sendButton());
+    note = await closedNote();
+    await waitFor(() => {
+      expect(note).toHaveFocus();
+    });
+    reset(view);
+
+    // Negative: focus moved on to the back link before the chat closed; the note takes none.
+    ({ view } = renderThread(T, [() => json(T), () => json(closed)]));
+    expect(await h1(T.other_name)).toBeVisible();
+    act(() => textarea().focus());
+    const back = screen.getByRole('link', { name: he.chat.thread.back });
+    act(() => back.focus());
+    await refetch();
+    note = await closedNote();
+    await settle();
+    expect(note).not.toHaveFocus();
+    expect(back).toHaveFocus();
   });
 });
