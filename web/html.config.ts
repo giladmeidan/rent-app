@@ -6,6 +6,8 @@ import he from './src/locales/he.json';
 // Every page needs it first, so it is preloaded.
 const HEBREW_FONT = /(?:^|\/)rubik-hebrew-wght-normal-[^/]+\.woff2$/;
 
+// Vite escapes attribute values itself but inserts `children` as raw HTML, so only the title text
+// is escaped here.
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -33,7 +35,7 @@ export function htmlTags({ themeColor }: { themeColor: string }): Plugin {
           { tag: 'title', children: escapeHtml(he.app.title), injectTo: 'head' },
           {
             tag: 'meta',
-            attrs: { name: 'description', content: escapeHtml(he.app.tagline) },
+            attrs: { name: 'description', content: he.app.tagline },
             injectTo: 'head',
           },
           { tag: 'meta', attrs: { name: 'theme-color', content: themeColor }, injectTo: 'head' },

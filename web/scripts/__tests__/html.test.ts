@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Rollup } from 'vite';
 import type { HtmlTagDescriptor, IndexHtmlTransformContext, ResolvedConfig } from 'vite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { htmlTags } from '../../html.config';
 import he from '../../src/locales/he.json';
@@ -11,8 +11,11 @@ import he from '../../src/locales/he.json';
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Runs the plugin's `transformIndexHtml.handler` directly, with base `/` and an optional bundle. */
-async function headTags(bundleFiles?: string[]): Promise<HtmlTagDescriptor[]> {
-  const plugin = htmlTags({ themeColor: '#ABCDEF' });
+async function headTags(
+  bundleFiles?: string[],
+  factory: typeof htmlTags = htmlTags,
+): Promise<HtmlTagDescriptor[]> {
+  const plugin = factory({ themeColor: '#ABCDEF' });
   const { configResolved, transformIndexHtml } = plugin;
   if (typeof configResolved !== 'function') throw new Error('configResolved is not a function');
   if (transformIndexHtml === undefined || typeof transformIndexHtml === 'function') {
@@ -72,6 +75,24 @@ describe('ac1_head_tags', () => {
     await expect(
       headTags(['assets/index-abc.js', 'assets/rubik-latin-wght-normal-abc.woff2']),
     ).rejects.toThrow(/rubik-hebrew-wght-normal/);
+  });
+
+  it('escapes the title text but passes the description raw, since Vite escapes attributes', async () => {
+    vi.resetModules();
+    vi.doMock('../../src/locales/he.json', () => ({
+      default: { app: { title: 'A & "B" <C>', tagline: 'D & "E" <F>' } },
+    }));
+    try {
+      const { htmlTags: withCopy } = await import('../../html.config');
+      const tags = await headTags(undefined, withCopy);
+      expect(tags.slice(0, 2)).toEqual([
+        { tag: 'title', children: 'A &amp; &quot;B&quot; &lt;C&gt;', injectTo: 'head' },
+        { tag: 'meta', attrs: { name: 'description', content: 'D & "E" <F>' }, injectTo: 'head' },
+      ]);
+    } finally {
+      vi.doUnmock('../../src/locales/he.json');
+      vi.resetModules();
+    }
   });
 
   it('the vite, html and pwa configs hold no Hebrew letter', () => {
