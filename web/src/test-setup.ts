@@ -92,4 +92,6 @@ HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
 afterEach(() => {
   cleanup();
   FakeEventSource.instances = [];
+  // Drafts (spec 0009g) and other tab storage never leak into the next test.
+  window.sessionStorage.clear();
 });

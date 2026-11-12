@@ -4,7 +4,9 @@ import { Link, Navigate, useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { clearDraft, readDraft } from '../../app/drafts';
 import { hasStatus } from '../applications/api';
+import { useMe } from '../auth/useMe';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
@@ -96,8 +98,17 @@ function MemberLine({ members }: { members: ThreadOut['members'] }) {
   );
 }
 
-/** `id` is the route's: the thread's cache key, which the composer's send updates. */
-function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
+/** `id` is the route's: the thread's cache key, which the composer's send updates. `userId`: the
+ * signed-in person, whose chat draft this is. */
+function Thread({
+  id,
+  thread,
+  userId,
+}: {
+  id: string;
+  thread: ThreadOut;
+  userId: string | undefined;
+}) {
   const { t } = useTranslation();
   const { listing, messages } = thread;
   const lastRef = useRef<HTMLLIElement>(null);
@@ -111,6 +122,20 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
   const composerHadFocus = useRef(false);
   const closedRef = useRef<HTMLParagraphElement>(null);
   const couldSend = useRef(thread.can_send);
+  // A closed chat shows the text its composer held (spec 0009g), read on every render: the draft
+  // is written after the mount, until the send's 409. "Discard" hides it until the chat reopens,
+  // when the composer restores whatever is still stored.
+  const [discarded, setDiscarded] = useState(false);
+  if (thread.can_send && discarded) setDiscarded(false);
+  const unsent = thread.can_send || discarded ? '' : readDraft('chat', id, userId);
+
+  function discard() {
+    clearDraft('chat', id);
+    setDiscarded(true);
+    // The focused button is gone with the text: focus goes to the closed note (spec 0009t's
+    // target).
+    closedRef.current?.focus();
+  }
 
   // The chat closed under the composer: the closed note replaces it and takes focus, only when
   // focus was lost with the composer (on <body>); focus the person moved elsewhere stays there.
@@ -229,17 +254,45 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
           }}
           onBlur={onComposerBlur}
         >
-          <Composer conversationId={id} onSent={(message) => setSentId(message.id)} />
+          <Composer
+            conversationId={id}
+            userId={userId}
+            onSent={(message) => setSentId(message.id)}
+          />
         </div>
       ) : (
-        <p
-          ref={closedRef}
-          role="status"
-          tabIndex={-1}
-          className="rounded-2xl border border-border bg-surface px-4 py-3 text-start text-[15px] text-ink-muted focus:outline-none"
-        >
-          {t('chat.thread.closed')}
-        </p>
+        <>
+          <p
+            ref={closedRef}
+            role="status"
+            tabIndex={-1}
+            className="rounded-2xl border border-border bg-surface px-4 py-3 text-start text-[15px] text-ink-muted focus:outline-none"
+          >
+            {t('chat.thread.closed')}
+          </p>
+          {unsent !== '' && (
+            <div className="flex flex-col items-start gap-2">
+              <p className="text-start text-sm font-semibold text-ink-muted">
+                {t('chat.thread.unsent')}
+              </p>
+              {/* The person's own text: a text node only, read-only. */}
+              <p
+                data-testid="unsent-draft"
+                dir="auto"
+                className="w-full whitespace-pre-wrap break-words rounded-xl border border-border bg-surface-subtle px-3 py-2 text-start text-[15px] leading-relaxed"
+              >
+                {unsent}
+              </p>
+              <button
+                type="button"
+                onClick={discard}
+                className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-border-strong bg-surface px-4 text-[14px] font-bold text-ink ${focusRing}`}
+              >
+                {t('chat.thread.discardDraft')}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </>
   );
@@ -247,12 +300,14 @@ function Thread({ id, thread }: { id: string; thread: ThreadOut }) {
 
 /** The thread was on screen and is now refused: the person left the flat or was removed. The
  * composer that had focus is gone, so the heading takes it. */
-function Removed() {
+function Removed({ id }: { id: string }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     ref.current?.focus();
-  }, []);
+    // Nothing more can be sent here: the unsent text goes (spec 0009g).
+    clearDraft('chat', id);
+  }, [id]);
   return (
     <h1 ref={ref} tabIndex={-1} className="text-start text-2xl font-extrabold focus:outline-none">
       {t('chat.removed')}
@@ -269,6 +324,8 @@ export function ChatThreadPage() {
   const valid = UUID.test(raw);
   const id = raw.toLowerCase();
   const thread = useThread(id, valid);
+  // `RequireUser` guarantees the person: their id binds the chat draft (spec 0009g).
+  const userId = useMe().data?.id;
   // Removed first: a send's 404 then a 404 refetch leaves the old thread cached, and that cached
   // thread then means "no longer in this chat"; with nothing cached a 404 is plain not found.
   const removed = valid && thread.data !== undefined && hasStatus(thread.error, 404);
@@ -286,16 +343,21 @@ export function ChatThreadPage() {
             : undefined,
   );
 
+  // A chat that is not found keeps no draft.
+  useEffect(() => {
+    if (notFound && valid) clearDraft('chat', id);
+  }, [notFound, valid, id]);
+
   if (valid && raw !== id) return <Navigate to={`/chat/${id}`} replace />;
 
   let body;
   if (removed) {
-    body = <Removed />;
+    body = <Removed id={id} />;
   } else if (notFound) {
     body = <h1 className="text-start text-2xl font-extrabold">{t('chat.thread.notFound')}</h1>;
   } else if (thread.data === undefined) {
     body = thread.isError ? (
-      <ErrorState page onRetry={() => void thread.refetch()} />
+      <ErrorState page onRetry={() => thread.refetch()} />
     ) : (
       <Loading>
         <Skeleton />
@@ -304,7 +366,7 @@ export function ChatThreadPage() {
   } else {
     // A failed background refetch keeps the thread on the page.
     // Keyed: another chat starts with its own scroll state and an empty composer.
-    body = <Thread key={id} id={id} thread={thread.data} />;
+    body = <Thread key={id} id={id} thread={thread.data} userId={userId} />;
   }
 
   return (

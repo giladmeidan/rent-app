@@ -20,6 +20,8 @@ import { profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
 import { MY_APPLICATIONS_KEY } from '../useMyApplications';
+import { readDraft, writeDraft } from '../../../app/drafts';
+import { PROFILE_KEY } from '../../profile/useProfile';
 import { application } from './fixtures';
 
 afterEach(() => {
@@ -117,10 +119,12 @@ function send() {
 /** The ids in `el`'s `aria-describedby`. */
 const describedBy = (el: HTMLElement) => (el.getAttribute('aria-describedby') ?? '').split(' ');
 
-/** Unmounts the current render and drops its fetch mock. */
+/** Unmounts the current render and drops its fetch mock and the tab's drafts (spec 0009g), as
+ * between two tests. */
 function cleanup() {
   unmount();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 }
 
 describe('ApplySection', () => {
@@ -977,5 +981,110 @@ describe('ApplySection', () => {
     const mountedGate = await s.findByText(he.applications.profileRequired);
     await new Promise((r) => setTimeout(r, 50));
     expect(mountedGate).not.toHaveFocus();
+  });
+
+  it('ac6_apply_draft_survives_401_and_profile_gate', async () => {
+    const draft = () => readDraft('apply', 'A', seeker.id);
+    /** The section's apply toggle and its textarea, once the section has settled. */
+    async function form() {
+      const s = await settled();
+      return {
+        toggle: s.getByRole('button', { name: he.applications.apply }),
+        field: s.queryByRole('textbox', { name: he.applications.form.label }),
+      };
+    }
+
+    // A 401 on the POST: the session clears and the person goes to log in. Back as the same seeker,
+    // the form is open with the text, and the text does not take focus.
+    let client = testQueryClient();
+    renderSeeker([json([])], { [APPLY]: [unauthenticated()] }, 0, client);
+    type(await openForm(), MESSAGE);
+    expect(draft()).toBe(MESSAGE);
+    send();
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(`/login?next=${NEXT}`);
+    });
+    expect(client.getQueryData(['me'])).toBeNull();
+    expect(draft()).toBe(MESSAGE);
+    unmount();
+    vi.unstubAllGlobals();
+
+    renderSeeker([json([])]);
+    let { toggle, field } = await form();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(field).toHaveValue(MESSAGE);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.activeElement).not.toBe(field);
+    cleanup();
+
+    // A 409 `seeker_profile_required`: the profile gate, the draft kept. Once a profile is cached,
+    // the form is back, open with the text, not focused.
+    client = testQueryClient();
+    renderSeeker(
+      [json([])],
+      {
+        [PROFILE]: [json(profile()), json({ detail: 'seeker_profile_not_found' }, 404)],
+        [APPLY]: [json({ detail: 'seeker_profile_required' }, 409)],
+      },
+      0,
+      client,
+    );
+    type(await openForm(), MESSAGE);
+    send();
+    expect(await (await section()).findByText(he.applications.profileRequired)).toBeVisible();
+    expect(draft()).toBe(MESSAGE);
+    act(() => {
+      client.setQueryData(PROFILE_KEY, profile());
+    });
+    ({ toggle, field } = await form());
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(field).toHaveValue(MESSAGE);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.activeElement).not.toBe(field);
+    cleanup();
+
+    // Closing with the toggle (not Cancel) keeps the draft; Cancel clears it.
+    renderSeeker([json([])]);
+    type(await openForm(), MESSAGE);
+    fireEvent.click(screen.getByRole('button', { name: he.applications.apply }));
+    expect(draft()).toBe(MESSAGE);
+    fireEvent.click(screen.getByRole('button', { name: he.applications.apply }));
+    fireEvent.click(screen.getByRole('button', { name: he.applications.form.cancel }));
+    expect(draft()).toBe('');
+    cleanup();
+
+    // The final answers clear it: a 201, a 404, and the 409s `already_applied` and
+    // `room_gender_mismatch`.
+    for (const reply of [
+      () => json(application({ status: 'submitted' }), 201),
+      () => json({ detail: 'not_found' }, 404),
+      () => json({ detail: 'already_applied' }, 409),
+      () => json({ detail: 'room_gender_mismatch' }, 409),
+    ]) {
+      const api = renderSeeker([json([])], { [APPLY]: [reply] });
+      type(await openForm(), MESSAGE);
+      expect(draft()).toBe(MESSAGE);
+      send();
+      await vi.waitFor(() => {
+        expect(api.calls(APPLY)).toHaveLength(1);
+        expect(draft()).toBe('');
+      });
+      cleanup();
+    }
+
+    // Another person on this tab: an empty, closed form.
+    writeDraft('apply', 'A', seeker.id, MESSAGE);
+    mockApi({
+      'GET /me': [json({ ...seeker, id: '00000000-0000-0000-0000-0000000000bb' })],
+      [LISTING]: [listingReply()],
+      [MINE]: [json([])],
+      [PROFILE]: [json(profile())],
+    });
+    renderListing();
+    ({ toggle, field } = await form());
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(field).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByRole('textbox', { name: he.applications.form.label })).toHaveValue('');
   });
 });
