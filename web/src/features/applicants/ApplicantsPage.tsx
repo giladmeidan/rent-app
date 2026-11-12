@@ -4,21 +4,22 @@ import { useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
+import { useConfirm } from '../../components/Dialog';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
+import { BackLink, PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { TabPanel, Tabs, tabId } from '../../components/Tabs';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
-import { BackToMine } from '../listings/ListingWizard';
 import { useMyListings } from '../listings/useMyListings';
 import type { ApplicantOut, ApplicantStatus } from './api';
 import { ApplicantCard, type CardOutcome } from './ApplicantCard';
 import { useApplicants } from './useApplicants';
 
 const section = 'flex flex-col gap-4';
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 type Filter = 'all' | ApplicantStatus;
 const FILTERS: readonly Filter[] = ['all', 'submitted', 'shortlisted', 'declined'];
@@ -59,19 +60,29 @@ export function ApplicantsPage() {
   const pendingFocus = useRef<FocusRequest | null>(null);
   const [focusTick, setFocusTick] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const filterRefs = useRef(new Map<Filter, HTMLButtonElement>());
   const baseId = useId();
+  // The tabs and the one panel they control.
+  const panelId = useId();
   const headingIdOf = (applicantId: string) => `${baseId}-${applicantId}`;
+  const [confirm, confirmDialog] = useConfirm();
+  const confirmDecline = (name: string) =>
+    confirm({
+      title: t('applicants.declineConfirm', { name }),
+      confirmLabel: t('applicants.actions.decline'),
+      tone: 'danger',
+    });
   usePageTitle(
-    t(
-      listings.data !== undefined && listing === undefined
-        ? 'applicants.notFound'
-        : 'applicants.title',
-    ),
+    listing !== undefined
+      ? `${t('applicants.titleFor')} ${cardTitle(t, listing)}`
+      : t(
+          listings.data !== undefined && listing === undefined
+            ? 'applicants.notFound'
+            : 'applicants.title',
+        ),
   );
 
   // Runs after the render that follows the action, when the target is in the DOM and enabled.
-  // The card's `<h2>`, else the pressed filter button, else the `<h1>`.
+  // The card's `<h2>`, else the selected tab, else the `<h1>`.
   useEffect(() => {
     const focus = pendingFocus.current;
     if (focus === null) return;
@@ -79,10 +90,10 @@ export function ApplicantsPage() {
     const target =
       (focus.to === 'heading' ? document.getElementById(focus.id) : null) ??
       (focus.to === 'button' && focus.element.isConnected ? focus.element : null) ??
-      filterRefs.current.get(filter) ??
+      document.getElementById(tabId(panelId, filter)) ??
       headingRef.current;
     target?.focus();
-  }, [focusTick, filter]);
+  }, [focusTick, filter, panelId]);
 
   function setFocus(request: FocusRequest) {
     pendingFocus.current = request;
@@ -118,11 +129,15 @@ export function ApplicantsPage() {
     }
   }
 
+  const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+
   // A cached list is used while it refetches, and kept if that refetch fails (every action
   // invalidates "my listings"). Loading and a failed list keep the page's <h1>: its text needs no
   // data.
   if (listings.data === undefined) {
-    const title = <h1 className="text-start text-2xl font-extrabold">{t('applicants.title')}</h1>;
+    const title = (
+      <h1 className="text-start font-display text-h2 lg:text-h1">{t('applicants.title')}</h1>
+    );
     if (listings.isPending) {
       return (
         <PageContainer as="section" className={section}>
@@ -135,7 +150,7 @@ export function ApplicantsPage() {
     }
     return (
       <PageContainer as="section" className={section}>
-        <BackToMine />
+        <BackLink {...back} />
         {title}
         <ErrorState onRetry={() => void listings.refetch()} />
       </PageContainer>
@@ -145,12 +160,12 @@ export function ApplicantsPage() {
   if (listing === undefined) {
     return (
       <PageContainer as="section" className={section}>
-        <BackToMine />
-        <h1 className="text-start text-2xl font-extrabold">{t('applicants.notFound')}</h1>
+        <PageHeader back={back} title={t('applicants.notFound')} />
       </PageContainer>
     );
   }
 
+  let tiles = null;
   let body;
   const list = applicants.data;
   if (list === undefined) {
@@ -166,7 +181,7 @@ export function ApplicantsPage() {
       </Loading>
     );
   } else if (list.length === 0) {
-    body = <EmptyState message={t('applicants.empty')} />;
+    body = <EmptyState pose="sleep" message={t('applicants.empty')} />;
   } else {
     const count = (status: ApplicantStatus) => list.filter((a) => a.status === status).length;
     const counts: Record<Filter, number> = {
@@ -207,73 +222,56 @@ export function ApplicantsPage() {
       match: t('applicants.sort.match'),
       newest: t('applicants.sort.newest'),
     };
+    tiles = (
+      <ul data-testid="applicant-totals" className="flex gap-2">
+        {stats.map((stat) => (
+          <li
+            key={stat.key}
+            className={`flex min-w-24 flex-1 flex-col gap-0.5 rounded-lg px-3 py-3 ${stat.tone}`}
+          >
+            <span className="font-display text-h2">{stat.value}</span>{' '}
+            <span className="text-caption">{stat.label}</span>
+          </li>
+        ))}
+      </ul>
+    );
     body = (
       <>
-        <ul data-testid="applicant-totals" className="flex flex-wrap gap-[10px]">
-          {stats.map((stat) => (
-            <li
-              key={stat.key}
-              className={`flex min-w-[96px] flex-1 flex-col gap-[2px] rounded-[14px] px-[14px] py-3 ${stat.tone}`}
-            >
-              <span className="text-2xl font-extrabold">{stat.value}</span>{' '}
-              <span className="text-[13px]">{stat.label}</span>
-            </li>
-          ))}
-        </ul>
-        <div
-          role="group"
-          aria-label={t('applicants.filter.label')}
-          className="flex flex-wrap gap-1 border-b border-border"
-        >
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              ref={(element) => {
-                if (element) filterRefs.current.set(f, element);
-                else filterRefs.current.delete(f);
-              }}
-              type="button"
-              aria-pressed={filter === f}
-              onClick={() => {
-                setGone(false);
-                setFilter(f);
-              }}
-              className={`min-h-[44px] border-b-[2.5px] px-[14px] text-sm ${
-                filter === f
-                  ? 'border-accent font-bold text-accent-strong'
-                  : 'border-transparent font-semibold text-ink-muted'
-              } ${focusRing}`}
-            >
-              {filterLabel[f]}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          label={t('applicants.filter.label')}
+          items={FILTERS.map((f) => ({ value: f, label: filterLabel[f] }))}
+          value={filter}
+          onChange={(f) => {
+            setGone(false);
+            setFilter(f);
+          }}
+          variant="underline"
+          scrollable
+          panelId={panelId}
+        />
         <div
           role="group"
           aria-label={t('applicants.sort.label')}
           className="flex flex-wrap items-center gap-2"
         >
           {SORTS.map((s) => (
-            <button
+            <Button
               key={s}
-              type="button"
+              size="sm"
+              shape="pill"
+              variant={sort === s ? 'soft' : 'ghost'}
               aria-pressed={sort === s}
               onClick={() => setSort(s)}
-              className={`min-h-[44px] rounded-full border-[1.5px] px-[14px] text-[13px] ${
-                sort === s
-                  ? 'border-accent bg-accent-soft font-bold text-accent-strong'
-                  : 'border-border-strong bg-surface font-semibold text-ink-muted'
-              } ${focusRing}`}
             >
               {sortLabel[s]}
-            </button>
+            </Button>
           ))}
         </div>
-        {shown.length === 0 ? (
-          <EmptyState message={t('applicants.emptyFilter')} />
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {shown.map((applicant) => (
+        <TabPanel panelId={panelId} value={filter} className="flex flex-col gap-3">
+          {shown.length === 0 ? (
+            <EmptyState message={t('applicants.emptyFilter')} />
+          ) : (
+            shown.map((applicant) => (
               <ApplicantCard
                 key={applicant.id}
                 listingId={listing.id}
@@ -282,37 +280,33 @@ export function ApplicantsPage() {
                 spots={listing.parking_spots}
                 flatLifestyle={listing.lifestyle}
                 flatIsRoom={listing.listing_type === 'room'}
+                confirmDecline={confirmDecline}
                 onSettled={(outcome, button) => onSettled(applicant.id, outcome, button)}
               />
-            ))}
-          </ul>
-        )}
+            ))
+          )}
+        </TabPanel>
       </>
     );
   }
 
   return (
     <PageContainer as="section" className={section}>
-      <BackToMine />
-      <div className="flex flex-col gap-1">
-        <h1
-          ref={headingRef}
-          tabIndex={-1}
-          className="text-start text-2xl font-extrabold focus:outline-none"
-        >
-          {t('applicants.title')}
-        </h1>
-        <p className="text-start font-bold">{cardTitle(t, listing)}</p>
-        <p className="text-start text-sm text-ink-muted">
-          {formatIls(listing.price_ils)} {t('listings.units.ils')}
-        </p>
-      </div>
+      <PageHeader
+        back={back}
+        eyebrow={t('applicants.titleFor')}
+        title={cardTitle(t, listing)}
+        subtitle={`${formatIls(listing.price_ils)} ${t('listings.units.ils')}`}
+        titleRef={headingRef}
+      />
+      {tiles}
       {gone && (
-        <p role="alert" className="text-sm font-semibold text-danger">
+        <p role="alert" className="text-body-sm font-semibold text-danger">
           {t('applicants.errors.gone')}
         </p>
       )}
       {body}
+      {confirmDialog}
       <p role="status" className="sr-only">
         {announcement}
       </p>

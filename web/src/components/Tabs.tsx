@@ -19,6 +19,8 @@ export type TabsProps<T extends string> = {
   /** The id of the one `TabPanel` the tabs control. */
   panelId: string;
   variant?: 'underline' | 'pill';
+  /** Underline only: the tabs stay on one row and the list scrolls inside it, not wraps. */
+  scrollable?: boolean;
   /** The selected tab, e.g. to focus it. */
   tabRef?: Ref<HTMLButtonElement>;
   /** Layout only; goes on the tablist. */
@@ -42,6 +44,7 @@ export function Tabs<T extends string>({
   onChange,
   panelId,
   variant = 'underline',
+  scrollable = false,
   tabRef,
   className,
 }: TabsProps<T>) {
@@ -86,7 +89,10 @@ export function Tabs<T extends string>({
       className={cx(
         pill
           ? 'inline-flex rounded-full bg-surface-subtle p-0.5'
-          : 'flex flex-wrap gap-1 border-b border-border',
+          : cx(
+              'flex gap-1 border-b border-border',
+              scrollable ? 'flex-nowrap overflow-x-auto' : 'flex-wrap',
+            ),
         className,
       )}
     >
@@ -111,7 +117,10 @@ export function Tabs<T extends string>({
               focusRing,
               pill
                 ? 'min-h-tap rounded-full px-3.5 text-label'
-                : 'min-h-tap border-b-2 px-4 text-label',
+                : cx(
+                    'min-h-tap border-b-2 px-4 text-label',
+                    scrollable && 'shrink-0 whitespace-nowrap',
+                  ),
               pill &&
                 (selected ? 'bg-surface text-ink font-semibold shadow-segment' : 'text-ink-muted'),
               !pill &&

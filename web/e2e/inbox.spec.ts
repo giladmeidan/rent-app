@@ -46,7 +46,9 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   // The inbox: the seeker's name (not the owner's) and message.
   await link.click();
   await expect(page).toHaveURL(`/me/listings/${id}/applicants`);
-  await expect(page.getByRole('heading', { level: 1, name: he.applicants.title })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: new RegExp(`^${he.applicants.titleFor}`) }),
+  ).toBeVisible();
   const applicant = page.getByRole('article', { name: SEEKER_NAME });
   await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
   await expect(applicant.getByText(MESSAGE)).toBeVisible();
@@ -54,7 +56,7 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   // The match (0006g AC8): the listing (7,200 ₪, entry in 30 days, one parking spot) against the
   // seeker's profile `P` (budget 7,500, the same day and area, one spot) scores 100; the
   // disclosure lists the reasons, budget first.
-  await expect(applicant.getByTestId('match-badge')).toHaveText(withScore(he.match.badge, 100));
+  await expect(applicant.getByTestId('match-ring')).toContainText(withScore(he.match.badge, 100));
   const why = applicant.getByRole('button', { name: he.applicants.why });
   await expect(why).toHaveAttribute('aria-expanded', 'false');
   await why.click();
@@ -109,9 +111,12 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   await expect(page).toHaveURL(`/me/listings/${id}/applicants`);
   await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
 
-  // Decline, accepting the confirmation: no actions remain (the disclosure button stays).
-  page.once('dialog', (dialog) => void dialog.accept());
+  // Decline, confirming in the kit's dialog (which names the seeker): no actions remain (the
+  // disclosure button stays).
   await applicant.getByRole('button', { name: he.applicants.actions.decline }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(SEEKER_NAME);
+  await dialog.getByRole('button', { name: he.applicants.actions.decline }).click();
   await expect(applicant.getByText(he.applicants.status.declined, { exact: true })).toBeVisible();
   for (const action of Object.values(he.applicants.actions)) {
     await expect(applicant.getByRole('button', { name: action, exact: true })).toHaveCount(0);
@@ -171,5 +176,30 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   await expect(applicant.getByRole('button', { name: he.applicants.why })).toBeVisible();
   await expect(applicant.getByRole('button', { name: he.applicants.more })).toHaveCount(0);
   await expect(applicant.getByText(ROOM_LINE, { exact: true })).toHaveCount(0);
+
+  // The same layout on a phone (390x844): the four tabs stay on one row, nothing scrolls the page
+  // sideways, and the score ring sits in the card's top row.
+  await test.step('phone 390x844', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/me/listings/${roomId}/applicants`);
+    await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
+    const tops = await page
+      .getByRole('tablist', { name: he.applicants.filter.label })
+      .getByRole('tab')
+      .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).offsetTop));
+    expect(tops).toHaveLength(4);
+    expect(new Set(tops).size).toBe(1);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    );
+    expect(overflow).toBe(true);
+    const ring = applicant.getByTestId('match-ring');
+    await expect(ring).toBeVisible();
+    // The ring is a child of the card's top row (the avatar, the text column and the ring).
+    const inTopRow = await ring.evaluate(
+      (el) => el.parentElement?.parentElement?.querySelector('h2') !== null,
+    );
+    expect(inTopRow).toBe(true);
+  });
   await seekerContext.close();
 });

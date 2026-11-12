@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { createRef } from 'react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -60,5 +60,24 @@ describe('PageHeader', () => {
       'href',
       '/me/listings',
     );
+  });
+
+  it('eyebrow_in_h1', () => {
+    render(
+      <MemoryRouter>
+        <PageHeader eyebrow={he.applicants.titleFor} title="3 חדרים, רחוב הרצל" />
+        <PageHeader title="no eyebrow" />
+      </MemoryRouter>,
+    );
+    const heading = screen.getByRole('heading', {
+      level: 1,
+      name: `${he.applicants.titleFor} 3 חדרים, רחוב הרצל`,
+    });
+    // Inside the <h1>, before the title, in Rubik (the h1 is Fredoka, never below 24px).
+    const eyebrow = within(heading).getByText(he.applicants.titleFor);
+    expect(eyebrow).toHaveClass('block', 'font-sans', 'text-caption', 'text-ink-muted');
+    expect(heading.firstElementChild).toBe(eyebrow);
+    // Without it, the <h1> is the title alone.
+    expect(screen.getByRole('heading', { level: 1, name: 'no eyebrow' }).children).toHaveLength(0);
   });
 });

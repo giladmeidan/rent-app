@@ -73,11 +73,13 @@ function reset(view: { unmount: () => void }) {
 }
 
 const cards = () => screen.getAllByRole('article');
-const filters = () => screen.getByRole('group', { name: he.applicants.filter.label });
+const filters = () => screen.getByRole('tablist', { name: he.applicants.filter.label });
 const filterButton = (key: 'all' | 'new' | 'shortlisted' | 'declined', count: number) =>
-  within(filters()).getByRole('button', {
+  within(filters()).getByRole('tab', {
     name: i18n.t(`applicants.filter.${key}`, { count }),
   });
+/** The inbox's `<h1>`: the eyebrow "מועמדויות עבור" and the listing's title. */
+const TITLE_FOR = new RegExp(`^${he.applicants.titleFor}`);
 const totals = () =>
   within(screen.getByTestId('applicant-totals'))
     .getAllByRole('listitem')
@@ -144,18 +146,24 @@ describe('ApplicantsPage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: he.applicants.title }),
     ).toBeVisible();
+    // No PageHeader yet: no back link, no eyebrow.
+    expect(screen.queryByRole('link', { name: he.listings.edit.backToMine })).toBeNull();
     const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
     expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(1);
     reset(view);
 
-    // "My listings" failing: ErrorState; retry refetches.
+    // "My listings" failing: the back link and ErrorState; retry refetches.
     let api;
     ({ api, view } = renderPage([json([])], { mine: [json({ detail: 'boom' }, 500), json([A])] }));
+    expect(await screen.findByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+      'href',
+      '/me/listings',
+    );
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
-    // The error state keeps the page's <h1>: wait for the loaded page.
+    // The error state has the back link and ErrorState: wait for the loaded page.
     expect(await screen.findByText(he.applicants.empty)).toBeVisible();
-    expect(screen.getByRole('heading', { level: 1, name: he.applicants.title })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toBeVisible();
     expect(api.calls(MINE)).toHaveLength(2);
     reset(view);
 
@@ -187,7 +195,7 @@ describe('ApplicantsPage', () => {
       'href',
       '/me/listings',
     );
-    expect(screen.getByRole('heading', { level: 1, name: he.applicants.title })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toBeVisible();
 
     const list = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(list).toHaveAttribute('aria-busy', 'true');
@@ -196,7 +204,9 @@ describe('ApplicantsPage', () => {
 
     // Applicants failing: ErrorState; retry refetches.
     ({ api, view } = renderPage([json({ detail: 'boom' }, 500), json([])]));
-    fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
+    const retry = await screen.findByRole('button', { name: he.common.retry });
+    expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toBeVisible();
+    fireEvent.click(retry);
     expect(await screen.findByText(he.applicants.empty)).toBeVisible();
     expect(api.calls(APPS)).toHaveLength(2);
     expect(api.calls(APPS)[0]?.request.credentials).toBe('include');
@@ -205,6 +215,7 @@ describe('ApplicantsPage', () => {
     // None: the empty state, no totals, no filters.
     ({ view } = renderPage([json([])]));
     expect(await screen.findByText(he.applicants.empty)).toBeVisible();
+    expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('group')).toBeNull();
     expect(screen.queryByTestId('applicant-totals')).toBeNull();
     expect(screen.queryByRole('article')).toBeNull();
@@ -221,12 +232,21 @@ describe('ApplicantsPage', () => {
     const { view } = renderPage([json(five)]);
     await screen.findAllByRole('article');
 
-    // The listing's title and price, no view count.
-    expect(
-      screen.getByText(
-        i18n.t('listings.card.title', { count: 3, rooms: '3', street: A.street, city: A.city }),
-      ),
-    ).toBeVisible();
+    // One <h1>: the eyebrow "מועמדויות עבור" inside it, before the listing's title; the back
+    // link; the price; no view count.
+    const listingTitle = i18n.t('listings.card.title', {
+      count: 3,
+      rooms: '3',
+      street: A.street,
+      city: A.city,
+    });
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1).toHaveAccessibleName(`${he.applicants.titleFor} ${listingTitle}`);
+    expect(h1.firstElementChild).toHaveTextContent(he.applicants.titleFor);
+    expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+      'href',
+      '/me/listings',
+    );
     expect(screen.getByText(/7,200[\s‎‏]*₪/)).toBeVisible();
     expect(document.body.textContent).not.toContain('\u05e6\u05e4\u05d9\u05d5\u05ea');
 
@@ -237,22 +257,29 @@ describe('ApplicantsPage', () => {
       `2 ${he.applicants.stats.new}`,
     ]);
 
-    // Four filters with counts; "all" pressed; every card in API order.
+    // Four filters with counts; "all" selected; every card in API order, inside the tabpanel.
     const all = filterButton('all', 5);
     const fresh = filterButton('new', 2);
     const short = filterButton('shortlisted', 2);
     const declined = filterButton('declined', 1);
-    expect(within(filters()).getAllByRole('button')).toEqual([all, fresh, short, declined]);
-    expect(all).toHaveAttribute('aria-pressed', 'true');
-    for (const b of [fresh, short, declined]) expect(b).toHaveAttribute('aria-pressed', 'false');
+    expect(within(filters()).getAllByRole('tab')).toEqual([all, fresh, short, declined]);
+    expect(all).toHaveAttribute('aria-selected', 'true');
+    for (const b of [fresh, short, declined]) expect(b).toHaveAttribute('aria-selected', 'false');
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toHaveAttribute('aria-labelledby', all.id);
+    expect(within(panel).getAllByRole('article')).toHaveLength(5);
     expect(cards().map((c) => within(c).getByRole('heading', { level: 2 }).textContent)).toEqual(
       five.map((p) => p.applicant_name),
     );
+    // One row that scrolls inside itself at 390px, never wrapping.
+    expect(filters()).toHaveClass('flex-nowrap', 'overflow-x-auto');
+    expect(filters()).not.toHaveClass('flex-wrap');
 
     // "New": the two submitted ones.
     fireEvent.click(fresh);
-    expect(fresh).toHaveAttribute('aria-pressed', 'true');
-    expect(all).toHaveAttribute('aria-pressed', 'false');
+    expect(fresh).toHaveAttribute('aria-selected', 'true');
+    expect(all).toHaveAttribute('aria-selected', 'false');
+    expect(within(screen.getByRole('tabpanel')).getAllByRole('article')).toHaveLength(2);
     expect(cards().map((c) => within(c).getByRole('heading', { level: 2 }).textContent)).toEqual([
       five[0]?.applicant_name,
       five[2]?.applicant_name,
@@ -260,7 +287,7 @@ describe('ApplicantsPage', () => {
 
     // "Declined": one.
     fireEvent.click(declined);
-    expect(declined).toHaveAttribute('aria-pressed', 'true');
+    expect(declined).toHaveAttribute('aria-selected', 'true');
     expect(cards()).toHaveLength(1);
     expect(within(cards()[0] as HTMLElement).getByRole('heading', { level: 2 })).toHaveTextContent(
       five[3]?.applicant_name ?? '',
@@ -283,8 +310,42 @@ describe('ApplicantsPage', () => {
     });
     const shortlisted = applicant({ status: 'shortlisted' });
     const declined = applicant({ status: 'declined' });
-    renderPage([json([submitted, shortlisted, declined])]);
+    // A new apartment applicant with a profile and a high score.
+    const scored = applicant({
+      applicant_name: 'R',
+      match: match(94),
+      profile: applicantProfile(),
+    });
+    renderPage([json([submitted, shortlisted, declined, scored])]);
     await screen.findAllByRole('article');
+
+    // The score is a ring in the card's top row, not in the name row; the name and the status
+    // badge are in the name row.
+    const ring = within(cardOf('R')).getByTestId('match-ring');
+    expect(ring).toHaveAttribute('data-bucket', 'high');
+    expect(ring).toHaveTextContent(badge(94));
+    const nameRow = within(cardOf('R')).getByTestId('applicant-name-row');
+    expect(nameRow).not.toContainElement(ring);
+    expect(nameRow).toContainElement(within(cardOf('R')).getByRole('heading', { level: 2 }));
+    expect(nameRow).toContainElement(within(cardOf('R')).getByTestId('application-status'));
+    expect(within(nameRow).getByTestId('application-status')).toHaveTextContent(
+      he.applicants.status.submitted,
+    );
+    expect(ring.parentElement?.parentElement).toBe(nameRow.parentElement?.parentElement);
+    for (const button of within(cardOf('R')).getAllByRole('button')) {
+      expect(button).toHaveAccessibleDescription('R');
+    }
+
+    // Before Slice 6: "no score" and no ring.
+    expect(within(cardOf(shortlisted.applicant_name)).getByText(he.match.noScore)).toBeVisible();
+    expect(within(cardOf(shortlisted.applicant_name)).queryByTestId('match-ring')).toBeNull();
+
+    // A shortlisted card's chat link has no visible text; it is named by `aria-label`.
+    const chat = within(cardOf(shortlisted.applicant_name)).getByRole('link', {
+      name: i18n.t('chat.withName', { name: shortlisted.applicant_name }),
+    });
+    expect(chat).toHaveAttribute('href', `/chat/${shortlisted.id}`);
+    expect(chat.textContent).toBe('');
 
     const card = cardOf(MICHAL);
     const inCard = within(card);
@@ -402,7 +463,7 @@ describe('ApplicantsPage', () => {
     expect(api.calls(unshortlistRoute).map((c) => c.body)).toEqual([{ status: 'submitted' }]);
     reset(view);
 
-    // Filter "new" pressed: a shortlisted card leaves the view; focus goes to that filter.
+    // Filter "new" selected: a shortlisted card leaves the view; focus goes to the selected tab.
     ({ api, view } = renderPage([json([P, Q])], {
       extra: { [patchRoute(P)]: [json({ ...P, status: 'shortlisted' })] },
     }));
@@ -418,31 +479,39 @@ describe('ApplicantsPage', () => {
     await vi.waitFor(() => {
       expect(filterButton('new', 0)).toHaveFocus();
     });
-    expect(filterButton('new', 0)).toHaveAttribute('aria-pressed', 'true');
+    expect(filterButton('new', 0)).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText(he.applicants.emptyFilter)).toBeVisible();
     reset(view);
 
-    // Decline asks first: cancel sends nothing.
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // Decline asks in the kit's dialog, never `window.confirm`: cancel sends nothing and focus
+    // returns to the decline button.
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     ({ api, view } = renderPage([json([P])], {
       extra: { [patchRoute(P)]: [json({ ...P, status: 'declined' })] },
     }));
     await screen.findByRole('article');
     const declineButton = () =>
       within(cardOf(MICHAL)).getByRole('button', { name: he.applicants.actions.decline });
+    declineButton().focus();
     fireEvent.click(declineButton());
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm).toHaveBeenCalledWith(i18n.t('applicants.declineConfirm', { name: MICHAL }));
-    expect(confirm.mock.calls[0]?.[0]).toContain(MICHAL);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveAccessibleName(i18n.t('applicants.declineConfirm', { name: MICHAL }));
+    expect(dialog.textContent).toContain(MICHAL);
+    fireEvent.click(within(dialog).getByRole('button', { name: he.common.cancel }));
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect(api.calls(patchRoute(P))).toHaveLength(0);
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.submitted);
+    expect(declineButton()).toHaveFocus();
 
-    // Confirmed: `declined`, and the card has no buttons.
-    confirm.mockReturnValue(true);
+    // Confirmed: exactly one PATCH `declined`, and the card has no buttons.
     fireEvent.click(declineButton());
+    const again = await screen.findByRole('dialog');
+    fireEvent.click(within(again).getByRole('button', { name: he.applicants.actions.decline }));
     await vi.waitFor(() => {
       expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.declined);
     });
@@ -451,6 +520,7 @@ describe('ApplicantsPage', () => {
     await vi.waitFor(() => {
       expect(within(cardOf(MICHAL)).getByRole('heading', { level: 2 })).toHaveFocus();
     });
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('ac6_action_error_copy', async () => {
@@ -506,7 +576,7 @@ describe('ApplicantsPage', () => {
       );
 
     // 404 (P withdrew): the list is requested again, the "gone" alert shows and focus is on the
-    // pressed filter button.
+    // selected tab.
     let { api, view } = renderPage([json([P, Q]), json([Q])], {
       extra: { [patchRoute(P)]: [json({ detail: 'not_found' }, 404)] },
     });
@@ -522,7 +592,7 @@ describe('ApplicantsPage', () => {
     });
     reset(view);
 
-    // 404 for the only applicant: no filter group remains, so focus is on the <h1>.
+    // 404 for the only applicant: no tabs remain, so focus is on the <h1>.
     ({ api, view } = renderPage([json([P]), json([])], {
       extra: { [patchRoute(P)]: [json({ detail: 'not_found' }, 404)] },
     }));
@@ -531,7 +601,7 @@ describe('ApplicantsPage', () => {
     expect(await screen.findByText(he.applicants.errors.gone)).toBeVisible();
     expect(screen.getByText(he.applicants.empty)).toBeVisible();
     await vi.waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: he.applicants.title })).toHaveFocus();
+      expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toHaveFocus();
     });
     reset(view);
 
@@ -616,7 +686,7 @@ describe('ApplicantsPage', () => {
     });
     expect(client.getQueryState(['me', 'listings'])?.status).toBe('error');
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
-    expect(screen.getByRole('heading', { level: 1, name: he.applicants.title })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toBeVisible();
     expect(cards()).toHaveLength(2);
     expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.shortlisted);
   });
@@ -647,9 +717,9 @@ describe('ApplicantsPage', () => {
 
     // The API's order as received, each card with its score or "no score".
     expect(names()).toEqual(['A', 'B', 'C']);
-    expect(within(cardOf('A')).getByTestId('match-badge')).toHaveTextContent(badge(94));
-    expect(within(cardOf('B')).getByTestId('match-badge')).toHaveTextContent(badge(59));
-    expect(within(cardOf('C')).queryByTestId('match-badge')).toBeNull();
+    expect(within(cardOf('A')).getByTestId('match-ring')).toHaveTextContent(badge(94));
+    expect(within(cardOf('B')).getByTestId('match-ring')).toHaveTextContent(badge(59));
+    expect(within(cardOf('C')).queryByTestId('match-ring')).toBeNull();
     expect(within(cardOf('C')).getByText(he.match.noScore)).toBeVisible();
 
     // The toggle: its own labelled group, outside the filters, "by match" pressed.
@@ -660,6 +730,10 @@ describe('ApplicantsPage', () => {
     expect(sortButton('match')).toHaveAttribute('aria-pressed', 'true');
     expect(sortButton('newest')).toHaveAttribute('aria-pressed', 'false');
     expect(filters()).not.toContainElement(sortButton('match'));
+    // Each sort button is a kit pill: tint when pressed, ghost when not.
+    expect(sortButton('match')).toHaveClass('rounded-full', 'min-h-tap');
+    expect(sortButton('match')).toHaveClass('bg-accent-soft');
+    expect(sortButton('newest')).toHaveClass('bg-transparent');
     // No `sort` is sent: the API's default is match.
     expect(api.calls(APPS)).toHaveLength(1);
     expect(new URL(api.calls(APPS)[0]?.request.url ?? '').search).toBe('');
@@ -698,7 +772,7 @@ describe('ApplicantsPage', () => {
     expect(names()).toEqual(['A', 'B']);
     fireEvent.click(sortButton('newest'));
     expect(names()).toEqual(['B', 'A']);
-    expect(filterButton('shortlisted', 2)).toHaveAttribute('aria-pressed', 'true');
+    expect(filterButton('shortlisted', 2)).toHaveAttribute('aria-selected', 'true');
     expect(totals()).toEqual(before);
     fireEvent.click(sortButton('match'));
     expect(names()).toEqual(['A', 'B']);
@@ -900,7 +974,7 @@ describe('ApplicantsPage', () => {
       within(cardOf('A')).getByRole('button', { name: he.applicants.actions.shortlist }),
     );
     await vi.waitFor(() => {
-      expect(within(cardOf('A')).getByTestId('match-badge')).toHaveTextContent(badge(50));
+      expect(within(cardOf('A')).getByTestId('match-ring')).toHaveTextContent(badge(50));
     });
     // Now below B's 59, but the list is not re-sorted: A keeps its place.
     expect(names()).toEqual(['A', 'B']);
@@ -989,7 +1063,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     renderPage([json([w, l])], { mine: [json([roomListing({ night: 3 })])] });
     await screen.findAllByRole('article');
 
-    expect(within(cardOf('W')).getByTestId('match-badge')).toHaveTextContent('התאמה 88%');
+    expect(within(cardOf('W')).getByTestId('match-ring')).toHaveTextContent('התאמה 88%');
     const line = lineAfterApplied(w);
     expect(line?.textContent).toBe('אישה · גיל 27');
     expect(line?.tagName).toBe('P');
@@ -1225,10 +1299,91 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     await screen.findAllByRole('article');
     const inMutual = within(cardOf('L'));
     expect(inMutual.getByTestId('applicant-mutual')).toHaveTextContent(he.applicants.mutual);
+    // The badge is in the name row, beside the status badge, not where the message would be.
+    expect(inMutual.getByTestId('applicant-name-row')).toContainElement(
+      inMutual.getByTestId('applicant-mutual'),
+    );
     expect(inMutual.queryByTestId('applicant-message')).toBeNull();
     const inApplied = within(cardOf('M'));
     expect(inApplied.getByTestId('applicant-message')).toHaveTextContent('Hello there');
     expect(inApplied.queryByTestId('applicant-mutual')).toBeNull();
+  });
+
+  it('ac6_disclosures_share_a_row', async () => {
+    const w = roomApplicant({ lifestyle: { cleanliness: 3 } }, { applicant_name: 'W' });
+    renderPage([json([w])], { mine: [json([roomListing({ cleanliness: 1 })])] });
+    await screen.findByRole('article');
+
+    // "למה ההתאמה?" and "עוד פרטים" are children of one row, each controlling its own panel.
+    const why = whyOf('W');
+    const more = moreOf('W');
+    expect(why.parentElement).toBe(more.parentElement);
+    expect(why.parentElement).toHaveClass('flex', 'flex-wrap');
+    expect(why.getAttribute('aria-controls')).not.toBe(more.getAttribute('aria-controls'));
+    expect(panelOf('W')).not.toBe(morePanelOf('W'));
+
+    // They open on their own.
+    fireEvent.click(why);
+    expect(panelOf('W')).toBeVisible();
+    expect(morePanelOf('W')).not.toBeVisible();
+    fireEvent.click(more);
+    expect(morePanelOf('W')).toBeVisible();
+    expect(panelOf('W')).toBeVisible();
+  });
+
+  it('ac7_long_message_show_more', async () => {
+    const LONG = Array.from({ length: 6 }, (_, n) => `line ${String(n + 1)} https://example.com/x`)
+      .join('\n')
+      .concat('\n<b>not html</b>');
+    const long = applicant({ applicant_name: 'L', message: LONG });
+    const short = applicant({ applicant_name: 'S', message: 'Hello there' });
+
+    // jsdom lays nothing out, so nothing overflows: no extra button on a card, short or long.
+    let { view } = renderPage([json([long, short])]);
+    await screen.findAllByRole('article');
+    for (const name of ['L', 'S']) {
+      expect(buttonsOf(name)).toEqual([
+        he.applicants.actions.shortlist,
+        he.applicants.actions.decline,
+      ]);
+    }
+    reset(view);
+
+    // An overflowing message gets the toggle, described by the card's <h2>.
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get: () => 100,
+    });
+    try {
+      ({ view } = renderPage([json([long])]));
+      await screen.findByRole('article');
+      const message = within(cardOf('L')).getByTestId('applicant-message');
+      const block = message.firstElementChild;
+      expect(block).toHaveClass('line-clamp-4');
+      const toggle = within(cardOf('L')).getByRole('button', { name: he.common.showMore });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(toggle).toHaveAttribute('aria-controls', message.id);
+      expect(toggle).toHaveAccessibleDescription('L');
+      // The text node holds the whole message; no link, no markup.
+      expect(message.textContent).toBe(LONG);
+      expect(message.querySelector('a, b')).toBeNull();
+      expect(message.querySelectorAll('*')).toHaveLength(1);
+
+      fireEvent.click(toggle);
+      expect(block).not.toHaveClass('line-clamp-4');
+      expect(within(cardOf('L')).getByRole('button', { name: he.common.showLess })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      expect(message.textContent).toBe(LONG);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
   });
 
   it('ac4_h1_while_loading_and_on_error', async () => {
@@ -1248,11 +1403,11 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(title()).toBeVisible();
     reset(view);
 
-    // The applicants failing: still the one <h1>.
+    // The applicants failing: the listing is known, so the one <h1> is "מועמדויות עבור …".
     ({ view } = renderPage([json({ detail: 'boom' }, 500)]));
     await screen.findByRole('button', { name: he.common.retry });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(title()).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: TITLE_FOR })).toBeVisible();
     reset(view);
   });
 });

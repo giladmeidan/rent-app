@@ -33,13 +33,13 @@ export function RoomDetails({ room, flat, flatIsRoom }: Props) {
           {t('applicants.room.summary', { same, shared })}
         </p>
       )}
-      <ul className="flex flex-col gap-[10px]">
+      <ul className="flex flex-col gap-2">
         {answered.map((key) => {
           const flatAnswer = flat[key];
           return (
             <li
               key={key}
-              className="flex min-w-0 flex-col gap-[2px] rounded-xl bg-surface-subtle px-3 py-[10px] text-start text-sm"
+              className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-surface-subtle px-3 py-2 text-start text-sm"
             >
               <span className="font-bold">{t(`lifestyle.${key}.topic`)}</span>
               <span className="[overflow-wrap:anywhere]">

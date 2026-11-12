@@ -42,6 +42,8 @@ export function BackLink({ to, label, onClick }: BackLinkProps) {
 
 export type PageHeaderProps = {
   title: string;
+  /** A small line above the title, inside the `<h1>`: the accessible name is "eyebrow title". */
+  eyebrow?: string;
   subtitle?: string;
   /** The page's actions, at the row's inline end. */
   actions?: ReactNode;
@@ -56,6 +58,7 @@ export type PageHeaderProps = {
 /** The page's back link, `<h1>`, subtitle and actions. Landmarks are the page's (0009c). */
 export function PageHeader({
   title,
+  eyebrow,
   subtitle,
   actions,
   back,
@@ -74,6 +77,12 @@ export function PageHeader({
             tabIndex={-1}
             className="font-display text-h2 lg:text-h1 break-words focus:outline-none"
           >
+            {eyebrow !== undefined && (
+              <>
+                {/* The h1 is Fredoka; the eyebrow is 12px, so it goes back to Rubik. */}
+                <span className="block font-sans text-caption text-ink-muted">{eyebrow}</span>{' '}
+              </>
+            )}
             {title}
           </h1>
           {subtitle !== undefined && <p className="text-body-sm text-ink-muted">{subtitle}</p>}
