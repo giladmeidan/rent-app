@@ -1,7 +1,7 @@
 ---
 id: 0009p
 title: A room lister's "מחפשים חדר" page uses the inbox's card family — kit cards with the score ring in the corner, the reason chips, an "about me" box and one row of disclosures; one column on a phone, two on a desktop — with behaviour unchanged
-status: in-progress
+status: done
 depends_on: [0009l]   # 0009l: MatchRing, ReasonList, RoomLine, DisclosureButton, Badge's attribute forwarding and the screenshot harness (it depends on 0009d + 0009h, the kit and the shell). Independent of 0009u (desktop inbox): different files
 reviewers: [ux]   # quick route (Gilad 2026-11-12: a cosmetic, behaviour-unchanged spec gets one ux review; coder Sonnet/medium). The spec session also greps its diff for raw-HTML rendering (dangerouslySetInnerHTML / innerHTML / linkify) and runs lint, test and e2e. Was: reviewers: [code, qa, ux]
 estimate: 1 coder run   # coder Sonnet/medium: a mechanical restyle onto 0009l's pieces plus FOLLOWUPS 169 / 171; the third part of the 0009l / 0009u / 0009p split
@@ -243,3 +243,11 @@ Brand amendment (orchestrator, 2026-11-12, `specs/0009-brand-amendment.md`) appl
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0009p — the room lister's "מחפשים חדר" page in the inbox card family   PR open, not merged
+Shipped: `/me/listings/:id/people` is a `wide` page with a `PageHeader` (chevron back link `listings.edit.backToMine`, "מחפשים חדר", the room's title) in every state, including while "my listings" loads or fails. Each person is a bordered kit card with the avatar, the name and "אהב/ה את החדר" `Badge`, `RoomLine`, the areas and move-in lines, a `MatchRing md` at the inline end, `MatchChips voice="person"` (neutral `people.short.*`, no budget amount), "קצת עליי" in the grey box (text children, `dir="auto"`), the why / "עוד פרטים" disclosures in one row and the like toggle (`primary` → `soft` + ✓). One column on a phone, two on a desktop (`lg:items-start`). Likes, paging, the banner and the alerts are unchanged. Demo: open a live room's people page at 390 and 1440 → open both disclosures on a card → like a person who liked the room (mutual banner).
+Tests: +1 unit (`MatchChips.test.tsx::ac4_person_voice`, new file); `PeoplePage.test.tsx` ac1 (ring outside `person-name-row`, disclosures as siblings) and ac6 (back-link name, pending and failed `<h1>`) extended, plus the one `aria-disabled` line in ac3; `pageWidths` row → `wide`. E2E: `people.spec.ts::ac10` runs at 1440×900 and opens "למה ההתאמה?" (no new sign-up). 20 screenshots in `web/screens/0009p/` (10 states × 390 / 1440, AC5).
+Findings (ux only, quick route; one round): 0 blockers, 0 majors, 2 minors, 2 nits. Fixed: the closed banner and alert slots added two 16 px gaps under the subtitle, so closed they are now `sr-only` (still live regions, as on MyLikesPage). No change: "the '!' sits at the inline end" was a misread, because the screenshot shows it at the inline start. Nits dropped.
+Spec text vs main: like toggle `soft` (the brand renamed `tint`); `Card` has no `radius` prop (always `rounded-lg`); `PersonCard` keeps its `<li>` around `Card as="article"`; the page alert's "!" is an inline icon in running text.
+AC4 grep `function (Chevron|RoomLine)|agreeChip|flattenPeople` over `features/people`: nothing. AC7 hex / `[Npx]` grep: nothing (`[overflow-wrap:anywhere]` is commented). `people.back`: gone from `he.json`, the grep finds nothing. Raw-HTML grep (`dangerouslySetInnerHTML|innerHTML|linkify`) over the diff: nothing.
+Checks on the final head (main at 0009k + 0009m merged): make lint / test (api 476, web 522) / i18n-check / build-web green. Local `people.spec.ts` 1/1 green. The full `make e2e` is left to CI (load ~21–25). `make screens` 125/126: `seeker-lists.screens.ts › 11-likes-card-error [mobile]` (0009qa/qb's file, untouched here) fails a strict `getByRole('alert')`, because MyLikesPage's always-mounted `sr-only` alert also matches. FOLLOWUPS 169 and 171 closed. Changed in PRODUCT.md: nothing.

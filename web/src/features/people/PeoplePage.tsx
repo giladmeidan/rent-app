@@ -7,39 +7,23 @@ import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { Button } from '../../components/Button';
 import { Loading } from '../../components/Loading';
+import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { flattenPages } from '../search/useSearch';
+import { DifferIcon } from '../match/icons';
 import { fetchAreas } from '../areas/api';
 import { hasStatus } from '../applications/api';
 import { cardTitle } from '../listings/cardTitle';
 import { useMyListings } from '../listings/useMyListings';
-import { flattenPeople, usePeople } from './usePeople';
+import { usePeople } from './usePeople';
 import { PersonCard, type Mutual, type PageAlert } from './PersonCard';
 
 const section = 'flex flex-col gap-4';
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-
-function Back() {
-  const { t } = useTranslation();
-  return (
-    <Link
-      to="/me/listings"
-      className={`inline-flex min-h-[44px] items-center self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
-    >
-      {t('people.back')}
-    </Link>
-  );
-}
-
-function Notice({ message }: { message: string }) {
-  return (
-    <PageContainer as="section" className={section}>
-      <Back />
-      <h1 className="text-start text-2xl font-extrabold">{message}</h1>
-    </PageContainer>
-  );
-}
+const bannerBase = 'rounded-lg px-4 py-3 text-start text-body font-semibold focus:outline-none';
 
 /**
  * `/me/listings/:id/people`, owners only (`RequireOwner`): the people who want a room, for one of
@@ -72,7 +56,8 @@ export function PeoplePage() {
     alertRef.current?.focus();
     alertRef.current?.scrollIntoView({ block: 'center' });
   }, [alert]);
-  const items = useMemo(() => (people.data ? flattenPeople(people.data) : []), [people.data]);
+  const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+  const items = useMemo(() => (people.data ? flattenPages(people.data) : []), [people.data]);
 
   const areaName = useMemo(
     () => new Map((areas.data ?? []).map((a) => [a.id, a.name_he])),
@@ -92,38 +77,37 @@ export function PeoplePage() {
 
   // Loading and a failed list keep the page's <h1>: its text needs no data.
   if (listings.data === undefined) {
-    const title = <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>;
-    if (listings.isPending) {
-      return (
-        <PageContainer as="section" className={section}>
-          {title}
+    return (
+      <PageContainer as="section" width="wide" className={section}>
+        <PageHeader back={back} title={t('people.title')} />
+        {listings.isPending ? (
           <Loading>
             <Skeleton />
           </Loading>
-        </PageContainer>
-      );
-    }
-    return (
-      <PageContainer as="section" className={section}>
-        <Back />
-        {title}
-        <ErrorState onRetry={() => listings.refetch()} />
+        ) : (
+          <ErrorState onRetry={() => listings.refetch()} />
+        )}
       </PageContainer>
     );
   }
 
-  if (listing === undefined || !isRoom) return <Notice message={t('people.notFound')} />;
+  const notice = (title: string) => (
+    <PageContainer as="section" width="wide" className={section}>
+      <PageHeader back={back} title={title} />
+    </PageContainer>
+  );
+  if (listing === undefined || !isRoom) return notice(t('people.notFound'));
 
   let body;
   if (people.data === undefined) {
     if (people.isError) {
-      if (hasStatus(people.error, 404)) return <Notice message={t('people.notFound')} />;
-      if (hasStatus(people.error, 409)) return <Notice message={t('people.notLive')} />;
+      if (hasStatus(people.error, 404)) return notice(t('people.notFound'));
+      if (hasStatus(people.error, 409)) return notice(t('people.notLive'));
       body = <ErrorState onRetry={() => people.refetch()} />;
     } else {
       body = (
         <Loading>
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-3">
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} />
             ))}
@@ -136,13 +120,13 @@ export function PeoplePage() {
     const lastTotal = people.data.pages[people.data.pages.length - 1]?.total ?? 0;
     body =
       lastTotal === 0 && items.length === 0 ? (
-        <EmptyState message={t('people.empty')} />
+        <EmptyState pose="search" message={t('people.empty')} />
       ) : (
         <>
-          <p className="text-start text-sm text-ink-muted">
+          <p className="text-start text-caption text-ink-muted">
             {t('people.count', { count: lastTotal })}
           </p>
-          <ul className="flex flex-col gap-3">
+          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start lg:gap-3">
             {items.map((person) => (
               <PersonCard
                 key={person.id}
@@ -161,35 +145,31 @@ export function PeoplePage() {
             ))}
           </ul>
           {people.hasNextPage && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => void people.fetchNextPage()}
               disabled={people.isFetchingNextPage}
               aria-busy={people.isFetchingNextPage}
-              className={`inline-flex min-h-[44px] items-center justify-center self-center rounded-xl border-[1.5px] border-border-strong bg-surface px-4 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`}
+              className="self-center"
             >
               {t('people.loadMore')}
-            </button>
+            </Button>
           )}
         </>
       );
   }
 
   return (
-    <PageContainer as="section" className={section}>
-      <Back />
-      <div className="flex flex-col gap-1">
-        <h1 className="text-start text-2xl font-extrabold">{t('people.title')}</h1>
-        <p className="text-start font-bold">{cardTitle(t, listing)}</p>
-      </div>
+    <PageContainer as="section" width="wide" className={section}>
+      <PageHeader back={back} title={t('people.title')} subtitle={cardTitle(t, listing)} />
       <div
         ref={mutualRef}
         role="status"
         tabIndex={-1}
         className={
           mutual === null
-            ? undefined
-            : 'flex flex-wrap items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3 text-start text-[15px] font-semibold text-accent-strong focus:outline-none'
+            ? 'sr-only'
+            : `flex flex-wrap items-center gap-3 bg-accent-soft text-accent-strong ${bannerBase}`
         }
       >
         {mutual !== null && (
@@ -206,11 +186,14 @@ export function PeoplePage() {
         role="alert"
         tabIndex={-1}
         className={
-          alert === null
-            ? undefined
-            : 'rounded-2xl bg-surface-subtle px-4 py-3 text-start text-[15px] font-semibold text-warning focus:outline-none'
+          alert === null ? 'sr-only' : `border border-border bg-surface text-warning ${bannerBase}`
         }
       >
+        {alert !== null && (
+          <span className="me-2 inline-flex align-middle">
+            <DifferIcon />
+          </span>
+        )}
         {alert?.kind === 'alreadyApplied' && (
           <>
             <strong>{alert.name}</strong> <span>{t('people.errors.alreadyApplied')}</span>{' '}
