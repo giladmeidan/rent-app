@@ -1,9 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export type View = 'list' | 'map';
 
-type Props = { view: View; onChange: (view: View) => void };
+type Props = {
+  view: View;
+  onChange: (view: View) => void;
+  /** The "list" button, which takes focus after the map's "show the list" (spec 0009t). */
+  listButtonRef?: Ref<HTMLButtonElement>;
+};
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
@@ -12,7 +17,7 @@ const current = `${option} bg-white font-bold text-ink shadow-[0_1px_2px_rgba(0,
 const other = `${option} bg-transparent font-semibold text-muted`;
 
 /** Search.dc.html's "list / map" segmented control. */
-export function ViewToggle({ view, onChange }: Props) {
+export function ViewToggle({ view, onChange, listButtonRef }: Props) {
   const { t } = useTranslation();
   // The view last asked for, not the render's `view`: the router applies a navigation in a
   // transition, so a double-click would see the old `view` twice and push two entries.
@@ -22,6 +27,7 @@ export function ViewToggle({ view, onChange }: Props) {
   }, [view]);
   const button = (value: View, text: string) => (
     <button
+      ref={value === 'list' ? listButtonRef : undefined}
       type="button"
       aria-pressed={view === value}
       onClick={() => {

@@ -1,4 +1,5 @@
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../../components/EmptyState';
@@ -20,6 +21,8 @@ type Props = {
   onClear: () => void;
   /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
   profile: SeekerProfileOut | undefined;
+  /** The count line, focused by the page after a filter change (spec 0009t). */
+  countRef?: Ref<HTMLParagraphElement>;
 };
 
 const focusRing =
@@ -27,7 +30,7 @@ const focusRing =
 const secondary = `inline-flex min-h-[44px] items-center justify-center rounded-full border-[1.5px] border-[#D6D3D1] bg-white px-5 text-[15px] font-semibold disabled:opacity-60 ${focusRing}`;
 
 /** The count line (always mounted, so its first announcement is heard) and the result states. */
-export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
+export function ResultsList({ search, hasFilters, onClear, profile, countRef }: Props) {
   const { t } = useTranslation();
   const { data } = search;
 
@@ -108,7 +111,12 @@ export function ResultsList({ search, hasFilters, onClear, profile }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p aria-live="polite" className="min-h-[1.5em] text-sm font-bold">
+      <p
+        ref={countRef}
+        tabIndex={-1}
+        aria-live="polite"
+        className="min-h-[1.5em] text-sm font-bold focus:outline-none"
+      >
         {count}
         {sortedByMatch && (
           <span className="font-normal text-muted">{t('search.sortedByMatch')}</span>

@@ -1,5 +1,5 @@
 import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { focusRing } from '../focusRing';
@@ -36,6 +36,9 @@ type Props = {
   /** Results are pending: the region is `aria-busy`. */
   busy?: boolean;
   minZoom?: number;
+  /** Drawn over the map (inside the region) once it has loaded, e.g. the search map's "updating"
+   * pill; it should be `pointer-events-none` so the pins and the pan surface stay usable. */
+  overlay?: ReactNode;
   /** The map cannot be shown: the library failed to load, no WebGL, or an error before `load`. */
   onError?: () => void;
   className?: string;
@@ -67,6 +70,7 @@ export function MapCanvas({
   approximate = false,
   busy = false,
   minZoom,
+  overlay,
   onError,
   className = '',
 }: Props) {
@@ -140,6 +144,21 @@ export function MapCanvas({
         return;
       }
       const created = map;
+
+      // The wrapper's region is the map's only landmark (spec 0009t). MapLibre makes the canvas a
+      // second `region` named "map": an interactive canvas becomes an `application` (not a
+      // landmark; the pan and zoom keys keep working in a screen reader's focus mode), and a
+      // static one is hidden from assistive tech, keeping its `tabindex="-1"` so no hidden element
+      // is focusable.
+      const canvas = created.getCanvas();
+      if (interactive) {
+        canvas.setAttribute('role', 'application');
+      } else {
+        canvas.removeAttribute('role');
+        canvas.removeAttribute('aria-label');
+        canvas.setAttribute('aria-hidden', 'true');
+        canvas.setAttribute('tabindex', '-1');
+      }
 
       const reportBounds = () => {
         const b = created.getBounds();
@@ -242,6 +261,7 @@ export function MapCanvas({
           className="pointer-events-none absolute inset-0 m-auto h-14 w-14 rounded-full border-2 border-accent bg-accent/25"
         />
       )}
+      {loaded && overlay}
       {!loaded && <Skeleton className="absolute inset-0 h-full w-full" />}
     </div>
   );
