@@ -24,21 +24,21 @@ Overall: IN_PROGRESS
 Current focus:
 **Slice 9 + 9b is complete**: all 21 specs `0009a`–`0009u` (no `0009n`) are merged and `status: done` on `main`
 (last: 0009s, #62, merge 36ce546). No PRs open, no build sessions running, no spec worktrees left.
-**Main's CI e2e**: the last `main` run (after #62) was green; `applications.spec.ts::ac9` timed out on earlier
-runs and is a flaky 30 s timeout (see Known Issues).
-**Slice 9c (map)** is being built by its own orchestrator (`local_671e0f86…`): see "Map improvements" below.
+**Slice 9c (map) is complete**: `0009v`–`0009y` merged and `status: done` on `main` (PRs #63, #65, #66, #67;
+last merge 9db5cc8, status 1d2f9b1). Main's ac9 timeout is fixed with `test.slow()` (#64) and `make e2e` now runs
+4 shards (OTP cap). No map PRs open, no map build sessions running, no map worktrees left.
 **Slice 10 "שוק השותפים" (the roommates market): all 11 specs `0010a`–`0010k` are written and `verified` on
 `main` (d856e38); nothing is built.** Spec split, migration chain (`0013`–`0017`) and build waves are in
 `specs/MARKET-PLAN.md` section 7. Gilad starts the Slice 10 builds himself in a new chat. Alembic head on `main`
 is still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-13 (Slice 10 spec session: 11 specs verified and pushed)
+2026-11-13 (map orchestrator `local_671e0f86…`: Slice 9c built and merged)
 
 ## Current Work
 - **Slice 10 specs done, builds not started.** Waves, at most 3 builds at a time:
   `0010a` ∥ `0010d` → `0010b` ∥ `0010g` ∥ `0010j` → `0010c` ∥ `0010e` → `0010k` ∥ `0010f` → `0010h` → `0010i`
-  (each spec's `depends_on` is authoritative). The map chain also wants build slots: share the 3 with it.
+  (each spec's `depends_on` is authoritative). The map chain is done, so all 3 slots are free.
   Specs, briefly: a = the move (two-way switch, `/market`, `/market/mine`, apartments-only search, no type switch
   on edit); b = role-free market (`is_mine`, signup from the market, seeker rule); c = profile split (personal +
   "looking for", migration `0015`); d = listing photos API (R2 / file store, deps `python-multipart`, `Pillow`,
@@ -47,12 +47,14 @@ Last updated:
   `card_id`, `0017`); i = people browse web; j = person photo API; k = photo display web (gallery, `Avatar`).
 - Slice 10 planning worktree: `../rent-app-0010-spec` (branch `docs/0010-planning`, at d856e38, clean). The four
   spec sessions (`local_3afd2925…`, `local_0fefa23d…`, `local_d3f25b94…`, `local_c433ada8…`) are finished; archive
-  them. `../rent-app-map-spec` belongs to the map job.
+  them. `../rent-app-map-spec` is removed (map job done).
 - No build sessions running. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
   collisions"), ran 0009j/o/p/r/s/u (PRs #57–#62) and merged them; their worktrees and branches are removed.
   The older orchestrator `local_2b79d58f…` merged 0009e/g/k/m (#53–#56) and is retired.
-- **Open decision: the ac9 e2e timeout.** Options: `test.slow()` on ac9 (triples its timeout), or split ac9 into
-  smaller tests. Either is a small e2e-only PR built by a session, not the orchestrator.
+- **ac9 e2e timeout: decided and fixed** (Gilad 2026-11-13): `test.slow()` on ac9, PR #64 (merge 41ca6b9); the
+  split into smaller tests is a FOLLOWUPS line. Since then ac9 has passed on every run.
+- **e2e shards = 4** (0009y, PR #67): at 28 tests the 3-way split put 11 sign-ups in one shard, past the OTP cap of
+  10 per IP per 15 min. A spec that adds sign-ups should count them per shard (`playwright test --list --shard`).
 - Starting a build (for the next slice): prepare the worktree + `.env`, then `start_session` with `cwd` = worktree,
   `use_worktree: false`, `user_asked`, only in a turn Gilad wrote. Brief template = the 0009j–0009u briefs in the
   orchestrator transcript `local_386fe896…` (each says: merge `origin/main` first, rebuild the web container, the
@@ -71,18 +73,20 @@ Last updated:
 - Main checkout `../rent-app` (at 287c8d5, behind `main`) still holds someone's uncommitted demo-seed work
   (`Makefile`, `api/scripts/seed_demo.py`) and runs the shared `rent-app` stack. Leave it to its owner.
 
-### Map improvements, Slice 9c (2026-11-13: specs verified, not pushed, not built)
-- Gilad put a session in charge of the map job; it wrote and verified four web-only specs (one verifier round
-  each, all findings applied, `status: verified`): `0009v` pins (tiers, liked/applied/seen marks, clusters, ends
-  the axe pin exemption) → `0009w` card inside the map + `c`/`z`/`pin` in the URL + fit to results → `0009x` side
-  map from 1280 px ∥ `0009y` locate me, places list, empty-area action, honest 300 m listing circle + map link.
-- Also: research moved to `specs/map-research/`, Gilad's seven map decisions as PRODUCT.md row "Map".
-- **Where:** on `main` since 397ad44 ("0009v starts now; 0009w on 0009v's PR; 0009x and 0009y on 0009w's PR");
-  worktrees `../rent-app-0009v`…`0009y` exist. Its orchestrator owns that state; check `git log` / its session.
-- Queue (Gilad to decide; recommended): the map chain as the third build slot beside the market waves.
-  `/market` reuses `SearchPage` (list + map), so the map work carries over. Shared files with `0010a`/`0010e`:
-  `SearchPage.tsx`, `ListingPage.tsx`, `ListingCard.tsx`, `useLogout.ts`, `he.json`; second to merge merges main.
-  Merges need main's CI e2e green (the ac9 timeout).
+### Map improvements, Slice 9c (2026-11-13: done)
+- Four web-only specs from `specs/map-research/` and Gilad's seven map decisions (PRODUCT.md row "Map"), built as a
+  chain by orchestrator `local_671e0f86…` (Gilad: two at a time, orchestrator merges): `0009v` pins (tiers,
+  liked/applied/seen marks, clusters, axe pin exemption gone; MapLibre controls drawn above pins) — #63 →
+  `0009w` card inside the map, `c`/`z`/`pin` in the URL, fit to results — #65 → `0009x` side map from 1280 px —
+  #66 ∥ `0009y` locate me (snapped ~200 m), places list, empty-area action, honest 300 m circle + map link — #67.
+- One review round each, 0 blockers left; minors in `specs/FOLLOWUPS.md` (0009v/w/x/y lines, incl. the root cause
+  of the `map_max_zoom_never_422_on_390px` flake after 0009w's first-open fit). Each PR's digest is on GitHub.
+- For Slice 10: `SearchPage.tsx`, `ListingPage.tsx`, `ListingCard.tsx`, `ResultsList.tsx`, `MapCanvas.tsx`,
+  `useLogout.ts` and `he.json` changed a lot; market specs that cite their old line numbers must re-check them.
+  `/market` reusing `SearchPage` gets pins, card, URL position and side map for free. `map.spec.ts` uses an auto
+  tile fixture (`newTileContext` for extra browser contexts) and `domcontentloaded` gotos.
+- OSM tiles now load on every wide-desktop list view (0009x); the Protomaps switch must happen before launch
+  (Slice 13 queue).
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -115,6 +119,9 @@ Last updated:
   (its layout e2e step lives in `search.spec.ts::ac9`); 0009u desktop inbox — #59; 0009r profile — #60; 0009o my
   listings — #61; 0009s chat — #62 (full route, 0 blockers / 0 majors, 11 minors → 8 FOLLOWUPS lines).
 - [x] CI e2e re-enabled (2026-11-12): `main`'s full suite green in CI (run 43227959268); #45 and #46 merged with CI e2e green.
+- [x] Slice 9c map (orchestrator-merged, all CI api/web/e2e green on the PR head): 0009v pins — #63 (d7b977f);
+  0009w card + URL — #65 (f986008); 0009x side map — #66 (bc4813f); 0009y map extras — #67 (9db5cc8). Infra:
+  ac9 `test.slow()` — #64 (41ca6b9); `E2E_SHARDS` 3 → 4 inside #67.
 - [x] Gilad's decisions are in `specs/PRODUCT.md` (rows "Listings", "Search", "Applications", "Chat", "Matching",
   "Rooms", "People & likes", "Flatmates", …).
 
@@ -131,22 +138,20 @@ Last updated:
    like people (403 `card_required`); a lister who says "I live here" shows as a full card (name, photo, age,
    gender, about me, answers) to seekers only — an exception to "Search" (no owner name) and "Applications"
    (owner hidden until chat). Then send Gilad the Slice 10 spec digest.
-2b. ac9 e2e flake: if it fails again, `test.slow()` on it in a small e2e-only PR.
 3. Send Gilad a Slice 9 digest (21/21 merged; the FOLLOWUPS each spec added). Listing renewal moves with trust to
    Slice 11.
 4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
 5. **Supervise CI e2e** on every merge; on a runner failure `gh variable set E2E_IN_CI --body off` and tell Gilad.
-6. FOLLOWUPS from Slice 9: map pin clustering (0009t), map desktop list pairing (0009i), range tags "3–4" render
+6. FOLLOWUPS from Slice 9 (pin clustering and desktop map pairing are closed by 0009v / 0009x): range tags "3–4" render
    4–3 under RTL bidi — a native reader's call (0009i), brand-voice sweep of slash forms (0009b), tabs row has no
    scroll cue at 390 (0009l), plus the minors 0009j/k/m/o/p/r/s/u logged (0009s: 8 lines).
 7. Gilad's open Slice 8 decisions (FOLLOWUPS "pending decision"): person-card score inference, people-browse rate
    limit; re-apply after decline (own later spec).
-8. Housekeeping: archive the finished Slice 9 build sessions; remove the planning worktrees
+8. Housekeeping: archive the finished Slice 9 and 9c build sessions (9c: `build-0009v/w/x/y`, `fix-ac9-slow`,
+   started from `local_671e0f86…`); remove the planning worktrees
    `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`; update `CLAUDE.md` Speed rule 7
    to "no local e2e" (it still says local `make e2e` is optional).
-
-9. **Map job (Slice 9c):** owned by its orchestrator; builds `0009v` → `0009w` → `0009x` ∥ `0009y` per Gilad's
-   queue answer (see Current Work → "Map improvements").
+9. Send Gilad a Slice 9c digest (4/4 merged, the FOLLOWUPS lines, the OSM tile load from the side map).
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -181,8 +186,8 @@ Last updated:
 - `specs/0008a-people-likes-api.md` … `specs/0008f-group-chat-web.md` — Slice 8 (done), each with its build digest
   and the orchestrator's amendments.
 - `specs/0009*.md` + `specs/0009-brand-amendment.md` — Slice 9 (done), each with its digest.
-- `web/e2e/applications.spec.ts` — `ac9_fill_profile_apply_withdraw`, the test that times out on `main`.
-- `Makefile` `e2e` target — the 3-shard run with the rate-limit flush (CI runs it; not locally).
+- `web/e2e/applications.spec.ts` — `ac9_fill_profile_apply_withdraw`, marked `test.slow()` (split pending).
+- `Makefile` `e2e` target — the 4-shard run with the rate-limit flush (CI runs it; not locally).
 - `design/README.md` + `design/screens-v1/*.dc.html` — artboards (reference a missing `support.js`).
 
 ## Important Decisions
@@ -260,11 +265,10 @@ Last updated:
 - `/areas` blocks on a *hung* Postgres via pooled connections; `/` has no `<h1>`.
 - Design artboards reference a missing `design/screens-v1/support.js`.
 - GitHub branch protection unavailable on this plan.
-- **Main CI e2e red**: `applications.spec.ts::ac9_fill_profile_apply_withdraw` (one long multi-step test) takes
-  ~16 s on a good run but exceeds its 30 s timeout on slow runners: it failed on the `main` runs after #58, #60
-  and #61 (a `putProfile` → `GET /areas` or a `toBeVisible` still waiting at 30 s), passed after #59, and flaked
-  on PRs #56, #58, #59. Most likely runner speed and a too-tight timeout, not a product bug; unconfirmed (CI keeps
-  no trace artifact).
+- ac9 (`applications.spec.ts`) needed `test.slow()` because `GET /areas` stalls on slow runners; why `/areas` is
+  slow in CI is unconfirmed (CI keeps no trace artifact).
+- `map.spec.ts::map_max_zoom_never_422_on_390px` flaked once on `main` after 0009w (f986008); 0009y made the test
+  open at a fixed position. Root cause (first-open fit racing the zoom clicks) is a FOLLOWUPS line.
 - The Mac's load reaches 25–50 with three build stacks plus coders up; local e2e under that load flakes (another
   reason it is CI-only).
 - GitGuardian incident 40007526 (fake fixture token) flags every PR that merges main until marked false positive.
@@ -282,15 +286,19 @@ logged in.
     make client     # regenerate web/src/api/schema.d.ts
     make i18n-check # hardcoded copy / missing keys
     make build-web  # vite build
-    make e2e        # playwright against the stack, E2E_SHARDS (default 3) shards, rl:* flushed before each
+    make e2e        # playwright against the stack, E2E_SHARDS (default 4) shards, rl:* flushed before each
 
 Env var names: see `.env.example`. A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and
-unique `DB_PORT`/`REDIS_PORT`/`API_PORT`; Slice 9 uses 5480–5500 / 6430–6450 / 8050–8070 and `WEB_PORT` 5191–5211 (start above those). The
+unique `DB_PORT`/`REDIS_PORT`/`API_PORT`; Slices 9 + 9c used 5480–5504 / 6430–6454 / 8050–8074 and `WEB_PORT` 5191–5215 (start above those). The
 shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.env` file, so pass
 `DB_PORT=5434 REDIS_PORT=6380` to `make migrate` there. Web at http://localhost:$WEB_PORT (must be `localhost` — CORS; `WEB_ORIGIN` follows `WEB_PORT`).
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-13 — Map orchestrator `local_671e0f86…` ("Map job specs implementation"): pushed the 9c specs (397ad44),
+  pre-started four builds chained v → w → x ∥ y (two at a time, Gilad); Gilad delegated 9c merging and picked
+  `test.slow()` for ac9 (#64). Merged #63, #65, #66, #67; 0009w's long map test was split after a CI timeout,
+  0009y raised `E2E_SHARDS` to 4. All map worktrees and branches removed, `docs/map-planning` too.
 - 2026-11-13 — Slice 10 spec session: verified the plan's code facts (three explorers), Gilad answered the seeker
   rule, unmatch and lister-card questions; wrote the split + shared contract (MARKET-PLAN §7, 2cf09bc); four spec
   sessions wrote and verified the specs; the verifier forced three splits (d→d+j, e→e+k, h→h+i), so 11 specs;
