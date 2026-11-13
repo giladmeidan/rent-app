@@ -635,3 +635,58 @@ def test_redis_down_is_json_503(client: TestClient, outbox: Outbox) -> None:
         assert response.status_code == 503
         assert response.json() == {"detail": "redis unavailable"}
     assert outbox.messages == []
+
+
+# --- spec 0010b: no role gates -----------------------------------------------------------------
+
+_ROLE_READ = re.compile(r"\b(user|seeker|owner|me)\.role\b")
+# (file under `app/`, stripped line): the only role reads left. Apartments keep the roles (POST
+# /listings, apply); the room-privacy rule reads it beside the profile (decision 13).
+_ROLE_READS_ALLOWED = {
+    ("routers/listings.py", 'if body.listing_type == "apartment" and user.role != "owner":'),
+    (
+        "services/applications.py",
+        'if gate.listing_type == "apartment" and seeker.role != "seeker":',
+    ),
+    (
+        "routers/search.py",
+        'return user is not None and (user.role == "seeker" or profile_user_id is not None)',
+    ),
+}
+
+
+def _dependency_names(dependant: Any) -> Iterator[str]:
+    for dependency in dependant.dependencies:
+        if dependency.call is not None:
+            yield getattr(dependency.call, "__name__", repr(dependency.call))
+        yield from _dependency_names(dependency)
+
+
+def test_ac9_role_read_only_for_apartments() -> None:
+    from fastapi.routing import APIRoute
+
+    import app.auth
+    from app.main import create_app
+    from tests.test_flatmates import _api_routes
+
+    assert not hasattr(app.auth, "current_owner")
+    assert not hasattr(app.auth, "current_seeker")
+    routes: list[APIRoute] = list(_api_routes(create_app().routes))
+    assert len(routes) > 30
+    gated = {
+        route.path: names
+        for route in routes
+        if (names := set(_dependency_names(route.dependant))) & {"current_owner", "current_seeker"}
+    }
+    assert gated == {}
+    assert any("current_user" in set(_dependency_names(r.dependant)) for r in routes)
+
+    app_dir = Path(app.auth.__file__).resolve().parent
+    reads = {
+        (path.relative_to(app_dir).as_posix(), line.strip())
+        for path in sorted(app_dir.rglob("*.py"))
+        if path.relative_to(app_dir).as_posix() != "services/auth.py"
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if _ROLE_READ.search(line)
+    }
+    assert reads == _ROLE_READS_ALLOWED

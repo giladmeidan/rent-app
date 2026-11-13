@@ -404,10 +404,11 @@ def test_ac4_people_errors(
     anonymous = _people(client, room)
     assert anonymous.status_code == 401
     assert anonymous.json() == {"detail": "unauthenticated"}
-    forbidden = _people(seeker, room)
-    assert forbidden.status_code == 403
-    assert forbidden.json() == {"detail": "owner_only"}
     unknown = _people(owner, uuid.uuid4())
+    # Spec 0010b: no role gate; a seeker on another's room is the unknown id's 404.
+    not_theirs = _people(seeker, room)
+    assert not_theirs.status_code == 404
+    assert not_theirs.content == unknown.content
     for listing_id in (other_room, apartment):
         response = _people(owner, listing_id)
         assert response.status_code == 404, listing_id
@@ -522,7 +523,7 @@ def test_ac6_lister_like_unlike(
     stranger = signup(client, outbox, "o2@example.com", "owner")
     assert _like_person(stranger, room, person).json() == NOT_FOUND
     assert _unlike_person(stranger, room, person).status_code == 404
-    assert _like_person(a, room, person).json() == {"detail": "owner_only"}
+    assert _like_person(a, room, person).json() == NOT_FOUND  # spec 0010b: no role gate
 
     _set_visible(db_engine, a_id, False)
     hidden = _like_person(owner, room, person)
@@ -957,7 +958,8 @@ def test_ac10_seeker_like_gates_and_limit(
     assert _pair_count(db_engine) == 0
 
     assert _like_room(client, room).status_code == 401
-    assert _like_room(owner, room).json() == {"detail": "seeker_only"}
+    # Spec 0010b: no role gate; the owner's own room, and they have no profile (checked first).
+    assert _like_room(owner, room).json() == {"detail": "seeker_profile_required"}
     assert _like_room(woman, "not-a-uuid").status_code == 422
 
     for n in range(people_service.LIKE_RATE_LIMIT_HOUR):
@@ -974,7 +976,53 @@ def test_ac10_seeker_like_gates_and_limit(
     assert gone.content == b""
     assert woman.delete(f"/listings/{apartment}/like").status_code == 204
     assert client.delete(f"/listings/{room}/like").status_code == 401
-    assert owner.delete(f"/listings/{room}/like").json() == {"detail": "seeker_only"}
+    assert owner.delete(f"/listings/{room}/like").status_code == 204  # spec 0010b: any account
+
+
+def test_ac4_room_likes_and_browse_for_any_account(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    """Spec 0010b AC4: a seeker lists a room, browses its people and likes one; an owner with a
+    room section likes someone else's room and sees it in `/me/likes`; an account that is not the
+    room's lister gets the unknown id's 404; nobody likes their own room."""
+    lister = signup(client, outbox, "lister@example.com", "seeker")
+    room = _room(db_engine, _user_id(lister), gush_dan)
+    _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
+
+    page = _page(lister, room)
+    assert _names(page) == ["Avi"]
+    person = page["items"][0]["id"]
+    assert _ok(_like_person(lister, room, person)) == {"liked": True, "application_id": None}
+
+    owner = signup(client, outbox, "owner@example.com", "owner")
+    stranger = signup(client, outbox, "stranger@example.com", "seeker")
+    unknown = _people(owner, uuid.uuid4())
+    for caller in (owner, stranger):
+        for response in (
+            _people(caller, room),
+            _like_person(caller, room, person),
+            _unlike_person(caller, room, person),
+        ):
+            assert response.status_code == 404
+            assert response.content == unknown.content
+    assert _card(lister, room, "Avi")["liked_by_me"] is True
+
+    # An owner likes someone else's room once their profile has a room section.
+    assert _like_room(owner, room).json() == {"detail": "seeker_profile_required"}
+    _visible(db_engine, _user_id(owner), gush_dan, people_visible=False)
+    assert _ok(_like_room(owner, room)) == {"liked": True, "application_id": None}
+    assert _likes(owner) == {"liked_me": [], "mine": [room]}
+    assert _ok(lister.get(f"/listings/{room}"))["like"] is None  # their own room
+
+    # Their own room is the unknown id's 404 (the profile is checked first).
+    own_room = _room(db_engine, _user_id(owner), gush_dan)
+    own = _like_room(owner, own_room)
+    assert own.status_code == 404
+    assert own.json() == NOT_FOUND
+    no_profile = signup(client, outbox, "bare@example.com", "owner")
+    bare_room = _room(db_engine, _user_id(no_profile), gush_dan)
+    assert _like_room(no_profile, bare_room).json() == {"detail": "seeker_profile_required"}
+    assert _pair(db_engine, own_room, _user_id(owner)) is None
 
 
 def test_ac11_like_shares_card_with_that_room_only(

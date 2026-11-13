@@ -26,9 +26,14 @@ Rules (PRODUCT.md "Applications"):
   applied to, apartments and rooms alike (spec 0007b), and never the caller's own nor one whose
   flat the caller is a flatmate of (spec 0008d, treated like the owner): all are
   `ListingNotFoundError` (a 404, the same as an unknown id).
-- Applying needs a housing profile (spec 0006a, PRODUCT.md "Matching"): checked **first**, so a
-  seeker without one gets `ProfileRequiredError` and the call costs no rate-limit budget. Only
-  applying is gated: existing applications are listed and withdrawn as before.
+- Roles (spec 0010b, PRODUCT.md "Account roles"): any account applies to a room; a public
+  **apartment** takes applications from role seekers only (`SeekerOnlyError`). It is checked
+  **first**, in the profile check's statement, and costs no rate-limit budget. A non-public or
+  unknown id has no type there and falls through to the counted 404, so the 403 never tells a
+  hidden listing from an unknown one. "Seeker" below means the applicant, whatever their role.
+- Applying needs a housing profile (spec 0006a, PRODUCT.md "Matching"): checked right after the
+  role, so a seeker without one gets `ProfileRequiredError` and the call costs no rate-limit
+  budget. Only applying is gated: existing applications are listed and withdrawn as before.
 - The room gate (spec 0007b, PRODUCT.md "Rooms"), on a public listing that is not the caller's
   own: a room whose `matching.fit.room_fit` is false is `RoomGenderMismatchError`; a women- or
   men-only room for a seeker without a room section is `SeekerGenderRequiredError`. It runs
@@ -96,6 +101,11 @@ ALLOWED_FROM: dict[ApplicantStatus, frozenset[str]] = {
 
 class AlreadyAppliedError(Exception):
     """The seeker already has a submitted, shortlisted or declined application to the listing."""
+
+
+class SeekerOnlyError(Exception):
+    """An apartment, and the caller is not a seeker (spec 0010b: apartments keep the roles; a room
+    takes applications from any account)."""
 
 
 class ProfileRequiredError(Exception):
@@ -176,14 +186,16 @@ def _upsert(
 def apply(
     db: Session, r: RedisClient, seeker: User, listing_id: uuid.UUID, message: str
 ) -> tuple[Application, Listing]:
-    """Apply `seeker` to a public listing with `message` (already validated by `ApplicationIn`).
-    Raises, in this order, `ProfileRequiredError` (nothing counted), `RoomGenderMismatchError` /
-    `SeekerGenderRequiredError` (the room gate, nothing counted), `RateLimitedError`,
-    `ListingNotFoundError` (unknown, not public or the caller's own) or `AlreadyAppliedError`.
-    One SELECT for the profile check (with whether the seeker is a flatmate of the listing, 0008d),
-    one for the listing (with the match and room fit, taking `FOR KEY SHARE` on it, so a
-    concurrent flatmate join is waited for), both before the limiter; after it, the pair's likes
-    are consumed and the application written (`_upsert`, which re-tests the membership). Commits."""
+    """Apply `seeker` (any account, spec 0010b) to a public listing with `message` (already
+    validated by `ApplicationIn`). Raises, in this order, `SeekerOnlyError` (a public apartment
+    and the caller's role is not seeker; nothing counted), `ProfileRequiredError` (nothing
+    counted), `RoomGenderMismatchError` / `SeekerGenderRequiredError` (the room gate, nothing
+    counted), `RateLimitedError`, `ListingNotFoundError` (unknown, not public or the caller's own)
+    or `AlreadyAppliedError`. One SELECT for the role and profile checks (with whether the seeker
+    is a flatmate of the listing, 0008d, and the type of the listing if it is public, 0010b), one
+    for the listing (with the match and room fit, taking `FOR KEY SHARE` on it, so a concurrent
+    flatmate join is waited for), both before the limiter; after it, the pair's likes are consumed
+    and the application written (`_upsert`, which re-tests the membership). Commits."""
     # Imported here: `services/people.py` imports this module.
     from app.services.people import flatmate_of
 
@@ -191,8 +203,19 @@ def apply(
         select(
             exists().where(SeekerProfile.user_id == seeker.id).label("has_profile"),
             flatmate_of(listing_id, seeker.id).label("flatmate"),
+            # Public listings only (0010b): a paused, expired or inactive-area id reads NULL, like
+            # an unknown one, and falls through to the counted 404 below.
+            search_service._public_listings()
+            .with_only_columns(Listing.listing_type)
+            .where(Listing.id == listing_id)
+            .scalar_subquery()
+            .label("listing_type"),
         )
     ).one()
+    # Apartments keep the roles (spec 0010b): before the profile check, so an owner without a
+    # profile gets the same 403.
+    if gate.listing_type == "apartment" and seeker.role != "seeker":
+        raise SeekerOnlyError
     if not gate.has_profile:
         raise ProfileRequiredError
     listing: Listing | None

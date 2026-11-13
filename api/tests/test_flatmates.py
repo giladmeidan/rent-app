@@ -303,9 +303,10 @@ def test_ac1_invite_create_rotate_disable(
             assert response.status_code == 404, (method, path)
             assert response.json() == NOT_FOUND
     for method in ("post", "delete"):
+        # Spec 0010b: no role gate; a seeker on another's room is the unknown id's 404.
         response = getattr(seeker, method)(f"/listings/{room}/flatmate-invite")
-        assert response.status_code == 403
-        assert response.json() == {"detail": "owner_only"}
+        assert response.status_code == 404
+        assert response.json() == NOT_FOUND
         assert getattr(client, method)(f"/listings/{room}/flatmate-invite").status_code == 401
     assert (
         _scalar(db_engine, "SELECT flatmate_invite_hash FROM listings WHERE id = :id", id=room)
@@ -315,6 +316,45 @@ def test_ac1_invite_create_rotate_disable(
     # Any listing status: a paused room gets a link too.
     paused = _room(db_engine, owner_id, gush_dan, status="paused")
     assert len(_invite(owner, paused)) == TOKEN_LENGTH
+
+
+def test_ac5b_any_lister_manages_flatmates(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    """Spec 0010b AC5: a seeker who lists a room creates, rotates and disables its invite link,
+    and lists and removes its flatmates; another account gets the unknown id's 404 on each."""
+    lister = _seeker(client, outbox, db_engine, gush_dan, "lister@example.com", "Noa")
+    room = _room(db_engine, _user_id(lister), gush_dan)
+    mate = _seeker(client, outbox, db_engine, gush_dan, "f@example.com", "Fay")
+
+    first = _invite(lister, room)
+    token = _invite(lister, room)  # rotated: the first link stops working
+    assert token != first
+    assert _preview(mate, first).json() == NOT_FOUND
+    assert _ok(_join(mate, token)) == {"listing_id": room}
+    (membership,) = _flatmates(lister, room)
+    assert membership["display_name"] == "Fay"
+
+    for other in (
+        signup(client, outbox, "o2@example.com", "owner"),
+        signup(client, outbox, "s2@example.com", "seeker"),
+    ):
+        for response in (
+            other.post(f"/listings/{room}/flatmate-invite"),
+            other.delete(f"/listings/{room}/flatmate-invite"),
+            other.get(f"/listings/{room}/flatmates"),
+            other.delete(f"/listings/{room}/flatmates/{membership['id']}"),
+        ):
+            assert response.status_code == 404
+            assert response.json() == NOT_FOUND
+    assert [f["display_name"] for f in _flatmates(lister, room)] == ["Fay"]
+    assert _my_listing(lister, room)["flatmate_invite_active"] is True
+
+    assert _ok(lister.delete(f"/listings/{room}/flatmates/{membership['id']}"), 204) is None
+    assert _flatmates(lister, room) == []
+    _invite(lister, room)
+    assert _ok(lister.delete(f"/listings/{room}/flatmate-invite"), 204) is None
+    assert _my_listing(lister, room)["flatmate_invite_active"] is False
 
 
 def _api_routes(routes: Iterable[Any]) -> Iterator[APIRoute]:
@@ -713,8 +753,9 @@ def test_ac6_remove_and_rejoin(
         assert response.status_code == 404, path
         assert response.json() == NOT_FOUND
     assert other_owner.get(f"/listings/{room}/flatmates").status_code == 404
-    assert seeker.get(f"/listings/{room}/flatmates").json() == {"detail": "owner_only"}
-    assert seeker.delete(f"/listings/{room}/flatmates/{membership['id']}").status_code == 403
+    # Spec 0010b: no role gate; a seeker on another's listing is the unknown id's 404.
+    assert seeker.get(f"/listings/{room}/flatmates").json() == NOT_FOUND
+    assert seeker.delete(f"/listings/{room}/flatmates/{membership['id']}").status_code == 404
     assert client.get(f"/listings/{room}/flatmates").status_code == 401
     assert len(_flatmates(owner, second_room)) == 1
     assert len(_flatmates(owner, room)) == 2

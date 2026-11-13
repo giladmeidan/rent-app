@@ -1,8 +1,9 @@
 """Flatmates endpoints (spec 0008d). Thin: all logic is in `services/flatmates.py`.
 
-Owner side: the four `/listings/{listing_id}/flatmate...` endpoints require an **owner** session
-(`current_owner`): 401 `unauthenticated`, 403 `owner_only` for a seeker. Another owner's listing is
-a 404 `not_found`, the same as an unknown id; so is an apartment when creating a link.
+Lister side: the four `/listings/{listing_id}/flatmate...` endpoints require a session of any role
+(`current_user`, spec 0010b): 401 `unauthenticated`. They act on the caller's own listing only:
+another account's listing is a 404 `not_found`, the same as an unknown id; so is an apartment when
+creating a link.
 
 Invitee and flatmate side: preview, join and `/me/flats` require a session of any role
 (`current_user`): 401 `unauthenticated`. The invite token travels **only in a POST body**, never in
@@ -16,11 +17,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
-from app.auth import current_owner, current_user
+from app.auth import current_user
 from app.db import get_session
 from app.models import Listing, User
 from app.redis_client import RedisClient, get_redis
-from app.routers.applications import _OWNER_ONLY
 from app.schemas.application import ApplicationListingOut
 from app.schemas.error import ErrorOut
 from app.schemas.flatmates import (
@@ -39,7 +39,6 @@ from app.services.rate_limit import RateLimitedError
 router = APIRouter(tags=["flatmates"])
 
 DbDep = Annotated[Session, Depends(get_session)]
-OwnerDep = Annotated[User, Depends(current_owner)]
 UserDep = Annotated[User, Depends(current_user)]
 RedisDep = Annotated[RedisClient, Depends(get_redis)]
 
@@ -48,7 +47,7 @@ _SESSION: dict[int | str, dict[str, Any]] = {
     503: {"model": ErrorOut, "description": "The database or Redis is unreachable"},
 }
 _NOT_OWN: dict[int | str, dict[str, Any]] = {
-    404: {"model": ErrorOut, "description": "not_found: unknown id or another owner's"},
+    404: {"model": ErrorOut, "description": "not_found: unknown id or another account's"},
 }
 _TOKEN_ERRORS: dict[int | str, dict[str, Any]] = {
     **_SESSION,
@@ -76,20 +75,18 @@ def _rate_limited(exc: RateLimitedError) -> HTTPException:
     status_code=201,
     response_model=InviteOut,
     responses={
-        **_OWNER_ONLY,
+        **_SESSION,
         404: {
             "model": ErrorOut,
-            "description": "not_found: unknown id, another owner's, or an apartment",
+            "description": "not_found: unknown id, another account's, or an apartment",
         },
     },
 )
-def create_invite(
-    listing_id: uuid.UUID, owner: OwnerDep, db: DbDep, response: Response
-) -> InviteOut:
+def create_invite(listing_id: uuid.UUID, me: UserDep, db: DbDep, response: Response) -> InviteOut:
     """Create the room's invite link, or rotate it (the old link stops working). The token is
     returned only here and can never be read again; the response is never cached."""
     try:
-        token = flatmates_service.create_invite(db, owner, listing_id)
+        token = flatmates_service.create_invite(db, me, listing_id)
     except ListingNotFoundError:
         raise _not_found() from None
     response.headers["Cache-Control"] = "no-store"
@@ -99,11 +96,11 @@ def create_invite(
 @router.delete(
     "/listings/{listing_id}/flatmate-invite",
     status_code=204,
-    responses={**_OWNER_ONLY, **_NOT_OWN},
+    responses={**_SESSION, **_NOT_OWN},
 )
-def disable_invite(listing_id: uuid.UUID, owner: OwnerDep, db: DbDep) -> Response:
+def disable_invite(listing_id: uuid.UUID, me: UserDep, db: DbDep) -> Response:
     try:
-        flatmates_service.disable_invite(db, owner, listing_id)
+        flatmates_service.disable_invite(db, me, listing_id)
     except ListingNotFoundError:
         raise _not_found() from None
     return Response(status_code=204)
@@ -169,11 +166,11 @@ def join(body: InviteTokenIn, me: UserDep, db: DbDep, r: RedisDep) -> JoinOut:
 @router.get(
     "/listings/{listing_id}/flatmates",
     response_model=list[FlatmateOut],
-    responses={**_OWNER_ONLY, **_NOT_OWN},
+    responses={**_SESSION, **_NOT_OWN},
 )
-def list_flatmates(listing_id: uuid.UUID, owner: OwnerDep, db: DbDep) -> list[FlatmateOut]:
+def list_flatmates(listing_id: uuid.UUID, me: UserDep, db: DbDep) -> list[FlatmateOut]:
     try:
-        rows = flatmates_service.list_flatmates(db, owner, listing_id)
+        rows = flatmates_service.list_flatmates(db, me, listing_id)
     except ListingNotFoundError:
         raise _not_found() from None
     return [
@@ -186,21 +183,21 @@ def list_flatmates(listing_id: uuid.UUID, owner: OwnerDep, db: DbDep) -> list[Fl
     "/listings/{listing_id}/flatmates/{flatmate_id}",
     status_code=204,
     responses={
-        **_OWNER_ONLY,
+        **_SESSION,
         404: {
             "model": ErrorOut,
-            "description": "not_found: unknown listing or membership, another owner's listing, "
+            "description": "not_found: unknown listing or membership, another account's listing, "
             "or another listing's membership",
         },
     },
 )
 def remove_flatmate(
-    listing_id: uuid.UUID, flatmate_id: uuid.UUID, owner: OwnerDep, db: DbDep
+    listing_id: uuid.UUID, flatmate_id: uuid.UUID, me: UserDep, db: DbDep
 ) -> Response:
     """Remove a flatmate: their chat access ends at once, and the invite link is turned off (they
     may still hold it); make a new one for the others."""
     try:
-        flatmates_service.remove_flatmate(db, owner, listing_id, flatmate_id)
+        flatmates_service.remove_flatmate(db, me, listing_id, flatmate_id)
     except ListingNotFoundError:
         raise _not_found() from None
     return Response(status_code=204)

@@ -252,7 +252,7 @@ def test_ac1_reapply_counts_as_new_and_ties_order_by_id(
     assert [i["id"] for i in _applicants(owner, listing, sort="newest").json()] == expected
 
 
-def test_ac2_applicants_are_owner_only(
+def test_ac2_applicants_are_the_listers_only(
     client: TestClient,
     outbox: Outbox,
     owner: TestClient,
@@ -267,21 +267,56 @@ def test_ac2_applicants_are_owner_only(
     assert anonymous.status_code == 401
     assert anonymous.json() == {"detail": "unauthenticated"}
 
+    # Spec 0010b: no role gate; a seeker on another's listing is the unknown id's 404.
     seeker = signup(client, outbox, "s@example.com", "seeker")
-    forbidden = _applicants(seeker, listing_a)
-    assert forbidden.status_code == 403
-    assert forbidden.json() == {"detail": "owner_only"}
-
     other = signup(client, outbox, "o2@example.com", "owner")
-    foreign = _applicants(other, listing_a)
     unknown = _applicants(other, uuid.uuid4())
-    assert foreign.status_code == 404
-    assert unknown.status_code == 404
-    assert foreign.json() == unknown.json() == NOT_FOUND
-    assert foreign.content == unknown.content
+    for caller in (seeker, other):
+        foreign = _applicants(caller, listing_a)
+        assert foreign.status_code == 404
+        assert unknown.status_code == 404
+        assert foreign.json() == unknown.json() == NOT_FOUND
+        assert foreign.content == unknown.content
 
     malformed = _applicants(owner, "not-a-uuid")
     assert malformed.status_code == 422
+
+
+def test_ac3_any_account_runs_its_room_inbox(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    """Spec 0010b AC3: a seeker lists their room's applicants and shortlists one, which opens the
+    chat; another account gets the unknown id's 404 on both."""
+    lister = signup(client, outbox, "lister@example.com", "seeker")
+    room = make_listing(
+        db_engine, _user_id(lister), gush_dan, listing_type="room", flatmates_count=2
+    )
+    applicant = signup(client, outbox, "applicant@example.com", "seeker")
+    application = make_application(db_engine, room, _user_id(applicant))
+    before = _all_rows(db_engine)
+
+    for other in (
+        signup(client, outbox, "seeker2@example.com", "seeker"),
+        signup(client, outbox, "owner2@example.com", "owner"),
+    ):
+        listed = _applicants(other, room)
+        changed = _set_status(other, room, application, {"status": "shortlisted"})
+        for response in (listed, changed):
+            assert response.status_code == 404
+            assert response.json() == NOT_FOUND
+    assert _all_rows(db_engine) == before
+
+    listed = _applicants(lister, room)
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [str(application)]
+    shortlisted = _set_status(lister, room, application, {"status": "shortlisted"})
+    assert shortlisted.status_code == 200, shortlisted.text
+    assert shortlisted.json()["status"] == "shortlisted"
+    # The chat opens for both sides.
+    for caller in (lister, applicant):
+        chats = caller.get("/me/conversations")
+        assert chats.status_code == 200
+        assert [chat["id"] for chat in chats.json()] == [str(application)]
 
 
 def test_ac3_applicants_is_three_statements(
@@ -468,10 +503,11 @@ def test_ac5_patch_ownership_and_validation(
     anonymous = _set_status(client, listing_a, p, shortlist)
     assert anonymous.status_code == 401
     assert anonymous.json() == {"detail": "unauthenticated"}
+    # Spec 0010b: no role gate; a seeker on another's listing is the unknown id's 404.
     seeker = signup(client, outbox, "s@example.com", "seeker")
-    forbidden = _set_status(seeker, listing_a, p, shortlist)
-    assert forbidden.status_code == 403
-    assert forbidden.json() == {"detail": "owner_only"}
+    not_theirs = _set_status(seeker, listing_a, p, shortlist)
+    assert not_theirs.status_code == 404
+    assert not_theirs.content == not_found[0].content
 
     assert _all_rows(db_engine) == before
 

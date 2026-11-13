@@ -1,4 +1,7 @@
-"""FastAPI dependencies for the current user (spec 0001a). Cookie `rent_session`."""
+"""FastAPI dependencies for the current user (spec 0001a). Cookie `rent_session`.
+
+There is no role dependency (spec 0010b): inside the market any account acts, and the role is read
+only where apartments need it (`POST /listings` and `services/applications.py::apply`)."""
 
 from typing import Annotated
 
@@ -24,20 +27,4 @@ def current_user(user: Annotated[User | None, Depends(optional_user)]) -> User:
     """The logged-in user; 401 `unauthenticated` otherwise."""
     if user is None:
         raise HTTPException(status_code=401, detail="unauthenticated")
-    return user
-
-
-def current_owner(user: Annotated[User, Depends(current_user)]) -> User:
-    """The logged-in owner; 401 `unauthenticated` without a session, 403 `owner_only` for a
-    seeker (spec 0002a)."""
-    if user.role != "owner":
-        raise HTTPException(status_code=403, detail="owner_only")
-    return user
-
-
-def current_seeker(user: Annotated[User, Depends(current_user)]) -> User:
-    """The logged-in seeker; 401 `unauthenticated` without a session, 403 `seeker_only` for an
-    owner (spec 0004a)."""
-    if user.role != "seeker":
-        raise HTTPException(status_code=403, detail="seeker_only")
     return user

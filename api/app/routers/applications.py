@@ -1,21 +1,23 @@
 """Applications endpoints. Thin: all logic is in `services/applications.py`.
 
-Seeker side (spec 0004a): the three seeker endpoints require a **seeker** session
-(`current_seeker`): 401 `unauthenticated` without one, 403 `seeker_only` for an owner. A listing
-that is not public, or is the caller's own, is a 404 `not_found` (the same body as an unknown id);
-so is another seeker's application. Rooms are open to applications (spec 0007b); a room that does
-not fit the seeker is a 409 `room_gender_mismatch`, a women- or men-only room for a seeker without a
-room section a 409 `seeker_gender_required`.
+Every endpoint requires a session of any role (`current_user`, spec 0010b): 401 `unauthenticated`
+without one. The role is read once, by `apply`: an **apartment** takes applications from seekers
+only (403 `seeker_only`, not counted); a room is open to any account.
 
-Owner side (spec 0004c): the two inbox endpoints require an **owner** session (`current_owner`):
-401 `unauthenticated`, 403 `owner_only` for a seeker. Another owner's listing, an application of a
-different listing and a withdrawn application are a 404 `not_found`, identical to an unknown id.
+Applicant side (spec 0004a): a listing that is not public, or is the caller's own, is a 404
+`not_found` (the same body as an unknown id); so is another account's application. Rooms are open to
+applications (spec 0007b); a room that does not fit the applicant is a 409 `room_gender_mismatch`,
+a women- or men-only room for an applicant without a room section a 409 `seeker_gender_required`.
+
+Lister side (spec 0004c): the two inbox endpoints act on the caller's own listings only. Another
+account's listing, an application of a different listing and a withdrawn application are a 404
+`not_found`, identical to an unknown id.
 
 Each applicant carries their current `match` and housing `profile` (spec 0006c); the list is sorted
 by match by default (`?sort=newest` for the 0004c order), applicants without a profile last. A room
-application also carries the seeker's room section as `room` (spec 0007c: gender, age, answers).
+application also carries the applicant's room section as `room` (spec 0007c: gender, age, answers).
 
-Every successful owner status change and seeker withdraw publishes a `status` chat event to the
+Every successful lister status change and applicant withdraw publishes a `status` chat event to the
 chat's members after the commit (spec 0005c): it may open or close the application's chat. On a
 room application that includes the listing's flatmates (`chat.event_members`, spec 0008d)."""
 
@@ -27,7 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
-from app.auth import current_owner, current_seeker
+from app.auth import current_user
 from app.db import get_session
 from app.matching.score import explain_row
 from app.models import Application, Listing, User
@@ -52,20 +54,11 @@ from app.services.rate_limit import RateLimitedError
 router = APIRouter(tags=["applications"])
 
 DbDep = Annotated[Session, Depends(get_session)]
-SeekerDep = Annotated[User, Depends(current_seeker)]
-OwnerDep = Annotated[User, Depends(current_owner)]
+UserDep = Annotated[User, Depends(current_user)]
 
-_SEEKER_ONLY: dict[int | str, dict[str, Any]] = {
+_SESSION: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorOut, "description": "unauthenticated"},
-    403: {"model": ErrorOut, "description": "seeker_only"},
     503: {"model": ErrorOut, "description": "The database or Redis is unreachable"},
-}
-
-
-_OWNER_ONLY: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorOut, "description": "unauthenticated"},
-    403: {"model": ErrorOut, "description": "owner_only: the caller is a seeker"},
-    503: {"model": ErrorOut, "description": "The database is unreachable"},
 }
 
 
@@ -86,7 +79,11 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
     status_code=201,
     response_model=MyApplicationOut,
     responses={
-        **_SEEKER_ONLY,
+        **_SESSION,
+        403: {
+            "model": ErrorOut,
+            "description": "seeker_only: an apartment by a non-seeker (not counted)",
+        },
         404: {
             "model": ErrorOut,
             "description": "not_found: unknown id, a paused, expired or inactive-area listing, "
@@ -106,12 +103,14 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
 def apply(
     listing_id: uuid.UUID,
     body: ApplicationIn,
-    seeker: SeekerDep,
+    user: UserDep,
     db: DbDep,
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> MyApplicationOut:
     try:
-        application, listing = applications_service.apply(db, r, seeker, listing_id, body.message)
+        application, listing = applications_service.apply(db, r, user, listing_id, body.message)
+    except applications_service.SeekerOnlyError:
+        raise HTTPException(status_code=403, detail="seeker_only") from None
     except applications_service.ProfileRequiredError:
         raise HTTPException(status_code=409, detail="seeker_profile_required") from None
     except applications_service.SeekerGenderRequiredError:
@@ -129,11 +128,11 @@ def apply(
     return _out(application, listing)
 
 
-@router.get("/me/applications", response_model=list[MyApplicationOut], responses=_SEEKER_ONLY)
-def my_applications(seeker: SeekerDep, db: DbDep) -> list[MyApplicationOut]:
+@router.get("/me/applications", response_model=list[MyApplicationOut], responses=_SESSION)
+def my_applications(user: UserDep, db: DbDep) -> list[MyApplicationOut]:
     return [
         _out(application, listing)
-        for application, listing in applications_service.list_my_applications(db, seeker)
+        for application, listing in applications_service.list_my_applications(db, user)
     ]
 
 
@@ -141,19 +140,19 @@ def my_applications(seeker: SeekerDep, db: DbDep) -> list[MyApplicationOut]:
     "/me/applications/{application_id}/withdraw",
     response_model=MyApplicationOut,
     responses={
-        **_SEEKER_ONLY,
-        404: {"model": ErrorOut, "description": "not_found: unknown id, or another seeker's"},
+        **_SESSION,
+        404: {"model": ErrorOut, "description": "not_found: unknown id, or another account's"},
         409: {"model": ErrorOut, "description": "not_withdrawable: already withdrawn, or declined"},
     },
 )
 def withdraw(
     application_id: uuid.UUID,
-    seeker: SeekerDep,
+    user: UserDep,
     db: DbDep,
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> MyApplicationOut:
     try:
-        application, listing = applications_service.withdraw(db, seeker, application_id)
+        application, listing = applications_service.withdraw(db, user, application_id)
     except applications_service.ApplicationNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.NotWithdrawableError:
@@ -209,18 +208,18 @@ def _applicant_out(row: Row[Any]) -> ApplicantOut:
     "/listings/{listing_id}/applications",
     response_model=list[ApplicantOut],
     responses={
-        **_OWNER_ONLY,
-        404: {"model": ErrorOut, "description": "not_found: unknown id or another owner's"},
+        **_SESSION,
+        404: {"model": ErrorOut, "description": "not_found: unknown id or another account's"},
     },
 )
 def list_applicants(
     listing_id: uuid.UUID,
-    owner: OwnerDep,
+    user: UserDep,
     db: DbDep,
     sort: Annotated[ApplicantSort, Query()] = "match",
 ) -> list[ApplicantOut]:
     try:
-        rows = applications_service.list_applicants(db, owner, listing_id, sort)
+        rows = applications_service.list_applicants(db, user, listing_id, sort)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     return [_applicant_out(row) for row in rows]
@@ -230,10 +229,10 @@ def list_applicants(
     "/listings/{listing_id}/applications/{application_id}",
     response_model=ApplicantOut,
     responses={
-        **_OWNER_ONLY,
+        **_SESSION,
         404: {
             "model": ErrorOut,
-            "description": "not_found: unknown listing or application, another owner's listing, "
+            "description": "not_found: unknown listing or application, another account's listing, "
             "an application of a different listing, or a withdrawn one",
         },
         409: {"model": ErrorOut, "description": "invalid_transition: the applicant is declined"},
@@ -243,19 +242,19 @@ def set_applicant_status(
     listing_id: uuid.UUID,
     application_id: uuid.UUID,
     body: ApplicantStatusIn,
-    owner: OwnerDep,
+    user: UserDep,
     db: DbDep,
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> ApplicantOut:
     try:
         row = applications_service.set_applicant_status(
-            db, owner, listing_id, application_id, body.status
+            db, user, listing_id, application_id, body.status
         )
     except (ListingNotFoundError, applications_service.ApplicationNotFoundError):
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.InvalidTransitionError:
         raise HTTPException(status_code=409, detail="invalid_transition") from None
     application: Application = row.Application
-    members = chat_service.event_members(db, application, owner.id)
+    members = chat_service.event_members(db, application, user.id)
     chat_events.publish(r, members, application.id, "status")
     return _applicant_out(row)

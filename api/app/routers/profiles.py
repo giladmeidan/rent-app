@@ -1,15 +1,15 @@
 """Seeker profile endpoints (spec 0006a). Thin: all logic is in `services/profiles.py`.
 
-Both require a **seeker** session (`current_seeker`): 401 `unauthenticated` without one, 403
-`seeker_only` for an owner. Neither takes a user id: a seeker reads and writes only their own
-profile (NF2)."""
+Both require a session of any role (`current_user`, spec 0010b: "a person looking" is this profile,
+open to every account): 401 `unauthenticated` without one. Neither takes a user id: an account
+reads and writes only its own profile (NF2)."""
 
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth import current_seeker
+from app.auth import current_user
 from app.db import get_session
 from app.models import User
 from app.schemas.error import ErrorOut
@@ -20,11 +20,10 @@ from app.services.listings import UnknownAreaError
 router = APIRouter(tags=["profiles"])
 
 DbDep = Annotated[Session, Depends(get_session)]
-SeekerDep = Annotated[User, Depends(current_seeker)]
+UserDep = Annotated[User, Depends(current_user)]
 
-_SEEKER_ONLY: dict[int | str, dict[str, Any]] = {
+_SESSION: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorOut, "description": "unauthenticated"},
-    403: {"model": ErrorOut, "description": "seeker_only: the caller is an owner"},
     503: {"model": ErrorOut, "description": "The database is unreachable"},
 }
 
@@ -33,12 +32,12 @@ _SEEKER_ONLY: dict[int | str, dict[str, Any]] = {
     "/me/profile",
     response_model=SeekerProfileOut,
     responses={
-        **_SEEKER_ONLY,
+        **_SESSION,
         404: {"model": ErrorOut, "description": "seeker_profile_not_found: no profile yet"},
     },
 )
-def get_profile(seeker: SeekerDep, db: DbDep) -> SeekerProfileOut:
-    profile = profiles_service.get_profile(db, seeker.id)
+def get_profile(user: UserDep, db: DbDep) -> SeekerProfileOut:
+    profile = profiles_service.get_profile(db, user.id)
     if profile is None:
         raise HTTPException(status_code=404, detail="seeker_profile_not_found")
     return SeekerProfileOut.model_validate(profile)
@@ -48,13 +47,13 @@ def get_profile(seeker: SeekerDep, db: DbDep) -> SeekerProfileOut:
     "/me/profile",
     response_model=SeekerProfileOut,
     responses={
-        **_SEEKER_ONLY,
+        **_SESSION,
         422: {"description": "unknown_area, or a malformed body (list `detail`)"},
     },
 )
-def put_profile(body: SeekerProfileIn, seeker: SeekerDep, db: DbDep) -> SeekerProfileOut:
+def put_profile(body: SeekerProfileIn, user: UserDep, db: DbDep) -> SeekerProfileOut:
     try:
-        profile = profiles_service.put_profile(db, seeker, body)
+        profile = profiles_service.put_profile(db, user, body)
     except UnknownAreaError:
         raise HTTPException(status_code=422, detail="unknown_area") from None
     return SeekerProfileOut.model_validate(profile)

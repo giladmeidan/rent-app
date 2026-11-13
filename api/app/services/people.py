@@ -513,9 +513,9 @@ def unlike_room(db: Session, seeker: User, listing_id: uuid.UUID) -> None:
 
 def like_state(db: Session, seeker_id: uuid.UUID, listing_id: uuid.UUID) -> LikeStateOut | None:
     """The likes between `seeker_id` and room `listing_id` for the listing page (the caller checks
-    that the caller is a seeker and the listing a room): None when the seeker has a non-withdrawn
-    application to it (the page shows that instead), else both sides' like, false without a pair.
-    One one-row SELECT."""
+    that the caller is signed in, of any role (spec 0010b), and the listing a room not their own):
+    None when the seeker has a non-withdrawn application to it (the page shows that instead), else
+    both sides' like, false without a pair. One one-row SELECT."""
     pair = and_(RoomPair.listing_id == listing_id, RoomPair.seeker_id == seeker_id)
     row = db.execute(
         select(

@@ -1,15 +1,17 @@
 """People browse and likes endpoints (spec 0008a). Thin: all logic is in `services/people.py` (and
 `services/search.py::liked_rooms`).
 
-Lister side: the three `/listings/{listing_id}/people...` endpoints require an **owner** session
-(`current_owner`): 401 `unauthenticated`, 403 `owner_only` for a seeker. `listing_id` must be the
-caller's own room listing: unknown, another owner's and an apartment are one 404 `not_found`; a
-paused, expired or inactive-area one is a 409 `listing_not_live` (browse and like; an unlike works
-whatever the state). A person is the pair's id, never a user id.
+Every endpoint requires a session of any role (`current_user`, spec 0010b): 401 `unauthenticated`
+without one. There are no roles in the market: the services' ownership checks decide.
 
-Seeker side: `PUT` / `DELETE /listings/{listing_id}/like` and `GET /me/likes` require a **seeker**
-session (`current_seeker`): 401, 403 `seeker_only`. The `DELETE` is always a 204, so it reveals
-nothing about the listing.
+Lister side: the three `/listings/{listing_id}/people...` endpoints act on the caller's own room
+listing: unknown, another account's and an apartment are one 404 `not_found`; a paused, expired or
+inactive-area one is a 409 `listing_not_live` (browse and like; an unlike works whatever the
+state). A person is the pair's id, never a user id.
+
+Room-liker side: `PUT` / `DELETE /listings/{listing_id}/like` and `GET /me/likes`: the caller's own
+room, an apartment and a flat they live in are a 404 on the `PUT`. The `DELETE` is always a 204,
+so it reveals nothing about the listing.
 
 Both like `PUT`s share one rate limit per user (`LIKE_RATE_LIMIT_HOUR` / `_DAY`, a 429 with
 `Retry-After`), counted only once the listing gate passed. A like that makes the pair mutual
@@ -24,12 +26,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
-from app.auth import current_owner, current_seeker
+from app.auth import current_user
 from app.db import get_session
 from app.matching.score import explain_row
 from app.models import User
 from app.redis_client import RedisClient, get_redis
-from app.routers.applications import _OWNER_ONLY, _SEEKER_ONLY
+from app.routers.applications import _SESSION
 from app.schemas.error import ErrorOut
 from app.schemas.people import (
     LikedRoomOut,
@@ -55,14 +57,13 @@ from app.services.rate_limit import RateLimitedError
 router = APIRouter(tags=["people"])
 
 DbDep = Annotated[Session, Depends(get_session)]
-OwnerDep = Annotated[User, Depends(current_owner)]
-SeekerDep = Annotated[User, Depends(current_seeker)]
+UserDep = Annotated[User, Depends(current_user)]
 RedisDep = Annotated[RedisClient, Depends(get_redis)]
 
 _OWN_ROOM_404: dict[int | str, dict[str, Any]] = {
     404: {
         "model": ErrorOut,
-        "description": "not_found: unknown id, another owner's listing, or an apartment",
+        "description": "not_found: unknown id, another account's listing, or an apartment",
     },
 }
 _RATE_LIMITED: dict[int | str, dict[str, Any]] = {
@@ -97,7 +98,7 @@ def _person_out(row: Row[Any]) -> PersonOut:
     "/listings/{listing_id}/people",
     response_model=PeoplePageOut,
     responses={
-        **_OWNER_ONLY,
+        **_SESSION,
         **_OWN_ROOM_404,
         409: {
             "model": ErrorOut,
@@ -108,11 +109,11 @@ def _person_out(row: Row[Any]) -> PersonOut:
 def list_people(
     listing_id: uuid.UUID,
     params: Annotated[PeopleParams, Query()],
-    owner: OwnerDep,
+    user: UserDep,
     db: DbDep,
 ) -> PeoplePageOut:
     try:
-        rows, total = people_service.list_people(db, owner, listing_id, params.offset)
+        rows, total = people_service.list_people(db, user, listing_id, params.offset)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except people_service.ListingNotLiveError:
@@ -124,10 +125,10 @@ def list_people(
     "/listings/{listing_id}/people/{person_id}/like",
     response_model=LikeOut,
     responses={
-        **_OWNER_ONLY,
+        **_SESSION,
         404: {
             "model": ErrorOut,
-            "description": "not_found: unknown listing or person, another owner's listing, an "
+            "description": "not_found: unknown listing or person, another account's listing, an "
             "apartment, a person of another listing, or one who is not a candidate any more",
         },
         409: {
@@ -141,12 +142,12 @@ def list_people(
 def like_person(
     listing_id: uuid.UUID,
     person_id: uuid.UUID,
-    owner: OwnerDep,
+    user: UserDep,
     db: DbDep,
     r: RedisDep,
 ) -> LikeOut:
     try:
-        application, seeker_id = people_service.like_person(db, r, owner, listing_id, person_id)
+        application, seeker_id = people_service.like_person(db, r, user, listing_id, person_id)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except people_service.ListingNotLiveError:
@@ -157,7 +158,7 @@ def like_person(
         raise HTTPException(status_code=409, detail="already_applied") from None
     if application is None:
         return LikeOut(liked=True, application_id=None)
-    members = chat_service.event_members(db, application, owner.id)
+    members = chat_service.event_members(db, application, user.id)
     chat_events.publish(r, members, application.id, "status")
     return LikeOut(liked=True, application_id=application.id)
 
@@ -166,18 +167,18 @@ def like_person(
     "/listings/{listing_id}/people/{person_id}/like",
     status_code=204,
     responses={
-        **_OWNER_ONLY,
+        **_SESSION,
         404: {
             "model": ErrorOut,
-            "description": "not_found: unknown person, or one of another listing or owner",
+            "description": "not_found: unknown person, or one of another listing or account",
         },
     },
 )
 def unlike_person(
-    listing_id: uuid.UUID, person_id: uuid.UUID, owner: OwnerDep, db: DbDep
+    listing_id: uuid.UUID, person_id: uuid.UUID, user: UserDep, db: DbDep
 ) -> Response:
     try:
-        people_service.unlike_person(db, owner, listing_id, person_id)
+        people_service.unlike_person(db, user, listing_id, person_id)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     return Response(status_code=204)
@@ -187,7 +188,7 @@ def unlike_person(
     "/listings/{listing_id}/like",
     response_model=LikeOut,
     responses={
-        **_SEEKER_ONLY,
+        **_SESSION,
         404: {
             "model": ErrorOut,
             "description": "not_found: unknown id, a paused, expired or inactive-area listing, "
@@ -202,9 +203,9 @@ def unlike_person(
         **_RATE_LIMITED,
     },
 )
-def like_room(listing_id: uuid.UUID, seeker: SeekerDep, db: DbDep, r: RedisDep) -> LikeOut:
+def like_room(listing_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) -> LikeOut:
     try:
-        application, listing = people_service.like_room(db, r, seeker, listing_id)
+        application, listing = people_service.like_room(db, r, user, listing_id)
     except ProfileRequiredError:
         raise HTTPException(status_code=409, detail="seeker_profile_required") from None
     except people_service.RoomSectionRequiredError:
@@ -224,20 +225,20 @@ def like_room(listing_id: uuid.UUID, seeker: SeekerDep, db: DbDep, r: RedisDep) 
     return LikeOut(liked=True, application_id=application.id)
 
 
-@router.delete("/listings/{listing_id}/like", status_code=204, responses=_SEEKER_ONLY)
-def unlike_room(listing_id: uuid.UUID, seeker: SeekerDep, db: DbDep) -> Response:
-    people_service.unlike_room(db, seeker, listing_id)
+@router.delete("/listings/{listing_id}/like", status_code=204, responses=_SESSION)
+def unlike_room(listing_id: uuid.UUID, user: UserDep, db: DbDep) -> Response:
+    people_service.unlike_room(db, user, listing_id)
     return Response(status_code=204)
 
 
-@router.get("/me/likes", response_model=MyLikesOut, responses=_SEEKER_ONLY)
-def my_likes(seeker: SeekerDep, db: DbDep) -> MyLikesOut:
+@router.get("/me/likes", response_model=MyLikesOut, responses=_SESSION)
+def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
     liked_me: list[LikedRoomOut] = []
     mine: list[LikedRoomOut] = []
-    for listing, match, lister_liked_at, seeker_liked_at in search_service.liked_rooms(
-        db, seeker.id
-    ):
-        room = ListingPublic.from_listing(listing, seeker=True, match=match)
+    for listing, match, lister_liked_at, seeker_liked_at in search_service.liked_rooms(db, user.id):
+        # `seeker=True`: only a profile holder has likes (decision 13). Never the caller's own room
+        # (`liked_rooms` excludes it), so `is_mine` is false.
+        room = ListingPublic.from_listing(listing, seeker=True, match=match, is_mine=False)
         if seeker_liked_at is not None:
             mine.append(LikedRoomOut(listing=room, liked_at=seeker_liked_at))
         elif lister_liked_at is not None:

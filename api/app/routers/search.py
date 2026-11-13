@@ -2,17 +2,20 @@
 page's view counter and applicant count (spec 0004a) are in `services/applications.py`.
 
 Both are **public** (`optional_user`): without a cookie no session query runs; an unknown or expired
-cookie is a visitor, never a 401. A cookie adds the caller's match score (spec 0006b): a seeker with
-a profile gets `match` on every listing (and search defaults to `sort=match`), everyone else
-`match: null`. For a seeker whose profile has a room section, a cookie also removes the rooms that
-do not fit them from search, the map and `total`, and sets the listing page's `room_fit` (spec
-0007b). That is why every 200 says `Vary: Cookie` and a 200 to a request carrying the session
-cookie is `Cache-Control: private` (0006b): the body may differ per caller. The cookie also
-decides whether a room's flatmates' ages and questionnaire answers are shown: only a signed-in
-seeker gets them, everyone else `[]` and `{}` (`ListingPublic.from_listing`, Gilad (b),
-2026-11-11). Search returns one type: `listing_type` omitted means `apartment` (spec 0010a), the
-market asks for `room`; the listing page serves both. A listing that is not public is a 404
-`not_found`, the same body as an unknown id. A seeker on a room also gets the listing page's `like`
+cookie is a visitor, never a 401. A cookie adds the caller's match score (spec 0006b): any account
+with a profile (spec 0010b: whatever its role) gets `match` on every listing but its own (and search
+defaults to `sort=match`), everyone else `match: null`. For an account whose profile has a room
+section, a cookie also removes the rooms that do not fit them from search, the map and `total`
+(never their own room, spec 0010b), and sets the listing page's `room_fit` (spec 0007b). That is
+why every 200 says `Vary: Cookie` and a 200 to a request carrying the session cookie is
+`Cache-Control: private` (0006b): the body may differ per caller. The cookie also decides whether a
+room's flatmates' ages and questionnaire answers are shown: only a signed-in seeker gets them, and
+a seeker is a role seeker **or** any account with a profile (`_sees_room_privacy`, decision 13,
+Gilad 2026-11-13); everyone else gets `[]` and `{}` (`ListingPublic.from_listing`). Every listing
+says `is_mine`, whether the caller owns it (spec 0010b; false for a visitor). Search returns one
+type: `listing_type` omitted means `apartment` (spec 0010a), the market asks for `room`; the
+listing page serves both. A listing that is not public is a 404 `not_found`, the same body as an
+unknown id. Any signed-in account on a room it does not own also gets the listing page's `like`
 (spec 0008a), the likes between them and the room."""
 
 import uuid
@@ -23,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import COOKIE_NAME, optional_user
 from app.db import get_session
-from app.models import User
+from app.models import Listing, User
 from app.schemas.error import ErrorOut
 from app.schemas.search import ListingDetail, ListingPublic, ListingSearchOut, SearchParams
 from app.services import applications as applications_service
@@ -42,16 +45,24 @@ _DB_DOWN: dict[int | str, dict[str, Any]] = {
 }
 
 
-def _is_seeker(user: User | None) -> bool:
-    """The caller is signed in as a seeker (no statement: `optional_user` loaded the user)."""
-    return user is not None and user.role == "seeker"
-
-
 def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
-    """The caller's id when they are a seeker with a housing profile (one PK lookup), else None."""
-    if user is None or not _is_seeker(user):
+    """The caller's id when they have a housing profile, whatever their role (spec 0010b; one PK
+    lookup), else None (a visitor runs no statement)."""
+    if user is None:
         return None
     return user.id if profiles_service.has_profile(db, user.id) else None
+
+
+def _sees_room_privacy(user: User | None, profile_user_id: uuid.UUID | None) -> bool:
+    """Whether the caller gets a room's flatmate ages and answers (decision 13, Gilad 2026-11-13):
+    signed in with the seeker role, or with a profile (`profile_user_id`, already read). No
+    statement."""
+    return user is not None and (user.role == "seeker" or profile_user_id is not None)
+
+
+def _is_mine(user: User | None, listing: Listing) -> bool:
+    """The caller owns `listing` (spec 0010b; no statement)."""
+    return user is not None and listing.owner_id == user.id
 
 
 def _private_if_cookie(request: Request, response: Response) -> None:
@@ -71,11 +82,18 @@ def search_listings(
     request: Request,
     response: Response,
 ) -> ListingSearchOut:
-    page, total, sort = search_service.search_listings(db, params, _profile_user_id(db, user))
-    seeker = _is_seeker(user)
-    items = [
-        ListingPublic.from_listing(listing, seeker=seeker, match=match) for listing, match in page
-    ]
+    profile_user_id = _profile_user_id(db, user)
+    page, total, sort = search_service.search_listings(db, params, profile_user_id)
+    seeker = _sees_room_privacy(user, profile_user_id)
+    items: list[ListingPublic] = []
+    for listing, match in page:
+        mine = _is_mine(user, listing)
+        # No score on your own listing; a `match` sort still orders it by its score.
+        items.append(
+            ListingPublic.from_listing(
+                listing, seeker=seeker, match=None if mine else match, is_mine=mine
+            )
+        )
     _private_if_cookie(request, response)
     return ListingSearchOut(items=items, total=total, sort=sort)
 
@@ -99,30 +117,28 @@ def get_listing(
     response: Response,
 ) -> ListingDetail:
     """A public listing with its applicant count, the caller's match, room fit and like state
-    (spec 0008a: a seeker on a room, not their own); counts one view (`listings.view_count`). A
-    404 counts nothing."""
+    (spec 0008a; 0010b: any signed-in account on a room, not their own) and `is_mine`; counts one
+    view (`listings.view_count`). A 404 counts nothing."""
+    profile_user_id = _profile_user_id(db, user)
     try:
         listing, match, room_fit = search_service.get_public_listing_with_match(
-            db, listing_id, _profile_user_id(db, user)
+            db, listing_id, profile_user_id
         )
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     count = applications_service.record_view(db, listing.id)
+    mine = _is_mine(user, listing)
     like = None
-    if (
-        user is not None
-        and _is_seeker(user)
-        and listing.listing_type == "room"
-        and listing.owner_id != user.id
-    ):
+    if user is not None and listing.listing_type == "room" and listing.owner_id != user.id:
         like = people_service.like_state(db, user.id, listing.id)
     _private_if_cookie(request, response)
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
         listing,
-        seeker=_is_seeker(user),
-        match=match,
+        seeker=_sees_room_privacy(user, profile_user_id),
+        match=None if mine else match,
         applicant_count=count,
         room_fit=room_fit,
         like=like,
+        is_mine=mine,
     )
