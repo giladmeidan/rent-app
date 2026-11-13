@@ -15,8 +15,11 @@ runs on the two-thread photo pool (`encode_upload`), the store and the database 
 threadpool: the event loop is never blocked.
 Nothing here logs or echoes the body; a 413 / 415 logs the route and the error code only.
 
-Delete and reorder are not rate-limited. Spec 0010j adds its person upload route to this router the
-same way, counting against the same limit."""
+Delete and reorder are not rate-limited.
+
+Person photo (spec 0010j): `PUT /me/photo` and `DELETE /me/photo`, any role. The upload runs exactly
+as a listing upload (no listing check), counting against the same limit and the same one upload
+slot; it returns the caller's `UserOut`. The delete is not rate-limited and is idempotent."""
 
 import logging
 import uuid
@@ -33,6 +36,8 @@ from app.auth import current_user
 from app.db import get_session
 from app.models import User
 from app.redis_client import RedisClient, get_redis
+from app.routers.auth import user_out
+from app.schemas.auth import UserOut
 from app.schemas.error import ErrorOut
 from app.schemas.photo import PhotoOrderIn, PhotoOut
 from app.services import photos as photos_service
@@ -263,3 +268,37 @@ def reorder_listing_photos(
     except photos_service.PhotoOrderMismatchError:
         raise HTTPException(status_code=422, detail="photo_order_mismatch") from None
     return photos_service.photos_out(photos)
+
+
+@router.put(
+    "/me/photo",
+    response_model=UserOut,
+    openapi_extra=IMAGE_BODY,
+    responses={**_AUTH, **UPLOAD_ERRORS},
+)
+async def set_my_photo(
+    request: Request, user: UserDep, db: DbDep, r: RedisDep, store: StoreDep
+) -> UserOut:
+    """Set the caller's person photo (the raw image as the body), replacing any previous one."""
+    try:
+        async with upload_body(request, db, r, user) as data:
+            encoded = await photos_service.encode_upload(data)
+            await run_in_threadpool(photos_service.set_user_photo, db, store, user, encoded)
+    except RateLimitedError as exc:
+        raise _rate_limited(exc) from None
+    except photos_service.PhotoTooLargeError:
+        _log_refused(request, "photo_too_large")
+        raise _too_large() from None
+    except photos_service.UnsupportedImageError:
+        _log_refused(request, "unsupported_image")
+        raise _unsupported() from None
+    except PhotoStoreUnavailable:
+        raise _storage_unavailable() from None
+    return user_out(user)
+
+
+@router.delete("/me/photo", status_code=204, responses=_AUTH)
+def clear_my_photo(user: UserDep, db: DbDep, store: StoreDep) -> Response:
+    """Remove the caller's person photo (also a 204 without one)."""
+    photos_service.clear_user_photo(db, store, user)
+    return Response(status_code=204)
