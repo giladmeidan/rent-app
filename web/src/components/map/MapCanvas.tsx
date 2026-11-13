@@ -107,9 +107,9 @@ const pinButton = `flex min-h-[44px] min-w-[44px] cursor-pointer items-center ju
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Outline icons (brand rule), 24 px grid drawn at 14 px with a 1.75 px stroke.
 const MARK_PATHS: Record<'applied' | 'liked', string> = {
-  applied: 'M20 6 9 17l-5-5',
-  liked:
-    'M12 20.5S3.5 15.5 3.5 9.25A4.75 4.75 0 0 1 12 6.4a4.75 4.75 0 0 1 8.5 2.85C20.5 15.5 12 20.5 12 20.5z',
+  // The app's own glyphs: Badge's check and the likes tab's heart.
+  applied: 'M5 12l5 5 9-10',
+  liked: 'M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z',
 };
 
 /** The mark's icon: decorative, the pin's name says it. */
@@ -237,6 +237,10 @@ export function MapCanvas({
         return;
       }
       const created = map;
+      // Markers' z-indices order them among themselves only: without its own stacking context the
+      // canvas container lets a pin with z >= 3 paint over the zoom buttons and attribution (z 2)
+      // and the "updating" pill.
+      created.getCanvasContainer().style.isolation = 'isolate';
 
       // The wrapper's region is the map's only landmark (spec 0009t). MapLibre makes the canvas a
       // second `region` named "map": an interactive canvas becomes an `application` (not a
