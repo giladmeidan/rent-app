@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { focusRing } from '../focusRing';
 import { Skeleton } from '../Skeleton';
 import { MAP_MAX_ZOOM, MAP_STYLE_URL, mapLocale, type Bbox } from './config';
+import { keepClearPan } from './keepClear';
 
 type MapLibre = typeof import('maplibre-gl');
 
@@ -451,15 +452,8 @@ export function MapCanvas({
     const card = regionRef.current?.querySelector('[data-map-card]');
     const pin = markersRef.current.get(selectedId)?.button;
     if (card == null || pin === undefined) return;
-    const pinBox = pin.getBoundingClientRect();
-    const cardBox = card.getBoundingClientRect();
-    const margin = 8;
-    const meet =
-      pinBox.bottom + margin > cardBox.top &&
-      pinBox.top - margin < cardBox.bottom &&
-      pinBox.right + margin > cardBox.left &&
-      pinBox.left - margin < cardBox.right;
-    if (meet) current.map.panBy([0, pinBox.bottom - cardBox.top + margin]);
+    const pan = keepClearPan(pin.getBoundingClientRect(), card.getBoundingClientRect());
+    if (pan !== null) current.map.panBy([0, pan]);
   }, [selectedId, loaded]);
 
   return (
