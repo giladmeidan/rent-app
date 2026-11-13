@@ -3,15 +3,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { writeDraft } from '../../../app/drafts';
 import he from '../../../locales/he.json';
-import { empty, json, mockApi, renderRoutes, testQueryClient } from '../../auth/__tests__/harness';
+import { useMyApplications } from '../../applications/useMyApplications';
+import {
+  empty,
+  json,
+  mockApi,
+  noa,
+  renderRoutes,
+  testQueryClient,
+} from '../../auth/__tests__/harness';
 import { AuthMenu } from '../../auth/AuthMenu';
 import type { ListingOut } from '../api';
+import { markSeen, readSeen } from '../seen';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { listing, owner } from './fixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
+
+/** A seeker call whose 401 runs `clearSession`. */
+function SeekerCall() {
+  useMyApplications();
+  return null;
+}
 
 describe('AuthMenu for an owner', () => {
   it('header_link_and_logout_drops_my_listings', async () => {
@@ -48,5 +64,39 @@ describe('AuthMenu for an owner', () => {
     );
     expect(keys.filter((k) => k?.startsWith('rent-app:draft:'))).toEqual([]);
     expect(window.sessionStorage.getItem('unrelated')).toBe('kept');
+  });
+
+  it('ac9_logout_clears_seen_not_401', async () => {
+    // An explicit logout forgets the listings opened on this device.
+    markSeen('L1');
+    markSeen('L2');
+    mockApi({ 'GET /me': [json(owner)], 'POST /auth/logout': [empty(204)] });
+    let view = renderRoutes('/', <AuthMenu />, testQueryClient());
+    fireEvent.click(await screen.findByRole('button', { name: he.header.logout }));
+    expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
+    expect(readSeen()).toEqual(new Set());
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A seeker call answering 401 (`clearSession`): the person is forgotten, the seen ids remain.
+    markSeen('L1');
+    markSeen('L2');
+    const api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json({ detail: 'unauthenticated' }, 401)],
+    });
+    view = renderRoutes(
+      '/',
+      <>
+        <AuthMenu />
+        <SeekerCall />
+      </>,
+      testQueryClient(),
+    );
+    expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
+    expect(api.calls('GET /me/applications').length).toBeGreaterThan(0);
+    expect(api.calls('POST /auth/logout')).toHaveLength(0);
+    expect(readSeen()).toEqual(new Set(['L1', 'L2']));
+    view.unmount();
   });
 });

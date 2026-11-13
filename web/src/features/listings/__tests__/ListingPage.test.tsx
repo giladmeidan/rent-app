@@ -23,6 +23,7 @@ import { application } from '../../applications/__tests__/fixtures';
 import { CONVERSATIONS_KEY } from '../../chat/useConversations';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import { ListingPage } from '../ListingPage';
+import { readSeen } from '../seen';
 
 vi.mock(
   '../../../components/map/MapCanvas',
@@ -31,7 +32,9 @@ vi.mock(
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   resetFakeMap();
+  window.localStorage.clear();
 });
 
 const render = (id: string, client?: QueryClient) =>
@@ -1162,6 +1165,49 @@ describe('ListingPage', () => {
       expect(screen.queryByText(he.likes.likedYouLine)).toBeNull();
       expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
     });
+  });
+
+  it('ac8_opening_marks_seen', async () => {
+    // A visitor opens a listing: its id is stored as seen on this device.
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json(katznelson)],
+    });
+    let view = render(katznelson.id);
+    await screen.findByRole('heading', { level: 1, name: cardTitle(i18n.t, katznelson) });
+    await vi.waitFor(() => {
+      expect(readSeen()).toEqual(new Set([katznelson.id]));
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A 404 listing is not stored.
+    const missing = crypto.randomUUID();
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${missing}`]: [json({ detail: 'listing_not_found' }, 404)],
+    });
+    view = render(missing);
+    await screen.findByRole('heading', { level: 1, name: he.listing.notFound });
+    expect(readSeen().has(missing)).toBe(false);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A throwing localStorage leaves the page working.
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('SecurityError');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('QuotaExceededError');
+    });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json(katznelson)],
+    });
+    render(katznelson.id);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: cardTitle(i18n.t, katznelson) }),
+    ).toBeVisible();
   });
 
   it('ac11_not_found_links_to_search', async () => {
