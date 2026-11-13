@@ -318,6 +318,8 @@ describe('ListingCard', () => {
     expect(within(card).getAllByRole('link')).toHaveLength(1);
     expect(within(card).getByRole('link')).toHaveAttribute('href', `/listings/${room.id}`);
     expect(screen.getByTestId('listing-facts').textContent?.startsWith('2 שותפים')).toBe(true);
+    // The title's first line can reach the close button's 44 px box: its end is kept clear too.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveClass('pe-12');
     expect(screen.getByRole('heading', { level: 2 }).nextElementSibling).toBe(
       screen.getByTestId('listing-facts'),
     );

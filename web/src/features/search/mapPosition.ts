@@ -35,7 +35,8 @@ function parseCenter(value: string | null): [lng: number, lat: number] | undefin
 
 /**
  * The map position a URL holds. `z` is clamped to the map's zoom range and used only with a valid
- * `c` (a centre without a zoom uses zoom 14); `pin` is any UUID, with no version check.
+ * `c` (a centre without a zoom uses zoom 14); `pin` is any UUID, with no version check, in lower
+ * case.
  */
 export function parseMapPosition(params: URLSearchParams): MapPosition {
   const position: MapPosition = {};
@@ -49,7 +50,8 @@ export function parseMapPosition(params: URLSearchParams): MapPosition {
         : CENTRE_ZOOM;
   }
   const pin = params.get('pin');
-  if (pin !== null && UUID.test(pin)) position.pin = pin;
+  // The API's ids are lower-case: an upper-case pin would never match its listing.
+  if (pin !== null && UUID.test(pin)) position.pin = pin.toLowerCase();
   return position;
 }
 

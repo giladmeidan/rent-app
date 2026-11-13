@@ -40,28 +40,32 @@ const titleClass = 'break-words text-body font-medium';
 function Title({
   as,
   id,
+  clearEnd = false,
   children,
 }: {
   as: 'h2' | 'h3' | 'p';
   id: string | undefined;
+  /** Keeps the inline end clear of a close button at the card's top end (compact). */
+  clearEnd?: boolean;
   children: ReactNode;
 }) {
+  const className = clearEnd ? `${titleClass} pe-12` : titleClass;
   if (as === 'h3') {
     return (
-      <h3 id={id} className={titleClass}>
+      <h3 id={id} className={className}>
         {children}
       </h3>
     );
   }
   if (as === 'p') {
     return (
-      <p id={id} className={titleClass}>
+      <p id={id} className={className}>
         {children}
       </p>
     );
   }
   return (
-    <h2 id={id} className={titleClass}>
+    <h2 id={id} className={className}>
       {children}
     </h2>
   );
@@ -206,7 +210,7 @@ export function ListingCard({
             </p>
             {badge}
           </div>
-          <Title as={titleAs} id={titleId}>
+          <Title as={titleAs} id={titleId} clearEnd={compact}>
             {to === undefined ? (
               title
             ) : (

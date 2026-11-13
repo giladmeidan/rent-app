@@ -218,7 +218,8 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
   /** The close button and Escape: the card or the list, whichever is open. */
   const closePanel = () => {
     if (listOpen) {
-      pendingFocus.current = { to: 'marker', id: samePlace?.[0] ?? '' };
+      // The list's first member still in the results: its bubble is the one that opened the list.
+      pendingFocus.current = { to: 'marker', id: listed[0]?.id ?? '' };
       setSamePlace(undefined);
     } else if (selected !== undefined) {
       pendingFocus.current = { to: 'marker', id: selected.id };
@@ -271,7 +272,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
         selected !== undefined && card(selected)
       )}
       <Button
-        variant="ghost"
+        variant="secondary"
         size="sm"
         aria-label={t('search.map.closeCard')}
         onClick={closePanel}

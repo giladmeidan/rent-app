@@ -20,7 +20,8 @@ describe('mapPosition', () => {
     });
     // The comma as URLSearchParams serialises it, an upper-case UUID and a test fixture's id.
     expect(parse('c=32.0712%2C34.8123&z=13.5')).toEqual({ center: [34.8123, 32.0712], zoom: 13.5 });
-    expect(parse(`pin=${UUID.toUpperCase()}`)).toEqual({ pin: UUID.toUpperCase() });
+    // An upper-case pin is kept in lower case, as the API's ids are.
+    expect(parse(`pin=${UUID.toUpperCase()}`)).toEqual({ pin: UUID });
     expect(parse(`pin=${FIXTURE_ID}`)).toEqual({ pin: FIXTURE_ID });
     // A centre without a zoom uses zoom 14; an invalid zoom is the same as none.
     expect(parse('c=32.0712,34.8123')).toEqual({ center: [34.8123, 32.0712], zoom: 14 });
@@ -83,5 +84,26 @@ describe('mapPosition', () => {
     // Only the map params are picked, as they are.
     expect(pickMapParams(before).toString()).toBe(`c=32.1%2C34.8&z=12&pin=${UUID}`);
     expect(pickMapParams(new URLSearchParams('price_max=8000&view=map')).toString()).toBe('');
+  });
+
+  it('ac1_parse_hostile_input', () => {
+    const C = 'c=32.0712,34.8123';
+    const centre = [34.8123, 32.0712];
+    // A leading space, a `+` (a space in a query) or an explicit plus sign: dropped.
+    expect(parse('c=%2032.0712,34.8123')).toEqual({});
+    expect(parse('c=+32,34')).toEqual({});
+    expect(parse('c=%2B32.0712,34.8123')).toEqual({});
+    // `-0` is a number: clamped to the least zoom.
+    expect(parse(`${C}&z=-0`)).toEqual({ center: centre, zoom: 8 });
+    // Not numbers: the centre's default zoom.
+    expect(parse(`${C}&z=NaN`)).toEqual({ center: centre, zoom: 14 });
+    expect(parse(`${C}&z=Infinity`)).toEqual({ center: centre, zoom: 14 });
+    expect(parse(`${C}&z=1e1`)).toEqual({ center: centre, zoom: 14 });
+    // A duplicate `c`: the first wins.
+    expect(parse(`${C}&c=32.1,34.9&z=12`)).toEqual({ center: centre, zoom: 12 });
+    // A UUID in braces, or followed by a newline: dropped.
+    expect(parse(`pin=%7B${UUID}%7D`)).toEqual({});
+    expect(parse(`pin=${UUID}%0A`)).toEqual({});
+    expect(parse(`pin=%0A${UUID}`)).toEqual({});
   });
 });

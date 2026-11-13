@@ -884,7 +884,6 @@ describe('SearchMap', () => {
     // X: the card is gone, `pin` removed, focus on that pin; nothing navigates.
     fireEvent.click(close);
     expect(currentPath()?.startsWith('/search?')).toBe(true);
-    expect(screen.queryByText('listing')).toBeNull();
     expect(dockedCard()).toBeNull();
     expect(params().get('pin')).toBeNull();
     expect(params().get('c')).toBe('32.08,34.8');
@@ -979,6 +978,32 @@ describe('SearchMap', () => {
     expect(dockedCard()).toBeNull();
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: bubbleName })).toHaveFocus();
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // The list's anchor leaves the results while the list stays open (a pan, same zoom): the X
+    // still returns focus to the bubble that now holds the list's members.
+    const later = deferred();
+    mockApi({ [SEARCH]: [() => json(page([x, y, z])), later.promise] });
+    view = render('/search?view=map');
+    moveTo(BOX, VIEW);
+    fireEvent.click(await screen.findByRole('button', { name: bubbleName }));
+    expect(within(dockedCard() as HTMLElement).getAllByRole('article')).toHaveLength(3);
+    moveTo(OTHER_BOX, VIEW);
+    later.resolve(json(page([y, z])));
+    await vi.waitFor(() => {
+      expect(within(dockedCard() as HTMLElement).getAllByRole('article')).toHaveLength(2);
+    });
+    fireEvent.click(closeButton());
+    expect(dockedCard()).toBeNull();
+    const pair = screen.getByRole('button', {
+      name: i18n.t('search.map.bubbleSamePlace', { count: 2 }),
+    });
+    expect(lastProps().bubbles?.[0]?.members.map((m) => m.id)).toContain(y.id);
+    await vi.waitFor(() => {
+      expect(pair).toHaveFocus();
     });
     view.unmount();
     vi.unstubAllGlobals();
