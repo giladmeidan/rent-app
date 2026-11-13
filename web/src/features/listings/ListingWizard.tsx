@@ -250,7 +250,8 @@ export function ListingWizard({ listing, initialType }: Props) {
   function update(patch: Partial<ListingForm>) {
     const next = { ...form, ...patch };
     setForm(next);
-    // A new type starts the preferences' validation over: the room block has not been "attempted" yet.
+    // A new type starts the preferences' validation over: the room block has not been
+    // "attempted" yet.
     if (patch.listing_type !== undefined && patch.listing_type !== form.listing_type) {
       setPreferencesAttempted(false);
     }

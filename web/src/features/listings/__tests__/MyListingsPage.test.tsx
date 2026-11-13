@@ -733,7 +733,7 @@ describe('MyListingsPage', () => {
       await act(async () => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
       });
-      expect(screen.getByRole('alert')).toBeEmptyDOMElement();
+      expect(screen.queryByRole('alert')).toBeNull();
       view.unmount();
       vi.unstubAllGlobals();
     }

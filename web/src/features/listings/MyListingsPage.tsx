@@ -324,10 +324,12 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
           </Card>
         )}
       </div>
-      {/* Under the published or saved line: the photos that did not upload. Mounted like them. */}
-      <p role="alert" className={failed > 0 ? 'text-body-sm font-semibold text-danger' : 'sr-only'}>
-        {failed > 0 ? t('listings.mine.photosFailed', { count: failed }) : ''}
-      </p>
+      {/* Under the published or saved line: the photos that did not upload (spec 0010e). */}
+      {failed > 0 && (
+        <p role="alert" className="text-body-sm font-semibold text-danger">
+          {t('listings.mine.photosFailed', { count: failed })}
+        </p>
+      )}
       {body}
     </>
   );
