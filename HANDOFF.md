@@ -63,6 +63,22 @@ Last updated:
 - Main checkout `../rent-app` (at 287c8d5, behind `main`) still holds someone's uncommitted demo-seed work
   (`Makefile`, `api/scripts/seed_demo.py`) and runs the shared `rent-app` stack. Leave it to its owner.
 
+### Map improvements, Slice 9c (2026-11-13: specs verified, not pushed, not built)
+- Gilad put a session in charge of the map job; it wrote and verified four web-only specs (one verifier round
+  each, all findings applied, `status: verified`): `0009v` pins (tiers, liked/applied/seen marks, clusters, ends
+  the axe pin exemption) → `0009w` card inside the map + `c`/`z`/`pin` in the URL + fit to results → `0009x` side
+  map from 1280 px ∥ `0009y` locate me, places list, empty-area action, honest 300 m listing circle + map link.
+- Also: research moved to `specs/map-research/`, Gilad's seven map decisions as PRODUCT.md row "Map".
+- **Where:** commit `4f4bcae` on local branch `docs/map-planning` in worktree `../rent-app-map-spec` (on top of
+  `2cf09bc`). **Not on `main` yet**: push it (`git push origin docs/map-planning:main` after a fetch/rebase;
+  docs-only, no CI). The untracked `research/map-improvements/` copy in the main checkout can then be deleted.
+- The market session also works in `../rent-app-map-spec` (it committed `2cf09bc` and has untracked `0010*`
+  specs there); commit only your own files.
+- Queue (Gilad to decide; recommended): the map chain as the third build slot beside the market waves.
+  `/market` reuses `SearchPage` (list + map), so the map work carries over. Shared files with `0010a`/`0010e`:
+  `SearchPage.tsx`, `ListingPage.tsx`, `ListingCard.tsx`, `useLogout.ts`, `he.json`; second to merge merges main.
+  Merges need main's CI e2e green (the ac9 timeout).
+
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
 - [x] Slice 0–1: 0000a Foundations API (#1), 0001a Auth API (#2), 0000b Foundations web (#3), 0001b Auth web (#4).
@@ -130,6 +146,9 @@ Last updated:
 8. Housekeeping: archive the finished Slice 9 build sessions; remove the planning worktrees
    `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`; update `CLAUDE.md` Speed rule 7
    to "no local e2e" (it still says local `make e2e` is optional).
+
+9. **Map job (Slice 9c):** push `4f4bcae` to `main`, then build `0009v` → `0009w` → `0009x` ∥ `0009y` per Gilad's
+   queue answer (see Current Work → "Map improvements").
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
