@@ -6,6 +6,8 @@ type Props = {
   onChange: (checked: boolean) => void;
   /** Id of a hint that describes the switch. */
   describedBy?: string;
+  /** Natively disabled (e.g. while its change is being saved), and drawn faded. */
+  disabled?: boolean;
 };
 
 /**
@@ -14,13 +16,15 @@ type Props = {
  * CreateListing.dc.html: the thumb sits at the inline start when off and slides to the inline end,
  * on an accent track, when on.
  */
-export function Switch({ label, checked, onChange, describedBy }: Props) {
+export function Switch({ label, checked, onChange, describedBy, disabled = false }: Props) {
   const id = useId();
   return (
-    <div className="flex items-stretch justify-between gap-3 px-4">
+    <div
+      className={`flex items-stretch justify-between gap-3 px-4${disabled ? ' opacity-60' : ''}`}
+    >
       <label
         htmlFor={id}
-        className="flex min-h-tap min-w-0 flex-1 cursor-pointer items-center py-3.5 text-body text-ink"
+        className={`flex min-h-tap min-w-0 flex-1 items-center py-3.5 text-body text-ink ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
       >
         {label}
       </label>
@@ -31,8 +35,9 @@ export function Switch({ label, checked, onChange, describedBy }: Props) {
           role="switch"
           aria-describedby={describedBy}
           checked={checked}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
-          className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
+          className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0 disabled:cursor-not-allowed"
         />
         <span
           aria-hidden="true"

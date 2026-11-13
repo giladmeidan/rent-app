@@ -374,16 +374,18 @@ def make_flatmate(
     user_id: uuid.UUID,
     *,
     joined_at: dt.datetime | None = None,
+    shown: bool = False,
 ) -> uuid.UUID:
     """Insert a `listing_flatmates` row directly (spec 0008d) and return its id (the membership's
-    id). `joined_at` defaults to now(). Bypasses the invite link, the limiter and the join rules."""
+    id). `joined_at` defaults to now(); `shown` (spec 0010f) to false. Bypasses the invite link,
+    the limiter and the join rules."""
     with engine.begin() as conn:
         flatmate_id: uuid.UUID = conn.execute(
             text(
-                "INSERT INTO listing_flatmates (listing_id, user_id, joined_at)"
-                " VALUES (:listing_id, :user_id, coalesce(:joined_at, now())) RETURNING id"
+                "INSERT INTO listing_flatmates (listing_id, user_id, joined_at, shown)"
+                " VALUES (:listing_id, :user_id, coalesce(:joined_at, now()), :shown) RETURNING id"
             ),
-            {"listing_id": listing_id, "user_id": user_id, "joined_at": joined_at},
+            {"listing_id": listing_id, "user_id": user_id, "joined_at": joined_at, "shown": shown},
         ).scalar_one()
     return flatmate_id
 

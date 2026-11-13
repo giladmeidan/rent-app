@@ -31,6 +31,7 @@ const flat = (id: string, street: string): MyFlatOut => ({
   listing: { id, listing_type: 'room', city: 'גבעתיים', street, rooms: 4, price_ils: 3200 },
   owner_name: 'רוני',
   joined_at: '2026-11-10T23:30:00Z',
+  shown: false,
 });
 const A = flat('00000000-0000-0000-0000-0000000000a1', 'כצנלסון');
 const B = flat('00000000-0000-0000-0000-0000000000b2', 'ביאליק');
@@ -137,6 +138,89 @@ describe('MyFlatsPage', () => {
     await answerLeave(he.flatmates.mine.leave);
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    reset(view);
+  });
+
+  it('ac9_show_switch_toggles_with_pending_and_revert', async () => {
+    // Spec 0010f AC9: each card's "להציג אותי בעמוד החדר" reflects `shown`; a toggle PATCHes and
+    // is disabled until it settles (the refetches included); a failure reverts it with an error.
+    const shownB: MyFlatOut = { ...B, shown: true };
+    const patchA = `PATCH /me/flats/${A.listing.id}`;
+    const saving = deferred();
+    const client = testQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    let { api, view } = renderPage(
+      [() => json([A, shownB]), () => json([{ ...A, shown: true }, shownB])],
+      { [patchA]: [saving.promise] },
+      client,
+    );
+    const [first, second] = (await screen.findAllByRole('listitem')) as [HTMLElement, HTMLElement];
+    const switchA = within(first).getByRole('switch', { name: he.flatmates.join.show });
+    expect(switchA).not.toBeChecked();
+    expect(within(second).getByRole('switch', { name: he.flatmates.join.show })).toBeChecked();
+
+    fireEvent.click(switchA);
+    // At once, with no flash back to the stored value.
+    expect(switchA).toBeChecked();
+    expect(switchA).toBeDisabled();
+    await waitFor(() => {
+      expect(api.calls(patchA)).toHaveLength(1);
+    });
+    expect(api.calls(patchA)[0]?.body).toEqual({ shown: true });
+    expect(switchA).toBeChecked();
+    expect(switchA).toBeDisabled();
+    saving.resolve(empty());
+    await waitFor(() => {
+      expect(switchA).toBeEnabled();
+    });
+    expect(switchA).toBeChecked();
+    expect(api.calls(FLATS)).toHaveLength(2);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['listing', A.listing.id] });
+    expect(screen.queryByRole('alert')).toBeNull();
+    reset(view);
+
+    // A failure: back to the stored value, `common.error` on the card.
+    const retry = deferred();
+    ({ api, view } = renderPage(
+      [() => json([A]), () => json([A]), () => json([{ ...A, shown: true }])],
+      {
+        [patchA]: [() => json({ detail: 'boom' }, 500), retry.promise],
+      },
+    ));
+    const again = await screen.findByRole('switch', { name: he.flatmates.join.show });
+    fireEvent.click(again);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(he.common.error);
+    expect(screen.getByRole('listitem')).toContainElement(alert);
+    expect(again).not.toBeChecked();
+    expect(again).toBeEnabled();
+    expect(api.calls(patchA)).toHaveLength(1);
+    // A second toggle clears the failure at once, and its success leaves no error behind.
+    fireEvent.click(again);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(again).toBeChecked();
+    retry.resolve(empty());
+    await waitFor(() => {
+      expect(again).toBeEnabled();
+    });
+    expect(again).toBeChecked();
+    expect(api.calls(patchA)).toHaveLength(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+    reset(view);
+
+    // A failed leave's line goes too when the switch is toggled next.
+    ({ api, view } = renderPage([() => json([A])], {
+      [leaveRoute(A)]: [() => json({ detail: 'x' }, 500)],
+      [patchA]: [() => empty()],
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: he.flatmates.mine.leave }));
+    await answerLeave(he.flatmates.mine.leave);
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    fireEvent.click(screen.getByRole('switch', { name: he.flatmates.join.show }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await waitFor(() => {
+      expect(api.calls(patchA)).toHaveLength(1);
+    });
     reset(view);
   });
 

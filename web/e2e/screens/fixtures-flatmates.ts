@@ -52,6 +52,11 @@ export function room(overrides: Partial<MyListingOut> = {}): MyListingOut {
     flatmates_count: 2,
     flatmate_ages: [27, 30],
     lifestyle: { cleanliness: 1, guests: 2 },
+    room_size_sqm: null, // spec 0010f: the flat facts
+    private_bathroom: null,
+    balcony: null,
+    bills_included: null,
+    poster: null,
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',
@@ -104,6 +109,7 @@ export const TWO_FLATS: MyFlatOut[] = [
     listing: PREVIEW.listing,
     owner_name: 'רוני',
     joined_at: '2026-11-10T23:30:00Z',
+    shown: true, // spec 0010f
   },
   {
     listing: {
@@ -116,5 +122,6 @@ export const TWO_FLATS: MyFlatOut[] = [
     },
     owner_name: 'Avi Mizrahi',
     joined_at: '2026-10-02T08:00:00Z',
+    shown: false,
   },
 ];

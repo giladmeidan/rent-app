@@ -6,15 +6,17 @@ import { Field } from '../../components/Field';
 import { Select } from '../../components/Select';
 import { TextInput } from '../../components/TextInput';
 import { LifestyleFields } from '../lifestyle/LifestyleFields';
-import type { GenderPreference } from './api';
-import { GENDER_PREFERENCES } from './constants';
+import type { GenderPreference, Poster } from './api';
+import { GENDER_PREFERENCES, POSTERS } from './constants';
 import {
   firstInvalidAge,
   flatmateAgeError,
   LIMITS,
+  roomSizeMax,
   type FieldErrors,
   type FieldName,
   type ListingForm,
+  type YesNo,
 } from './validate';
 
 const alertText = 'text-body-sm font-medium text-danger';
@@ -44,9 +46,13 @@ type Props = {
   fieldId: (name: FieldName) => string;
 };
 
+/** The flat facts' yes / no / "לא לציין" choices (0010f), in display order. */
+const YES_NO: readonly YesNo[] = ['yes', 'no', ''];
+
 /**
  * Step 3's room block (spec 0007e): who the room is for, how many flatmates live there, their ages
- * (optional) and the flat's questionnaire (optional). Rendered for a room only.
+ * (optional), the flat facts (0010f, all optional: the room's size, a private bathroom, a balcony,
+ * bills, who is posting) and the flat's questionnaire (optional). Rendered for a room only.
  */
 export function RoomFields({ form, onChange, errors, fieldId }: Props) {
   const { t } = useTranslation();
@@ -71,6 +77,25 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
     value,
     label: genders[value],
   }));
+  const yesNoLabels: Record<YesNo, string> = {
+    yes: t('common.yes'),
+    no: t('common.no'),
+    '': t('listings.room.unset'),
+  };
+  const yesNoOptions: ChoiceOption<YesNo>[] = YES_NO.map((value) => ({
+    value,
+    label: yesNoLabels[value],
+  }));
+  const posterOptions: ChoiceOption<Poster | ''>[] = [
+    // `i18n-check` does not see these dynamic keys; `rooms/__tests__/poster.test.ts` covers them.
+    ...POSTERS.map((value) => ({ value, label: t(`listings.room.poster.${value}`) })),
+    { value: '' as const, label: t('listings.room.unset') },
+  ];
+  const yesNoFacts = [
+    { name: 'private_bathroom', legend: t('listings.room.privateBathroom') },
+    { name: 'balcony', legend: t('listings.room.balcony') },
+    { name: 'bills_included', legend: t('listings.room.bills') },
+  ] as const;
 
   const count = form.flatmates_count;
   const ages = form.flatmate_ages;
@@ -181,6 +206,47 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
           )}
         </fieldset>
       )}
+
+      <Field
+        id={fieldId('room_size_sqm')}
+        label={t('listings.room.roomSize')}
+        hint={t('listings.room.roomSizeHint')}
+        error={message('room_size_sqm')}
+      >
+        <TextInput
+          type="number"
+          inputMode="numeric"
+          min={LIMITS.room_size_sqm.min}
+          max={roomSizeMax(form)}
+          value={form.room_size_sqm}
+          onChange={(e) => onChange({ room_size_sqm: e.target.value })}
+          end={t('listings.units.sqm')}
+        />
+      </Field>
+
+      {yesNoFacts.map((fact) => (
+        <ChoiceGroup
+          key={fact.name}
+          legend={fact.legend}
+          name={fact.name}
+          options={yesNoOptions}
+          value={form[fact.name]}
+          onChange={(value) => onChange({ [fact.name]: value })}
+        />
+      ))}
+
+      <div className="flex flex-col gap-1.5">
+        <ChoiceGroup
+          legend={t('listings.room.poster.title')}
+          name="poster"
+          options={posterOptions}
+          value={form.poster}
+          onChange={(poster) => onChange({ poster })}
+        />
+        {form.poster === 'lives_here' && (
+          <p className="text-caption text-ink-muted">{t('listings.room.poster.livesHereHint')}</p>
+        )}
+      </div>
 
       <div className="border-t border-border pt-6">
         <LifestyleFields

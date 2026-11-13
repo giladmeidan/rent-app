@@ -32,7 +32,6 @@ from app.matching.score import explain_row
 from app.models import User
 from app.redis_client import RedisClient, get_redis
 from app.routers.applications import _SESSION
-from app.routers.search import _profile_user_id, _sees_room_privacy
 from app.schemas.error import ErrorOut
 from app.schemas.people import (
     LikedRoomOut,
@@ -47,6 +46,7 @@ from app.services import chat as chat_service
 from app.services import chat_events
 from app.services import people as people_service
 from app.services import photos as photos_service
+from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.applications import (
     AlreadyAppliedError,
@@ -239,10 +239,10 @@ def unlike_room(listing_id: uuid.UUID, user: UserDep, db: DbDep) -> Response:
 def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
     liked_me: list[LikedRoomOut] = []
     mine: list[LikedRoomOut] = []
-    # Decision 13 (the search router's rule): the seeker role, or a profile with the looking part.
+    # Decision 13 (`profiles_service.sees_room_privacy`): the seeker role, or the looking part.
     # `liked_rooms` returns nothing without the looking part (spec 0010c), so a caller with rows
     # has it; asked anyway, so the rule lives in one place.
-    seeker = _sees_room_privacy(user, _profile_user_id(db, user))
+    seeker = profiles_service.sees_room_privacy(user, profiles_service.profile_user_id(db, user))
     for (
         listing,
         match,

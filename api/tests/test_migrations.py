@@ -173,6 +173,8 @@ _LISTINGS_CHECKS = {
     "ck_listings_flatmate_ages",
     "ck_listings_lifestyle",
     "ck_listings_room_fields",
+    "ck_listings_room_size_sqm",  # spec 0010f
+    "ck_listings_poster",
 }
 
 
@@ -2186,5 +2188,134 @@ def test_ac9_profile_split_upgrade_downgrade(migration_db_url: str) -> None:
         with engine.begin() as conn:
             conn.execute(text(insert_profile), {**no_looking, "user": users["personal"]})
             assert conn.execute(text("SELECT count(*) FROM seeker_profiles")).scalar_one() == 2
+    finally:
+        engine.dispose()
+
+
+_FLAT_FACTS = ("room_size_sqm", "private_bathroom", "balcony", "bills_included", "poster")
+
+
+def test_ac6_flat_profile_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0010f: 0016 adds the five nullable room facts and their CHECKs, rewrites
+    # `ck_listings_room_fields` (same name) and adds `listing_flatmates.shown`. Downgrade drops them
+    # and restores 0009's `ck_listings_room_fields`.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0015")
+    engine = create_engine(migration_db_url)
+    insert_listing = (
+        "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms, floor,"
+        " size_sqm, price_ils, available_from, elevator, furnished, pets_allowed, expires_at,"
+        " flatmates_count{extra})"
+        " VALUES (:owner, :area, :type, 'city', 'street', 3, 1, 60, 4500, current_date, false,"
+        " 'none', false, now() + interval '90 days', :count{extra_values}) RETURNING id"
+    )
+
+    def listing_sql(**extra: str) -> str:
+        return insert_listing.format(
+            extra="".join(f", {name}" for name in extra),
+            extra_values="".join(f", {value}" for value in extra.values()),
+        )
+
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            owner, mate = (
+                conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, 'owner') RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name},
+                ).scalar_one()
+                for name in ("owner", "mate")
+            )
+            base = {"owner": owner, "area": area_id}
+            room = conn.execute(
+                text(listing_sql()), {**base, "type": "room", "count": 2}
+            ).scalar_one()
+            apartment = conn.execute(
+                text(listing_sql()), {**base, "type": "apartment", "count": None}
+            ).scalar_one()
+            membership = conn.execute(
+                text(
+                    "INSERT INTO listing_flatmates (listing_id, user_id)"
+                    " VALUES (:listing, :user) RETURNING id"
+                ),
+                {"listing": room, "user": mate},
+            ).scalar_one()
+            room_fields_0015 = _check_definition(conn, "ck_listings_room_fields")
+            assert room_fields_0015 is not None
+            for name in ("ck_listings_room_size_sqm", "ck_listings_poster"):
+                assert _check_definition(conn, name) is None
+
+        command.upgrade(cfg, "0016")
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(f"SELECT id, {', '.join(_FLAT_FACTS)} FROM listings ORDER BY listing_type")
+            ).all()
+            assert [tuple(row) for row in rows] == [
+                (apartment, None, None, None, None, None),
+                (room, None, None, None, None, None),
+            ]
+            assert conn.execute(text("SELECT id, shown FROM listing_flatmates")).one() == (
+                membership,
+                False,
+            )
+            columns = _columns(conn, "listings")
+            assert all(columns[name] is True for name in _FLAT_FACTS)
+            assert _columns(conn, "listing_flatmates")["shown"] is False
+            for name in ("ck_listings_room_size_sqm", "ck_listings_poster"):
+                assert _check_definition(conn, name) is not None
+            assert _check_definition(conn, "ck_listings_room_fields") != room_fields_0015
+
+        def refused(constraint: str, type_: str, count: int | None, **extra: str) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(listing_sql(**extra)), {**base, "type": type_, "count": count})
+
+        refused("ck_listings_room_fields", "apartment", None, balcony="true")
+        refused("ck_listings_room_size_sqm", "room", 2, room_size_sqm="61")
+        refused("ck_listings_room_size_sqm", "room", 2, room_size_sqm="3")
+        refused("ck_listings_poster", "room", 2, poster="'agent'")
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    listing_sql(
+                        room_size_sqm="12",
+                        private_bathroom="true",
+                        balcony="false",
+                        bills_included="true",
+                        poster="'lives_here'",
+                    )
+                ),
+                {**base, "type": "room", "count": 1},
+            )
+            conn.execute(text("UPDATE listing_flatmates SET shown = true"))
+
+        command.downgrade(cfg, "0015")
+        with engine.connect() as conn:
+            columns = _columns(conn, "listings")
+            assert not set(_FLAT_FACTS) & set(columns)
+            assert "shown" not in _columns(conn, "listing_flatmates")
+            assert _check_definition(conn, "ck_listings_room_fields") == room_fields_0015
+            for name in ("ck_listings_room_size_sqm", "ck_listings_poster"):
+                assert _check_definition(conn, name) is None
+            assert conn.execute(text("SELECT count(*) FROM listings")).scalar_one() == 3
+            assert conn.execute(text("SELECT id FROM listing_flatmates")).scalar_one() == membership
+        with pytest.raises(IntegrityError, match="ck_listings_room_fields"), engine.begin() as conn:
+            conn.execute(
+                text("UPDATE listings SET gender_preference = 'women' WHERE id = :id"),
+                {"id": apartment},
+            )
+
+        command.upgrade(cfg, "0016")
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT shown FROM listing_flatmates")).scalar_one() is False
+            assert _check_definition(conn, "ck_listings_room_fields") != room_fields_0015
     finally:
         engine.dispose()

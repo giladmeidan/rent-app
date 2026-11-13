@@ -313,6 +313,20 @@ and the existing room fields, fact cells and person cards.
   that break, a valid UNION ALL ordering; 8 minors: statement-count AC, PATCH returns 204, Hebrew copy without
   one-gender forms, `profile.about.privacy` amended, downgrade order, `ROOM_FIELDS`/`FIELD_ORDER`/
   `PREFERENCE_FIELDS`, preview chips tested, `display_name` and `person_photo_url` naming).
+- **Build deviations (spec session, 2026-11-14).** `_is_seeker` did not exist: decision 13's rule moved, unchanged,
+  to `services/profiles.py::profile_user_id` / `sees_room_privacy` (closing FOLLOWUPS' 0010c line), and
+  `get_listing` computes `seeker` once. No shared `Avatar` yet (it is 0010k's, not 0010e's): `FlatPeople` keeps
+  the inline photo or initial, marked as a shortcut. `components/Switch.tsx` gained `disabled` (AC9);
+  `RoomFacts` exports `AnswerList`, which `FlatPeople` reuses. The wizard preview's poster chip reuses
+  `listings.room.poster.*`; the bathroom and balcony chips show only for "yes" (no copy for "no"). The e2e step
+  makes the owner a seeker with `putProfile` instead of a new sign-up (shard 1 is at 9 of the OTP cap of 10).
+- **Review round 1 (security blocker, fixed).** `room_fit` is known only for a viewer with the looking part, and a
+  person without one has `flatmate_gender` forced to `any`, so a man with only "עליי" saw the women's cards on a
+  women-only room. `shown_people` now also holds the viewer to the room's own `gender_preference`
+  (`_fits_room`, same statement): on a women or men room only a viewer of that gender sees anyone, and a viewer
+  with no gender sees nobody (fail closed; the room itself stays visible). The no-gender half and a personal-part
+  "who may see me" preference are Speed rule 9 questions sent to the orchestrator (2026-11-14). `JoinIn.shown` and
+  `ShownIn.shown` are `StrictBool`.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.

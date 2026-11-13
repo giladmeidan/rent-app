@@ -1,9 +1,10 @@
 """`listing_flatmates` and `conversation_reads` tables (spec 0008d): who joined a room listing's
 flat through its invite link, and each flatmate's read marker per conversation.
 
-Every FK, the unique constraint and the index match migrations 0012 and 0014 (which moves and
-names the `conversation_reads` FK) exactly (autogenerate must see no diff). `services/flatmates.py`
-writes memberships; `services/chat.py` reads both and writes `conversation_reads`.
+Every FK, the unique constraint and the index match migrations 0012, 0014 (which moves and names
+the `conversation_reads` FK) and 0016 (`shown`) exactly (autogenerate must see no diff).
+`services/flatmates.py` writes memberships; `services/chat.py` reads both and writes
+`conversation_reads`.
 
 A membership reaches only conversations of **room** applications (`listing_type_at_apply =
 'room'`), and only the messages sent from its `joined_at` on. `conversation_reads` holds flatmates'
@@ -12,7 +13,7 @@ markers only: the owner and the seeker keep `conversations.owner_read_at` / `see
 import datetime as dt
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, Index, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,6 +42,9 @@ class ListingFlatmate(Base):
     joined_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    # The flatmate's own choice to appear on the room's page, to seekers only (spec 0010f,
+    # decision 17): set at join, changed from `/me/flats`; a re-join of a member keeps it.
+    shown: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
 
 class ConversationRead(Base):

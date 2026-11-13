@@ -9,7 +9,7 @@ hex) nor readable again. It is sent back only in a POST body (`InviteTokenIn`), 
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.schemas.application import ApplicationListingOut
 
@@ -27,6 +27,23 @@ class InviteTokenIn(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     token: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class JoinIn(InviteTokenIn):
+    """The join body: the token, and whether the caller chooses to appear on the room's page
+    (spec 0010f, decision 17; default off; a JSON boolean only, so consent is never coerced from
+    `"yes"` or `0`). The preview keeps `InviteTokenIn`."""
+
+    shown: StrictBool = False
+
+
+class ShownIn(BaseModel):
+    """A flatmate's choice to appear on the room's page (spec 0010f), from `/me/flats`: a JSON
+    boolean only (no coercion of `"yes"`, `"false"` or `0`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shown: StrictBool
 
 
 class InvitePreviewOut(BaseModel):
@@ -59,3 +76,5 @@ class MyFlatOut(BaseModel):
     listing: ApplicationListingOut
     owner_name: str
     joined_at: dt.datetime
+    # Whether the caller chose to appear on the room's page (spec 0010f).
+    shown: bool

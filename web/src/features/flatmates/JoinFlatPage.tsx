@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 
@@ -13,6 +13,7 @@ import { Loading } from '../../components/Loading';
 import { Mascot } from '../../components/Mascot';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { Switch } from '../../components/Switch';
 import { loginWithNext } from '../auth/next';
 import { clearSession } from '../auth/useLogout';
 import { useMe } from '../auth/useMe';
@@ -151,6 +152,9 @@ function JoinFlow() {
   const loggedIn = me.data !== undefined && me.data !== null;
   const preview = useInvitePreview(loggedIn ? token : null);
   const join = useJoinFlat();
+  // Decision 17 (0010f): shown on the room's page only by the person's own choice, default off.
+  const [shown, setShown] = useState(false);
+  const showHintId = useId();
 
   // The preview settles the token when it is final, or when the caller is already a member.
   useEffect(() => {
@@ -184,19 +188,22 @@ function JoinFlow() {
   function onJoin() {
     if (token === null || inFlight.current) return;
     inFlight.current = true;
-    join.mutate(token, {
-      onSuccess: () => {
-        clearInviteToken();
-        // `replace`: Back from the chats does not land on the spent link's "invalid" text.
-        void navigate('/chat', { replace: true, state: { joined: true } });
+    join.mutate(
+      { token, shown },
+      {
+        onSuccess: () => {
+          clearInviteToken();
+          // `replace`: Back from the chats does not land on the spent link's "invalid" text.
+          void navigate('/chat', { replace: true, state: { joined: true } });
+        },
+        onError: (error) => {
+          if (isFinal(error)) clearInviteToken();
+        },
+        onSettled: () => {
+          inFlight.current = false;
+        },
       },
-      onError: (error) => {
-        if (isFinal(error)) clearInviteToken();
-      },
-      onSettled: () => {
-        inFlight.current = false;
-      },
-    });
+    );
   }
 
   // No token at all: nothing to log in for.
@@ -294,16 +301,32 @@ function JoinFlow() {
         <Mascot pose="hello" width={96} className="self-center" />
         {title}
         {!spent && (
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            onClick={onJoin}
-            disabled={join.isPending}
-            aria-busy={join.isPending}
-          >
-            {t('flatmates.join.cta')}
-          </Button>
+          <>
+            <div className="flex flex-col gap-1.5">
+              <div className="rounded-md border border-border">
+                <Switch
+                  label={t('flatmates.join.show')}
+                  checked={shown}
+                  onChange={setShown}
+                  describedBy={showHintId}
+                  disabled={join.isPending}
+                />
+              </div>
+              <p id={showHintId} className="text-body-sm text-ink-muted">
+                {t('flatmates.join.showHint')}
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={onJoin}
+              disabled={join.isPending}
+              aria-busy={join.isPending}
+            >
+              {t('flatmates.join.cta')}
+            </Button>
+          </>
         )}
         {failure !== null && failure !== 'other' && (
           <>

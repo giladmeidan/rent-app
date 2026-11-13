@@ -29,7 +29,15 @@ else `null`. Search items do not carry it: a room that does not fit the caller n
 for a signed-in account on a room it does not own and has no non-withdrawn application to, else
 `null` (spec 0010b: any role).
 `ListingPublic.is_mine` (spec 0010b) says the caller owns the listing (false for a visitor); on an
-own listing `match` is `null`."""
+own listing `match` is `null`.
+
+The flat facts (spec 0010f: `room_size_sqm`, `private_bathroom`, `balcony`, `bills_included`,
+`poster`) describe the flat, not a person, and are public to every caller (null on an apartment;
+`poster` says who posts, never their name). `ListingDetail.people` (spec 0010f) lists the people
+who live in a room's flat as `FlatPersonOut`: the lister when `poster = 'lives_here'`, then each
+flatmate who chose to be shown (decision 17), each filtered by decision 7's gender rule; only for a
+seeker (decision 13) on a room that fits them (`room_fit` not false), else `[]`. A person carries
+no id of any kind and no looking field."""
 
 import datetime as dt
 import uuid
@@ -39,10 +47,16 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
-from app.schemas.listing import Furnished, ListingType, Rooms
+from app.schemas.listing import Furnished, ListingType, Poster, Rooms
 from app.schemas.match import MatchOut
 from app.schemas.photo import PhotoOut
-from app.schemas.profile import ContractMonths, GenderPreference, HouseholdsOut, Lifestyle
+from app.schemas.profile import (
+    ContractMonths,
+    GenderPreference,
+    HouseholdsOut,
+    Lifestyle,
+    SeekerGender,
+)
 
 # `match` (spec 0006b) orders by the caller's match score; without a profile it is `newest`.
 SearchSort = Literal["newest", "price_asc", "price_desc", "match"]
@@ -160,6 +174,12 @@ class ListingPublic(BaseModel):
     flatmates_count: int | None
     flatmate_ages: list[int]
     lifestyle: Lifestyle
+    # The flat facts (spec 0010f), public to every caller: they describe the flat, not a person.
+    room_size_sqm: int | None
+    private_bathroom: bool | None
+    balcony: bool | None
+    bills_included: bool | None
+    poster: Poster | None
     created_at: dt.datetime
     lat: float | None
     lng: float | None
@@ -198,6 +218,21 @@ class LikeStateOut(BaseModel):
     liked_me: bool
 
 
+class FlatPersonOut(BaseModel):
+    """A person who lives in a room's flat, on its page (spec 0010f): the lister (`lister: true`,
+    when they said they live there) or a flatmate who chose to be shown. Their personal part only
+    (null and `{}` without one), never a looking field, and no id of any kind (user, membership or
+    card)."""
+
+    display_name: str
+    photo_url: str | None  # their person photo's small address (spec 0010d / 0010j)
+    age: int | None  # the current UTC year minus their birth year
+    gender: SeekerGender | None
+    about_me: str | None
+    lifestyle: Lifestyle
+    lister: bool
+
+
 class ListingDetail(ListingPublic):
     """The public listing page (spec 0004a): `ListingPublic` plus the exact number of applicants
     (every application except withdrawn ones; declined ones count, they applied), the caller's
@@ -209,6 +244,9 @@ class ListingDetail(ListingPublic):
     like: LikeStateOut | None
     # Every photo in position order (spec 0010d); `cover` is `photos[0]` or null.
     photos: list[PhotoOut]
+    # The flat's people (spec 0010f): the lister first, then shown flatmates by join time; `[]` on
+    # an apartment and for a caller who is not a seeker (see the module docstring).
+    people: list[FlatPersonOut]
 
 
 class ListingSearchOut(BaseModel):

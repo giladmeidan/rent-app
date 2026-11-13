@@ -284,6 +284,49 @@ describe('ListingWizard', () => {
     expect(await screen.findByTestId('state')).toHaveTextContent('{"saved":true,"photosFailed":0}');
   });
 
+  it('ac7 editing a room preloads the flat facts and saves only the change', async () => {
+    // Spec 0010f AC7.
+    const r = l.room;
+    const stored = listing({
+      listing_type: 'room',
+      flatmates_count: 2,
+      size_sqm: 60,
+      room_size_sqm: 12,
+      private_bathroom: true,
+      balcony: false,
+      bills_included: null,
+      poster: 'lives_here',
+    });
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      [`PATCH /listings/${stored.id}`]: [json({ ...stored, balcony: null })],
+    });
+    renderRoutes(
+      '/edit',
+      <Routes>
+        <Route path="/edit" element={<ListingWizard listing={stored} />} />
+        <Route path="/market/mine" element={<StatePrinter />} />
+      </Routes>,
+    );
+    await areasLoaded();
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    expectStep(3, 4);
+    const radio = (legend: string, name: string) =>
+      within(screen.getByRole('group', { name: legend })).getByRole('radio', { name });
+    expect(screen.getByLabelText(r.roomSize)).toHaveValue(12);
+    expect(radio(r.privateBathroom, he.common.yes)).toBeChecked();
+    expect(radio(r.balcony, he.common.no)).toBeChecked();
+    expect(radio(r.bills, r.unset)).toBeChecked();
+    expect(radio(r.poster.title, r.poster.lives_here)).toBeChecked();
+    expect(screen.getByText(r.poster.livesHereHint)).toBeVisible();
+    fireEvent.click(radio(r.balcony, r.unset));
+    fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: l.save }));
+    expect(await screen.findByTestId('state')).toHaveTextContent('"saved":true');
+    expect(api.calls(`PATCH /listings/${stored.id}`)[0]?.body).toEqual({ balcony: null });
+  });
+
   it('ac2_type_step_and_back_keeps_state', async () => {
     mockApi({ 'GET /areas': [json([gushDan])] });
     renderWizard();

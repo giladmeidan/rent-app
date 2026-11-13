@@ -1,8 +1,8 @@
 """API schemas for listings (spec 0002a). Never the ORM model.
 
-Every bound of the `listings` CHECKs (migrations 0003, 0007 and 0009, the room fields of spec 0007a
-included) is repeated here, so a bad value is a 422 with a list `detail`, never a database
-`IntegrityError` (a 500)."""
+Every bound of the `listings` CHECKs (migrations 0003, 0007, 0009 and 0016, the room fields of
+spec 0007a and the flat facts of spec 0010f included) is repeated here, so a bad value is a 422
+with a list `detail`, never a database `IntegrityError` (a 500)."""
 
 import datetime as dt
 import uuid
@@ -96,6 +96,10 @@ VaadIls = Annotated[int, Field(ge=0, le=5_000)]  # monthly
 # Room fields (spec 0007a): the people already living there, and none, some or all of their ages.
 FlatmatesCount = Annotated[int, Field(ge=1, le=7)]
 FlatmateAges = Annotated[list[Annotated[int, Field(ge=AGE_MIN, le=AGE_MAX)]], Field(max_length=7)]
+# Flat facts (spec 0010f), all optional: the room's own size (at most the flat's `size_sqm`) and who
+# is posting (`lives_here` puts the lister on the room's page, to seekers only).
+Poster = Literal["lives_here", "leaving", "landlord"]
+RoomSizeSqm = Annotated[int, Field(ge=4, le=100)]
 
 # The room fields as an apartment must hold them (`ck_listings_room_fields`). Never mutated.
 ROOM_FIELD_DEFAULTS: dict[str, Any] = {
@@ -103,11 +107,28 @@ ROOM_FIELD_DEFAULTS: dict[str, Any] = {
     "flatmates_count": None,
     "flatmate_ages": [],
     "lifestyle": {},
+    "room_size_sqm": None,
+    "private_bathroom": None,
+    "balcony": None,
+    "bills_included": None,
+    "poster": None,
 }
 
 # Columns an explicit `null` in a PATCH clears; `null` on any other field is a 422.
 NULLABLE_FIELDS = frozenset(
-    {"total_floors", "arnona_ils", "vaad_ils", "description", "min_contract_months"}
+    {
+        "total_floors",
+        "arnona_ils",
+        "vaad_ils",
+        "description",
+        "min_contract_months",
+        # The flat facts (spec 0010f): `null` = not said.
+        "room_size_sqm",
+        "private_bathroom",
+        "balcony",
+        "bills_included",
+        "poster",
+    }
 )
 
 
@@ -146,6 +167,12 @@ class ListingIn(BaseModel):
     flatmates_count: FlatmatesCount | None = None
     flatmate_ages: FlatmateAges = Field(default_factory=list)
     lifestyle: Lifestyle = Field(default_factory=dict)
+    # Flat facts (spec 0010f), room only; `None` = not said.
+    room_size_sqm: RoomSizeSqm | None = None
+    private_bathroom: bool | None = None
+    balcony: bool | None = None
+    bills_included: bool | None = None
+    poster: Poster | None = None
 
     @field_validator("description")
     @classmethod
@@ -162,19 +189,18 @@ class ListingIn(BaseModel):
     def _room_fields(self, info: ValidationInfo) -> Self:
         """An apartment holds the room defaults; a room needs `flatmates_count` (except on a pause
         or resume of a legacy room: the `status_only` context, `services/listings.py`); ages never
-        outnumber the flatmates."""
+        outnumber the flatmates; the room is never larger than the flat (spec 0010f)."""
         if self.listing_type == "apartment" and any(
             getattr(self, name) != default for name, default in ROOM_FIELD_DEFAULTS.items()
         ):
-            raise ValueError(
-                "gender_preference, flatmates_count, flatmate_ages and lifestyle"
-                " are for a room only"
-            )
+            raise ValueError(f"{', '.join(ROOM_FIELD_DEFAULTS)} are for a room only")
         status_only = bool((info.context or {}).get("status_only"))
         if self.listing_type == "room" and self.flatmates_count is None and not status_only:
             raise ValueError("a room needs flatmates_count")
         if len(self.flatmate_ages) > (self.flatmates_count or 0):
             raise ValueError("flatmate_ages lists more people than flatmates_count")
+        if self.room_size_sqm is not None and self.room_size_sqm > self.size_sqm:
+            raise ValueError("room_size_sqm must not exceed size_sqm")
         return self
 
 
@@ -211,6 +237,12 @@ class ListingPatch(BaseModel):
     flatmates_count: FlatmatesCount | None = None
     flatmate_ages: FlatmateAges | None = None
     lifestyle: Lifestyle | None = None
+    # Flat facts (spec 0010f): in `NULLABLE_FIELDS`, so an explicit `null` clears one.
+    room_size_sqm: RoomSizeSqm | None = None
+    private_bathroom: bool | None = None
+    balcony: bool | None = None
+    bills_included: bool | None = None
+    poster: Poster | None = None
     status: ListingStatus | None = None
 
     @field_validator("description")
@@ -265,6 +297,11 @@ class ListingOut(BaseModel):
     flatmates_count: int | None
     flatmate_ages: list[int]
     lifestyle: Lifestyle
+    room_size_sqm: int | None
+    private_bathroom: bool | None
+    balcony: bool | None
+    bills_included: bool | None
+    poster: Poster | None
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime

@@ -42,6 +42,11 @@ PUBLIC_KEYS = {
     "flatmates_count",
     "flatmate_ages",
     "lifestyle",
+    "room_size_sqm",  # spec 0010f: the five flat facts, public
+    "private_bathroom",
+    "balcony",
+    "bills_included",
+    "poster",
     "created_at",
     "lat",
     "lng",
@@ -208,6 +213,12 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "flatmates_count": None,
         "flatmate_ages": [],
         "lifestyle": {},
+        # The flat facts (spec 0010f): an apartment's nulls.
+        "room_size_sqm": None,
+        "private_bathroom": None,
+        "balcony": None,
+        "bills_included": None,
+        "poster": None,
         "lat": None,  # not located yet (spec 0003c)
         "lng": None,
         "match": None,  # a visitor (spec 0006b)
@@ -219,8 +230,15 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
     assert response.status_code == 200
     one = response.json()
     # specs 0004a, 0007b, 0008a, 0010d
-    assert set(one) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like", "photos"}
-    assert one == {**item, "applicant_count": 0, "room_fit": None, "like": None, "photos": []}
+    assert set(one) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like", "photos", "people"}
+    assert one == {
+        **item,
+        "applicant_count": 0,
+        "room_fit": None,
+        "like": None,
+        "photos": [],
+        "people": [],
+    }
 
 
 def test_ac3_price_and_rooms_ranges(
