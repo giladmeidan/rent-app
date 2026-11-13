@@ -206,15 +206,26 @@ export function ListingWizard({ listing, initialType }: Props) {
     (Object.keys(changedFields(base, toListingIn(form))).length > 0 ||
       !samePhotos(photos, base.photos));
 
-  // Reload or tab close while dirty: the browser asks (with its own text).
+  // Reload or tab close while dirty, or while photos upload (either mode): the browser asks (with
+  // its own text).
+  const guardUnload = dirty || syncing !== null;
   useEffect(() => {
-    if (!dirty) return;
+    if (!guardUnload) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  }, [guardUnload]);
+
+  // A sync that ends after the lister left (a header link, browser Back) does not navigate.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const fieldId = (name: FieldName) => `${id}-${name}`;
 
@@ -332,21 +343,32 @@ export function ListingWizard({ listing, initialType }: Props) {
     stored: PhotoOut[],
     state: { published: true } | { saved: true },
   ) {
-    setSyncing({ done: 0, total: photos.filter((photo) => photo.kind === 'new').length });
-    const { failed, unauthenticated } = await syncPhotos(listingId, stored, photos, (done, of) =>
-      setSyncing({ done, total: of }),
-    );
+    const added = photos.filter((photo) => photo.kind === 'new').length;
+    setSyncing({ done: 0, total: added });
+    let result: { failed: number; unauthenticated: boolean };
+    try {
+      result = await syncPhotos(listingId, stored, photos, (done, of) => {
+        if (mounted.current) setSyncing({ done, total: of });
+      });
+    } catch {
+      // Not expected (each request's failure is counted inside): every new photo counts as failed.
+      result = { failed: added, unauthenticated: false };
+    } finally {
+      if (mounted.current) setSyncing(null);
+    }
     // The cover and the gallery changed.
     void queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY });
     void queryClient.invalidateQueries({ queryKey: ['listing', listingId] });
-    publishing.current = false;
-    if (unauthenticated) {
-      // The session is gone: the page sends the lister to log in.
-      setSyncing(null);
+    if (result.unauthenticated) {
+      // The session is gone: the page sends the lister to log in. `publishing` stays set: the
+      // listing exists, so another click must not post it again.
       queryClient.setQueryData<UserOut | null>(ME_KEY, null);
       return;
     }
-    void navigate(mine, { state: { ...state, photosFailed: failed } });
+    publishing.current = false;
+    if (mounted.current) {
+      void navigate(mine, { state: { ...state, photosFailed: result.failed } });
+    }
   }
 
   function publish() {
@@ -645,7 +667,9 @@ export function ListingWizard({ listing, initialType }: Props) {
                   variant="secondary"
                   size="lg"
                   type="button"
-                  disabled={syncing !== null}
+                  // Not while the save is pending either: `goTo` resets the mutation, which drops
+                  // its `onSuccess` (the photos would never upload).
+                  disabled={busy}
                   onClick={() => goTo(order[index - 1] ?? step)}
                   icon={chevron('M9 6l6 6-6 6')}
                   className="basis-2/5 lg:flex-none lg:basis-auto"

@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { Route, Routes, useLocation } from 'react-router';
+import { Link, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -1034,6 +1034,79 @@ describe('ListingWizard photos (spec 0010e)', () => {
       'blob:wizard-1',
       'blob:wizard-2',
     ]);
+  });
+
+  it('ac2_back_disabled_while_the_post_is_pending', async () => {
+    // "Back" during the POST would reset the mutation and drop its `onSuccess`: the listing would
+    // exist and its photos never upload.
+    const created = withoutCounts(listing());
+    const upload = `POST /listings/${created.id}/photos`;
+    const post = deferred();
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [post.promise],
+      [upload]: [json(out('d0000000-0000-0000-0000-0000000000d1'), 201)],
+    });
+    await newToPhotos();
+    pick(file('one.jpg'));
+    publishFromPhotos();
+    await vi.waitFor(() => {
+      expect(api.calls('POST /listings')).toHaveLength(1);
+    });
+    expect(backButton()).toBeDisabled();
+    fireEvent.click(backButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
+    post.resolve(json(created, 201));
+    expect(await screen.findByTestId('state')).toHaveTextContent(
+      '{"published":true,"photosFailed":0}',
+    );
+    expect(writes(api)).toEqual(['POST /listings', upload]);
+  });
+
+  it('ac2_leaving_mid_sync_does_not_navigate', async () => {
+    const created = withoutCounts(listing());
+    const upload = `POST /listings/${created.id}/photos`;
+    const first = deferred();
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(created, 201)],
+      [upload]: [first.promise],
+    });
+    await newToPhotos(
+      meClient(),
+      <>
+        <Link to="/elsewhere">away</Link>
+        <Routes>
+          <Route path="/listings/new" element={<NewListingPage />} />
+          <Route path="/me/listings" element={<StatePrinter />} />
+          <Route path="/elsewhere" element={<p>elsewhere</p>} />
+        </Routes>
+      </>,
+    );
+    pick(file('one.jpg'));
+    publishFromPhotos();
+    await vi.waitFor(() => {
+      expect(api.calls(upload)).toHaveLength(1);
+    });
+    // While it uploads, closing the tab asks first.
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    // The lister leaves through a header link; the upload ends later.
+    fireEvent.click(screen.getByRole('link', { name: 'away' }));
+    expect(await screen.findByText('elsewhere')).toBeVisible();
+    first.resolve(json(out('d0000000-0000-0000-0000-0000000000d1'), 201));
+    // Let the sync finish (its last request answered, the invalidations sent).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(currentPath()).toBe('/elsewhere');
+    expect(screen.queryByTestId('state')).toBeNull();
+    // Nothing guards the tab any more.
+    const later = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(later);
+    expect(later.defaultPrevented).toBe(false);
   });
 
   it('ac3_partial_upload_failure', async () => {
