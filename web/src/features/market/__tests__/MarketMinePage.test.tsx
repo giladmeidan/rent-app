@@ -37,9 +37,14 @@ describe('MarketMinePage', () => {
       await main().findByRole('heading', { level: 1, name: he.market.mine.title }),
     ).toBeVisible();
     expect(document.title).toContain(he.market.mine.title);
+    let hrefs: string[];
     let cards = await main().findAllByRole('article');
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toHaveTextContent('חדר');
+    hrefs = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.includes(room.id))).toBe(true);
+    expect(hrefs.some((h) => h.includes(flat.id))).toBe(false);
     // The shared cap: both live listings count.
     expect(main().getByText(i18n.t('listings.mine.count', { live: 2, cap: 3 }))).toBeVisible();
     expect(main().getByRole('link', { name: he.market.mine.newRoom })).toHaveAttribute(
@@ -57,7 +62,11 @@ describe('MarketMinePage', () => {
     }));
     cards = await main().findAllByRole('article');
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toHaveTextContent('חדר');
+    hrefs = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.includes(room.id))).toBe(true);
+    expect(hrefs.some((h) => h.includes(flat.id))).toBe(false);
     expect(screen.queryByRole('tablist')).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();

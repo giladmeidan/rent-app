@@ -627,9 +627,14 @@ describe('MyListingsPage', () => {
     const count = i18n.t('listings.mine.count', { live: 2, cap: 3 });
     mockApi({ 'GET /me/listings': [json([flat, room])] });
     let view = render();
+    let hrefs: string[];
     let cards = await screen.findAllByRole('article');
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toHaveTextContent('דירה');
+    hrefs = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.includes(flat.id))).toBe(true);
+    expect(hrefs.some((h) => h.includes(room.id))).toBe(false);
     expect(screen.getByText(count)).toBeVisible();
     expect(screen.getByRole('heading', { level: 1, name: he.listings.mine.title })).toBeVisible();
     expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
@@ -641,7 +646,11 @@ describe('MyListingsPage', () => {
     view = renderRooms();
     cards = await screen.findAllByRole('article');
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toHaveTextContent('חדר');
+    hrefs = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.includes(room.id))).toBe(true);
+    expect(hrefs.some((h) => h.includes(flat.id))).toBe(false);
     expect(screen.getByText(count)).toBeVisible();
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
     expect(
