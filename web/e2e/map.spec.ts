@@ -458,18 +458,20 @@ test('map_max_zoom_never_422_on_390px', async ({ page }) => {
     if (r.url().includes('/listings?')) statuses.push(r.status());
   });
 
-  await page.goto('/search?view=map');
+  // Opened at a position, so 0009w's first-open fit never runs: a fit racing the clicks made a step
+  // wait for a search that never came (CI, f986008 and #67).
+  await page.goto('/search?view=map&c=32.08,34.8&z=13', { waitUntil: 'domcontentloaded' });
   const region = page.getByRole('region', { name: he.search.map.label });
   await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
 
-  // Zoom in to the limit, one step per answered search (each step's `moveend` is a new box); the
-  // button is disabled at `MAP_MAX_ZOOM`.
+  // Zoom in to the limit, one step per settled view (each step's `moveend` writes `z` and asks for
+  // a new box); the button is disabled at `MAP_MAX_ZOOM`.
   const zoomIn = region.getByRole('button', { name: he.map.zoomIn });
   for (let i = 0; i < 20 && (await zoomIn.isEnabled()); i += 1) {
-    await Promise.all([
-      page.waitForResponse((r) => r.url().includes('/listings?')),
-      zoomIn.click(),
-    ]);
+    const zoomBefore = query(page).get('z');
+    await zoomIn.click();
+    await expect.poll(() => query(page).get('z')).not.toBe(zoomBefore);
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
   }
   await expect(zoomIn).toBeDisabled();
   await expect(region).toHaveAttribute('aria-busy', 'false');
