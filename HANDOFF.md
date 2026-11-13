@@ -19,74 +19,57 @@ session's note); the orchestrator pre-starts a slice's build sessions (`start_se
 worktree) in a turn Gilad wrote, and sends each its "go" later with `SendMessage`.
 
 ## Current Status
-Overall: IN_PROGRESS
+Overall: IN_PROGRESS (Slice 10 paused halfway by Gilad)
 
 Current focus:
-**Slice 9 + 9b is complete**: all 21 specs `0009a`–`0009u` (no `0009n`) are merged and `status: done` on `main`
-(last: 0009s, #62, merge 36ce546). No PRs open, no build sessions running, no spec worktrees left.
-**Slice 9c (map) is complete**: `0009v`–`0009y` merged and `status: done` on `main` (PRs #63, #65, #66, #67;
-last merge 9db5cc8, status 1d2f9b1). Main's ac9 timeout is fixed with `test.slow()` (#64) and `make e2e` now runs
-4 shards (OTP cap). No map PRs open, no map build sessions running, no map worktrees left.
-**Slice 10 "שוק השותפים" (the roommates market): all 11 specs `0010a`–`0010k` are written and `verified` on
-`main` (d856e38); nothing is built.** Spec split, migration chain (`0013`–`0017`) and build waves are in
-`specs/MARKET-PLAN.md` section 7. Gilad starts the Slice 10 builds himself in a new chat. Alembic head on `main`
-is still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.
+**Slice 10 "שוק השותפים" is half built: 5 of 11 specs merged and `status: done` on `main`** —
+`0010a` market move (#68), `0010d` listing photos API (#69, migration `0013`), `0010g` direct chat (#70, `0014`),
+`0010j` person photo API (#71), `0010b` role-free market (#72). Alembic head on `main` is `0014`.
+**Gilad (2026-11-13 evening): stop after the running specs; next, dive into CI e2e tests failing on the 30 s
+timeout.** The other six (`0010c`, `0010e`, `0010f`, `0010h`, `0010i`, `0010k`) are `in-progress` locks on `main`
+with prepared worktrees and pre-started build sessions that are idle, waiting for a "go" that was never sent.
+Gilad delegated Slice 10 merging to the orchestrator. Spec status on `main` is the source of truth; `git log`
+beats this file.
 
 Last updated:
-2026-11-13 (map orchestrator `local_671e0f86…`: Slice 9c built and merged)
+2026-11-13 evening (Slice 10 orchestrator: 0010a/b/d/g/j built and merged)
 
 ## Current Work
-- **Slice 10 specs done, builds not started.** Waves, at most 3 builds at a time:
-  `0010a` ∥ `0010d` → `0010b` ∥ `0010g` ∥ `0010j` → `0010c` ∥ `0010e` → `0010k` ∥ `0010f` → `0010h` → `0010i`
-  (each spec's `depends_on` is authoritative). The map chain is done, so all 3 slots are free.
-  Specs, briefly: a = the move (two-way switch, `/market`, `/market/mine`, apartments-only search, no type switch
-  on edit); b = role-free market (`is_mine`, signup from the market, seeker rule); c = profile split (personal +
-  "looking for", migration `0015`); d = listing photos API (R2 / file store, deps `python-multipart`, `Pillow`,
-  `boto3`, migration `0013`); e = wizard photo step; f = flat profile (room facts, flatmates shown as people,
-  `0016`); g = direct chat (conversations get their own id, `0014`); h = people browse API (`person_pairs`,
-  `card_id`, `0017`); i = people browse web; j = person photo API; k = photo display web (gallery, `Avatar`).
-- Slice 10 planning worktree: `../rent-app-0010-spec` (branch `docs/0010-planning`, at d856e38, clean). The four
-  spec sessions (`local_3afd2925…`, `local_0fefa23d…`, `local_d3f25b94…`, `local_c433ada8…`) are finished; archive
-  them. `../rent-app-map-spec` is removed (map job done).
-- No build sessions running. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
-  collisions"), ran 0009j/o/p/r/s/u (PRs #57–#62) and merged them; their worktrees and branches are removed.
-  The older orchestrator `local_2b79d58f…` merged 0009e/g/k/m (#53–#56) and is retired.
-- **ac9 e2e timeout: decided and fixed** (Gilad 2026-11-13): `test.slow()` on ac9, PR #64 (merge 41ca6b9); the
-  split into smaller tests is a FOLLOWUPS line. Since then ac9 has passed on every run.
-- **e2e shards = 4** (0009y, PR #67): at 28 tests the 3-way split put 11 sign-ups in one shard, past the OTP cap of
-  10 per IP per 15 min. A spec that adds sign-ups should count them per shard (`playwright test --list --shard`).
-- Starting a build (for the next slice): prepare the worktree + `.env`, then `start_session` with `cwd` = worktree,
-  `use_worktree: false`, `user_asked`, only in a turn Gilad wrote. Brief template = the 0009j–0009u briefs in the
-  orchestrator transcript `local_386fe896…` (each says: merge `origin/main` first, rebuild the web container, the
-  route and models, **no local e2e**, siblings and shared files, one push with `ready-to-merge`, report to the
-  session that started it, `make down` last).
-- **GitGuardian incident 40007526**: a fake invite token in `web/e2e/screens/fixtures-flatmates.ts` (0009qb, now on
-  main) re-flags in any merge commit that brings main in. Gilad: PRs whose *only* finding is that incident may merge
-  on green api/web/e2e. Clean fix: mark it false positive in the GitGuardian dashboard (asked Gilad). Force-push is
-  denied, so history rewrites are out.
-- Starting a build: `start_session` with `cwd` = worktree, `use_worktree: false`, `user_asked`, only in a turn Gilad
-  wrote. Brief template = the 0009m / 0009k briefs in the orchestrator transcript.
-- Merge routine: `gh pr checks N` green (api, web, e2e) → `gh pr merge N --merge --match-head-commit <sha>` → in
-  `../rent-app-orch` (detached on origin/main) set `status: done`, push `HEAD:main` → after the session's
-  `make down`, `git worktree remove --force ../rent-app-<id>`, delete local + remote branch. A FOLLOWUPS-only conflict
-  the orchestrator union-merges on the spec branch itself (done for 0009t and 0009e).
-- Main checkout `../rent-app` (at 287c8d5, behind `main`) still holds someone's uncommitted demo-seed work
-  (`Makefile`, `api/scripts/seed_demo.py`) and runs the shared `rent-app` stack. Leave it to its owner.
-
-### Map improvements, Slice 9c (2026-11-13: done)
-- Four web-only specs from `specs/map-research/` and Gilad's seven map decisions (PRODUCT.md row "Map"), built as a
-  chain by orchestrator `local_671e0f86…` (Gilad: two at a time, orchestrator merges): `0009v` pins (tiers,
-  liked/applied/seen marks, clusters, axe pin exemption gone; MapLibre controls drawn above pins) — #63 →
-  `0009w` card inside the map, `c`/`z`/`pin` in the URL, fit to results — #65 → `0009x` side map from 1280 px —
-  #66 ∥ `0009y` locate me (snapped ~200 m), places list, empty-area action, honest 300 m circle + map link — #67.
-- One review round each, 0 blockers left; minors in `specs/FOLLOWUPS.md` (0009v/w/x/y lines, incl. the root cause
-  of the `map_max_zoom_never_422_on_390px` flake after 0009w's first-open fit). Each PR's digest is on GitHub.
-- For Slice 10: `SearchPage.tsx`, `ListingPage.tsx`, `ListingCard.tsx`, `ResultsList.tsx`, `MapCanvas.tsx`,
-  `useLogout.ts` and `he.json` changed a lot; market specs that cite their old line numbers must re-check them.
-  `/market` reusing `SearchPage` gets pins, card, URL position and side map for free. `map.spec.ts` uses an auto
-  tile fixture (`newTileContext` for extra browser contexts) and `domcontentloaded` gotos.
-- OSM tiles now load on every wide-desktop list view (0009x); the Protomaps switch must happen before launch
-  (Slice 13 queue).
+- **Next task: the CI e2e 30 s timeouts** (Gilad). Seen on #69's first run: `flatmates.spec.ts::ac5_group_chat_flow`
+  (30.3 s) and `inbox.spec.ts::ac12_shortlist_chat_decline` (30.9 s), both chat flows; the rerun on the next head
+  passed. Earlier: ac9 needed `test.slow()` (#64), `/areas` slow in CI unconfirmed. Start from failed runs
+  (`gh run list --status failure`, `gh run view <id> --log-failed`); CI keeps no trace artifact, so adding one on
+  failure is a likely first step. Also: four Slice 8 PR runs (0008b, 0008c) have sat `queued` for ~46 h
+  (runs 43098114144, 43098113265, 43097722508, 43097722080) — cancel them.
+- **Slice 10, paused.** Remaining waves (≤3 builds at a time): `0010c` ∥ `0010e` → `0010k` ∥ `0010f` → `0010h` →
+  `0010i`. Readiness: c ← b + g (both merged, so c is ready), e ← a + d (ready), k ← c + d + j, f ← c + d,
+  h ← c + g + f, i ← h + k. Migration chain: `0015` (c) → `0016` (f) → `0017` (h); merge each only when its
+  `down_revision` is `main`'s head.
+- **Waiting build sessions** (each idle after replying "waiting for go"; brief says: on go, `git fetch`, merge the
+  named branches and `origin/main`, then `/build`): c `local_5be2d941-868a-4888-b85e-36f393da975a`,
+  e `local_f3d2229f-6f1e-454e-955b-34e198836bd0`, f `local_829f4c25-65e8-4488-a87d-f663f264058e`,
+  k `local_e8437897-2e6d-4c9e-80e1-0eb9f76214b8`, h `local_7650fafe-e13e-45bb-ac40-ea0c43a5eab9`,
+  i `local_5cfa37c4-43f1-4281-9576-a24a660fe72f`. Their worktrees `../rent-app-0010{c,e,f,h,i,k}` are cut from
+  4e07f78 with `.env` ports DB 5513/5515/5516/5518/5519/5521, Redis 646x, API 808x/809x, web 5223/5225/5226/5228/
+  5229/5231. Since `main` has moved a lot, every go must say "merge `origin/main`" (all parents are merged).
+  SendMessage reaches them from any turn; only `start_session` needs a turn Gilad wrote.
+- **Go notes to pass on:** c — read 0010b's hand-over (`0010b-handover.md`, "shared notes folder"; ask build-0010b
+  `local_59add869…` if not found): `my_likes` `seeker=True` forward risk, the AC9 allow-list, seeker-rule names.
+  e and j — 0010d added one upload in flight per user (429 `rate_limited`, `Retry-After: 5`) and shared
+  `upload_body` / `encode_upload`. h — its Risks line about "0010e's shared Avatar" is stale (the Avatar is
+  0010k's; h is API-only); 0010g's security review flagged re-liking to reopen a chat the other side closed:
+  Gilad's Q-A rule (reopen only on a new *mutual* like) covers it — keep it mutual.
+- **Done builds' sessions** (archive them): a `local_08e87eb7…`, d `local_1e1b3da6…`, g `local_0b1eeeb7…`,
+  j `local_956c59f6…`, b `local_59add869…`. Their worktrees and branches are removed.
+- Merge routine (unchanged): `gh pr checks N` green (api, web, e2e) → `gh pr merge N --merge --match-head-commit
+  <sha>` → in `../rent-app-orch` (detached on origin/main) set `status: done`, push `HEAD:main` → remove worktree,
+  delete local + remote branch. A duplicate `cancelled` run on a fresh PR is the concurrency rule cancelling the
+  twin started by the label (harmless).
+- Rate limit: all sessions share Gilad's 5-hour usage limit; 0010a and 0010d hit it once (reset 19:30) and resumed
+  on a message. Expect it again with three builds up.
+- Main checkout `../rent-app` (on `main` at 144eefd) has `HANDOFF.md` **unmerged** (UU) from an autostash pop
+  conflict, plus autostash entries in the shared stash list and the demo-seed work (`Makefile`,
+  `api/scripts/seed_demo.py`). Not the orchestrator's; leave it to its owner and tell Gilad.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -122,36 +105,25 @@ Last updated:
 - [x] Slice 9c map (orchestrator-merged, all CI api/web/e2e green on the PR head): 0009v pins — #63 (d7b977f);
   0009w card + URL — #65 (f986008); 0009x side map — #66 (bc4813f); 0009y map extras — #67 (9db5cc8). Infra:
   ac9 `test.slow()` — #64 (41ca6b9); `E2E_SHARDS` 3 → 4 inside #67.
+- [x] Slice 10, first half (orchestrator-merged, CI api/web/e2e green on each head): 0010a market move — #68
+  (afa7612); 0010d listing photos API — #69 (0698962, `0013`, one security blocker fixed: encode memory); 0010g
+  direct chat — #70 (87ed8d2, `0014`); 0010b role-free market — #72 (648803d); 0010j person photo API — #71
+  (377fcd5, Gilad: both sizes stay reachable by the same audience). PRODUCT.md market rows rewritten (4f3d75b).
 - [x] Gilad's decisions are in `specs/PRODUCT.md` (rows "Listings", "Search", "Applications", "Chat", "Matching",
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. **Build Slice 10** (Gilad, in a new chat): prepare a worktree + `.env` per spec (`../rent-app-0010a`, own
-   `COMPOSE_PROJECT_NAME`, ports above the Slice 9 ranges, own `WEB_PORT`), then pre-start the wave's build
-   sessions in a turn Gilad wrote and send each its "go". First wave: `0010a` and `0010d`. Model per spec: Opus/high
-   coder for `0010b/c/d/f/g/h/j` (auth, migrations, uploads, chat); reviewers per each spec's frontmatter. Briefs:
-   no local e2e, merge `origin/main` first, one push with `ready-to-merge`, `make down` last. A migration spec
-   merges only when its `down_revision` is `main`'s head (the chain in section 7).
-2. **Rewrite PRODUCT.md rows** the market contradicts before 0010a merges: "Rooms", "People & likes", "Listing edit",
-   "Search", "Account roles", and record Gilad's 2026-11-13 answers: seeker = seeker account or filled "looking
-   for" part; after a removed match the two may match again; a lister with no visible card browses but cannot
-   like people (403 `card_required`); a lister who says "I live here" shows as a full card (name, photo, age,
-   gender, about me, answers) to seekers only — an exception to "Search" (no owner name) and "Applications"
-   (owner hidden until chat). Then send Gilad the Slice 10 spec digest.
-3. Send Gilad a Slice 9 digest (21/21 merged; the FOLLOWUPS each spec added). Listing renewal moves with trust to
-   Slice 11.
+1. **Investigate the CI e2e 30 s timeouts** (Gilad's next ask; see Current Work). Cancel the four stuck Slice 8 runs.
+2. Resume Slice 10 when Gilad says: send the go to `0010c` and `0010e` (both ready; merge `origin/main` only), then
+   k ∥ f, h, i as PRs open. Pass on the go notes in Current Work.
+3. Send Gilad a Slice 10 digest so far (5/11 merged, the FOLLOWUPS lines each added) and the Slice 9 / 9c digests
+   (still owed).
 4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
-5. **Supervise CI e2e** on every merge; on a runner failure `gh variable set E2E_IN_CI --body off` and tell Gilad.
-6. FOLLOWUPS from Slice 9 (pin clustering and desktop map pairing are closed by 0009v / 0009x): range tags "3–4" render
-   4–3 under RTL bidi — a native reader's call (0009i), brand-voice sweep of slash forms (0009b), tabs row has no
-   scroll cue at 390 (0009l), plus the minors 0009j/k/m/o/p/r/s/u logged (0009s: 8 lines).
-7. Gilad's open Slice 8 decisions (FOLLOWUPS "pending decision"): person-card score inference, people-browse rate
-   limit; re-apply after decline (own later spec).
-8. Housekeeping: archive the finished Slice 9 and 9c build sessions (9c: `build-0009v/w/x/y`, `fix-ac9-slow`,
-   started from `local_671e0f86…`); remove the planning worktrees
-   `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`; update `CLAUDE.md` Speed rule 7
-   to "no local e2e" (it still says local `make e2e` is optional).
-9. Send Gilad a Slice 9c digest (4/4 merged, the FOLLOWUPS lines, the OSM tile load from the side map).
+5. Housekeeping: archive the finished build sessions (Slice 9, 9c, and 0010a/b/d/g/j); remove planning worktrees
+   `../rent-app-0008-spec`, `../rent-app-0009-spec`, `../rent-app-0010-spec`; decide on `qa-live-2026-11-10/`;
+   update `CLAUDE.md` Speed rule 7 to "no local e2e"; tell Gilad about the main checkout's unmerged `HANDOFF.md`.
+6. FOLLOWUPS from Slices 9–10, and Gilad's open Slice 8 decisions (person-card score inference, re-apply after
+   decline) — the people-browse rate limit lands with 0010h.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -168,7 +140,7 @@ Last updated:
   chat membership = owner, seeker, and flatmates (flatmates see messages from `joined_at`); `my_role` resolves
   owner → seeker → flatmate.
 - `api/alembic/versions/`: `0001`–`0012` (… `0009_room_inputs`, `0010_application_listing_type`,
-  `0011_people_likes`, `0012_flatmates`).
+  `0011_people_likes`, `0012_flatmates`, `0013_photos`, `0014_direct_chat`).
 - `web/src/`: `app/` (`routes.tsx`, `Layout.tsx`), `features/` (`applicants`, `applications`, `areas`, `auth`,
   `chat`, `flatmates`, `lifestyle`, `likes`, `listings`, `match`, `people`, `profile`, `rooms`, `search`),
   `components/`, `locales/he.json`, generated `api/schema.d.ts` (git-ignored, `make client`). `web/e2e/`: `smoke`,
@@ -257,6 +229,7 @@ Last updated:
   escapes in code and check the file for invisible characters afterwards.
 
 ## Known Issues
+- CI e2e: chat-flow tests intermittently hit the 30 s per-test timeout (#69 first run); under investigation next.
 - People browse has no rate limit, and the person-card score lets an owner infer hidden seeker fields by editing
   the room (pending Gilad, Next Steps 7).
 - Join, leave and remove publish no chat event; open threads refresh their members on window focus only.
@@ -295,6 +268,11 @@ shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.en
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-13 evening — Slice 10 orchestrator (this session, started from `/continue-from-handoff`): locked all 11
+  `0010*` specs (4e07f78), prepared 11 worktrees, pre-started 11 build sessions (a, d at once; 9 waiting).
+  Rewrote PRODUCT.md market rows (4f3d75b). Gilad delegated merging and chose "keep both sizes" for person photos
+  (0565a44). Merged #68, #69, #70, #72, #71. Gilad then paused the slice after the running five and asked for the
+  CI timeout dive next.
 - 2026-11-13 — Map orchestrator `local_671e0f86…` ("Map job specs implementation"): pushed the 9c specs (397ad44),
   pre-started four builds chained v → w → x ∥ y (two at a time, Gilad); Gilad delegated 9c merging and picked
   `test.slow()` for ac9 (#64). Merged #63, #65, #66, #67; 0009w's long map test was split after a CI timeout,
