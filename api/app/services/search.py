@@ -21,18 +21,22 @@ the fit: it reports it. A non-public listing is indistinguishable from an unknow
 (`ListingNotFoundError`, a 404).
 
 The seeker's likes (spec 0008a, `liked_rooms`) are the public rooms they liked or whose lister
-liked them, read here because they build on `_public_listings()`."""
+liked them, read here because they build on `_public_listings()`.
+
+The cover photo (spec 0010d): the search page and the liked rooms join each listing's position-0
+photo (`_with_cover`) in their one page statement and return its id and key (`None`, `None`
+without photos), so search and the map stay two statements."""
 
 import datetime as dt
 import uuid
 from typing import Any
 
 from sqlalchemy import Integer, Label, Select, and_, cast, func, or_, select
-from sqlalchemy.orm import Session, undefer
+from sqlalchemy.orm import Session, aliased, undefer
 
 from app.matching.fit import room_fit
 from app.matching.score import explain_row, match_columns
-from app.models import Area, Listing, RoomPair, SeekerProfile
+from app.models import Area, Listing, ListingPhoto, RoomPair, SeekerProfile
 from app.models.listing import PLAIN_GEOMETRY
 from app.schemas.match import MatchOut
 from app.schemas.search import SearchParams, SearchSort
@@ -55,6 +59,15 @@ def _public_listings() -> Select[tuple[Listing]]:
             Area.is_active.is_(True),
         )
     )
+
+
+def _with_cover(query: Select[Any]) -> Select[Any]:
+    """`query` with each listing's cover photo (position 0) as `cover_id` / `cover_key`, NULL
+    without photos. One row per listing: `(listing_id, position)` is unique."""
+    cover = aliased(ListingPhoto, name="cover")
+    return query.outerjoin(
+        cover, and_(cover.listing_id == Listing.id, cover.position == 0)
+    ).add_columns(cover.id.label("cover_id"), cover.key.label("cover_key"))
 
 
 def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
@@ -136,11 +149,12 @@ def _with_match(query: Select[Any]) -> tuple[Select[Any], Label[Any]]:
 
 def search_listings(
     db: Session, params: SearchParams, profile_user_id: uuid.UUID | None = None
-) -> tuple[list[tuple[Listing, MatchOut | None]], int, SearchSort]:
+) -> tuple[list[tuple[Listing, MatchOut | None, uuid.UUID | None, str | None]], int, SearchSort]:
     """One page of public listings matching `params` with each one's match (`None` without a
-    `profile_user_id`), the total matching (ignoring `limit` / `offset`, and never the score), and
-    the sort applied. With a `profile_user_id` the filtered select itself joins the profile and
-    drops the rooms that do not fit it (`room_fit` false), so the count and the page agree.
+    `profile_user_id`) and cover photo id and key (`None`, `None` without photos), the total
+    matching (ignoring `limit` / `offset`, and never the score), and the sort applied. With a
+    `profile_user_id` the filtered select itself joins the profile and drops the rooms that do not
+    fit it (`room_fit` false), so the count and the page agree.
     Exactly two statements: the count, then the page."""
     filtered: Select[Any] = _filtered(params)
     if profile_user_id is not None:
@@ -153,15 +167,21 @@ def search_listings(
         select(func.count()).select_from(filtered.order_by(None).subquery())
     ).scalar_one()
     if profile_user_id is None:
-        listings = db.scalars(
-            filtered.order_by(*_order(sort, None)).limit(params.limit).offset(params.offset)
+        rows = db.execute(
+            _with_cover(filtered)
+            .order_by(*_order(sort, None))
+            .limit(params.limit)
+            .offset(params.offset)
         ).all()
-        return [(listing, None) for listing in listings], total, sort
+        return [(row[0], None, row.cover_id, row.cover_key) for row in rows], total, sort
     matched, score = _with_match(filtered)
     rows = db.execute(
-        matched.order_by(*_order(sort, score)).limit(params.limit).offset(params.offset)
+        _with_cover(matched)
+        .order_by(*_order(sort, score))
+        .limit(params.limit)
+        .offset(params.offset)
     ).all()
-    return [(row[0], explain_row(row)) for row in rows], total, sort
+    return [(row[0], explain_row(row), row.cover_id, row.cover_key) for row in rows], total, sort
 
 
 def get_public_listing_with_match(
@@ -198,9 +218,12 @@ def get_public_listing_with_match(
 
 def liked_rooms(
     db: Session, seeker_id: uuid.UUID
-) -> list[tuple[Listing, MatchOut, dt.datetime | None, dt.datetime | None]]:
+) -> list[
+    tuple[Listing, MatchOut, dt.datetime | None, dt.datetime | None, uuid.UUID | None, str | None]
+]:
     """The public rooms with a like between them and `seeker_id` (either side), each with the
-    seeker's match, `lister_liked_at` and `seeker_liked_at`, newest like first. Only rooms (a room
+    seeker's match, `lister_liked_at`, `seeker_liked_at` and the cover photo's id and key (spec
+    0010d; `None`, `None` without photos), newest like first. Only rooms (a room
     switched to an apartment keeps its pairs; `room_fit` is NULL for it), whose fit is not false,
     that are not the seeker's own and have no non-withdrawn application from them (the
     application took over). Never names the owner. One statement."""
@@ -221,8 +244,18 @@ def liked_rooms(
     matched, _ = _with_match(query)
     newest = func.coalesce(RoomPair.seeker_liked_at, RoomPair.lister_liked_at)
     rows = db.execute(
-        matched.add_columns(RoomPair.lister_liked_at, RoomPair.seeker_liked_at).order_by(
-            newest.desc(), Listing.id
-        )
+        _with_cover(
+            matched.add_columns(RoomPair.lister_liked_at, RoomPair.seeker_liked_at)
+        ).order_by(newest.desc(), Listing.id)
     ).all()
-    return [(row[0], explain_row(row), row.lister_liked_at, row.seeker_liked_at) for row in rows]
+    return [
+        (
+            row[0],
+            explain_row(row),
+            row.lister_liked_at,
+            row.seeker_liked_at,
+            row.cover_id,
+            row.cover_key,
+        )
+        for row in rows
+    ]

@@ -43,6 +43,7 @@ from app.schemas.search import ListingPublic
 from app.services import chat as chat_service
 from app.services import chat_events
 from app.services import people as people_service
+from app.services import photos as photos_service
 from app.services import search as search_service
 from app.services.applications import (
     AlreadyAppliedError,
@@ -234,10 +235,20 @@ def unlike_room(listing_id: uuid.UUID, seeker: SeekerDep, db: DbDep) -> Response
 def my_likes(seeker: SeekerDep, db: DbDep) -> MyLikesOut:
     liked_me: list[LikedRoomOut] = []
     mine: list[LikedRoomOut] = []
-    for listing, match, lister_liked_at, seeker_liked_at in search_service.liked_rooms(
-        db, seeker.id
-    ):
-        room = ListingPublic.from_listing(listing, seeker=True, match=match)
+    for (
+        listing,
+        match,
+        lister_liked_at,
+        seeker_liked_at,
+        cover_id,
+        cover_key,
+    ) in search_service.liked_rooms(db, seeker.id):
+        room = ListingPublic.from_listing(
+            listing,
+            seeker=True,
+            match=match,
+            cover=photos_service.cover_out(cover_id, cover_key),
+        )
         if seeker_liked_at is not None:
             mine.append(LikedRoomOut(listing=room, liked_at=seeker_liked_at))
         elif lister_liked_at is not None:

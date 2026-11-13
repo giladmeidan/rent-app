@@ -2,6 +2,7 @@
 
 import logging
 import math
+import mimetypes
 from typing import Any
 
 import redis
@@ -10,6 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
@@ -23,12 +25,16 @@ from app.routers import (
     health,
     listings,
     people,
+    photos,
     profiles,
     search,
 )
 from app.schemas.error import ErrorOut
 
 log = logging.getLogger(__name__)
+
+# The slim image's `mimetypes` may not know WebP; `/media` must serve `image/webp` (spec 0010d).
+mimetypes.add_type("image/webp", ".webp")
 
 
 async def _database_unavailable(request: Request, exc: Exception) -> JSONResponse:
@@ -118,6 +124,12 @@ def create_app() -> FastAPI:
     app.include_router(profiles.router)
     app.include_router(people.router)
     app.include_router(flatmates.router)
+    app.include_router(photos.router)
+    if settings.photo_backend == "file":
+        # Dev, CI and e2e: the api serves the file photo store itself (spec 0010d). Created first:
+        # `StaticFiles` refuses a missing directory. With `r2` nothing is mounted.
+        settings.photo_dir.mkdir(parents=True, exist_ok=True)
+        app.mount("/media", StaticFiles(directory=settings.photo_dir), name="media")
     return app
 
 

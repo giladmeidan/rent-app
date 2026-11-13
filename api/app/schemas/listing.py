@@ -22,6 +22,7 @@ from pydantic import (
 )
 
 from app.schemas._text import lf_newlines, visible_characters_only
+from app.schemas.photo import PhotoOut
 from app.schemas.profile import (
     AGE_MAX,
     AGE_MIN,
@@ -231,7 +232,11 @@ class ListingPatch(BaseModel):
 
 
 class ListingOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    # `photos` (spec 0010d) has a default, but the key is always sent, so the response schema lists
+    # it as required.
+    model_config = ConfigDict(
+        from_attributes=True, json_schema_serialization_defaults_required=True
+    )
 
     id: uuid.UUID
     owner_id: uuid.UUID
@@ -264,6 +269,9 @@ class ListingOut(BaseModel):
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime
+    # The listing's photos in order, the first is the cover (spec 0010d). Not an ORM attribute:
+    # `[]` from `model_validate(listing)`; the router fills it (`services/photos.py`).
+    photos: list[PhotoOut] = Field(default_factory=list)
 
 
 class MyListingOut(ListingOut):

@@ -16,7 +16,15 @@ _HTTPS_READY: dict[str, Any] = {
     "cookie_secure": True,
     "email_backend": "file",
     "geocoder": "fake",
+    # spec 0010d: photos on R2 (obviously fake values)
+    "photo_backend": "r2",
+    "photo_public_base_url": "https://photos.rent.example",
+    "r2_account_id": "fake-account",
+    "r2_access_key_id": "fake-key-id",
+    "r2_secret_access_key": "fake-secret",
+    "r2_bucket": "fake-bucket",
 }
+_PHOTO_ENV = {k: v for k, v in _HTTPS_READY.items() if k.startswith(("photo_", "r2_"))}
 
 
 @pytest.mark.parametrize(
@@ -178,7 +186,7 @@ def test_https_web_origin_refuses_dev_defaults(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setenv("EMAIL_BACKEND", "file")  # from the environment counts as explicit
     monkeypatch.setenv("GEOCODER", "fake")
-    assert Settings(**https, secret_key=_SECRET, cookie_secure=True).cookie_secure is True
+    assert Settings(**https, **_PHOTO_ENV, secret_key=_SECRET, cookie_secure=True).cookie_secure
     # Plain http (local dev) keeps the dev defaults working.
     assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=DEV_SECRET_KEY).secret_key
 
@@ -218,3 +226,65 @@ def test_ac12_geocoder_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert production.geocoder == "nominatim"
     assert production.nominatim_user_agent == "rent-app/1.0 (+https://rent.example)"
+
+
+def test_ac13_photo_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "PHOTO_BACKEND",
+        "PHOTO_DIR",
+        "PHOTO_PUBLIC_BASE_URL",
+        "R2_ACCOUNT_ID",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+        "R2_BUCKET",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    required: dict[str, Any] = {"database_url": _DSN, "redis_url": _REDIS, "secret_key": _SECRET}
+
+    dev = Settings(**required)
+    assert (dev.photo_backend, str(dev.photo_dir)) == ("file", ".media")
+    assert dev.photo_public_base_url == "http://localhost:8000/media"
+    trimmed = Settings(**required, photo_public_base_url=" https://photos.rent.example/media/ ")
+    assert trimmed.photo_public_base_url == "https://photos.rent.example/media"
+    for bad_url in ("ftp://photos.example", "https://", "https://p.example/?a=1", "x/#f"):
+        with pytest.raises(ValidationError, match="PHOTO_PUBLIC_BASE_URL") as excinfo:
+            Settings(**required, photo_public_base_url=bad_url)
+        assert "p.example" not in str(excinfo.value)
+
+    # r2 needs every R2_* value, non-empty (an empty commented `# R2_BUCKET=` counts as unset).
+    r2 = {k: v for k, v in _PHOTO_ENV.items() if k.startswith("r2_")}
+    assert Settings(**required, photo_backend="r2", **r2).r2_bucket == "fake-bucket"
+    for missing in r2:
+        for value in (None, "", "  "):
+            with pytest.raises(ValidationError, match="R2_BUCKET are all required") as excinfo:
+                Settings(**required, photo_backend="r2", **{**r2, missing: value})
+            for secret in r2.values():
+                assert secret not in str(excinfo.value)
+    configured = Settings(**required, photo_backend="r2", **r2)
+    assert "fake-secret" not in repr(configured)
+    assert "fake-key-id" not in repr(configured)
+
+    # An https web origin: PHOTO_BACKEND explicit, r2, and an https, non-local base URL.
+    https: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "web_origin": "https://rent.example",
+        **{k: v for k, v in _HTTPS_READY.items() if k not in _PHOTO_ENV},
+    }
+    with pytest.raises(ValidationError, match="PHOTO_BACKEND must be set explicitly"):
+        Settings(**https)
+    with pytest.raises(ValidationError, match="PHOTO_BACKEND must be r2"):
+        Settings(**https, photo_backend="file")
+    for base_url in (
+        "http://photos.rent.example",
+        "https://localhost/media",
+        "https://127.0.0.1:8000/media",
+    ):
+        with pytest.raises(ValidationError, match="PHOTO_PUBLIC_BASE_URL must be https") as excinfo:
+            Settings(**https, **{**_PHOTO_ENV, "photo_public_base_url": base_url})
+        assert base_url not in str(excinfo.value)
+        assert "fake-secret" not in str(excinfo.value)
+    monkeypatch.setenv("PHOTO_BACKEND", "r2")  # from the environment counts as explicit
+    production = Settings(**https, **{k: v for k, v in _PHOTO_ENV.items() if k != "photo_backend"})
+    assert production.photo_backend == "r2"
+    assert production.photo_public_base_url == "https://photos.rent.example"

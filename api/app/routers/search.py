@@ -27,6 +27,7 @@ from app.schemas.error import ErrorOut
 from app.schemas.search import ListingDetail, ListingPublic, ListingSearchOut, SearchParams
 from app.services import applications as applications_service
 from app.services import people as people_service
+from app.services import photos as photos_service
 from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
@@ -73,7 +74,13 @@ def search_listings(
     page, total, sort = search_service.search_listings(db, params, _profile_user_id(db, user))
     seeker = _is_seeker(user)
     items = [
-        ListingPublic.from_listing(listing, seeker=seeker, match=match) for listing, match in page
+        ListingPublic.from_listing(
+            listing,
+            seeker=seeker,
+            match=match,
+            cover=photos_service.cover_out(cover_id, cover_key),
+        )
+        for listing, match, cover_id, cover_key in page
     ]
     _private_if_cookie(request, response)
     return ListingSearchOut(items=items, total=total, sort=sort)
@@ -115,6 +122,10 @@ def get_listing(
         and listing.owner_id != user.id
     ):
         like = people_service.like_state(db, user.id, listing.id)
+    # The last statement (spec 0010d), after `record_view`.
+    photos = photos_service.photos_out(
+        photos_service.photos_by_listing(db, [listing.id])[listing.id]
+    )
     _private_if_cookie(request, response)
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
@@ -124,4 +135,6 @@ def get_listing(
         applicant_count=count,
         room_fit=room_fit,
         like=like,
+        cover=photos[0] if photos else None,
+        photos=photos,
     )
