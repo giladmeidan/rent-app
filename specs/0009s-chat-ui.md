@@ -1,7 +1,7 @@
 ---
 id: 0009s
 title: Chat looks like the artboards' cards on a phone and opens as two panes on a desktop — the conversation list beside the open thread — with the same routes, the same event stream and message text still rendered as plain text
-status: in-progress
+status: done
 depends_on: [0009h]   # 0009h (which depends on 0009d): the kit (Button, Card, Badge, Tag, Textarea, PageContainer, PageHeader), the tokens, the page roots and the pageWidths table this spec edits. Branch from 0009h's PR once it is open
 reviewers: [code, qa, ux, security]   # security: chat rendering is restyled (message bodies and previews must stay text nodes, FOLLOWUPS 95); ux: no artboard, judged against Inbox / InboxDesktop; qa: routes, SSE refetches, the removed / closed / not-found states at both widths; no perf: no new request
 estimate: 1 coder run (upper end)   # coder Opus/high: a route-structure change around the SSE-driven chat, at two widths, plus ClampedText and 15 states x 2 screenshots; Sonnet would be enough for the styling alone. Verifier: if the run overflows, the coder stops and reports; it never trims an AC
