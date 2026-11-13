@@ -15,6 +15,10 @@ export const MAP_STYLE_URL: string = import.meta.env.VITE_MAP_STYLE_URL || '/map
 /** Gush Dan, the same box as `api/scripts/seed.py`'s `GUSH_DAN_WKT`. */
 export const GUSH_DAN_BOUNDS: Bbox = [34.74, 31.95, 34.95, 32.17];
 
+/** Where a map centre read from the URL may lie: `GUSH_DAN_BOUNDS` widened by 0.5 deg on each side
+ * (spec 0009w), so a hand-edited link never flies the map to another country. */
+export const MAP_POSITION_BOUNDS: Bbox = [34.24, 31.45, 35.45, 32.67];
+
 /** At most this many pins (`0003c`'s `limit` cap). */
 export const MAP_RESULTS_LIMIT = 50;
 
