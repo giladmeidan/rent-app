@@ -80,7 +80,8 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
     flatmatePage.getByRole('heading', { level: 1, name: he.auth.login.title }),
   ).toBeVisible();
 
-  // F signs up from there: the login asks for a role and a name for a new email.
+  // F signs up from there: the login asks for a name for a new email, and no role (the join page
+  // is the market's, spec 0010b).
   const email = uniqueEmail();
   await flatmatePage.getByLabel(he.auth.email.label).fill(email);
   await flatmatePage.getByRole('button', { name: he.auth.sendCode }).click();
@@ -93,7 +94,7 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   await codeInput.fill(code ?? '');
   await flatmatePage.getByRole('button', { name: he.auth.verify }).click();
   await expect(flatmatePage.getByText(he.auth.noAccountYet)).toBeVisible();
-  await flatmatePage.getByText(he.auth.role.seeker, { exact: true }).click();
+  await expect(flatmatePage.getByRole('group', { name: he.auth.role.label })).toHaveCount(0);
   await flatmatePage.getByLabel(he.auth.name.label).fill(FLATMATE);
   await flatmatePage.getByRole('button', { name: he.auth.verify }).click();
 
