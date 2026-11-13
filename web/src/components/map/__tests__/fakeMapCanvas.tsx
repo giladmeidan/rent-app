@@ -63,6 +63,9 @@ export function failMap() {
 }
 
 export function MapCanvas(props: Props) {
+  // `keyboard={false}` (the side map, spec 0009x): no pin or bubble is a tab stop or exposed.
+  const hidden =
+    props.keyboard === false ? { tabIndex: -1, 'aria-hidden': true as const } : undefined;
   useLayoutEffect(() => {
     fakeMap.props = props;
     const { camera } = props;
@@ -73,7 +76,7 @@ export function MapCanvas(props: Props) {
   return (
     <div role="region" aria-label={props.label} aria-busy={props.busy ?? false}>
       {/* The pan surface: MapLibre's canvas is focusable when the map is interactive. */}
-      <canvas tabIndex={props.interactive === false ? -1 : 0} />
+      <canvas tabIndex={props.interactive === false || props.keyboard === false ? -1 : 0} />
       {(props.pins ?? []).map((pin) => (
         <button
           key={pin.id}
@@ -84,6 +87,7 @@ export function MapCanvas(props: Props) {
           data-tier={pin.tier}
           data-mark={pin.mark ?? undefined}
           data-seen={pin.seen}
+          {...hidden}
           onClick={() => props.onPinClick?.(pin.id)}
         >
           {pin.text}
@@ -96,6 +100,7 @@ export function MapCanvas(props: Props) {
           aria-label={bubble.label}
           data-pin-id={bubble.id}
           data-tier={bubble.tier}
+          {...hidden}
           onClick={() => {
             const ids = bubble.members.map((member) => member.id);
             if (bubble.separates) fakeMap.zoomedTo = ids;
