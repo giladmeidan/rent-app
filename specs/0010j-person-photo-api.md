@@ -1,7 +1,7 @@
 ---
 id: 0010j
 title: Any signed-in account sets, replaces or removes one photo of themselves, and that photo's address appears only in responses that already show the person to the caller
-status: in-progress
+status: done
 depends_on: [0010d]   # 0010d: users.photo_key (migration 0013), the store, encode, read_capped and the upload router. No migration here
 reviewers: [code, qa, security]   # security: personal data (a face), Q16 exposure rule on every person surface, upload of untrusted bytes (0010d's encode); qa: every response that shows a person
 estimate: 1 coder run   # coder Opus/high (personal data; Speed rule 6)
