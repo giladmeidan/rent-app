@@ -10,9 +10,10 @@ do not fit them from search, the map and `total`, and sets the listing page's `r
 cookie is `Cache-Control: private` (0006b): the body may differ per caller. The cookie also
 decides whether a room's flatmates' ages and questionnaire answers are shown: only a signed-in
 seeker gets them, everyone else `[]` and `{}` (`ListingPublic.from_listing`, Gilad (b),
-2026-11-11). A listing that is not public is a 404 `not_found`, the same body as an unknown id. A
-seeker on a room also gets the listing page's `like` (spec 0008a), the likes between them and the
-room."""
+2026-11-11). Search returns one type: `listing_type` omitted means `apartment` (spec 0010a), the
+market asks for `room`; the listing page serves both. A listing that is not public is a 404
+`not_found`, the same body as an unknown id. A seeker on a room also gets the listing page's `like`
+(spec 0008a), the likes between them and the room."""
 
 import uuid
 from typing import Annotated, Any

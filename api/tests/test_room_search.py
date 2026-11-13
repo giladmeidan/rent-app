@@ -154,10 +154,13 @@ def test_ac1_rooms_are_public_with_room_fields(
     assert unknown.status_code == 404
     assert unknown.json() == NOT_FOUND
     for name, caller in callers.items():
-        body = _search(caller)
-        assert set(_ids(body)) == {room, apartment}, name
-        assert body["total"] == 2, name
-        items = {item["id"]: item for item in body["items"]}
+        # Rooms are asked for explicitly; the default is apartments only (spec 0010a).
+        body = _search(caller, "listing_type=room")
+        assert _ids(body) == [room], name
+        assert body["total"] == 1, name
+        apartments = _search(caller)
+        assert _ids(apartments) == [apartment], name
+        items = {item["id"]: item for item in [*body["items"], *apartments["items"]]}
         assert set(items[room]) == PUBLIC_KEYS, name
         assert items[room]["listing_type"] == "room"
         assert items[room]["gender_preference"] == "women"
@@ -194,7 +197,8 @@ def test_ac2_listing_type_filter(
 
     assert _id_set(client, "listing_type=apartment") == apartments
     assert _id_set(client, "listing_type=room") == {*rooms_inside, room_outside}
-    assert _id_set(client, "") == {*apartments, *rooms_inside, room_outside}
+    assert _id_set(client, "") == apartments  # omitted: apartments only (spec 0010a)
+    assert _id_set(client, BOX) == apartments
     assert _id_set(client, f"listing_type=room&{BOX}") == rooms_inside
     for bad in ("listing_type=house", "listing_type="):
         response = client.get(f"/listings?{bad}")
@@ -254,8 +258,8 @@ def test_ac3_misfit_rooms_hidden_per_seeker(
         fits = dict.fromkeys(rooms)
     visible_rooms = {rooms[name] for name, fit in fits.items() if fit is not False}
 
-    assert _id_set(caller, "") == {*visible_rooms, apartment}
-    assert _id_set(caller, BOX) == {*visible_rooms, apartment}  # the map
+    assert _id_set(caller, "") == {apartment}  # omitted: apartments only (spec 0010a)
+    assert _id_set(caller, f"listing_type=room&{BOX}") == visible_rooms  # the map
     assert _id_set(caller, "listing_type=room") == visible_rooms
 
     for name, listing_id in rooms.items():
@@ -283,45 +287,43 @@ def test_ac4_fit_filter_pages_counts_and_adds_no_statement(
                 _r0(db_engine, owner, gush_dan, gender_preference="men", created_at=created)
             )
             continue
-        kind = i % 3
-        if kind == 0:
-            listing_id = _l0(db_engine, owner, gush_dan, price_ils=price, created_at=created)
-        else:
-            listing_id = _r0(
-                db_engine,
-                owner,
-                gush_dan,
-                price_ils=price,
-                created_at=created,
-                gender_preference="any" if kind == 1 else "women",
-            )
+        # Every row is a room: the market asks for `listing_type=room` (spec 0010a).
+        listing_id = _r0(
+            db_engine,
+            owner,
+            gush_dan,
+            price_ils=price,
+            created_at=created,
+            gender_preference="women" if i % 3 == 2 else "any",
+        )
         fitting.add(listing_id)
     assert (len(fitting), len(men_rooms)) == (25, 5)
     seeker = _seeker(client, outbox, db_engine, gush_dan, gender="woman", flatmate_gender="any")
 
-    whole = _search(seeker, "sort=match&limit=50")
+    whole = _search(seeker, "listing_type=room&sort=match&limit=50")
     assert whole["total"] == 25
     assert set(_ids(whole)) == fitting
     paged: list[str] = []
     for offset in (0, 10, 20):
-        page = _search(seeker, f"sort=match&limit=10&offset={offset}")
+        page = _search(seeker, f"listing_type=room&sort=match&limit=10&offset={offset}")
         assert page["total"] == 25, offset
         paged.extend(_ids(page))
     assert paged == _ids(whole)
     assert len(paged) == len(set(paged)) == 25
-    assert _search(client)["total"] == 30
+    assert _search(client, "listing_type=room")["total"] == 30
 
-    _search(client)  # warm the connection: a first connect sends its own setup statements
-    _search(seeker, "limit=10")
+    # Warm the connection: a first connect sends its own setup statements.
+    _search(client, "listing_type=room")
+    _search(seeker, "listing_type=room&limit=10")
     statements.clear()
-    body = _search(seeker, "limit=10")
+    body = _search(seeker, "listing_type=room&limit=10")
     assert (len(body["items"]), body["total"]) == (10, 25)
     assert len(statements) == 4, statements
     assert "seeker_profiles" in statements[2], statements  # the count
     assert "seeker_profiles" in statements[3], statements  # the page
 
     statements.clear()
-    visitor = _search(client, "limit=10")
+    visitor = _search(client, "listing_type=room&limit=10")
     assert (len(visitor["items"]), visitor["total"]) == (10, 30)
     assert len(statements) == 2, statements
 
@@ -617,7 +619,7 @@ def test_ac7_room_ages_and_answers_only_to_seekers(
     }
 
     def reads(caller: TestClient) -> tuple[dict[str, Any], dict[str, Any]]:
-        items = {item["id"]: item for item in _search(caller)["items"]}
+        items = {item["id"]: item for item in _search(caller, "listing_type=room")["items"]}
         # `like` (0008a) is per caller, not a seeker-only field: `test_people.py` AC12.
         detail = {k: v for k, v in _detail(caller, room).items() if k != "like"}
         return items[room], detail

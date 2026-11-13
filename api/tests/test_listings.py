@@ -722,12 +722,16 @@ def test_ac1_room_fields_on_create_and_reads(
     assert detail.status_code == 200
     assert _room_fields(detail.json()) == ("women", 2, [], {})
     assert detail.json()["room_fit"] is None
-    search = client.get("/listings")
+    # Rooms are asked for explicitly; the default is apartments only (spec 0010a).
+    search = client.get("/listings?listing_type=room")
     assert search.status_code == 200
     ids = {item["id"] for item in search.json()["items"]}
     assert room["id"] in ids
     assert some_ages["id"] in ids
-    assert apartment["id"] in ids
+    assert apartment["id"] not in ids
+    apartments = client.get("/listings")
+    assert apartments.status_code == 200
+    assert {item["id"] for item in apartments.json()["items"]} == {apartment["id"]}
 
 
 def _without_key(body: dict[str, Any], key: str) -> dict[str, Any]:
@@ -842,60 +846,36 @@ def test_ac3_room_fields_patch(owner: TestClient, gush_dan: uuid.UUID, db_engine
     )
 
 
-def test_ac4_type_switch_room_fields(
+def test_ac2_patch_cannot_switch_type(
     owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
-    apartment_id = _create(owner, gush_dan)["id"]
+    """Spec 0010a AC2: `ListingPatch` has no `listing_type` and forbids unknown keys, so a PATCH
+    that tries to switch the type is a 422 `extra_forbidden` that echoes nothing and writes
+    nothing. Replaces 0007a's `test_ac4_type_switch_room_fields`."""
+    room = _create_room(owner, gush_dan)
+    room_id = room["id"]
+    assert owner.post(f"/listings/{room_id}/flatmate-invite").status_code == 201
+    row_before = _row(db_engine, room_id)
+    assert row_before["flatmate_invite_hash"] is not None
 
-    _assert_refused(owner, db_engine, apartment_id, [{"listing_type": "room"}])
+    for body in ({"listing_type": "apartment"}, {"listing_type": "room", "price_ils": 5000}):
+        response = _patch(owner, room_id, body)
+        _assert_clean_422(response)
+        assert response.json()["detail"] == [
+            {
+                "type": "extra_forbidden",
+                "loc": ["body", "listing_type"],
+                "msg": "Extra inputs are not permitted",
+            }
+        ], body
+        assert _row(db_engine, room_id) == row_before, body
 
-    room = _patched(
-        owner,
-        apartment_id,
-        {
-            "listing_type": "room",
-            "flatmates_count": 2,
-            "flatmate_ages": [30],
-            "gender_preference": "men",
-            "lifestyle": {"kosher": 3},
-        },
-    )
-    room_values = ("men", 2, [30], {"kosher": 3})
-    assert room["listing_type"] == "room"
-    assert _room_fields(room) == room_values
-    assert _room_fields(_row(db_engine, apartment_id)) == room_values
-
-    _assert_refused(
-        owner,
-        db_engine,
-        apartment_id,
-        [
-            {"listing_type": "apartment", "gender_preference": "women"},
-            {"listing_type": "apartment", "flatmates_count": None},  # an explicit null stays a 422
-        ],
-    )
-
-    # Exactly the body 0007e sends on this switch: the server resets the four fields.
-    switched = _patched(owner, apartment_id, {"listing_type": "apartment"})
-    assert switched["listing_type"] == "apartment"
-    assert _room_fields(switched) == ROOM_DEFAULTS
-    row = _row(db_engine, apartment_id)
-    assert row["listing_type"] == "apartment"
-    assert _room_fields(row) == ROOM_DEFAULTS
-
-    _assert_refused(
-        owner,
-        db_engine,
-        apartment_id,
-        [
-            {"gender_preference": "women"},
-            {"flatmates_count": 2},
-            {"flatmate_ages": [30]},
-            {"lifestyle": {"night": 2}},
-        ],
-    )
-
-    assert _patched(owner, apartment_id, {"gender_preference": "any"})["gender_preference"] == "any"
+    patched = _patched(owner, room_id, {"price_ils": 5000})
+    assert (patched["listing_type"], patched["price_ils"]) == ("room", 5000)
+    row = _row(db_engine, room_id)
+    assert (row["listing_type"], row["price_ils"]) == ("room", 5000)
+    assert _room_fields(row) == _room_fields(row_before)
+    assert row["flatmate_invite_hash"] == row_before["flatmate_invite_hash"]
 
 
 def test_ac5_legacy_room_fills_count_on_next_edit(
@@ -917,11 +897,6 @@ def test_ac5_legacy_room_fills_count_on_next_edit(
 
     filled = _patched(owner, legacy_1, {"price_ils": 3000, "flatmates_count": 2})
     assert (filled["price_ils"], filled["flatmates_count"]) == (3000, 2)
-
-    # An apartment needs no count.
-    switched = _patched(owner, legacy_2, {"listing_type": "apartment"})
-    assert switched["listing_type"] == "apartment"
-    assert _room_fields(switched) == ROOM_DEFAULTS
 
 
 def _many_unknown_keys() -> dict[str, int]:

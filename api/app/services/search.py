@@ -3,7 +3,9 @@
 "Public" has one definition, `_public_listings()`: a live (active, not yet lapsed) listing, an
 apartment or a room (spec 0007b), in an **active** launch area; listings outside an active area are
 hidden (PRODUCT.md "Launch area"). Both public functions below build on it and no other code here
-states any part of it, so search and the listing page can never disagree.
+states any part of it, so search and the listing page can never disagree. Search lists one type
+at a time (`SearchParams.listing_type`, `apartment` when omitted, spec 0010a); the listing page
+serves both.
 
 The optional map box (spec 0003c) filters on the listing's **approximate** point, the same point the
 response's `lat` / `lng` show, so it reveals nothing the response does not.
@@ -59,8 +61,7 @@ def _public_listings() -> Select[tuple[Listing]]:
 
 def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
     query = _public_listings()
-    if params.listing_type is not None:
-        query = query.where(Listing.listing_type == params.listing_type)
+    query = query.where(Listing.listing_type == params.listing_type)
     if params.price_min is not None:
         query = query.where(Listing.price_ils >= params.price_min)
     if params.price_max is not None:
