@@ -1,17 +1,23 @@
-"""`seeker_profiles` table (spec 0006a): a seeker's housing preferences, one row per seeker.
+"""`seeker_profiles` table (spec 0006a): a person's profile, one row per account.
 
-Every CHECK and the FK match migrations 0007, 0009, 0010 and 0011 exactly (autogenerate must see
-no diff). Personal data (NF2): read only by its seeker (`GET /me/profile`), by the apply gate
-(existence only) and, from 0006b / 0006c, by the matching queries.
+Every CHECK and the FK match migrations 0007, 0009, 0010, 0011 and 0015 exactly (autogenerate must
+see no diff). Personal data (NF2): read only by its owner (`GET /me/profile`), by the apply and like
+gates (whether the looking part is filled) and, from 0006b / 0006c, by the matching queries.
 
-The room section (spec 0007a): `gender` (NULL = not looking for a room), an optional `birth_year`,
-`flatmate_gender` (the flatmates preference) and `lifestyle` (the seeker's questionnaire answers,
-key -> 1-3). Without a `gender` the other three hold their defaults
-(`ck_seeker_profiles_room_section`). Also personal data: in 0007a only its seeker reads it; from
-0007b the room fit rule and the match score read it; from 0007c, the owner's inbox reads `gender`,
-`birth_year` (as an age) and `lifestyle` on room applications only (never `flatmate_gender`).
-From 0008a the room section also holds `people_visible` (opt in to room listers' people browse) and
-`about_me`; people browse reads them with the card fields by name, never `budget_max_ils`.
+Two independent parts (spec 0010c), at least one always set (`ck_seeker_profiles_parts`):
+- **The looking part** ("what I am looking for"): the 7 housing columns `budget_max_ils`,
+  `move_in_date`, `area_ids`, `household`, `has_pets`, `smoker`, `contract_months`, all set or all
+  NULL (`ck_seeker_profiles_looking`), plus `move_in_flexible`, `parking_needed` and
+  `flatmate_gender`, which hold their defaults without it (`ck_seeker_profiles_looking_defaults`).
+  A NULL `budget_max_ils` means the looking part is empty.
+- **The personal part** (spec 0007a, the former "room section"): `gender` (NULL = no personal
+  part), an optional `birth_year`, `lifestyle` (the questionnaire answers, key -> 1-3) and, from
+  0008a, `about_me`. Without a `gender` these, `flatmate_gender` and `people_visible` hold their
+  defaults (`ck_seeker_profiles_room_section`, name kept). Also personal data: from 0007b the room
+  fit rule and the match score read it; from 0007c, the owner's inbox reads `gender`, `birth_year`
+  (as an age) and `lifestyle` on room applications only (never `flatmate_gender`).
+`people_visible` (0008a: opt in to room listers' people browse) needs both parts; people browse
+reads the card columns by name, never `budget_max_ils`.
 
 `area_ids` has no FK (an array cannot carry one): the API
 checks each id is an active area when the profile is written; a later-deactivated area simply never
@@ -78,27 +84,45 @@ class SeekerProfile(Base):
             " AND lifestyle = '{}'::jsonb AND NOT people_visible AND about_me IS NULL)",
             name="ck_seeker_profiles_room_section",
         ),
+        # The looking part (spec 0010c, migration 0015): all 7 or none; its defaults without it; a
+        # row is never empty.
+        CheckConstraint(
+            "num_nulls(budget_max_ils, move_in_date, area_ids, household, has_pets, smoker,"
+            " contract_months) IN (0, 7)",
+            name="ck_seeker_profiles_looking",
+        ),
+        CheckConstraint(
+            "budget_max_ils IS NOT NULL OR (NOT move_in_flexible AND parking_needed = 0"
+            " AND flatmate_gender = 'any' AND NOT people_visible)",
+            name="ck_seeker_profiles_looking_defaults",
+        ),
+        CheckConstraint(
+            "budget_max_ils IS NOT NULL OR gender IS NOT NULL", name="ck_seeker_profiles_parts"
+        ),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    budget_max_ils: Mapped[int] = mapped_column(Integer, nullable=False)  # monthly
+    # The looking part (spec 0010c: nullable, all 7 or none).
+    budget_max_ils: Mapped[int | None] = mapped_column(Integer, nullable=True)  # monthly
     # The API refuses a past date or one more than a year ahead; a stored date may later pass.
-    move_in_date: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    move_in_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     move_in_flexible: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
-    area_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False)
-    household: Mapped[str] = mapped_column(Text, nullable=False)
-    has_pets: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    smoker: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    area_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=True
+    )
+    household: Mapped[str | None] = mapped_column(Text, nullable=True)
+    has_pets: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    smoker: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # The contract length the seeker wants.
-    contract_months: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    contract_months: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     parking_needed: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=text("0")
     )
-    # The room section (spec 0007a); `gender` NULL = not looking for a room.
+    # The personal part (spec 0007a's room section, 0010c); `gender` NULL = no personal part.
     gender: Mapped[str | None] = mapped_column(Text)
     birth_year: Mapped[int | None] = mapped_column(SmallInteger)
     flatmate_gender: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'any'"))
