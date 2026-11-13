@@ -343,15 +343,18 @@ has the "what I am looking for" part filled.
 | Spec | What | Migration | depends_on | Reviewers |
 | --- | --- | --- | --- | --- |
 | `0010a-market-move` | The move: two-way switch, market area, apartments-only search, no type switch on edit | none | — | code, qa, ux |
-| `0010d-photos-api` | Photo storage (file in dev/CI, R2 in prod), upload/delete/order, person photo, photo URLs on every read surface | `0013` | — | code, qa, security |
+| `0010d-photos-api` | Listing photo storage (file in dev/CI, R2 in prod), upload/delete/order | `0013` | — | code, qa, security |
 | `0010b-role-free-market` | Room actions for any account, `is_mine`, signup from the market, seeker rule (decision 13) | none | 0010a | code, qa, security, ux |
-| `0010g-direct-chat` | Conversations get their own id; a chat with no application (plumbing + no-listing chat UI) | `0014` | 0010d (migration chain only) | code, qa, security, perf |
-| `0010c-profile-split` | Profile = personal part + "looking for" part; one visibility switch re-worded | `0015` | 0010b, 0010g (chain) | code, qa, security, ux |
-| `0010e-photos-web` | Wizard photo step, listing gallery, card covers, shared `Avatar`, person photo on the profile | none | 0010a, 0010c, 0010d | code, qa, ux |
-| `0010f-flat-profile` | Optional room facts, who is posting, flatmates shown as people by their choice | `0016` | 0010c, 0010d | code, qa, security, ux |
-| `0010h-people-browse` | People browse people, person likes, mutual like opens a direct chat, remove match, browse rate limits | `0017` | 0010c, 0010g, 0010f (chain) | code, qa, security, perf, ux |
+| `0010g-direct-chat` | Conversations get their own id; a chat with no application | `0014` | 0010d (chain) | code, qa, security, perf |
+| `0010j-person-photo-api` | `/me/photo` and `photo_url` on every person surface | none | 0010d | code, qa, security |
+| `0010c-profile-split` | Personal part + "looking for" part; one visibility switch | `0015` | 0010b, 0010g (chain) | code, qa, security, ux |
+| `0010e-photos-web` | Wizard photo step, upload sync, partial-failure alert | none | 0010a, 0010d | code, qa, ux |
+| `0010k-photos-display-web` | Gallery, card covers, shared `Avatar`, profile photo | none | 0010c, 0010d, 0010j | code, qa, ux |
+| `0010f-flat-profile` | Optional room facts, who is posting, flatmates shown as people | `0016` | 0010c, 0010d | code, qa, security, ux |
+| `0010h-people-browse-api` | People browse people, person likes, direct chat on mutual, remove match, rate limits | `0017` | 0010c, 0010g, 0010f (chain) | code, qa, security, perf |
+| `0010i-people-browse-web` | People tab, person cards, likes sections, remove match in chat | none | 0010h, 0010k | code, qa, ux |
 
-Waves (at most 3 builds at a time): **a ∥ d** → **b ∥ g** → **c** → **e ∥ f** → **h**.
+Waves (at most 3 builds at a time): **a ∥ d** → **b ∥ g ∥ j** → **c ∥ e** → **k ∥ f** → **h** → **i**. 11 specs: 0010d, 0010e and 0010h were split by the verifier's one-run limit (orchestrator, 2026-11-13).
 Why 8, not 7: role-free + profile split together exceed one coder run (≈15 gate swaps and their tests, plus a
 migration with every NULL-profile consumer and the profile page rework). Every other pair was merged or kept
 split for the size or security reasons in section 2. Migration revisions are fixed by the chain above:
