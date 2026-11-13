@@ -465,3 +465,72 @@ test('map-same-place', async ({ page }, info) => {
     .waitFor();
   await shot0009w(page, info.project.name, 'map-same-place');
 });
+
+// Spec 0009y: locate me, the place box and the empty area's actions, into screens/0009y/.
+async function shot0009y(page: Page, project: string, state: string) {
+  await page.screenshot({ path: `screens/0009y/${state}-${project}.png`, fullPage: true });
+}
+
+/** The status line under the count line (the answer to a press). */
+const statusLine = (page: Page) => page.locator('p[role="status"]');
+
+test('map-locate', async ({ page }, info) => {
+  // Inside the launch area (Tel Aviv): the map moves to the ~200 m grid point, the dot at the fix.
+  await page.context().grantPermissions(['geolocation'], { origin: WEB_ORIGIN });
+  await page.context().setGeolocation({ latitude: 32.08167, longitude: 34.78123 });
+  await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
+  await page.goto('/search?view=map');
+  await mapReady(page);
+  await mapSettled(page);
+  await page.getByRole('button', { name: he.search.map.locate }).click();
+  await page.locator('[data-user-position]').waitFor();
+  await expect.poll(() => new URL(page.url()).searchParams.get('c')).toBe('32.082,34.782');
+  await mapReady(page);
+  await mapSettled(page);
+  await shot0009y(page, info.project.name, 'map-locate');
+});
+
+test('map-locate-outside', async ({ page }, info) => {
+  // Outside the launch area (Haifa): the map stays, the status line says so. A page of its own:
+  // within `maximumAge` the browser would answer with the cached Tel Aviv fix.
+  await page.context().grantPermissions(['geolocation'], { origin: WEB_ORIGIN });
+  await page.context().setGeolocation({ latitude: 32.79, longitude: 34.99 });
+  await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
+  await page.goto('/search?view=map');
+  await mapReady(page);
+  await mapSettled(page);
+  await page.getByRole('button', { name: he.search.map.locate }).click();
+  await expect(statusLine(page)).toHaveText(he.search.map.locateOutside);
+  await shot0009y(page, info.project.name, 'map-locate-outside');
+});
+
+test('map-place', async ({ page }, info) => {
+  await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
+  await page.goto('/search?view=map');
+  await mapReady(page);
+  await mapSettled(page);
+  const box = page.getByLabel(he.search.map.placeLabel);
+  // A partial name: no jump yet (the native list popup is browser chrome, not in the shot).
+  await box.fill('פלור');
+  await shot0009y(page, info.project.name, 'map-place-typing');
+  // The full name: the map goes to Florentin.
+  await box.fill(he.places.florentin);
+  await expect.poll(() => new URL(page.url()).searchParams.get('z')).toBe('15');
+  await mapReady(page);
+  await mapSettled(page);
+  await shot0009y(page, info.project.name, 'map-place');
+  // Enter on a name not in the list.
+  await box.fill('רחוב שאינו ברשימה');
+  await box.press('Enter');
+  await expect(statusLine(page)).toHaveText(he.search.map.placeNotFound);
+  await shot0009y(page, info.project.name, 'map-place-not-found');
+});
+
+test('map-empty-actions', async ({ page }, info) => {
+  // An empty box smaller than the launch area, with a filter: "show the whole area" and "clear".
+  await mockApi(page, { seeker: false, search: 'empty' });
+  await page.goto('/search?view=map&pets=true&c=32.08,34.8&z=15');
+  await mapReady(page);
+  await page.getByRole('button', { name: he.search.map.showAll }).waitFor();
+  await shot0009y(page, info.project.name, 'map-empty-actions');
+});
