@@ -204,3 +204,22 @@ export async function routeTiles(page: Page, failing = 0) {
       : route.fulfill({ status: 200, contentType: 'image/png', body: TILE });
   });
 }
+
+/**
+ * The latitude `px` screen pixels north of `lat` at `zoom`, by Web Mercator with MapLibre's 512 px
+ * tiles (about 1.01 m per px at zoom 16 and latitude 32). Spec 0009w: a map centred there shows a
+ * pin at `lat` `px` below the map's centre.
+ */
+export function latNorthBy(lat: number, px: number, zoom: number): number {
+  const world = 512 * 2 ** zoom;
+  const phi = (lat * Math.PI) / 180;
+  const y = ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * world - px;
+  return (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / world))) * 180) / Math.PI;
+}
+
+/**
+ * How far below a phone map's centre a pin sits inside the docked card's band: its centre 92 px
+ * above the map's bottom edge, while the card is docked 32 px up (`bottom-8`) and is at least
+ * ~150 px tall, so the 44 px pin starts fully covered.
+ */
+export const intoTheDockedCard = (mapHeight: number) => mapHeight / 2 - 92;

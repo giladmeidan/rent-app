@@ -1,7 +1,7 @@
-import { test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
-import { routeTiles } from '../helpers';
+import { intoTheDockedCard, latNorthBy, routeTiles } from '../helpers';
 import { WEB_ORIGIN } from './origin';
 
 // The visual check of spec 0009i (`make screens`): /search in seven states at 390px and 1440px.
@@ -66,7 +66,11 @@ function listing(n: number, overrides: Record<string, unknown>) {
 
 /** Where the listings sit: their true points (the list states), or spread on the map (0009v), plus
  * a tight pair or two at one point. */
-type MapFixtures = 'true' | 'spread' | 'bubble' | 'samePlace';
+type MapFixtures = 'true' | 'spread' | 'bubble' | 'samePlace' | 'longTitle';
+
+/** The street of listing 1 in the `longTitle` fixtures: a title that wraps under the close button
+ * unless the compact card keeps it clear (spec 0009w). */
+const LONG_STREET = 'שדרות ירושלים ויהודית בן צבי';
 
 /** The four listings' map points, each ~0.04 deg of latitude (~80 px at the fitted view) apart. */
 const SPREAD = {
@@ -85,7 +89,7 @@ function listings(seeker: boolean, map: MapFixtures = 'true') {
     map === 'true' ? { lng, lat } : SPREAD[n];
   const items = [
     listing(1, {
-      street: 'כצנלסון',
+      street: map === 'longTitle' ? LONG_STREET : 'כצנלסון',
       city: 'גבעתיים',
       rooms: 4,
       floor: 3,
@@ -407,6 +411,45 @@ test('map-bubble', async ({ page }, info) => {
   await mapReady(page);
   await page.getByRole('button', { name: he.search.map.bubble_two }).waitFor();
   await shot0009v(page, info.project.name, 'map-bubble');
+});
+
+test('map-card-pan', async ({ page }, info) => {
+  // The pin starts low in a phone's map, where the card docks: pressed, the map pans it clear
+  // (spec 0009w). Listing 1's long street also shows the title kept clear of the close button.
+  test.skip(info.project.name !== 'mobile', 'the card covers a pin only on a phone');
+  await mockApi(page, { seeker: false, search: 'items', map: 'longTitle' });
+  const { lat, lng } = SPREAD[1];
+  const region = page.getByRole('region', { name: he.search.map.label });
+  await page.goto(`/search?view=map&c=${String(lat)},${String(lng)}&z=16`);
+  await mapReady(page);
+  const height = (await region.boundingBox())?.height ?? 0;
+  const drop = intoTheDockedCard(height);
+  const centre = `${latNorthBy(lat, drop, 16).toFixed(6)},${lng.toFixed(6)}`;
+  await page.goto(`/search?view=map&c=${centre}&z=16`);
+  await mapReady(page);
+  await mapSettled(page);
+
+  // Calibration: the pin's centre is `drop` px below the map's centre (2 px of rounding).
+  const pin = page.getByRole('button', { name: new RegExp(LONG_STREET) });
+  const start = await pin.boundingBox();
+  const map = await region.boundingBox();
+  if (start === null || map === null) throw new Error('no boxes');
+  const below = start.y + start.height / 2 - (map.y + map.height / 2);
+  console.log(`map-card-pan: map ${String(map.height)} px, pin ${String(below)} px below centre`);
+  expect(Math.abs(below - drop)).toBeLessThanOrEqual(2);
+
+  await pin.click();
+  const card = page.locator('[data-map-card]');
+  await card.getByRole('article').waitFor();
+  await mapSettled(page);
+  const docked = await card.boundingBox();
+  const end = await pin.boundingBox();
+  if (docked === null || end === null) throw new Error('no boxes');
+  // The card covered where the pin started; the pin now ends 8 px above it.
+  expect(start.y + start.height).toBeGreaterThan(docked.y);
+  expect(Math.round(docked.y - (end.y + end.height))).toBeGreaterThanOrEqual(7);
+  console.log(`map-card-pan: panned ${String(start.y - end.y)} px`);
+  await shot0009w(page, info.project.name, 'map-card-pan');
 });
 
 test('map-same-place', async ({ page }, info) => {

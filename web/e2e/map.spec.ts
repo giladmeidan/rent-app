@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { routeTiles, signUpOwner } from './helpers';
+import { intoTheDockedCard, latNorthBy, routeTiles, signUpOwner } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
@@ -294,6 +294,43 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     await expect(pin).toHaveAttribute('aria-pressed', 'true');
     const after = query(page);
     for (const key of ['c', 'z', 'pin']) expect(after.get(key)).toBe(before.get(key));
+  });
+
+  // Apart from the Back check above: after a pan, the 4-decimal `c` can move the pin a few px on
+  // restore and pan it again, so a pan never meets an exact-`c` comparison.
+  await test.step('ac7_card_keeps_the_pin_clear', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // The map's height at 390 decides how far below the centre the card docks.
+    await page.goto(atThePin);
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    const drop = intoTheDockedCard((await boxOf(region)).height);
+    // The centre `drop` px north of the pin: the pin starts low in the map, in the card's band.
+    const north = `${latNorthBy(point.lat, drop, 16).toFixed(6)},${point.lng.toFixed(6)}`;
+    await page.goto(
+      `/search?view=map&price_min=${String(price)}&price_max=${String(price)}&c=${north}&z=16`,
+    );
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    await expect(pin).toBeVisible({ timeout: 15_000 });
+    await region.scrollIntoViewIfNeeded();
+    const regionBox = await boxOf(region);
+    const start = await boxOf(pin);
+    expect(
+      Math.abs(start.y + start.height / 2 - (regionBox.y + regionBox.height / 2) - drop),
+    ).toBeLessThanOrEqual(3);
+
+    await pin.focus();
+    await pin.press('Enter');
+    await expect(dockedCard).toHaveCount(1);
+    // The card covers where the pin started, so the map has to pan.
+    expect(intersects(start, await boxOf(docked))).toBe(true);
+    await expect
+      .poll(async () => intersects(await boxOf(pin), await boxOf(docked)), { timeout: 10_000 })
+      .toBe(false);
+    expect((await boxOf(pin)).y).toBeLessThan(start.y);
+    await expect(pin).toBeInViewport();
+    const attribution = region.locator('.maplibregl-ctrl-attrib');
+    await expect(attribution).toBeVisible();
+    expect(intersects(await boxOf(attribution), await boxOf(docked))).toBe(false);
   });
 });
 
