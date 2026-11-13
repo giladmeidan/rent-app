@@ -351,6 +351,7 @@ def _mutual(db: Session, listing: Listing, pair: RoomPair, *, lister_second: boo
     db.execute(
         insert(Conversation)
         .values(
+            id=application.id,  # an application chat's id is its application's (0010g)
             application_id=application.id,
             owner_id=listing.owner_id,
             seeker_id=pair.seeker_id,

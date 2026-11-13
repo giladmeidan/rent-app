@@ -1804,3 +1804,257 @@ def test_ac14_photos_upgrade_downgrade(migration_db_url: str) -> None:
             assert conn.execute(text("SELECT photo_key FROM users")).scalar() is None
     finally:
         engine.dispose()
+
+
+def _conversation_keys(conn: Any) -> dict[str, tuple[str, str, str]]:
+    """The primary key, unique and foreign-key constraints that touch `conversations`, by name:
+    (table, kind, the key columns -> the referenced table's columns, for an FK)."""
+    return {
+        name: (table, kind, definition)
+        for table, name, kind, definition in conn.execute(
+            text(
+                "SELECT conrelid::regclass::text, conname, contype, pg_get_constraintdef(oid)"
+                " FROM pg_constraint WHERE contype IN ('p', 'u', 'f')"
+                " AND (conrelid = 'conversations'::regclass"
+                " OR confrelid = 'conversations'::regclass)"
+            )
+        ).tuples()
+    }
+
+
+def test_ac9_direct_chat_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0010g: 0014 gives `conversations` its own `id` (= application_id on existing rows), makes
+    # `application_id` nullable and unique, moves the two FKs onto `id`, and adds `closed_at`, the
+    # direct-chat CHECKs and the one-per-pair partial index. Downgrade deletes direct chats only.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0013")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, :role) RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name, "role": role},
+                ).scalar_one()
+                for name, role in (("owner", "owner"), ("seeker", "seeker"), ("mate", "seeker"))
+            }
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at, flatmates_count)"
+                    " VALUES (:owner, :area, 'room', 'city', 'street', 3, 1, 80, 4500,"
+                    " current_date, false, 'none', false, now() + interval '90 days', 2)"
+                    " RETURNING id"
+                ),
+                {"owner": users["owner"], "area": area_id},
+            ).scalar_one()
+            application_id = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, status,"
+                    " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+                    " VALUES (:listing, :seeker, 'Hello', 'shortlisted', 4500, :area, 'room')"
+                    " RETURNING id"
+                ),
+                {"listing": listing_id, "seeker": users["seeker"], "area": area_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO conversations (application_id, owner_id, seeker_id, owner_read_at)"
+                    " VALUES (:application, :owner, :seeker, now())"
+                ),
+                {"application": application_id, "owner": users["owner"], "seeker": users["seeker"]},
+            )
+            message_id = conn.execute(
+                text(
+                    "INSERT INTO messages (conversation_id, sender_id, body)"
+                    " VALUES (:conversation, :sender, 'hi') RETURNING id"
+                ),
+                {"conversation": application_id, "sender": users["owner"]},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO listing_flatmates (listing_id, user_id) VALUES (:listing, :user)"
+                ),
+                {"listing": listing_id, "user": users["mate"]},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO conversation_reads (conversation_id, user_id, read_at)"
+                    " VALUES (:conversation, :user, now())"
+                ),
+                {"conversation": application_id, "user": users["mate"]},
+            )
+
+        def survivors(conn: Any) -> tuple[Any, ...]:
+            """The application chat with its message and flatmate marker, joined on the FKs'
+            target column (`application_id` at 0013; at 0014 it equals `id`)."""
+            return tuple(
+                conn.execute(
+                    text(
+                        "SELECT c.application_id, c.owner_id, c.seeker_id, m.id, m.body, r.user_id"
+                        " FROM conversations c"
+                        " JOIN messages m ON m.conversation_id = c.application_id"
+                        " JOIN conversation_reads r ON r.conversation_id = c.application_id"
+                    )
+                ).one()
+            )
+
+        with engine.connect() as conn:
+            before = survivors(conn)
+            keys_0013 = _conversation_keys(conn)
+        assert before == (
+            application_id,
+            users["owner"],
+            users["seeker"],
+            message_id,
+            "hi",
+            users["mate"],
+        )
+        assert keys_0013["conversations_pkey"][2] == "PRIMARY KEY (application_id)"
+        assert keys_0013["messages_conversation_id_fkey"][2].startswith(
+            "FOREIGN KEY (conversation_id) REFERENCES conversations(application_id)"
+        )
+        assert keys_0013["conversation_reads_conversation_id_fkey"][2].startswith(
+            "FOREIGN KEY (conversation_id) REFERENCES conversations(application_id)"
+        )
+
+        command.upgrade(cfg, "0014")
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert conn.execute(text("SELECT id, application_id FROM conversations")).one() == (
+                application_id,
+                application_id,
+            )
+            # The message and the marker join on the new key too.
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM conversations c"
+                        " JOIN messages m ON m.conversation_id = c.id"
+                        " JOIN conversation_reads r ON r.conversation_id = c.id"
+                    )
+                ).scalar_one()
+                == 1
+            )
+            columns = _columns(conn, "conversations")
+            assert columns["id"] is False
+            assert columns["application_id"] is True
+            assert columns["closed_at"] is True
+            keys = _conversation_keys(conn)
+            checks = {
+                name: _check_definition(conn, name)
+                for name in (
+                    "ck_conversations_two_people",
+                    "ck_conversations_direct",
+                    "ck_conversations_closed_direct",
+                    "ck_conversations_application_id",
+                )
+            }
+            pair_index = conn.execute(
+                text(
+                    "SELECT indexdef FROM pg_indexes"
+                    " WHERE indexname = 'uq_conversations_direct_pair'"
+                )
+            ).scalar_one()
+        cascade = "ON DELETE CASCADE"
+        assert keys["conversations_pkey"] == ("conversations", "p", "PRIMARY KEY (id)")
+        assert keys["uq_conversations_application_id"] == (
+            "conversations",
+            "u",
+            "UNIQUE (application_id)",
+        )
+        assert keys["fk_messages_conversation_id"] == (
+            "messages",
+            "f",
+            f"FOREIGN KEY (conversation_id) REFERENCES conversations(id) {cascade}",
+        )
+        assert keys["fk_conversation_reads_conversation_id"] == (
+            "conversation_reads",
+            "f",
+            f"FOREIGN KEY (conversation_id) REFERENCES conversations(id) {cascade}",
+        )
+        assert "messages_conversation_id_fkey" not in keys
+        assert "conversation_reads_conversation_id_fkey" not in keys
+        assert keys["conversations_application_id_fkey"][2] == (
+            f"FOREIGN KEY (application_id) REFERENCES applications(id) {cascade}"
+        )
+        assert all(checks.values()), checks
+        assert pair_index.endswith(
+            "USING btree (owner_id, seeker_id) WHERE (application_id IS NULL)"
+        ), pair_index
+        assert pair_index.startswith("CREATE UNIQUE INDEX"), pair_index
+
+        # A direct chat with a message and a marker: the downgrade deletes it, and only it.
+        with engine.begin() as conn:
+            direct_id = conn.execute(
+                text(
+                    "INSERT INTO conversations (owner_id, seeker_id)"
+                    " VALUES (least(CAST(:a AS uuid), CAST(:b AS uuid)),"
+                    " greatest(CAST(:a AS uuid), CAST(:b AS uuid))) RETURNING id"
+                ),
+                {"a": users["seeker"], "b": users["mate"]},
+            ).scalar_one()
+            assert direct_id != application_id
+            conn.execute(
+                text(
+                    "INSERT INTO messages (conversation_id, sender_id, body)"
+                    " VALUES (:conversation, :sender, 'direct')"
+                ),
+                {"conversation": direct_id, "sender": users["mate"]},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO conversation_reads (conversation_id, user_id, read_at)"
+                    " VALUES (:conversation, :user, now())"
+                ),
+                {"conversation": direct_id, "user": users["owner"]},
+            )
+
+        command.downgrade(cfg, "0013")
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert conn.execute(text("SELECT count(*) FROM conversations")).scalar_one() == 1
+            assert conn.execute(text("SELECT count(*) FROM messages")).scalar_one() == 1
+            assert conn.execute(text("SELECT count(*) FROM conversation_reads")).scalar_one() == 1
+            columns = _columns(conn, "conversations")
+            assert "id" not in columns
+            assert "closed_at" not in columns
+            assert columns["application_id"] is False
+            assert _conversation_keys(conn) == keys_0013
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint WHERE conname IN"
+                        " ('ck_conversations_direct', 'ck_conversations_closed_direct',"
+                        " 'ck_conversations_application_id')"
+                    )
+                ).scalar_one()
+                == 0
+            )
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes"
+                        " WHERE indexname = 'uq_conversations_direct_pair'"
+                    )
+                ).scalar_one()
+                == 0
+            )
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert _conversation_keys(conn) == keys
+    finally:
+        engine.dispose()

@@ -1,7 +1,7 @@
 ---
 id: 0010g
 title: A conversation gets its own id, so two people can share a chat with no room and no application (the plumbing 0010h's mutual person like opens), and the chat screens show such a chat without a listing line
-status: in-progress
+status: done
 depends_on: [0010d]   # migration chain only (0013 -> 0014). 0005a/0005c/0008d (done): conversations, messages, read markers, SSE, flatmate members
 reviewers: [code, qa, security, perf]   # security: membership on every chat statement after the joins become outer joins (a chat must never leak or vanish); perf: the chat list's one statement and its index use; qa: existing application chats unchanged end to end
 estimate: 1 coder run   # coder Opus/high (chat access control, a primary-key migration; Speed rule 6)

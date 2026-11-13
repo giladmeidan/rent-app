@@ -214,8 +214,8 @@ def list_flatmates(db: Session, owner: User, listing_id: uuid.UUID) -> Sequence[
 
 
 def _delete_reads(db: Session, listing_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    """Drop `user_id`'s flatmate read markers on the listing's conversations (a conversation's id
-    is its application's)."""
+    """Drop `user_id`'s flatmate read markers on the listing's conversations (an application chat's
+    id is its application's, by CHECK: `ck_conversations_application_id`)."""
     db.execute(
         delete(ConversationRead)
         .where(

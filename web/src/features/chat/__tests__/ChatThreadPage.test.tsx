@@ -17,7 +17,7 @@ import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut, MessageOut, ThreadOut } from '../api';
 import { readDraft, writeDraft } from '../../../app/drafts';
 import { CONVERSATIONS_KEY } from '../useConversations';
-import { conversation, message, thread } from './fixtures';
+import { conversation, directThread, message, thread } from './fixtures';
 import { chatRoutes, connected, ES, openStream, settle } from './harness';
 
 afterEach(() => {
@@ -979,5 +979,63 @@ describe('ChatThreadPage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: he.chat.removed })).toBeVisible();
     expect(draft()).toBe('');
     reset(view);
+  });
+
+  it('ac11_direct_chat_header_and_closed_note', async () => {
+    // A direct chat (spec 0010g): the person's name, one caption line, no listing link, the
+    // deposit warning, and no member line (two people).
+    const D = directThread({ other_name: NAME, messages: [message({ body: 'hi' })] });
+    let { view } = renderThread(D, [json(D)]);
+    expect(await h1(NAME)).toBeVisible();
+    const caption = screen.getByText(he.chat.thread.direct);
+    expect(caption.tagName).toBe('P');
+    expect(caption).toHaveClass('text-caption', 'text-ink-muted');
+    expect(caption.textContent).toBe(he.chat.thread.direct);
+    expect(screen.queryByRole('link', { name: he.chat.thread.toListing })).toBeNull();
+    expect(screen.queryByRole('link', { name: he.chat.thread.toApplicants })).toBeNull();
+    expect(screen.getByRole('note').textContent).toBe(he.chat.thread.warning);
+    expect(screen.queryByRole('group', { name: he.chat.members })).toBeNull();
+    expect(bubbles()).toHaveLength(1);
+    expect(textarea()).toBeVisible();
+    expect(screen.queryByText(he.chat.thread.closedDirect)).toBeNull();
+    reset(view);
+
+    // Closed (the match was removed): the direct closed note replaces the composer, readable.
+    const closed = { ...D, can_send: false };
+    ({ view } = renderThread(closed, [json(closed)]));
+    expect(await h1(NAME)).toBeVisible();
+    expect(bubbles()).toHaveLength(1);
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: he.chat.composer.send })).toBeNull();
+    const note = screen.getByText(he.chat.thread.closedDirect);
+    expect(note).toHaveAttribute('role', 'status');
+    expect(screen.queryByText(he.chat.thread.closed)).toBeNull();
+    reset(view);
+
+    // It closes under the composer: the note takes focus, as today's (spec 0009t).
+    ({ view } = renderThread(D, [() => json(D), () => json(closed)]));
+    expect(await h1(NAME)).toBeVisible();
+    act(() => textarea().focus());
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    const focused = await screen.findByText(he.chat.thread.closedDirect);
+    await waitFor(() => {
+      expect(focused).toHaveFocus();
+    });
+    reset(view);
+
+    // An application thread still shows its listing line and button, and today's closed note.
+    const T = thread({ other_name: NAME, can_send: false });
+    renderThread(T, [json(T)]);
+    expect(await h1(NAME)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.chat.thread.toListing })).toHaveAttribute(
+      'href',
+      `/listings/${T.listing.id}`,
+    );
+    expect(screen.queryByText(he.chat.thread.direct)).toBeNull();
+    expect(screen.getByText(he.chat.thread.closed)).toHaveAttribute('role', 'status');
+    expect(screen.queryByText(he.chat.thread.closedDirect)).toBeNull();
   });
 });

@@ -145,11 +145,12 @@ def _conversation(
     seeker_id: uuid.UUID,
     created_ago_s: float = 0,
 ) -> None:
-    """Insert a conversation by SQL (owner's read marker set, as on open)."""
+    """Insert a conversation by SQL (owner's read marker set, as on open; its id is the
+    application's, spec 0010g)."""
     _execute(
         engine,
-        "INSERT INTO conversations (application_id, owner_id, seeker_id, owner_read_at,"
-        " created_at) VALUES (:a, :o, :s, now() - make_interval(secs => :ago),"
+        "INSERT INTO conversations (id, application_id, owner_id, seeker_id, owner_read_at,"
+        " created_at) VALUES (:a, :a, :o, :s, now() - make_interval(secs => :ago),"
         " now() - make_interval(secs => :ago))",
         a=application_id,
         o=owner_id,
