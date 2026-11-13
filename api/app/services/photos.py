@@ -76,6 +76,8 @@ _RELEASE_SLOT = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
 return 0
 """
+# 16-bit (and 32-bit integer) grayscale: scaled to 8 bits, since `convert` clips instead.
+_WIDE_GRAY_MODES = frozenset({"I", "I;16", "I;16L", "I;16B", "I;16N"})
 
 
 class PhotoTooLargeError(Exception):
@@ -197,6 +199,8 @@ def _encode(data: bytes) -> Encoded:
     # Decodes frame 0 only (an animated WebP or APNG keeps its first frame) and applies the EXIF
     # orientation, so the EXIF can go.
     oriented = ImageOps.exif_transpose(img)
+    if oriented.mode in _WIDE_GRAY_MODES:
+        oriented = oriented.convert("I").point(lambda v: v * (1 / 256)).convert("L")
     rgb = oriented.convert("RGBA" if alpha else "RGB")
     rgb.info.clear()
     large, (width, height) = _webp(rgb, LARGE_EDGE)

@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Any, Literal, cast
 
 import pytest
-from PIL import Image, ImageCms, ImageFile
+from PIL import Image, ImageCms, ImageFile, ImageStat
 
 from app.services.photos import (
     LARGE_EDGE,
@@ -169,3 +169,13 @@ def test_only_the_three_plugins_open_uploads(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(Image, "open", spy)
     encode(jpeg(32, 32))
     assert seen == [["JPEG", "PNG", "WEBP"]]
+
+
+def test_sixteen_bit_grayscale_is_scaled_not_clipped() -> None:
+    data = _save(Image.new("I;16", (100, 100), 40000), "PNG")
+    assert _open(data).mode == "I;16"
+
+    large = _open(encode(data).large)
+
+    mean = ImageStat.Stat(large.convert("L")).mean[0]
+    assert abs(mean - 152) <= 20, mean  # 40000 / 256 = 156, not clipped to 255
