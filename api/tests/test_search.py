@@ -46,6 +46,7 @@ PUBLIC_KEYS = {
     "lat",
     "lng",
     "match",  # spec 0006b: null unless the caller is a seeker with a profile
+    "cover",  # spec 0010d: the position-0 photo, null without photos
     "is_mine",  # spec 0010b: the caller owns it
 }
 
@@ -210,15 +211,16 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "lat": None,  # not located yet (spec 0003c)
         "lng": None,
         "match": None,  # a visitor (spec 0006b)
+        "cover": None,  # no photos (spec 0010d)
         "is_mine": False,  # a visitor (spec 0010b)
     }
 
     response = client.get(f"/listings/{world.a}")
     assert response.status_code == 200
     one = response.json()
-    # specs 0004a, 0007b, 0008a
-    assert set(one) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like"}
-    assert one == {**item, "applicant_count": 0, "room_fit": None, "like": None}
+    # specs 0004a, 0007b, 0008a, 0010d
+    assert set(one) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like", "photos"}
+    assert one == {**item, "applicant_count": 0, "room_fit": None, "like": None, "photos": []}
 
 
 def test_ac3_price_and_rooms_ranges(

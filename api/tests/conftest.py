@@ -8,9 +8,11 @@ overriding `DATABASE_URL` before any app module is imported, so no dependency ov
 import datetime as dt
 import os
 import re
+import secrets
 import uuid
 from collections.abc import Iterator
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,6 +21,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
+from PIL import Image
 from psycopg.types.json import Jsonb
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
@@ -47,6 +50,7 @@ from app.main import create_app  # noqa: E402
 from app.models import Application, Listing, SeekerProfile  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
+from app.services.photo_store import FilePhotoStore, get_photo_store  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
 
 get_settings.cache_clear()
@@ -105,14 +109,15 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `conversation_reads`, `listing_flatmates`, `room_pairs`,
-    `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`, `sessions`, `users`
-    and `areas` tables."""
+    """Per-test engine on clean `listing_photos`, `conversation_reads`, `listing_flatmates`,
+    `room_pairs`, `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`,
+    `sessions`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE conversation_reads, listing_flatmates, room_pairs, seeker_profiles,"
-                " messages, conversations, applications, listings, sessions, users, areas"
+                "TRUNCATE TABLE listing_photos, conversation_reads, listing_flatmates, room_pairs,"
+                " seeker_profiles, messages, conversations, applications, listings, sessions,"
+                " users, areas"
             )
         )
     yield migrated_db
@@ -171,6 +176,17 @@ def outbox(client: TestClient) -> Iterator[Outbox]:
     app.dependency_overrides[get_email_sender] = lambda: box
     yield box
     app.dependency_overrides.pop(get_email_sender, None)
+
+
+@pytest.fixture
+def photo_store(client: TestClient, tmp_path: Path) -> Iterator[FilePhotoStore]:
+    """A `FilePhotoStore` in `tmp_path / "media"`, installed as the app's photo store (spec
+    0010d). AC11 builds its own app instead."""
+    app = cast(FastAPI, client.app)
+    store = FilePhotoStore(tmp_path / "media")
+    app.dependency_overrides[get_photo_store] = lambda: store
+    yield store
+    app.dependency_overrides.pop(get_photo_store, None)
 
 
 @pytest.fixture
@@ -412,3 +428,41 @@ def set_location(engine: Engine, listing_id: uuid.UUID, lng: float, lat: float) 
             ),
             {"id": listing_id, "lng": lng, "lat": lat},
         )
+
+
+def make_photo(
+    engine: Engine, listing_id: uuid.UUID, *, position: int, key: str | None = None
+) -> uuid.UUID:
+    """Insert a `listing_photos` row directly (spec 0010d) and return its id. `key` defaults to a
+    fresh random key; no object is stored. Bypasses the service, its cap and its lock."""
+    with engine.begin() as conn:
+        photo_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO listing_photos (listing_id, key, position, width, height)"
+                " VALUES (:listing_id, :key, :position, 1600, 1067) RETURNING id"
+            ),
+            {
+                "listing_id": listing_id,
+                "key": key or secrets.token_urlsafe(32),
+                "position": position,
+            },
+        ).scalar_one()
+    return photo_id
+
+
+def jpeg(
+    width: int = 800, height: int = 600, *, exif_gps: bool = False, orientation: int = 1
+) -> bytes:
+    """A JPEG built in memory (spec 0010d): a horizontal gradient, so a rotation is visible.
+    `exif_gps` adds an EXIF GPS block (a point in Tel Aviv); `orientation` sets EXIF Orientation
+    (274) when it is not 1."""
+    image = Image.linear_gradient("L").resize((width, height)).convert("RGB")
+    exif = Image.Exif()
+    if orientation != 1:
+        exif[0x0112] = orientation
+    if exif_gps:
+        exif[0x010F] = "FakeCam"  # Make, so IFD0 is not empty either
+        exif.get_ifd(0x8825).update({1: "N", 2: (32.0, 4.0, 48.0), 3: "E", 4: (34.0, 46.0, 56.0)})
+    out = BytesIO()
+    image.save(out, format="JPEG", quality=85, exif=exif.tobytes() if len(exif) else b"")
+    return out.getvalue()

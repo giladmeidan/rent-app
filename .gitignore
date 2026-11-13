@@ -12,4 +12,5 @@ web/src/api/schema.d.ts
 web/test-results/
 web/playwright-report/
 .outbox/
+.media/
 web/screens/

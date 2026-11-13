@@ -41,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_valida
 
 from app.schemas.listing import Furnished, ListingType, Rooms
 from app.schemas.match import MatchOut
+from app.schemas.photo import PhotoOut
 from app.schemas.profile import ContractMonths, GenderPreference, HouseholdsOut, Lifestyle
 
 # `match` (spec 0006b) orders by the caller's match score; without a profile it is `newest`.
@@ -162,6 +163,9 @@ class ListingPublic(BaseModel):
     created_at: dt.datetime
     lat: float | None
     lng: float | None
+    # The cover photo (spec 0010d): the listing's position-0 photo, null without photos. Not an ORM
+    # attribute: every caller passes it to `from_listing`.
+    cover: PhotoOut | None
     # The caller's match (spec 0006b): set exactly when the caller has a profile and the listing is
     # not their own; the router passes it to `from_listing`.
     match: MatchOut | None = None
@@ -175,8 +179,8 @@ class ListingPublic(BaseModel):
         """The public shape of a listing row for one caller. `seeker`: the caller is signed in
         as a seeker, or has a profile (decision 13); otherwise `SEEKER_ONLY_FIELDS` hold their
         empty values. `match` and `fields` (`is_mine`; on `ListingDetail` also `applicant_count`,
-        `room_fit`, `like`) are the router's caller-dependent values; every other field is read
-        from `listing`."""
+        `room_fit`, `like`) are the router's caller-dependent values, as is `cover` (and `photos`
+        on `ListingDetail`, spec 0010d); every other field is read from `listing`."""
         given: dict[str, Any] = {"match": match, **fields}
         if not seeker:
             given |= {name: empty() for name, empty in SEEKER_ONLY_FIELDS.items()}
@@ -202,6 +206,8 @@ class ListingDetail(ListingPublic):
     applicant_count: int
     room_fit: bool | None
     like: LikeStateOut | None
+    # Every photo in position order (spec 0010d); `cover` is `photos[0]` or null.
+    photos: list[PhotoOut]
 
 
 class ListingSearchOut(BaseModel):

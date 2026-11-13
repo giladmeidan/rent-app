@@ -408,8 +408,11 @@ def test_ac6_me_listings_is_own_newest_first(
         (0, False),
     ]
     assert all("flatmate_invite_hash" not in item for item in body)
-    assert len(sent) == 2, sent
+    assert [item["photos"] for item in body] == [[], []]  # spec 0010d
+    # The session, the listings, their photos (spec 0010d: one statement for the whole list).
+    assert len(sent) == 3, sent
     assert sum("FROM listings" in statement for statement in sent) == 1
+    assert "FROM listing_photos" in sent[2]
 
     empty = fresh.get("/me/listings")
     assert empty.status_code == 200

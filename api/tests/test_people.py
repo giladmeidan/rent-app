@@ -503,6 +503,8 @@ def test_ac6_lister_like_unlike(
     assert _ok(_like_person(owner, room, person)) == {"liked": True, "application_id": None}
     assert _card(owner, room, "Avi")["liked_by_me"] is True
     assert _likes(a) == {"liked_me": [room], "mine": []}
+    # spec 0010d: every liked room carries its cover photo, null without photos.
+    assert _ok(a.get("/me/likes"))["liked_me"][0]["listing"]["cover"] is None
     liked_at = _pair(db_engine, room, a_id).lister_liked_at
     assert liked_at is not None
 

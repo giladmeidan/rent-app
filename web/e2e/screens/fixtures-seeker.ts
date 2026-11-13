@@ -133,6 +133,7 @@ function room(overrides: Partial<ListingPublic> = {}): LikedRoomOut {
       lat: null,
       lng: null,
       match: null,
+      cover: null, // spec 0010d
       is_mine: false,
       ...overrides,
     },

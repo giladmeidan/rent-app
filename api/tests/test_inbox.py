@@ -543,7 +543,7 @@ def test_ac6_my_listings_counts(
     measured = owner.get("/me/listings")
     sent = list(statements)
     assert measured.status_code == 200
-    assert len(sent) == 2, sent
+    assert len(sent) == 3, sent  # spec 0010d: + the listings' photos, one statement
 
     created = owner.post("/listings", json=_body(gush_dan))
     assert created.status_code == 201, created.text

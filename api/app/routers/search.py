@@ -31,6 +31,7 @@ from app.schemas.error import ErrorOut
 from app.schemas.search import ListingDetail, ListingPublic, ListingSearchOut, SearchParams
 from app.services import applications as applications_service
 from app.services import people as people_service
+from app.services import photos as photos_service
 from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
@@ -86,12 +87,16 @@ def search_listings(
     page, total, sort = search_service.search_listings(db, params, profile_user_id)
     seeker = _sees_room_privacy(user, profile_user_id)
     items: list[ListingPublic] = []
-    for listing, match in page:
+    for listing, match, cover_id, cover_key in page:
         mine = _is_mine(user, listing)
         # No score on your own listing; a `match` sort still orders it by its score.
         items.append(
             ListingPublic.from_listing(
-                listing, seeker=seeker, match=None if mine else match, is_mine=mine
+                listing,
+                seeker=seeker,
+                match=None if mine else match,
+                cover=photos_service.cover_out(cover_id, cover_key),
+                is_mine=mine,
             )
         )
     _private_if_cookie(request, response)
@@ -131,6 +136,10 @@ def get_listing(
     like = None
     if user is not None and listing.listing_type == "room" and listing.owner_id != user.id:
         like = people_service.like_state(db, user.id, listing.id)
+    # The last statement (spec 0010d), after `record_view`.
+    photos = photos_service.photos_out(
+        photos_service.photos_by_listing(db, [listing.id])[listing.id]
+    )
     _private_if_cookie(request, response)
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
@@ -140,5 +149,7 @@ def get_listing(
         applicant_count=count,
         room_fit=room_fit,
         like=like,
+        cover=photos[0] if photos else None,
+        photos=photos,
         is_mine=mine,
     )

@@ -3,11 +3,12 @@
 import datetime as dt
 import uuid
 
-from sqlalchemy import CheckConstraint, DateTime, SmallInteger, Text, text
+from sqlalchemy import CheckConstraint, DateTime, SmallInteger, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
+from app.models._checks import photo_key_check
 
 
 class User(Base):
@@ -19,6 +20,9 @@ class User(Base):
         CheckConstraint("role IN ('owner', 'seeker')", name="ck_users_role"),
         CheckConstraint("account_type IN ('individual', 'broker')", name="ck_users_account_type"),
         CheckConstraint("listing_cap BETWEEN 0 AND 100", name="ck_users_listing_cap"),
+        # The person photo's key (spec 0010d migration 0013; read and written from spec 0010j).
+        UniqueConstraint("photo_key", name="uq_users_photo_key"),
+        CheckConstraint(photo_key_check("photo_key"), name="ck_users_photo_key"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -38,3 +42,6 @@ class User(Base):
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     # Live listings allowed at once (spec 0002a; PRODUCT.md "Owner cap: 3 … admin may raise").
     listing_cap: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("3"))
+    # The person photo's random object key (`{photo_key}-s.webp` / `-l.webp`), NULL = no photo.
+    # Column only in spec 0010d; nothing reads or writes it until 0010j.
+    photo_key: Mapped[str | None] = mapped_column(Text)
