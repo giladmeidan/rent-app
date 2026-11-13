@@ -323,7 +323,7 @@ export function SearchMap({
   );
 
   // The card or the list, docked; the close button is the card's sibling, above its stretched link.
-  const dockedPanel = (listOpen || selected !== undefined) && (
+  const panel = (listOpen || selected !== undefined) && (
     <div
       ref={setPanelRef}
       data-map-card=""
@@ -372,7 +372,7 @@ export function SearchMap({
 
   // The locate button at the map's top inline start (the zoom buttons are at the top inline end),
   // on the full map only.
-  const panel = (
+  const mapOverlay = (
     <>
       {fullMap && (
         <LocateButton
@@ -390,7 +390,7 @@ export function SearchMap({
           className="absolute start-3 top-3 z-10"
         />
       )}
-      {dockedPanel}
+      {panel}
     </>
   );
 
@@ -417,9 +417,16 @@ export function SearchMap({
   const showAll = empty && answeredBox !== undefined && !contains(answeredBox, GUSH_DAN_BOUNDS);
   useEffect(() => {
     if (showAll || !showAllPressed.current) return;
+    // The wider box failed: the error state's retry keeps focus's place; leave focus alone.
+    if (search.isError) {
+      showAllPressed.current = false;
+      return;
+    }
+    // Still waiting for the wider box's own answer.
+    if (data === undefined || search.isPlaceholderData) return;
     showAllPressed.current = false;
     countLineRef.current?.focus();
-  }, [showAll, countLineRef]);
+  }, [showAll, countLineRef, search.isError, search.isPlaceholderData, data]);
 
   const statusText: Record<StatusKey, string> = {
     locateOutside: t('search.map.locateOutside'),
@@ -509,7 +516,7 @@ export function SearchMap({
                 </p>
               )
             }
-            panel={panel}
+            panel={mapOverlay}
             pins={clustered.pins}
             bubbles={clustered.bubbles}
             selectedId={selectedId}
