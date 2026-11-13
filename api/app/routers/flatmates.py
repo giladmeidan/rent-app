@@ -34,6 +34,7 @@ from app.schemas.flatmates import (
 from app.services import flatmates as flatmates_service
 from app.services.applications import AlreadyAppliedError
 from app.services.listings import ListingNotFoundError
+from app.services.photos import person_photo_url
 from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["flatmates"])
@@ -174,7 +175,12 @@ def list_flatmates(listing_id: uuid.UUID, me: UserDep, db: DbDep) -> list[Flatma
     except ListingNotFoundError:
         raise _not_found() from None
     return [
-        FlatmateOut(id=row.id, display_name=row.display_name, joined_at=row.joined_at)
+        FlatmateOut(
+            id=row.id,
+            display_name=row.display_name,
+            photo_url=person_photo_url(row.photo_key),
+            joined_at=row.joined_at,
+        )
         for row in rows
     ]
 

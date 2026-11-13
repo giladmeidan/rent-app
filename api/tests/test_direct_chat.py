@@ -206,6 +206,7 @@ def test_ac2_direct_chat_in_list_and_thread(
     assert item["listing"] is None
     assert item["my_role"] == "person"
     assert item["other_name"] == "Bat"
+    assert item["other_photo_url"] is None
     assert item["member_count"] == 2
     assert item["can_send"] is True
     assert item["is_new"] is True
@@ -219,14 +220,15 @@ def test_ac2_direct_chat_in_list_and_thread(
     assert thread["visible_from"] is None
     assert thread["my_role"] == "person"
     assert thread["other_name"] == "Bat"
+    assert thread["other_photo_url"] is None
     assert thread["can_send"] is True
     assert thread["messages"] == []
     # The owner_id slot (the lower id) first, then the seeker_id slot.
     names = {a_id: "Avi", b_id: "Bat"}
     low, high = min(a_id, b_id), max(a_id, b_id)
     assert thread["members"] == [
-        {"name": names[low], "role": "person", "is_me": low == a_id},
-        {"name": names[high], "role": "person", "is_me": high == a_id},
+        {"name": names[low], "photo_url": None, "role": "person", "is_me": low == a_id},
+        {"name": names[high], "photo_url": None, "role": "person", "is_me": high == a_id},
     ]
     assert _item(person_a, conversation_id)["is_new"] is False
     assert _item(person_b, conversation_id)["is_new"] is True

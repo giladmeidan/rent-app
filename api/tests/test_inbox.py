@@ -41,6 +41,7 @@ APPLICANT_KEYS = {
     "status",
     "message",
     "applicant_name",
+    "photo_url",  # 0010j
     "created_at",
     "updated_at",
     "match",

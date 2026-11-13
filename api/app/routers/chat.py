@@ -32,6 +32,7 @@ from app.schemas.chat import (
 from app.schemas.error import ErrorOut
 from app.services import chat as chat_service
 from app.services import chat_events
+from app.services.photos import person_photo_url
 from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["chat"])
@@ -75,6 +76,7 @@ def _conversation_out(row: Row[Any]) -> ConversationOut:
         id=row.id,
         listing=_listing(row),
         other_name=row.other_name,
+        other_photo_url=person_photo_url(row.other_photo_key),
         my_role=row.my_role,
         member_count=row.member_count,
         can_send=row.can_send,
@@ -105,8 +107,14 @@ def get_thread(conversation_id: uuid.UUID, me: UserDep, db: DbDep) -> ThreadOut:
         id=conversation_id,
         listing=_listing(header),
         other_name=header.other_name,
+        other_photo_url=person_photo_url(header.other_photo_key),
         my_role=header.my_role,
-        members=[MemberOut(name=m.name, role=m.role, is_me=m.is_me) for m in thread.members],
+        members=[
+            MemberOut(
+                name=m.name, photo_url=person_photo_url(m.photo_key), role=m.role, is_me=m.is_me
+            )
+            for m in thread.members
+        ],
         visible_from=header.visible_from,
         can_send=header.can_send,
         messages=[

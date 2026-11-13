@@ -14,8 +14,12 @@ and two uploads to one listing serialise: the cap of `MAX_LISTING_PHOTOS` holds 
 
 Cleanup: a refused or failed upload deletes the objects it put; a delete removes the row first and
 the objects after the commit (a failed object delete is logged and leaves an unreferenced object,
-spec Risks). Person photos (`users.photo_key`) are spec 0010j's; it reuses `encode`, `new_key`, the
-store and the rate limit here."""
+spec Risks).
+
+Person photos (spec 0010j): one per account, `users.photo_key`, through the same pipeline, store and
+rate limit. Only the small address is ever in a response (`person_photo_url`), and only in responses
+that already show that person to the caller (MARKET-PLAN Q16). The `-l` copy is stored too and is
+reachable by anyone holding the `-s` address, the same audience (decided Gilad 2026-11-13)."""
 
 import asyncio
 import logging
@@ -355,6 +359,67 @@ def reorder_listing_photos(
     for index, photo in enumerate(ordered):
         set_committed_value(photo, "position", index)
     return ordered
+
+
+def _lock_photo_key(db: Session, user_id: uuid.UUID) -> str | None:
+    """The user's current photo key, read under a `FOR NO KEY UPDATE` row lock until the
+    transaction ends. A scalar, never the identity-mapped `User`: two concurrent writes each read
+    the key the other committed, never a stale one."""
+    key: str | None = db.scalar(
+        select(User.photo_key)
+        .where(User.id == user_id)
+        # `key_share` without `read` renders `FOR NO KEY UPDATE` on PostgreSQL.
+        .with_for_update(key_share=True)
+    )
+    return key
+
+
+def _set_photo_key(db: Session, user_id: uuid.UUID, key: str | None) -> None:
+    db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(photo_key=key)
+        .execution_options(synchronize_session=False)
+    )
+
+
+def set_user_photo(db: Session, store: PhotoStore, user: User, encoded: Encoded) -> str | None:
+    """Store both copies of an encoded upload under a new key and make it `user`'s photo; returns
+    the old key (None without one). On any failure before the commit both new objects are deleted
+    again and the old photo stays. After the commit the old photo's objects are deleted (a failure
+    is logged and swallowed). Raises `PhotoStoreUnavailable`. `user.photo_key` is the new key."""
+    key = new_key()
+    names = object_names(key)
+    try:
+        store.put(names[0], encoded.small)
+        store.put(names[1], encoded.large)
+        old = _lock_photo_key(db, user.id)
+        _set_photo_key(db, user.id, key)
+        db.commit()
+    except BaseException:
+        _discard(store, names)
+        raise
+    set_committed_value(user, "photo_key", key)
+    if old is not None:
+        _discard(store, object_names(old))
+    return old
+
+
+def clear_user_photo(db: Session, store: PhotoStore, user: User) -> None:
+    """Remove `user`'s photo: the column is cleared and committed first, then both objects are
+    deleted (a failure is logged and swallowed). Idempotent: without a photo nothing is deleted."""
+    old = _lock_photo_key(db, user.id)
+    if old is not None:
+        _set_photo_key(db, user.id, None)
+    db.commit()
+    set_committed_value(user, "photo_key", None)
+    if old is not None:
+        _discard(store, object_names(old))
+
+
+def person_photo_url(key: str | None) -> str | None:
+    """A person's photo address (the small copy only), or None without a photo."""
+    return None if key is None else small_url(key)
 
 
 def photos_by_listing(

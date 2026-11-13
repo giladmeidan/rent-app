@@ -215,8 +215,8 @@ def list_people(
     db: Session, owner: User, listing_id: uuid.UUID, offset: int
 ) -> tuple[Sequence[Row[Any]], int]:
     """One page (`PEOPLE_LIMIT`) of the candidates of one of `owner`'s live room listings, and
-    their total. Each row has `RoomPair.id`, both like timestamps, `display_name`, the card
-    columns (`_CARD_COLUMNS`) and the match columns (budget at the pair's frozen price). Order:
+    their total. Each row has `RoomPair.id`, both like timestamps, `display_name`, `photo_key`, the
+    card columns (`_CARD_COLUMNS`) and the match columns (budget at the pair's frozen price). Order:
     those who liked the room first, then score, then the pair's age, then its id.
 
     Three statements after the session lookup: the listing (`_own_room`), the snapshot (every
@@ -268,7 +268,11 @@ def list_people(
         )
         rows = db.execute(
             page.add_columns(
-                User.display_name, *_CARD_COLUMNS, *columns, func.count().over().label("total")
+                User.display_name,
+                User.photo_key,
+                *_CARD_COLUMNS,
+                *columns,
+                func.count().over().label("total"),
             )
             .order_by(
                 RoomPair.seeker_liked_at.is_(None),

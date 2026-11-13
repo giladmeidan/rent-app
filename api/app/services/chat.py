@@ -122,6 +122,7 @@ class Member:
     """One member of a thread, as `ThreadOut.members` lists them."""
 
     name: str
+    photo_key: str | None  # their person photo's key (spec 0010j)
     role: Role
     is_me: bool
 
@@ -238,7 +239,8 @@ def _my_read_at(me: User) -> Any:
 
 def _is_other(me: User) -> Any:
     """The join condition onto `users` for the name the caller sees as `other_name` (select
-    `display_name` only): the owner's for the seeker, the seeker's for the owner and a flatmate."""
+    `display_name` and `photo_key` only): the owner's for the seeker, the seeker's for the owner
+    and a flatmate."""
     return User.id == case(
         (Conversation.seeker_id == me.id, Conversation.owner_id), else_=Conversation.seeker_id
     )
@@ -323,6 +325,7 @@ def list_statement(me: User) -> Select[Any]:
             Conversation.created_at.label("created_at"),
             *_LISTING_COLUMNS,
             User.display_name.label("other_name"),
+            User.photo_key.label("other_photo_key"),
             _my_role(me).label("my_role"),
             member_count.label("member_count"),
             _can_send().label("can_send"),
@@ -364,8 +367,14 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                     (Conversation.seeker_id == me.id, owner.display_name),
                     else_=seeker.display_name,
                 ).label("other_name"),
+                case(
+                    (Conversation.seeker_id == me.id, owner.photo_key),
+                    else_=seeker.photo_key,
+                ).label("other_photo_key"),
                 owner.display_name.label("owner_name"),
+                owner.photo_key.label("owner_photo_key"),
                 seeker.display_name.label("seeker_name"),
+                seeker.photo_key.label("seeker_photo_key"),
                 _can_send().label("can_send"),
                 Application.listing_id.label("application_listing_id"),
                 _is_room().label("is_room"),
@@ -413,14 +422,35 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
         i_am_seeker = header.seeker_id == me.id
         if role == "person":
             members = [
-                Member(name=header.owner_name, role="person", is_me=not i_am_seeker),
-                Member(name=header.seeker_name, role="person", is_me=i_am_seeker),
+                Member(
+                    name=header.owner_name,
+                    photo_key=header.owner_photo_key,
+                    role="person",
+                    is_me=not i_am_seeker,
+                ),
+                Member(
+                    name=header.seeker_name,
+                    photo_key=header.seeker_photo_key,
+                    role="person",
+                    is_me=i_am_seeker,
+                ),
             ]
         else:
-            members = [Member(name=header.owner_name, role="owner", is_me=role == "owner")]
+            members = [
+                Member(
+                    name=header.owner_name,
+                    photo_key=header.owner_photo_key,
+                    role="owner",
+                    is_me=role == "owner",
+                )
+            ]
         if header.is_room:
             flatmates = db.execute(
-                select(User.display_name, (ListingFlatmate.user_id == me.id).label("is_me"))
+                select(
+                    User.display_name,
+                    User.photo_key,
+                    (ListingFlatmate.user_id == me.id).label("is_me"),
+                )
                 .select_from(ListingFlatmate)
                 .join(User, User.id == ListingFlatmate.user_id)
                 .where(
@@ -430,10 +460,20 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                 .order_by(ListingFlatmate.joined_at, ListingFlatmate.id)
             ).all()
             members += [
-                Member(name=row.display_name, role="flatmate", is_me=row.is_me) for row in flatmates
+                Member(
+                    name=row.display_name, photo_key=row.photo_key, role="flatmate", is_me=row.is_me
+                )
+                for row in flatmates
             ]
         if role != "person":
-            members.append(Member(name=header.seeker_name, role="seeker", is_me=role == "seeker"))
+            members.append(
+                Member(
+                    name=header.seeker_name,
+                    photo_key=header.seeker_photo_key,
+                    role="seeker",
+                    is_me=role == "seeker",
+                )
+            )
         my_read_at: dt.datetime | None = header.my_read_at
         last_message_at: dt.datetime | None = header.last_message_at
         if my_read_at is None or (last_message_at is not None and my_read_at < last_message_at):

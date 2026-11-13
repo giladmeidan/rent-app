@@ -11,6 +11,7 @@ export function person(overrides: Partial<PersonOut> = {}): PersonOut {
   return {
     id: `00000000-0000-0000-0000-${String(n).padStart(12, 'c')}`,
     display_name: `Person ${String(n)}`,
+    photo_url: null,
     gender: 'woman',
     age: 27,
     area_ids: [],

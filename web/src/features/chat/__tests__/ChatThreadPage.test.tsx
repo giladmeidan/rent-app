@@ -548,9 +548,9 @@ describe('ChatThreadPage', () => {
   });
 
   const GROUP_MEMBERS: ThreadOut['members'] = [
-    { name: 'רוני', role: 'owner', is_me: false },
-    { name: 'דנה', role: 'flatmate', is_me: true },
-    { name: 'נועה', role: 'seeker', is_me: false },
+    { name: 'רוני', photo_url: null, role: 'owner', is_me: false },
+    { name: 'דנה', photo_url: null, role: 'flatmate', is_me: true },
+    { name: 'נועה', photo_url: null, role: 'seeker', is_me: false },
   ];
   const group = (overrides: Partial<ThreadOut> = {}) =>
     thread({
@@ -678,12 +678,12 @@ describe('ChatThreadPage', () => {
 
   it('ac10_member_line_show_all', async () => {
     const six: ThreadOut['members'] = [
-      { name: 'רוני', role: 'owner', is_me: false },
-      { name: 'דנה', role: 'flatmate', is_me: true },
-      { name: 'יעל', role: 'flatmate', is_me: false },
-      { name: 'Maya Rosenberg-Levi', role: 'flatmate', is_me: false },
-      { name: 'עומר', role: 'flatmate', is_me: false },
-      { name: 'נועה', role: 'seeker', is_me: false },
+      { name: 'רוני', photo_url: null, role: 'owner', is_me: false },
+      { name: 'דנה', photo_url: null, role: 'flatmate', is_me: true },
+      { name: 'יעל', photo_url: null, role: 'flatmate', is_me: false },
+      { name: 'Maya Rosenberg-Levi', photo_url: null, role: 'flatmate', is_me: false },
+      { name: 'עומר', photo_url: null, role: 'flatmate', is_me: false },
+      { name: 'נועה', photo_url: null, role: 'seeker', is_me: false },
     ];
     const joined =
       'רוני (בעל/ת הדירה) · את/ה · יעל (שותף/ה) · Maya Rosenberg-Levi (שותף/ה) · עומר (שותף/ה) · נועה';
@@ -746,7 +746,12 @@ describe('ChatThreadPage', () => {
         focusManager.setFocused(true);
       });
     };
-    const yael: ThreadOut['members'][number] = { name: 'יעל', role: 'flatmate', is_me: false };
+    const yael: ThreadOut['members'][number] = {
+      name: 'יעל',
+      photo_url: null,
+      role: 'flatmate',
+      is_me: false,
+    };
     const T = group({
       members: [...GROUP_MEMBERS.slice(0, 2), yael, ...GROUP_MEMBERS.slice(2)],
       messages: [message({ body: 'hello', sender_name: 'רוני' })],

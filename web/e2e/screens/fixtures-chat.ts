@@ -53,6 +53,7 @@ function conversation(n: number, overrides: Partial<ConversationOut>): Conversat
     id: id(n),
     listing: APARTMENT,
     other_name: 'מיכל',
+    other_photo_url: null,
     my_role: 'seeker',
     member_count: 2,
     can_send: true,
@@ -122,10 +123,11 @@ export function oneToOne(overrides: Partial<ThreadOut> = {}): ThreadOut {
     id: ONE_TO_ONE_ID,
     listing: APARTMENT,
     other_name: MICHAL,
+    other_photo_url: null,
     my_role: 'seeker',
     members: [
-      { name: MICHAL, role: 'owner', is_me: false },
-      { name: ME, role: 'seeker', is_me: true },
+      { name: MICHAL, photo_url: null, role: 'owner', is_me: false },
+      { name: ME, photo_url: null, role: 'seeker', is_me: true },
     ],
     visible_from: null,
     can_send: true,
@@ -146,12 +148,12 @@ export function oneToOne(overrides: Partial<ThreadOut> = {}): ThreadOut {
 
 // Long names (the API allows 40 characters), so the line is cut at two lines on a phone.
 const SIX_MEMBERS: ThreadOut['members'] = [
-  { name: 'רוני שמואלי-בן חיים', role: 'owner', is_me: false },
-  { name: ME, role: 'flatmate', is_me: true },
-  { name: 'יעל אברהמי-רוזנברג', role: 'flatmate', is_me: false },
-  { name: 'Maya Rosenberg-Levi', role: 'flatmate', is_me: false },
-  { name: 'Alexandra Montgomery-Fitzgerald', role: 'flatmate', is_me: false },
-  { name: 'נועה', role: 'seeker', is_me: false },
+  { name: 'רוני שמואלי-בן חיים', photo_url: null, role: 'owner', is_me: false },
+  { name: ME, photo_url: null, role: 'flatmate', is_me: true },
+  { name: 'יעל אברהמי-רוזנברג', photo_url: null, role: 'flatmate', is_me: false },
+  { name: 'Maya Rosenberg-Levi', photo_url: null, role: 'flatmate', is_me: false },
+  { name: 'Alexandra Montgomery-Fitzgerald', photo_url: null, role: 'flatmate', is_me: false },
+  { name: 'נועה', photo_url: null, role: 'seeker', is_me: false },
 ];
 
 /** A flatmate's group thread: six members, sender names, the joined and truncated notes. */
@@ -160,6 +162,7 @@ export function group(): ThreadOut {
     id: GROUP_ID,
     listing: ROOM,
     other_name: 'נועה',
+    other_photo_url: null,
     my_role: 'flatmate',
     members: SIX_MEMBERS,
     visible_from: '2026-11-09T12:00:00Z',

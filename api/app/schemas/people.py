@@ -36,6 +36,7 @@ class PersonOut(BaseModel):
 
     id: uuid.UUID  # the pair's id (`room_pairs.id`), never a user id
     display_name: str
+    photo_url: str | None  # their person photo's small address (spec 0010j)
     gender: SeekerGender
     age: int | None
     area_ids: list[uuid.UUID]

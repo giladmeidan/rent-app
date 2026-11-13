@@ -82,6 +82,7 @@ def _person_out(row: Row[Any]) -> PersonOut:
     return PersonOut(
         id=row.id,
         display_name=row.display_name,
+        photo_url=photos_service.person_photo_url(row.photo_key),
         gender=row.gender,
         age=people_service.age(row.birth_year),
         area_ids=row.area_ids,

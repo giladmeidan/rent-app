@@ -1,7 +1,8 @@
 """Email-OTP auth endpoints (spec 0001a). Thin: all logic is in `services/auth.py`.
 
 POST /auth/otp/request, POST /auth/otp/verify and POST /auth/logout are public; GET /me requires a
-session (`current_user`)."""
+session (`current_user`). `UserOut` is always built by `user_out` (also `PUT /me/photo`'s, spec
+0010j)."""
 
 from typing import Annotated
 
@@ -18,12 +19,26 @@ from app.schemas.auth import OtpRequestIn, OtpVerifyIn, UserOut
 from app.schemas.error import ErrorOut
 from app.services import auth as auth_service
 from app.services.email import EmailSender, EmailUnavailable, get_email_sender
+from app.services.photos import person_photo_url
 from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["auth"])
 
 RedisDep = Annotated[RedisClient, Depends(get_redis)]
 DbDep = Annotated[Session, Depends(get_session)]
+
+
+def user_out(user: User) -> UserOut:
+    """The caller's own account, with their person photo's small address (spec 0010j)."""
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+        account_type=user.account_type,
+        created_at=user.created_at,
+        photo_url=person_photo_url(user.photo_key),
+    )
 
 
 @router.post(
@@ -72,7 +87,7 @@ def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:
     token = auth_service.create_session(db, user)
     response = JSONResponse(
         status_code=201 if created else 200,
-        content=UserOut.model_validate(user).model_dump(mode="json"),
+        content=user_out(user).model_dump(mode="json"),
     )
     response.set_cookie(
         COOKIE_NAME,
@@ -92,7 +107,7 @@ def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:
     responses={401: {"model": ErrorOut, "description": "unauthenticated"}},
 )
 def me(user: Annotated[User, Depends(current_user)]) -> UserOut:
-    return UserOut.model_validate(user)
+    return user_out(user)
 
 
 @router.post("/auth/logout", status_code=204)

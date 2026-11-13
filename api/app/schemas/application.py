@@ -4,9 +4,9 @@ Both response shapes list their fields explicitly (NF3): `ApplicationListingOut`
 `owner_id`, owner name, `status`, `expires_at` or `view_count`; `MyApplicationOut` has no
 `seeker_id` (the caller is the seeker) and nothing about the owner (PRODUCT.md "Applications": the
 owner's identity is not shown to applicants until chat opens). `ApplicantOut` (the owner's view,
-0004c) carries only the seeker's `display_name` and message: no `seeker_id`, email or any other user
-column (NF2). The message is plain text: stored and returned as validated, never processed as
-HTML.
+0004c) carries only the seeker's `display_name`, photo address (0010j) and message: no `seeker_id`,
+email or any other user column (NF2). The message is plain text: stored and returned as
+validated, never processed as HTML.
 
 From 0006c the owner's view also carries the applicant's current `match` and `ApplicantProfileOut`,
 seven housing-profile fields listed explicitly: never the seeker's `budget_max_ils` or `area_ids`
@@ -130,6 +130,7 @@ class ApplicantOut(BaseModel):
     source: ApplicationSource
     message: str | None  # null exactly when `source == "like"`
     applicant_name: str
+    photo_url: str | None  # the applicant's person photo's small address (spec 0010j)
     created_at: dt.datetime
     updated_at: dt.datetime
     match: MatchOut | None

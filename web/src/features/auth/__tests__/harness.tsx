@@ -14,6 +14,7 @@ export const noa: UserOut = {
   role: 'seeker',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
 };
 
 export const json = (body: unknown, status = 200) =>

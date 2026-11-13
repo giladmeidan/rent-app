@@ -39,7 +39,8 @@ class OtpVerifyIn(BaseModel):
 
 
 class UserOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """The caller's own account. `photo_url`: their person photo's small address (spec 0010j),
+    null without one."""
 
     id: uuid.UUID
     email: str
@@ -47,3 +48,4 @@ class UserOut(BaseModel):
     role: Role
     account_type: str
     created_at: dt.datetime
+    photo_url: str | None

@@ -42,7 +42,7 @@ out of `0010d` by the orchestrator (2026-11-13, verifier finding 7 of 0010d's ro
   `photo_storage_unavailable`).
 - `photo_url: str | None` (the small address) where the person is already shown, each from a `users.photo_key`
   column added next to the `display_name` the statement already selects (**no new statement**):
-  - `schemas/auth.py` `UserOut` (`GET /auth/me`, OTP verify, and `PUT /me/photo`'s response): the caller's
+  - `schemas/auth.py` `UserOut` (`GET /me`, OTP verify, and `PUT /me/photo`'s response): the caller's
     own photo. `UserOut` is built in `routers/auth.py:75` and `:95`; both, and the new route, use a new
     `user_out(user) -> UserOut` helper in `routers/auth.py`.
   - `schemas/people.py` `PersonOut` (`services/people.py:271`, `routers/people.py:82`): a room lister browsing
@@ -89,14 +89,14 @@ None. `users.photo_key` (with `uq_users_photo_key` and `ck_users_photo_key`) is 
 | --- | --- | --- | --- | --- | --- |
 | PUT | `/me/photo` | `current_user` (any role) | raw image body, ≤ 8 MB | 200 `UserOut` (with the new `photo_url`); the old photo's objects are deleted | 401; 413 `photo_too_large`; 415 `unsupported_image`; 429 `rate_limited` + `Retry-After`; 503 `photo_storage_unavailable` |
 | DELETE | `/me/photo` | `current_user` | — | 204 (also with no photo) | 401 |
-| GET | `/auth/me`, `/listings/{id}/people`, `/listings/{id}/applicants`, `/me/conversations`, `/conversations/{id}`, `/listings/{id}/flatmates`; PATCH `/listings/{id}/applications/{id}`; POST OTP verify (changed) | as today | as today | `+photo_url` (`UserOut`, `PersonOut`, `ApplicantOut`, `MemberOut`, `FlatmateOut`), `+other_photo_url` (conversation, thread) | as today |
+| GET | `/me`, `/listings/{id}/people`, `/listings/{id}/applications`, `/me/conversations`, `/conversations/{id}`, `/listings/{id}/flatmates`; PATCH `/listings/{id}/applications/{id}`; POST OTP verify (changed) | as today | as today | `+photo_url` (`UserOut`, `PersonOut`, `ApplicantOut`, `MemberOut`, `FlatmateOut`), `+other_photo_url` (conversation, thread) | as today |
 
 ## UI
 None (`0010k`); only the typed web fixtures change (Scope).
 
 ## Acceptance criteria
 - [ ] AC1 `PUT /me/photo` with a JPEG returns `UserOut` with `photo_url` = `{PHOTO_PUBLIC_BASE_URL}/{key}-s.webp`
-  (no user id in it); a second PUT replaces it and the first photo's two objects are deleted; `GET /auth/me`
+  (no user id in it); a second PUT replaces it and the first photo's two objects are deleted; `GET /me`
   shows the new one; `DELETE /me/photo` returns 204, `photo_url` becomes null and the objects are gone; a
   second DELETE is 204. A seeker-role and an owner-role account both can; anonymous gets 401. —
   `api/tests/test_person_photo.py::test_ac1_set_replace_clear`
@@ -128,6 +128,9 @@ count tests). Unit: none new (0010d's `encode` is reused). E2E: none (`0010k`).
   display name: the security reviewer checks each added column against its statement's existing WHERE.
 - **Public address (Q16).** As 0010d: anyone holding the address sees it until deleted (and CDN expiry). The
   hint on the profile (`0010k`) tells people where it is shown.
+- **Large copy (decided Gilad 2026-11-13, option 1 "keep both sizes").** Only the small address is ever in a
+  response, but `{key}-l.webp` (1600 px) is reachable by anyone holding `{key}-s.webp`: the same Q16 audience,
+  a larger face. Both sizes stay stored so a later slice can enlarge (review round 1 security minor).
 - **0010g** reshapes the chat statements (`conversations.id`, nullable listing). It chains after this spec's
   dependency 0010d; whichever of 0010g/0010j merges second keeps the `photo_key` column next to `display_name`.
 - **Body cap follow-up** (FOLLOWUPS `0005a`, `0007a`): the 64 KB middleware must exempt `PUT /me/photo` too
@@ -142,3 +145,16 @@ separate round (one verifier round).
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0010j — person photo API   READY TO MERGE (0010d merged as #69)
+Shipped: any signed-in account sets, replaces or removes one photo of themselves (`PUT`/`DELETE /me/photo`); its
+small address shows only where the caller already sees that person (own account, applicants inbox and status
+PATCH, people page, chat list/thread/members, flatmates list). Demo (API only; web is 0010k): sign in → `PUT /me/photo`
+with a JPEG → `photo_url`; `GET /me` shows it and the URL opens; `DELETE /me/photo` → null, the files are gone.
+Tests: +0 unit, +4 integration (`test_person_photo.py` AC1–AC4; 5 test files' key sets amended, AC5 counts unchanged), +0 e2e
+Findings (code Opus, qa Sonnet, security Opus/high; one round): 0 blockers, 0 majors; 4 minors: 1 decided by Gilad
+(keep both sizes; `-l` reachable by the same audience as `-s`, written in Risks and the module docstring), 2 logged in
+FOLLOWUPS (test helpers to `conftest.py`, extra person-route input tests), 1 spec-text fix (`GET /me`,
+`/listings/{id}/applications`); 8 nits dropped.
+Changed in PRODUCT.md: nothing here (the orchestrator records "keep both sizes").
+Next spec I propose: 0010k — photos display web (after 0010c).

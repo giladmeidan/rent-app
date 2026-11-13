@@ -68,6 +68,7 @@ export function room(overrides: Partial<MyListingOut> = {}): MyListingOut {
 const flatmate = (n: number, display_name: string, joined_at: string): FlatmateOut => ({
   id: `00000000-0000-0000-0000-${String(n).padStart(12, 'f')}`,
   display_name,
+  photo_url: null,
   joined_at,
 });
 
