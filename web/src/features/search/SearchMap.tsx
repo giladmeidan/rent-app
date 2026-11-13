@@ -256,7 +256,9 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
       {listOpen ? (
         <section
           aria-labelledby={samePlaceHeadingId}
-          className="flex flex-col gap-3 overflow-y-auto p-3"
+          // Rows at their content's height: the cards (overflow-hidden) would otherwise shrink to
+          // fit the panel instead of scrolling in it.
+          className="grid auto-rows-max gap-3 overflow-y-auto p-3"
         >
           <h2 id={samePlaceHeadingId} className="pe-12 text-start text-h3">
             {t('search.map.samePlace', { count: listed.length })}

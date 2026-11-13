@@ -191,8 +191,11 @@ export function ListingCard({
           )}
         </div>
         <div className={`flex min-w-0 flex-1 flex-col gap-2 ${bodyClass}`}>
-          {/* Compact: the badge clears the close button its container puts at the top end. */}
-          <div className={`flex items-center justify-between gap-3 ${compact ? 'pe-12' : ''}`}>
+          {/* Compact: the badge clears the close button its container puts at the top end, and
+              wraps under the price when both do not fit on one line. */}
+          <div
+            className={`flex items-center justify-between gap-3 ${compact ? 'flex-wrap gap-y-1 pe-12' : ''}`}
+          >
             <p className="text-h3 font-bold tracking-tight">
               <span>
                 {formatIls(listing.price_ils)} {t('listings.units.ils')}
