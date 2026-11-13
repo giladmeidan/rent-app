@@ -45,14 +45,11 @@ Last updated:
   `0010i`. Readiness: c ← b + g (both merged, so c is ready), e ← a + d (ready), k ← c + d + j, f ← c + d,
   h ← c + g + f, i ← h + k. Migration chain: `0015` (c) → `0016` (f) → `0017` (h); merge each only when its
   `down_revision` is `main`'s head.
-- **Waiting build sessions** (each idle after replying "waiting for go"; brief says: on go, `git fetch`, merge the
-  named branches and `origin/main`, then `/build`): c `local_5be2d941-868a-4888-b85e-36f393da975a`,
-  e `local_f3d2229f-6f1e-454e-955b-34e198836bd0`, f `local_829f4c25-65e8-4488-a87d-f663f264058e`,
-  k `local_e8437897-2e6d-4c9e-80e1-0eb9f76214b8`, h `local_7650fafe-e13e-45bb-ac40-ea0c43a5eab9`,
-  i `local_5cfa37c4-43f1-4281-9576-a24a660fe72f`. Their worktrees `../rent-app-0010{c,e,f,h,i,k}` are cut from
-  4e07f78 with `.env` ports DB 5513/5515/5516/5518/5519/5521, Redis 646x, API 808x/809x, web 5223/5225/5226/5228/
-  5229/5231. Since `main` has moved a lot, every go must say "merge `origin/main`" (all parents are merged).
-  SendMessage reaches them from any turn; only `start_session` needs a turn Gilad wrote.
+- **The six remaining specs' build sessions are archived** (Gilad 2026-11-13: he runs them in a different chat).
+  Their worktrees `../rent-app-0010{c,e,f,h,i,k}` stay, cut from 4e07f78, with `.env` ports (DB 5513/5515/5516/5518/
+  5519/5521, Redis 6463/6465/6466/6468/6469/6471, API 8083/8085/8086/8088/8089/8091, web 5223/5225/5226/5228/5229/
+  5231). `main` has moved a lot since: each build must start with `git fetch && git merge origin/main`. Their
+  specs stay `status: in-progress` on `main` (the lock); the new chat can keep the lock or reset it.
 - **Go notes to pass on:** c — read 0010b's hand-over (`0010b-handover.md`, "shared notes folder"; ask build-0010b
   `local_59add869…` if not found): `my_likes` `seeker=True` forward risk, the AC9 allow-list, seeker-rule names.
   e and j — 0010d added one upload in flight per user (429 `rate_limited`, `Retry-After: 5`) and shared
