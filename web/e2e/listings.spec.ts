@@ -62,6 +62,18 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByLabel(f.description).fill('דירה מוארת');
   await page.getByRole('button', { name: he.listings.next }).click();
 
+  // Photos (0010e): none chosen, so none is sent after the publish.
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.listings.stepTitle.photos }),
+  ).toBeVisible();
+  const photoRequests: string[] = [];
+  page.on('request', (request) => {
+    if (/\/listings\/[^/]+\/photos/.test(new URL(request.url()).pathname)) {
+      photoRequests.push(`${request.method()} ${request.url()}`);
+    }
+  });
+  await page.getByRole('button', { name: he.listings.next }).click();
+
   // Preferences (0006e): no smokers.
   await expect(
     page.getByRole('heading', { level: 2, name: he.listings.prefs.title }),
@@ -88,6 +100,9 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(card.getByText(/7,200\s*₪/)).toBeVisible();
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.live);
   await expectNoAxeViolations(page, '/me/listings');
+  // No photo was chosen: no upload, delete or reorder, and the card keeps its placeholder.
+  expect(photoRequests).toEqual([]);
+  await expect(card.locator('img')).toHaveCount(0);
 
   // The public page shows the preference (before pausing: a paused listing is a 404 there).
   await page.goto('/listings/' + id);
@@ -154,6 +169,11 @@ test('ac12_owner_edits_listing', async ({ page }) => {
   await page.getByLabel(f.price).fill('7500');
   await page.getByLabel(f.arnona, { exact: true }).fill('');
   await page.getByRole('button', { name: he.listings.next }).click();
+  // Photos (0010e) untouched.
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.listings.stepTitle.photos }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: he.listings.next }).click();
   // Preferences untouched: the households array must not join the PATCH body.
   await expect(
     page.getByRole('heading', { level: 2, name: he.listings.prefs.title }),
@@ -202,7 +222,13 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     await page.getByLabel(f.availableFrom).fill(israelDay(30));
     await page.getByRole('button', { name: he.listings.next }).click();
 
-    // Step 3: the room block.
+    // The photos step (0010e), skipped.
+    await expect(
+      page.getByRole('heading', { level: 2, name: he.listings.stepTitle.photosRoom }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: he.listings.next }).click();
+
+    // The preferences: the room block.
     await expect(
       page.getByRole('heading', { level: 2, name: he.listings.prefs.titleRoom }),
     ).toBeVisible();
