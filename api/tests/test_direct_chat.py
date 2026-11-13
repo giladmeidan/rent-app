@@ -493,6 +493,8 @@ def test_ac7_statement_counts_and_plan(
             "EXPLAIN (FORMAT JSON) " + str(compiled), compiled.params
         ).scalar_one()
         conn.rollback()
+    # With `enable_seqscan = off` this proves an index path exists for every read of
+    # `conversations`, not which plan the planner would choose with real statistics.
     scans = list(_scans_of(plan["Plan"], "conversations"))
     assert scans, plan
     for scan in scans:

@@ -16,7 +16,9 @@ link and every status event keyed by an application id stays valid.
   byte order), and there is one per pair, ever (`uq_conversations_direct_pair`, partial on
   `application_id IS NULL`).
 
-Postgres DDL is transactional: a failure rolls the whole swap back.
+Postgres DDL is transactional: a failure rolls the whole swap back. The swap holds ACCESS EXCLUSIVE
+on `conversations` and blocks writes to `messages` / `conversation_reads` while the two FKs
+re-validate; fine at MVP volume (spec 0010g, Risks).
 
 Downgrade deletes every direct chat first: **direct chats, their messages and their read markers
 are lost** (cascade). Application chats, their messages and markers survive with the old primary

@@ -128,10 +128,11 @@ class Member:
 
 @dataclass(frozen=True)
 class Thread:
-    """`get_thread`'s result: the header row (`listing_*`, `other_name`, `status`, `my_role`,
-    `visible_from`), the members (owner, flatmates by `joined_at`, seeker) and the newest
-    `THREAD_LIMIT` visible messages oldest first (rows of `id`, `body`, `mine`, `sender_name`,
-    `created_at`)."""
+    """`get_thread`'s result: the header row (`listing_*`, null for a direct chat; `other_name`,
+    `can_send`, `my_role`, `visible_from`), the members (owner, flatmates by `joined_at`, seeker;
+    a direct chat's are its two people, `owner_id` then `seeker_id`, both role `person`) and the
+    newest `THREAD_LIMIT` visible messages oldest first (rows of `id`, `body`, `mine`,
+    `sender_name`, `created_at`)."""
 
     header: Row[Any]
     members: list[Member]
@@ -145,8 +146,10 @@ def _is_room() -> Any:
 
 def _flatmate_join(me: User) -> Any:
     """The LEFT JOIN condition onto `me`'s own `listing_flatmates` row (`_F`) of the conversation's
-    listing, only on a room application. The statement must join `Application`."""
+    listing, only on a room application (never on a direct chat). The statement must join
+    `Application`."""
     return and_(
+        Conversation.application_id.is_not(None),
         _F.listing_id == Application.listing_id,
         _F.user_id == me.id,
         _is_room(),
@@ -363,7 +366,6 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                 ).label("other_name"),
                 owner.display_name.label("owner_name"),
                 seeker.display_name.label("seeker_name"),
-                Application.status.label("status"),
                 _can_send().label("can_send"),
                 Application.listing_id.label("application_listing_id"),
                 _is_room().label("is_room"),
