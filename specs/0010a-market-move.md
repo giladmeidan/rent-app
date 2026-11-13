@@ -1,7 +1,7 @@
 ---
 id: 0010a
 title: The app has two sides, דירות and שוק השותפים, behind a switch at the top; rooms leave the apartment search and live in the market (its own search, its own "שלי", its own bottom bar), and a listing can no longer switch between apartment and room
-status: verified
+status: in-progress
 depends_on: []   # Wave 1 with 0010d (no shared files). 0010b, 0010c, 0010e build on the names fixed here (MARKET-PLAN.md section 7)
 reviewers: [code, qa, ux]   # qa: the search default flips for every client and ~15 tests move; ux: a new header control, two new pages, a regrouped bottom bar
 estimate: 1 coder run   # coder Opus/high (Speed rule 6, "when in doubt the stronger one"): no auth or data, but ~25 source files and ~20 test files across api, web and e2e

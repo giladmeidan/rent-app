@@ -1,7 +1,7 @@
 ---
 id: 0010b
 title: Inside שוק השותפים there are no owner or seeker roles. Any account posts and manages a room, applies to and likes rooms, has a profile and sees its own listing marked as its own. Apartments keep their roles (only owners post apartments, only seekers apply to them), and signup from the market asks no role question
-status: verified
+status: in-progress
 depends_on: [0010a]   # side.ts / sideOf, /market/mine and its two-panel Tabs, the per-side bottom bar, SearchPage type, wizard initialType (MARKET-PLAN section 7). Builds in wave 2 beside 0010g (no shared files)
 reviewers: [code, qa, security, ux]   # security: every role gate in the API is swapped for current_user + ownership, and the room-privacy rule (decision 13) changes; ux: the market bar for every account, signup without the role question, own-listing states
 estimate: 1 coder run   # coder Opus/high (auth gates, Speed rule 6). About 15 gate swaps, 13 role-gate tests and ~12 web files

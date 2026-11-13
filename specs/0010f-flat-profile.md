@@ -1,7 +1,7 @@
 ---
 id: 0010f
 title: A room listing says more about the flat (room size, private bathroom, balcony, bills, who is posting), and flatmates who choose to, plus a lister who lives there, appear on the room's page as people, to seekers only
-status: verified
+status: in-progress
 depends_on: [0010c, 0010d]   # 0010c: the personal part of the profile (gender, birth year, about me, answers) without a looking part, migration chain 0015 -> 0016; 0010d: `users.photo_key` and the photo URL builder
 reviewers: [code, qa, security, ux]   # security: flatmates' personal data on a public page, behind the decision-13 seeker rule and each flatmate's own choice; qa: wizard, room page, join, my flats; ux: three screens change
 estimate: 1 coder run   # coder Opus/high (migration + personal data on a public response; Speed rule 6)

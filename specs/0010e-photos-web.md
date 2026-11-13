@@ -1,7 +1,7 @@
 ---
 id: 0010e
 title: A lister adds, removes and orders photos in the listing wizard; they upload after publish or save, a partial failure is reported, and the lister's own cards show the cover
-status: verified
+status: in-progress
 depends_on: [0010a, 0010d]   # 0010a: the wizard's type-skip (firstStep/shown/total) and publish destination; 0010d: listing photo endpoints and the `photos` field
 reviewers: [code, qa, ux]   # no security: the client only picks files, the server re-checks everything (0010d has security); ux: a new wizard step with no artboard body; qa: upload sync after publish/save, partial failure, the step refactor
 estimate: 1 coder run   # coder Opus/high: the wizard step refactor shifts ~40 test assertions
