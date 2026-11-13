@@ -10,6 +10,8 @@ type Props = {
   onChange: (view: View) => void;
   /** The "list" button, which takes focus after the map's "show the list" (spec 0009t). */
   listButtonRef?: Ref<HTMLButtonElement>;
+  /** The "map" button, which takes focus after the side map's "open the full map" (spec 0009x). */
+  mapButtonRef?: Ref<HTMLButtonElement>;
 };
 
 const option = `min-h-tap rounded-full border px-3.5 text-label ${focusRing}`;
@@ -18,7 +20,7 @@ const current = `${option} border-border bg-surface text-ink`;
 const other = `${option} border-transparent bg-transparent text-ink-muted`;
 
 /** Search.dc.html's "list / map" segmented control. */
-export function ViewToggle({ view, onChange, listButtonRef }: Props) {
+export function ViewToggle({ view, onChange, listButtonRef, mapButtonRef }: Props) {
   const { t } = useTranslation();
   // The view last asked for, not the render's `view`: the router applies a navigation in a
   // transition, so a double-click would see the old `view` twice and push two entries.
@@ -28,7 +30,7 @@ export function ViewToggle({ view, onChange, listButtonRef }: Props) {
   }, [view]);
   const button = (value: View, text: string) => (
     <button
-      ref={value === 'list' ? listButtonRef : undefined}
+      ref={value === 'list' ? listButtonRef : mapButtonRef}
       type="button"
       aria-pressed={view === value}
       onClick={() => {

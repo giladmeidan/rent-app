@@ -1,5 +1,5 @@
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
-import type { Ref } from 'react';
+import type { FocusEvent, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
@@ -25,10 +25,26 @@ type Props = {
   profile: SeekerProfileOut | undefined;
   /** The count line, focused by the page after a filter change (spec 0009t). */
   countRef?: Ref<HTMLParagraphElement>;
+  /** Beside the side map (spec 0009x): one card per row, the highlighted card's cue, and each
+   * card's pointer and focus events. */
+  sideMap?: CardEvents & { highlightedId: string | undefined };
 };
 
+/** A card's pointer and focus events, with its listing's id (spec 0009x). */
+export type CardEvents = {
+  onPointerEnter: (id: string) => void;
+  onPointerLeave: (id: string) => void;
+  onFocus: (id: string) => void;
+  onBlur: (id: string, event: FocusEvent<HTMLLIElement>) => void;
+};
+
+// The highlighted card: an accent border and the soft accent fill, never an outline (the focus
+// ring's look), so a hovered card never looks focused.
+const highlightCue =
+  '[&[data-highlighted]>article]:border-accent [&[data-highlighted]>article]:bg-accent-soft';
+
 /** The count line (always mounted, so its first announcement is heard) and the result states. */
-export function ResultsList({ search, hasFilters, onClear, profile, countRef }: Props) {
+export function ResultsList({ search, hasFilters, onClear, profile, countRef, sideMap }: Props) {
   const { t } = useTranslation();
   const { data } = search;
 
@@ -77,9 +93,21 @@ export function ResultsList({ search, hasFilters, onClear, profile, countRef }: 
       body = (
         <div className="flex flex-col gap-4">
           {/* The grid: each row card at least the artboard's 440px list column. */}
-          <ul className="grid gap-3 lg:grid-cols-[repeat(auto-fill,minmax(min(100%,27.5rem),1fr))]">
+          <ul
+            className={`grid gap-3 lg:grid-cols-[repeat(auto-fill,minmax(min(100%,27.5rem),1fr))] ${sideMap === undefined ? '' : 'xl:grid-cols-1'}`}
+          >
             {flattenPages(data).map((listing) => (
-              <li key={listing.id}>
+              <li
+                key={listing.id}
+                {...(sideMap !== undefined && {
+                  className: highlightCue,
+                  'data-highlighted': sideMap.highlightedId === listing.id ? '' : undefined,
+                  onPointerEnter: () => sideMap.onPointerEnter(listing.id),
+                  onPointerLeave: () => sideMap.onPointerLeave(listing.id),
+                  onFocus: () => sideMap.onFocus(listing.id),
+                  onBlur: (event: FocusEvent<HTMLLIElement>) => sideMap.onBlur(listing.id, event),
+                })}
+              >
                 <ListingCard
                   listing={listing}
                   today={today}

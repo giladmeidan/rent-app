@@ -43,7 +43,7 @@ const FIT_MAX_ZOOM = 15;
 type PendingFocus = { to: 'card'; id: string } | { to: 'list' } | { to: 'marker'; id: string };
 
 /** The `[west, south, east, north]` extent of the pins. */
-function extentOf(pins: readonly Pin[]): Bbox {
+export function extentOf(pins: readonly Pin[]): Bbox {
   let west = Infinity;
   let south = Infinity;
   let east = -Infinity;
