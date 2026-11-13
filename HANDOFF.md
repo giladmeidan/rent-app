@@ -63,9 +63,12 @@ Last updated:
   twin started by the label (harmless).
 - Rate limit: all sessions share Gilad's 5-hour usage limit; 0010a and 0010d hit it once (reset 19:30) and resumed
   on a message. Expect it again with three builds up.
-- Main checkout `../rent-app` (on `main` at 144eefd) has `HANDOFF.md` **unmerged** (UU) from an autostash pop
-  conflict, plus autostash entries in the shared stash list and the demo-seed work (`Makefile`,
-  `api/scripts/seed_demo.py`). Not the orchestrator's; leave it to its owner and tell Gilad.
+- Main checkout `../rent-app`: the `HANDOFF.md` autostash conflict is resolved (2026-11-13, with Gilad: the
+  committed version won; the stale map-research copy `research/map-improvements/` went to the Trash, it is
+  committed as `specs/map-research/`). It is on `main` again and holds only the uncommitted demo-seed work:
+  `Makefile` (`seed-demo` target and a `DESTROY_MAIN=1` guard on `make down` for the main stack, re-applied on
+  top of 8729397) and `api/scripts/seed_demo.py`. It also holds the knowledge graph (`graphify-out/`, CLAUDE.md).
+  Old `autostash` entries remain in the shared stash list; nobody needs them.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.

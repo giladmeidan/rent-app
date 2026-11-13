@@ -104,8 +104,8 @@ Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/
 
 ## Knowledge graph (graphify) (Gilad, 2026-11-13)
 The code of `main` is mapped as a graph in the main checkout: `rent-app/graphify-out/graph.json`
-(gitignored; api, web, infra and CI code, plus the headings and links of `specs/`, `research/`
-and `HANDOFF.md`; design artboards are not in it). It is the first place to look, before grep or
+(gitignored; api, web, infra and CI code, plus the headings and links of `specs/` and
+`HANDOFF.md`; design artboards are not in it). It is the first place to look, before grep or
 reading files.
 
 - **Where it lives.** Only the main checkout has it. `.claude/settings.json` sets `GRAPHIFY_OUT` to
