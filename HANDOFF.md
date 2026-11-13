@@ -38,9 +38,8 @@ Last updated:
 ## Current Work
 - **Market planning done, specs not started.** `specs/MARKET-PLAN.md` (new) holds Gilad's decisions, the five-step
   build order, code findings per step from five read-only explorers, and section 6 with all 23 answers.
-  `specs/PRODUCT.md` has a new "שוק השותפים" row and the renumbered slice order. **Both files, and this handoff,
-  are uncommitted edits in `../rent-app-orch`** (detached on origin/main); commit and push them as a docs commit
-  (`HEAD:main`) before writing specs. Gilad starts the spec writing himself in a new chat.
+  `specs/PRODUCT.md` has a new "שוק השותפים" row and the renumbered slice order. Both files and this handoff
+  are on `main` (docs commit `8ef7044`). Gilad starts the spec writing himself in a new chat.
 - No build sessions running. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
   collisions"), ran 0009j/o/p/r/s/u (PRs #57–#62) and merged them; their worktrees and branches are removed.
   The older orchestrator `local_2b79d58f…` merged 0009e/g/k/m (#53–#56) and is retired.
@@ -104,7 +103,7 @@ Last updated:
 2. **Write the Slice 10 market specs** (when Gilad says so in a new chat). Instructions:
    a. Read `specs/MARKET-PLAN.md` in full, then the "שוק השותפים" row in `specs/PRODUCT.md`. Section 6 of the plan
       is all decisions; **(rec)** items in section 3 are engineering advice for the spec author, not Gilad's.
-   b. Commit the three uncommitted docs files first (see Current Work).
+   b. Work from a checkout at or after `8ef7044` on `main` (the plan and this handoff landed there).
    c. Write about seven specs with `/spec`, ids `0010a`…, in the plan's order: (1) the move — two tabs, market
       search and post flow, apartments-only main search, no schema change; (2) role-free market incl. the profile
       split; (3) photos as two specs, storage + upload API (new deps `python-multipart`, `Pillow`, `boto3`;
@@ -277,7 +276,7 @@ Login locally: the code is in the newest `.outbox/*.json`.
 ## Session History
 - 2026-11-13 — Market planning session: Gilad pushed trust back and made "שוק השותפים" Slice 10. Brainstormed the
   scope, ran five read-only explorers over the code, checked R2's free tier and upload limits, wrote
-  `specs/MARKET-PLAN.md` and the PRODUCT.md row; Gilad answered all 23 questions. No specs, no code, no commit.
+  `specs/MARKET-PLAN.md` and the PRODUCT.md row; Gilad answered all 23 questions. No specs, no code; docs pushed to `main`.
 - 2026-11-12/13 — Orchestrator session `local_386fe896…` ("Specs without collisions"): checked the remaining six
   specs for file collisions, ran them 3 at a time (0009j, then 0009p, 0009u, then 0009o, 0009r, 0009s), merged
   PRs #57–#62 and cleaned up. Gilad: e2e only in GitHub CI from now on. 0009j's ac9 CI failure turned out to be
