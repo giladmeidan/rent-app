@@ -14,9 +14,9 @@ import { useProfile } from '../profile/useProfile';
 import { ActiveFilterTags } from './ActiveFilterTags';
 import { FiltersForm, type FormFilters } from './FiltersForm';
 import { countActive, parseFilters, toSearchParams, type Sort } from './filters';
-import { pickMapParams } from './mapPosition';
-import { ResultsList } from './ResultsList';
+import { pickMapParams, writeMapPosition } from './mapPosition';
 import { SearchMap } from './SearchMap';
+import { SearchResults } from './SearchResults';
 import { SortSelect } from './SortSelect';
 import { useSearch } from './useSearch';
 import { ViewToggle, type View } from './ViewToggle';
@@ -59,6 +59,9 @@ export function SearchPage() {
   const listButtonRef = useRef<HTMLButtonElement>(null);
   const focusCount = useRef(false);
   const focusListButton = useRef(false);
+  // The side map's "open the full map" is gone after the switch: focus goes to the pressed map button.
+  const mapButtonRef = useRef<HTMLButtonElement>(null);
+  const focusMapButton = useRef(false);
   // The filters part of the URL (with `view`, without the map's position): the form's key and what
   // "did the filters change" compares, so a map move never remounts the form or moves focus.
   const filtersKey = toSearchParams(filters).toString();
@@ -71,6 +74,10 @@ export function SearchPage() {
     if (focusListButton.current && view !== 'map') {
       focusListButton.current = false;
       listButtonRef.current?.focus();
+    }
+    if (focusMapButton.current && view === 'map') {
+      focusMapButton.current = false;
+      mapButtonRef.current?.focus();
     }
   }, [filtersKey, view]);
 
@@ -157,6 +164,7 @@ export function SearchPage() {
                 view={view ?? 'list'}
                 onChange={switchView}
                 listButtonRef={listButtonRef}
+                mapButtonRef={mapButtonRef}
               />
             </div>
           </div>
@@ -174,12 +182,23 @@ export function SearchPage() {
               }}
             />
           ) : (
-            <ResultsList
+            <SearchResults
               search={search}
               profile={profile}
               hasFilters={active > 0}
               onClear={clear}
               countRef={countRef}
+              filtersKey={filtersKey}
+              onOpenFullMap={(position) => {
+                // The same filters in the map view at the side map's place, as a new history entry.
+                focusMapButton.current = true;
+                const next = toSearchParams({ ...filters, view: 'map' });
+                setSearchParams(
+                  position === undefined
+                    ? next
+                    : writeMapPosition(next, { center: position.center, zoom: position.zoom }),
+                );
+              }}
             />
           )}
         </div>

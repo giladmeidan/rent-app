@@ -1,7 +1,8 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, type Locator } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
+import { test } from './fixtures';
 
 // The title's line break (whitespace-pre-line) reads as a space.
 const TITLE = he.landing.title.replace('\n', ' ');

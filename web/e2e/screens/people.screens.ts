@@ -1,13 +1,14 @@
 // The visual check for the room lister's people page (spec 0009p, AC5): one screenshot per state at
 // each project's size, in web/screens/0009p/. Every API request is answered here, so it needs only
 // the vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { MyListingOut } from '../../src/features/listings/api';
 import type { PeoplePageOut, PersonOut } from '../../src/features/people/api';
 import { API } from '../helpers';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 // --- fixtures (obviously fake) ----------------------------------------------------------------------
 

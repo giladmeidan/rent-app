@@ -1,7 +1,7 @@
 // The visual check for login and signup (spec 0009m, AC7): one screenshot per state at each
 // project's size, in web/screens/0009m/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import { API } from '../helpers';
@@ -20,6 +20,7 @@ import {
   type Answer,
 } from './fixtures-auth';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 type Setup = {
   /** `POST /auth/otp/request`'s answers in order; the last one repeats. */

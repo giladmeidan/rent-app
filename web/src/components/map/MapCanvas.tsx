@@ -93,6 +93,10 @@ type Props = {
   /** The map cannot be shown: the library failed to load, no WebGL, or an error before `load`. */
   onError?: () => void;
   className?: string;
+  /** `false` (the side map, spec 0009x): the pins, bubbles, zoom buttons and canvas are neither tab
+   * stops nor exposed to assistive tech (`aria-hidden`, `tabindex="-1"`); the mouse and touch
+   * behaviour is unchanged. Read once, at creation. */
+  keyboard?: boolean;
 };
 
 // Chip classes per match tier (spec 0009v); the selected chip stays the one accent-filled element.
@@ -183,6 +187,7 @@ export function MapCanvas({
   panel,
   onError,
   className = '',
+  keyboard = true,
 }: Props) {
   const { t, i18n } = useTranslation();
   const regionRef = useRef<HTMLDivElement>(null);
@@ -194,7 +199,16 @@ export function MapCanvas({
 
   // The map is created once; it reads the initial view and options from here, and the latest
   // callbacks through refs, so a re-render never rebuilds it.
-  const initial = useRef({ bounds, center, zoom, interactive, minZoom, t, dir: i18n.dir() });
+  const initial = useRef({
+    bounds,
+    center,
+    zoom,
+    interactive,
+    minZoom,
+    keyboard,
+    t,
+    dir: i18n.dir(),
+  });
   const callbacks = useRef({ onPinClick, onBubbleOpen, onMoveEnd, onError });
   useEffect(() => {
     callbacks.current = { onPinClick, onBubbleOpen, onMoveEnd, onError };
@@ -228,7 +242,7 @@ export function MapCanvas({
       const container = containerRef.current;
       if (cancelled || container === null) return;
 
-      const { bounds, center, zoom, interactive, minZoom, t, dir } = initial.current;
+      const { bounds, center, zoom, interactive, minZoom, keyboard, t, dir } = initial.current;
       // MapLibre option strings, not CSS: zoom buttons at the inline end, attribution at the
       // bottom inline start.
       const rtl = dir === 'rtl';
@@ -249,6 +263,7 @@ export function MapCanvas({
           pitchWithRotate: false,
           touchPitch: false,
           cooperativeGestures: false,
+          ...(keyboard ? {} : { keyboard: false }),
         });
       } catch {
         fail();
@@ -264,9 +279,9 @@ export function MapCanvas({
       // second `region` named "map": an interactive canvas becomes an `application` (not a
       // landmark; the pan and zoom keys keep working in a screen reader's focus mode), and a
       // static one is hidden from assistive tech, keeping its `tabindex="-1"` so no hidden element
-      // is focusable.
+      // is focusable. A map without keyboard use (the side map, spec 0009x) is treated as static.
       const canvas = created.getCanvas();
-      if (interactive) {
+      if (interactive && keyboard) {
         canvas.setAttribute('role', 'application');
       } else {
         canvas.removeAttribute('role');
@@ -309,6 +324,15 @@ export function MapCanvas({
           new lib.NavigationControl({ showCompass: false }),
           rtl ? 'top-left' : 'top-right',
         );
+        if (!keyboard) {
+          // The zoom buttons stay for the mouse only: hidden, and no tab stops inside the hidden group.
+          for (const group of created.getContainer().querySelectorAll('.maplibregl-ctrl-group')) {
+            group.setAttribute('aria-hidden', 'true');
+            for (const button of group.querySelectorAll('button')) {
+              button.setAttribute('tabindex', '-1');
+            }
+          }
+        }
       }
 
       mapRef.current = { map: created, lib };
@@ -354,12 +378,17 @@ export function MapCanvas({
     for (const pin of pins ?? []) wanted.set(pin.id, { kind: 'pin', pin });
     for (const bubble of bubbles ?? []) wanted.set(bubble.id, { kind: 'bubble', bubble });
 
-    // A focused bubble that this diff removes (its members parted after a zoom): focus lands on
+    // A focused bubble that this diff removes (its members parted after a zoom; never on a map
+    // without keyboard use, whose markers take no focus): focus lands on
     // what replaced it (spec 0009t's rule), the anchor's pin or its new bubble, else the canvas.
     let refocus: string | undefined;
     for (const [id, entry] of markers) {
       if (wanted.has(id)) continue;
-      if (entry.item.kind === 'bubble' && entry.button === document.activeElement) {
+      if (
+        initial.current.keyboard &&
+        entry.item.kind === 'bubble' &&
+        entry.button === document.activeElement
+      ) {
         refocus = entry.item.bubble.members[0]?.id ?? '';
       }
       entry.marker.remove();
@@ -398,6 +427,13 @@ export function MapCanvas({
         button.type = 'button';
         button.className = pinButton;
         button.dataset.pinId = id;
+        if (!initial.current.keyboard) {
+          // The side map's pins are for the mouse; the cards are the keyboard path (spec 0009x).
+          element.setAttribute('aria-hidden', 'true');
+          button.tabIndex = -1;
+          // A press never focuses a hidden pin or bubble: focus stays where it is.
+          button.addEventListener('mousedown', (event) => event.preventDefault());
+        }
         const text = document.createElement('span');
         button.append(text);
         element.append(button);
