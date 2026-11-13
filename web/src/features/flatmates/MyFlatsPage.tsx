@@ -11,8 +11,9 @@ import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { Switch } from '../../components/Switch';
 import { cardTitle } from '../listings/cardTitle';
-import { useLeaveFlat, useMyFlats, type MyFlatOut } from './api';
+import { useLeaveFlat, useMyFlats, useSetShown, type MyFlatOut } from './api';
 import { formatDay } from './format';
 
 const section = 'flex flex-col gap-4';
@@ -29,6 +30,7 @@ function FlatRow({
 }) {
   const { t } = useTranslation();
   const leave = useLeaveFlat();
+  const show = useSetShown(flat.listing.id);
   const titleId = useId();
   // Same-tick guard: a double click sends one DELETE. Re-checked after the confirm's await.
   const inFlight = useRef(false);
@@ -66,6 +68,10 @@ function FlatRow({
     });
   }
 
+  // While the change is saved the switch shows the new value, disabled; after a failure it shows
+  // the stored one again (0010f).
+  const shown = show.isPending ? show.variables : flat.shown;
+
   return (
     <Card
       as="li"
@@ -94,7 +100,15 @@ function FlatRow({
       >
         {t('flatmates.mine.leave')}
       </Button>
-      {leave.isError && (
+      <div className="rounded-md border border-border lg:basis-full">
+        <Switch
+          label={t('flatmates.join.show')}
+          checked={shown}
+          onChange={(next) => show.mutate(next)}
+          disabled={show.isPending}
+        />
+      </div>
+      {(leave.isError || show.isError) && (
         <p role="alert" className="text-body-sm font-semibold text-danger lg:basis-full">
           {t('common.error')}
         </p>

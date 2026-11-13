@@ -33,6 +33,11 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     flatmates_count: null,
     flatmate_ages: [],
     lifestyle: {},
+    room_size_sqm: null, // spec 0010f: the flat facts
+    private_bathroom: null,
+    balcony: null,
+    bills_included: null,
+    poster: null,
     created_at: '2026-11-01T10:00:00Z',
     lat: null,
     lng: null,
@@ -44,7 +49,7 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
 }
 
 /** `GET /listings/{id}`'s shape: a public listing plus its applicant count, the caller's room
- * fit (0007b; `null` for an apartment) and its photos (0010d; none here). */
+ * fit (0007b; `null` for an apartment), its photos (0010d; none here) and its people (0010f; none). */
 export function listingDetail(overrides: Partial<ListingDetail> = {}): ListingDetail {
   return {
     ...publicListing(),
@@ -52,6 +57,7 @@ export function listingDetail(overrides: Partial<ListingDetail> = {}): ListingDe
     room_fit: null,
     like: null,
     photos: [], // spec 0010d
+    people: [], // spec 0010f
     ...overrides,
   };
 }

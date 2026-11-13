@@ -52,6 +52,11 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     flatmates_count: null,
     flatmate_ages: [],
     lifestyle: {},
+    room_size_sqm: null, // spec 0010f: the flat facts
+    private_bathroom: null,
+    balcony: null,
+    bills_included: null,
+    poster: null,
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',

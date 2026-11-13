@@ -79,10 +79,13 @@ export async function previewInvite(token: string): Promise<InvitePreviewOut> {
   return data;
 }
 
-/** Joins the flat, the token in the body. 404, 409 (`own_listing`, `already_applied`, `declined`,
- * `flatmates_full`), 422 and 429 throw. A member gets 200 again. */
-export async function joinFlat(token: string): Promise<JoinOut> {
-  const { data, error, response } = await api.POST('/flatmate-invites/join', { body: { token } });
+/** Joins the flat, the token in the body with the person's choice to be shown on the room's page
+ * (0010f). 404, 409 (`own_listing`, `already_applied`, `declined`, `flatmates_full`), 422 and 429
+ * throw. A member gets 200 again (and keeps their stored choice). */
+export async function joinFlat(token: string, shown: boolean): Promise<JoinOut> {
+  const { data, error, response } = await api.POST('/flatmate-invites/join', {
+    body: { token, shown },
+  });
   if (data === undefined) {
     throw new ApiError('POST', '/flatmate-invites/join', response.status, error);
   }
@@ -159,11 +162,12 @@ export function useInvitePreview(token: string | null) {
   });
 }
 
-/** Joins the flat of `token`; the chats and "my flats" refetch on success. */
+/** Joins the flat of `token`, shown on the room's page or not; the chats and "my flats" refetch
+ * on success. */
 export function useJoinFlat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (token: string) => joinFlat(token),
+    mutationFn: ({ token, shown }: { token: string; shown: boolean }) => joinFlat(token, shown),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY }),
@@ -220,6 +224,33 @@ export function useLeaveFlat() {
         queryClient.invalidateQueries({ queryKey: MY_FLATS_KEY }),
         queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY }),
         queryClient.invalidateQueries({ queryKey: THREADS_KEY }),
+      ]),
+  });
+}
+
+/** Shows or hides the caller on the room's page (0010f; 204). 404 (not a flatmate there) throws. */
+export async function setShown(listingId: string, shown: boolean): Promise<void> {
+  const { error, response } = await api.PATCH('/me/flats/{listing_id}', {
+    params: { path: { listing_id: listingId } },
+    body: { shown },
+  });
+  if (!response.ok) throw new ApiError('PATCH', '/me/flats/{id}', response.status, error);
+}
+
+/** Changes the caller's `shown` on one flat. It stays pending until "my flats" and the room's
+ * page (`['listing', id]`, whose refetch counts one view) have refetched, so the switch shows the
+ * stored value when it settles. A 401 forgets the session. */
+export function useSetShown(listingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (shown: boolean) => setShown(listingId, shown),
+    onError: (error) => {
+      if (hasStatus(error, 401)) clearSession(queryClient);
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: MY_FLATS_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['listing', listingId] }),
       ]),
   });
 }

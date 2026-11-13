@@ -30,6 +30,14 @@ const roomChips = () =>
     .getAllByRole('listitem')
     .map((chip) => chip.textContent);
 const rangeError = () => i18n.t('listings.errors.range', { min: 18, max: 99 });
+// The flat facts (spec 0010f).
+const roomSize = () => screen.getByLabelText(r.roomSize);
+const factGroup = (legend: string) => screen.getByRole('group', { name: legend });
+const fact = (legend: string, name: string) =>
+  within(factGroup(legend)).getByRole('radio', { name });
+const accessibleName = (element: HTMLElement) =>
+  (element as HTMLInputElement).labels?.[0]?.textContent;
+const ROOM_FACTS = ['room_size_sqm', 'private_bathroom', 'balcony', 'bills_included', 'poster'];
 
 /** One questionnaire answer, by the question's flat wording and the answer's label. */
 function answer(key: 'cleanliness' | 'guests', n: '1' | '2' | '3') {
@@ -363,6 +371,174 @@ describe('RoomFields', () => {
     expect(body).toMatchObject({ gender_preference: 'any', flatmates_count: 2 });
     expect(body).toHaveProperty('flatmate_ages', []);
     expect(body).toHaveProperty('lifestyle', {});
+    view.unmount();
+  });
+
+  it('ac7 flat facts render unset, show the poster hint and are sent', async () => {
+    // Spec 0010f AC7: after the flatmates block, the room size and four choices, each on
+    // "לא לציין"; the picked values go in the body and the preview has one chip per set fact.
+    let api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    let view = await toPreferences(testQueryClient(), 'room');
+    const region = roomRegion();
+    const size = roomSize();
+    expect(region).toContainElement(size);
+    expect(size).toHaveValue(null);
+    expect(size).toHaveAccessibleDescription(r.roomSizeHint);
+    expect(count().compareDocumentPosition(size) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const lifestyle = within(region).getByRole('region', { name: he.lifestyle.title.flat });
+    for (const legend of [r.privateBathroom, r.balcony, r.bills]) {
+      const group = factGroup(legend);
+      expect(region).toContainElement(group);
+      expect(
+        within(group)
+          .getAllByRole('radio')
+          .map((radio) => (radio as HTMLInputElement).checked),
+      ).toEqual([false, false, true]);
+      expect(within(group).getAllByRole('radio').map(accessibleName)).toEqual([
+        he.common.yes,
+        he.common.no,
+        r.unset,
+      ]);
+      expect(
+        group.compareDocumentPosition(lifestyle) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    const poster = factGroup(r.poster.title);
+    expect(within(poster).getAllByRole('radio').map(accessibleName)).toEqual([
+      r.poster.lives_here,
+      r.poster.leaving,
+      r.poster.landlord,
+      r.unset,
+    ]);
+    expect(fact(r.poster.title, r.unset)).toBeChecked();
+    expect(screen.queryByText(r.poster.livesHereHint)).toBeNull();
+    fireEvent.click(fact(r.poster.title, r.poster.lives_here));
+    expect(screen.getByText(r.poster.livesHereHint)).toBeVisible();
+    fireEvent.click(fact(r.poster.title, r.poster.leaving));
+    expect(screen.queryByText(r.poster.livesHereHint)).toBeNull();
+    fireEvent.click(fact(r.poster.title, r.poster.lives_here));
+
+    fireEvent.change(count(), { target: { value: '2' } });
+    fireEvent.change(size, { target: { value: '12' } });
+    fireEvent.click(fact(r.privateBathroom, he.common.yes));
+    fireEvent.click(fact(r.balcony, he.common.no));
+    fireEvent.click(fact(r.bills, he.common.yes));
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
+    // A balcony "no" has no chip; bills have one either way.
+    expect(roomChips()).toEqual([
+      '2 שותפים בדירה',
+      i18n.t('listings.roomPreview.roomSize', { size: 12 }),
+      he.listings.roomPreview.privateBathroom,
+      he.listings.roomPreview.bills.included,
+      r.poster.lives_here,
+    ]);
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/market/mine');
+    });
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({
+      room_size_sqm: 12,
+      private_bathroom: true,
+      balcony: false,
+      bills_included: true,
+      poster: 'lives_here',
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Left unsaid: every fact is `null` and has no chip; bills "no" has its own chip.
+    api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    view = await toPreferences(testQueryClient(), 'room');
+    fireEvent.change(count(), { target: { value: '2' } });
+    fireEvent.click(nextButton());
+    expect(roomChips()).toEqual(['2 שותפים בדירה']);
+    back();
+    fireEvent.click(fact(r.bills, he.common.no));
+    fireEvent.click(nextButton());
+    expect(roomChips()).toEqual(['2 שותפים בדירה', he.listings.roomPreview.bills.notIncluded]);
+    back();
+    fireEvent.click(fact(r.bills, r.unset));
+    fireEvent.click(nextButton());
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/market/mine');
+    });
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({
+      room_size_sqm: null,
+      private_bathroom: null,
+      balcony: null,
+      bills_included: null,
+      poster: null,
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An apartment never shows them, nor sends the keys.
+    api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    view = await toPreferences();
+    expect(screen.queryByLabelText(r.roomSize)).toBeNull();
+    expect(screen.queryByRole('group', { name: r.poster.title })).toBeNull();
+    fireEvent.click(nextButton());
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    const body = api.calls('POST /listings')[0]?.body as Record<string, unknown>;
+    for (const key of ROOM_FACTS) expect(body).not.toHaveProperty(key);
+    view.unmount();
+  });
+
+  it('ac7 room size is a whole number from 4 to the flat size', async () => {
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [invalid('room_size_sqm'), json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    const view = await toPreferences(testQueryClient(), 'room');
+    // A 60 m² flat.
+    back();
+    back();
+    fireEvent.change(screen.getByLabelText(he.listings.fields.size), { target: { value: '60' } });
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.change(count(), { target: { value: '2' } });
+    const range = i18n.t('listings.errors.range', { min: 4, max: 60 });
+    for (const value of ['70', '3', '12.5']) {
+      fireEvent.change(roomSize(), { target: { value } });
+      fireEvent.click(nextButton());
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
+      expect(errorFor(roomSize())).toHaveTextContent(range);
+      expect(roomSize()).toHaveFocus();
+    }
+    fireEvent.change(roomSize(), { target: { value: '60' } });
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
+
+    // The API naming the field brings the wizard back to step 4 with the error on it.
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    });
+    expect(errorFor(roomSize())).toHaveTextContent(he.listings.errors.invalid);
+    fireEvent.click(nextButton());
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/market/mine');
+    });
+    expect(api.calls('POST /listings')[1]?.body).toMatchObject({ room_size_sqm: 60 });
     view.unmount();
   });
 

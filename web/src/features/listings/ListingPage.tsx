@@ -20,6 +20,7 @@ import { LikeRoomButton } from '../likes/LikeRoomButton';
 import { MutualBanner } from '../likes/MutualBanner';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
+import { FlatPeople } from '../rooms/FlatPeople';
 import { RoomFacts } from '../rooms/RoomFacts';
 import { writeMapPosition } from '../search/mapPosition';
 import { ApiError } from './api';
@@ -154,6 +155,8 @@ export function ListingPage() {
           <ListingFacts listing={l} />
 
           {l.listing_type === 'room' && <RoomFacts listing={l} />}
+
+          {l.people.length > 0 && <FlatPeople people={l.people} />}
 
           {l.description !== null && (
             <section className="flex flex-col gap-2">

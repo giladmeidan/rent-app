@@ -570,6 +570,90 @@ describe('validate', () => {
     expect(emptyForm.lifestyle).toStrictEqual({});
   });
 
+  it('ac7 flat facts: room size rule, body mapping, edit form and changed fields', () => {
+    // Spec 0010f AC7.
+    const room: ListingForm = {
+      ...valid,
+      listing_type: 'room',
+      flatmates_count: 2,
+      size_sqm: '60',
+    };
+    const sizeError = (room_size_sqm: string, size_sqm = '60') =>
+      validatePreferences({ ...room, size_sqm, room_size_sqm }).room_size_sqm;
+    expect(sizeError('')).toBeUndefined();
+    expect(sizeError('4')).toBeUndefined();
+    expect(sizeError(' 60 ')).toBeUndefined();
+    for (const bad of ['3', '61', '12.5', 'abc', '-5'])
+      expect(sizeError(bad)).toEqual(range(4, 60));
+    // Never above the API's 100, whatever the flat; a flat size that is not a number yet: 100.
+    expect(sizeError('101', '200')).toEqual(range(4, 100));
+    expect(sizeError('100', '200')).toBeUndefined();
+    expect(sizeError('101', '')).toEqual(range(4, 100));
+    // An apartment's (kept) room size is never checked.
+    expect(
+      validatePreferences({ ...room, listing_type: 'apartment', room_size_sqm: '999' }),
+    ).toEqual({});
+
+    // `''` is `null`; a room always sends the five, an apartment never.
+    const facts = {
+      room_size_sqm: null,
+      private_bathroom: null,
+      balcony: null,
+      bills_included: null,
+      poster: null,
+    };
+    expect(toListingIn(room)).toMatchObject(facts);
+    const said: ListingForm = {
+      ...room,
+      room_size_sqm: '12',
+      private_bathroom: 'yes',
+      balcony: 'no',
+      bills_included: 'yes',
+      poster: 'landlord',
+    };
+    const saidBody = {
+      room_size_sqm: 12,
+      private_bathroom: true,
+      balcony: false,
+      bills_included: true,
+      poster: 'landlord',
+    };
+    expect(toListingIn(said)).toMatchObject(saidBody);
+    const apartment = toListingIn({ ...said, listing_type: 'apartment' });
+    for (const key of Object.keys(facts)) expect(apartment).not.toHaveProperty(key);
+
+    // The edit form starts from the stored facts, and only a changed one is sent.
+    const stored = listing({
+      listing_type: 'room',
+      flatmates_count: 2,
+      size_sqm: 60,
+      ...saidBody,
+      poster: 'landlord',
+    });
+    const form = formFromListing(stored);
+    expect(form).toMatchObject({
+      room_size_sqm: '12',
+      private_bathroom: 'yes',
+      balcony: 'no',
+      bills_included: 'yes',
+      poster: 'landlord',
+    });
+    expect(formFromListing(listing({ listing_type: 'room', flatmates_count: 2 }))).toMatchObject({
+      room_size_sqm: '',
+      private_bathroom: '',
+      balcony: '',
+      bills_included: '',
+      poster: '',
+    });
+    expect(changedFields(stored, toListingIn(form))).toEqual({});
+    expect(changedFields(stored, toListingIn({ ...form, balcony: '', room_size_sqm: '' }))).toEqual(
+      { balcony: null, room_size_sqm: null },
+    );
+    expect(changedFields(stored, toListingIn({ ...form, poster: 'lives_here' }))).toEqual({
+      poster: 'lives_here',
+    });
+  });
+
   it('ac10_changed_fields_never_type', () => {
     // Spec 0010a: `listing_type` is never in a PATCH, whatever the form holds.
     for (const stored of [

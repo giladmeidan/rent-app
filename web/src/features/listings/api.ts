@@ -19,8 +19,17 @@ export type GenderPreference = ListingOut['gender_preference'];
 /** One listing photo's addresses (0010d): `small_url` (480 px) and `large_url` (1600 px), WebP. */
 export type PhotoOut = components['schemas']['PhotoOut'];
 
-/** The create body as the wizard sends it: every key present, `rooms` a JSON number. */
-export type ListingInBody = Required<Omit<ListingIn, 'rooms'>> & { rooms: number };
+/** Who is behind a room listing (0010f): `lives_here` shows the lister on the room's page. */
+export type Poster = NonNullable<ListingOut['poster']>;
+/** A room's optional flat facts (0010f): `null` means not said. */
+export type RoomFactKey =
+  'room_size_sqm' | 'private_bathroom' | 'balcony' | 'bills_included' | 'poster';
+
+/** The create body as the wizard sends it: every key present, `rooms` a JSON number; the flat
+ * facts only for a room (an apartment never sends them). */
+export type ListingInBody = Required<Omit<ListingIn, 'rooms' | RoomFactKey>> & {
+  rooms: number;
+} & Pick<ListingIn, RoomFactKey>;
 
 /** A non-2xx answer. A network failure is the `TypeError` fetch throws, never this. */
 export class ApiError extends Error {
@@ -64,6 +73,9 @@ export async function patchListing(id: string, body: ListingPatch): Promise<List
 export type ListingPublic = components['schemas']['ListingPublic'];
 /** `ListingPublic` plus the exact applicant count (0004a), on `GET /listings/{id}` only. */
 export type ListingDetail = components['schemas']['ListingDetail'];
+/** A person living in a room's flat, on its page (0010f): the lister who lives there, or a
+ * flatmate who chose to be shown. No id of any kind. */
+export type FlatPersonOut = components['schemas']['FlatPersonOut'];
 
 /** A live listing as anyone sees it. 404 (not live, or unknown) and 422 (malformed id) throw. */
 export async function fetchPublicListing(id: string): Promise<ListingDetail> {
