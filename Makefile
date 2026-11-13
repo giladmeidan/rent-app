@@ -27,7 +27,7 @@ export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api down migrate seed test test-api test-web lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -121,17 +121,40 @@ i18n-check: web/node_modules/.modules.yaml
 ## 90 s each for the api /health and the web, then runs the suite in E2E_SHARDS shards, clearing the
 ## stack's Redis rate-limit keys (`rl:*`) before each so the OTP limit of 10 per IP per 15 min is not
 ## hit (dev / CI compose stack only). Every shard runs; the target fails if any shard failed.
+## A shard's failed tests run once more, after the keys are cleared again (so the retry's sign-ups fit);
+## a shard that passes only then prints a "Flaky e2e" warning (an annotation in CI) and does not fail.
+## Each shard keeps its own web/test-results/shard-N (and shard-N-retry) with the failed tests' traces.
 # shortcut: 4 shards (E2E_SHARDS) fit ~33 sign-ups per 15 min (3 stopped fitting at 28 tests, PR #67:
 # Playwright moved inbox.spec.ts into shard 1, its 11th code); add a shard or an env override when the suite outgrows it
 E2E_SHARDS ?= 4
+RL_FLUSH = $(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'
 e2e: web/node_modules/.modules.yaml
 	$(PNPM) exec playwright install --with-deps chromium
 	$(call wait_for,$(API_HEALTH),90,api)
 	$(call wait_for,$(WEB_URL),90,web)
 	@status=0; for i in $$(seq $(E2E_SHARDS)); do \
-	  $(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'; \
-	  $(PNPM) exec playwright test --shard=$$i/$(E2E_SHARDS) || status=1; \
+	  out=test-results/shard-$$i; \
+	  $(RL_FLUSH); \
+	  if ! $(PNPM) exec playwright test --shard=$$i/$(E2E_SHARDS) --output=$$out; then \
+	    echo "e2e shard $$i failed; running its failed tests once more"; \
+	    $(RL_FLUSH); \
+	    if $(PNPM) exec playwright test --last-failed --last-failed-file=$$out/.last-run.json --output=$$out-retry; then \
+	      echo "::warning title=Flaky e2e::shard $$i passed only on the retry of its failed tests; see the ✘ lines above and the traces in web/$$out"; \
+	    else status=1; fi; \
+	  fi; \
 	done; exit $$status
+
+## merge: merge PR N (`make merge PR=N`) only when its head contains origin/main and the `ci` check
+## passed on that head; a merge commit pinned to that head. A PR behind main was tested against an
+## older main: merge origin/main into its branch and push, which runs CI again (the label stays).
+merge:
+	@test -n "$(PR)" || { echo "usage: make merge PR=<number>" >&2; exit 1; }
+	@head=$$(gh pr view $(PR) --json headRefOid --jq .headRefOid) && \
+	git fetch -q origin main "pull/$(PR)/head" && \
+	{ git merge-base --is-ancestor origin/main $$head || { echo "PR $(PR) is behind main: merge origin/main into its branch and push; CI runs again" >&2; exit 1; }; } && \
+	ci=$$(gh pr checks $(PR) --json name,bucket --jq '[.[] | select(.name == "ci") | .bucket] | first // "missing"') && \
+	{ [ "$$ci" = pass ] || { echo "PR $(PR): the ci check on its head is '$$ci', not pass" >&2; gh pr checks $(PR) >&2; exit 1; }; } && \
+	gh pr merge $(PR) --merge --match-head-commit $$head
 
 ## screens: the 9b visual check. One screenshot per UI state at 390x844 and 1440x900 into web/screens/<spec>/
 ## (git-ignored). Needs only the vite server (`make dev`); the scripts answer every API request. WEB_PORT

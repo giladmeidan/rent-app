@@ -1,124 +1,58 @@
 name: ci
 
-# Tiering (spec 0000b): api and web run on every PR push; e2e only when the PR carries the
-# `ready-to-merge` label (the `labeled` event starts it) and on pushes to main. Changes that touch
-# only Markdown, specs/ or design/ run no CI.
+# One run per merge attempt (CLAUDE.md, Speed rules 7-8): a PR runs CI only while it carries the
+# `ready-to-merge` label (added at the spec's single push; a later push to the PR runs it again), or by
+# hand (Actions → ci → Run workflow). Ordinary pushes and pushes to main run nothing: `make merge`
+# refuses a PR whose head does not contain main, so the PR's run already tested what lands on main.
+# Changes that touch only Markdown, specs/ or design/ run no CI.
+#
+# Runs on the self-hosted Mac runner (label `rent-app-mac`), which costs no Actions minutes. While the
+# Mac is away, `gh variable set CI_ON_GITHUB --body on` moves it to a GitHub-hosted runner (paid
+# minutes, ~16 min a run); `gh variable delete CI_ON_GITHUB` moves it back.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     paths-ignore: ["**.md", "specs/**", "design/**"]
-  push:
-    branches: [main]
-    paths-ignore: ["**.md", "specs/**", "design/**"]
+  workflow_dispatch:
 
-# Least privilege for the GITHUB_TOKEN: the jobs only read the repository.
+# Least privilege for the GITHUB_TOKEN: the job only reads the repository.
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Superseded PR runs are cancelled; every run on main finishes.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
-  api:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgis/postgis:16-3.4
-        env:
-          POSTGRES_USER: rent
-          POSTGRES_PASSWORD: rent
-          POSTGRES_DB: rent
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U rent -d rent"
-          --health-interval 2s
-          --health-timeout 3s
-          --health-retries 30
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 2s
-          --health-timeout 3s
-          --health-retries 30
+  ci:
+    # Another label being added does not start a run; a push to a labelled PR does.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ready-to-merge'))
+    runs-on: ${{ vars.CI_ON_GITHUB == 'on' && 'ubuntu-latest' || 'rent-app-mac' }}
+    timeout-minutes: 25
+    # Its own compose project and ports, clear of the main stack (5432/6379/8000/5173) and the spec
+    # worktrees' stacks on the same Mac. The Makefile derives every URL from these.
     env:
-      DATABASE_URL: postgresql+psycopg://rent:rent@localhost:5432/rent
-      TEST_DATABASE_URL: postgresql+psycopg://rent:rent@localhost:5432/rent_test
-      REDIS_URL: redis://localhost:6379/0
-      WEB_ORIGIN: http://localhost:5173
-      SECRET_KEY: dev-only-secret-change-me-0123456789abcdef
+      COMPOSE_PROJECT_NAME: rent-app-ci
+      DB_PORT: "5599"
+      REDIS_PORT: "6399"
+      API_PORT: "8099"
+      WEB_PORT: "5299"
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: "0.12.16"
-          enable-cache: true
-          cache-dependency-glob: api/uv.lock
-      - name: Install Python and dependencies
-        run: uv --directory api sync --frozen
-      - name: Lint (ruff + mypy --strict)
-        run: make lint-api
-      - name: Test (pytest against the postgis + redis service containers)
-        run: make test-api
-
-  # `make client` gets DATABASE_URL / REDIS_URL / WEB_ORIGIN / SECRET_KEY from the Makefile defaults;
-  # nothing connects.
-  web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: web/package.json
+      # Node first: pnpm's installer needs `node`, which the Mac runner's PATH lacks (the Mac's is nvm's).
+      # The Mac keeps its pnpm store, uv cache and Playwright browsers between runs, and its own uv
+      # (same pinned version) is on the runner's PATH; GitHub-hosted runners set up uv and the browsers.
       - uses: actions/setup-node@v4
         with:
           node-version-file: web/.nvmrc
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: "0.12.16"
-          enable-cache: true
-          cache-dependency-glob: api/uv.lock
-      - name: Install dependencies
-        run: |
-          uv --directory api sync --frozen
-          pnpm --dir web install --frozen-lockfile
-      - name: Generate the API client (OpenAPI export, no server)
-        run: make client
-      - name: i18n-check
-        run: make i18n-check
-      - name: Lint (eslint + prettier --check + tsc --noEmit)
-        run: make lint-web
-      - name: Test (vitest)
-        run: make test-web
-      - name: Build (tsc + vite build, PWA manifest and service worker)
-        run: make build-web
-      - name: Build check (manifest, icons, head tags, service-worker policy)
-        run: make build-check
-
-  e2e:
-    # Repo variable E2E_IN_CI=off switches this job off while GitHub runners can't install Playwright deps
-    # (Gilad, 2026-11-11); specs run `make e2e` locally meanwhile. Re-enable: `gh variable delete E2E_IN_CI`.
-    if: vars.E2E_IN_CI != 'off' && (github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: web/package.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: web/.nvmrc
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
       - uses: astral-sh/setup-uv@v6
+        if: runner.environment == 'github-hosted'
         with:
           version: "0.12.16"
           enable-cache: true
@@ -130,14 +64,41 @@ jobs:
           echo "PLAYWRIGHT_VERSION=$(node -p "require('./web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_ENV"
       # On a hit `playwright install` (in make e2e) skips the download; --with-deps still installs OS packages.
       - name: Cache Playwright browsers
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      - name: Generate the API client (OpenAPI export, no server)
+        run: make client
+      - name: i18n-check
+        run: make i18n-check
+      - name: Lint (ruff + mypy --strict, eslint + prettier --check + tsc --noEmit)
+        run: make lint
+      # A cancelled or killed run can leave its stack behind on the Mac.
+      - name: Remove a leftover CI stack
+        run: make down
       - name: Start the compose stack (db, redis, migrate, seed, api, worker, web)
         run: make dev
-      - name: Smoke suite (playwright)
+      - name: Test (pytest against the stack's Postgres and Redis, then vitest)
+        run: make test
+      - name: Build (tsc + vite build, PWA manifest and service worker)
+        run: make build-web
+      - name: Build check (manifest, icons, head tags, service-worker policy)
+        run: make build-check
+      - name: Smoke suite (playwright; a shard's failed tests run once more)
         run: make e2e
+      # The failed tests' traces (playwright.config.ts: trace retain-on-failure); open with `playwright show-trace`.
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: web/test-results/
+          retention-days: 7
       - name: Compose logs
         if: failure()
         run: docker compose -f infra/docker-compose.yml logs
+      - name: Stop the stack
+        if: always()
+        run: make down
