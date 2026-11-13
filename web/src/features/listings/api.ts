@@ -16,6 +16,8 @@ export type Household = ListingOut['accepted_households'][number];
 export type ContractMonths = NonNullable<ListingOut['min_contract_months']>;
 /** Who a room is for (0007a); an apartment is always `any`. The schema inlines the `Literal`. */
 export type GenderPreference = ListingOut['gender_preference'];
+/** One listing photo's addresses (0010d): `small_url` (480 px) and `large_url` (1600 px), WebP. */
+export type PhotoOut = components['schemas']['PhotoOut'];
 
 /** The create body as the wizard sends it: every key present, `rooms` a JSON number. */
 export type ListingInBody = Required<Omit<ListingIn, 'rooms'>> & { rooms: number };
