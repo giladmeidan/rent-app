@@ -19,6 +19,45 @@ export const GUSH_DAN_BOUNDS: Bbox = [34.74, 31.95, 34.95, 32.17];
  * (spec 0009w), so a hand-edited link never flies the map to another country. */
 export const MAP_POSITION_BOUNDS: Bbox = [34.24, 31.45, 35.45, 32.67];
 
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+
+/** Whether a point lies inside the launch area, `GUSH_DAN_BOUNDS` (spec 0009y). */
+export function inLaunchArea(lng: number, lat: number): boolean {
+  const [west, south, east, north] = GUSH_DAN_BOUNDS;
+  return lng >= west && lng <= east && lat >= south && lat <= north;
+}
+
+/** The snapping grid: 0.002 deg (~200 m), the grid of the listings' own privacy offset (0003c). */
+const GRID_DEG = 0.002;
+
+/**
+ * A point snapped to the ~200 m grid, then to 4 decimals (spec 0009y): the device's position moves
+ * the map to its grid cell, so the URL and the box request never carry the exact fix.
+ */
+export function snapToGrid([lng, lat]: [lng: number, lat: number]): [lng: number, lat: number] {
+  const snap = (value: number) => round4(Math.round(value / GRID_DEG) * GRID_DEG);
+  return [snap(lng), snap(lat)];
+}
+
+/** The Earth's circumference at the equator in metres (Web Mercator). */
+const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
+
+/**
+ * `meters` on the ground as screen pixels at a latitude and zoom: MapLibre's world is 512 px wide
+ * at zoom 0 and doubles per level, whatever the raster tiles' size.
+ */
+export function metersToPixels(meters: number, lat: number, zoom: number): number {
+  const metersPerPixel =
+    (EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+  return meters / metersPerPixel;
+}
+
+/** The listing page's area radius: the stored point is the street's point plus a fixed per-listing
+ * offset of up to ~220 m per axis (0003c), so a smaller circle would claim more precision than the
+ * data has (Gilad, 2026-11-13, decision 6). */
+export const APPROXIMATE_RADIUS_M = 300;
+
 /** At most this many pins (`0003c`'s `limit` cap). */
 export const MAP_RESULTS_LIMIT = 50;
 
@@ -30,9 +69,6 @@ export const MAP_MIN_ZOOM = 8;
  * box rounds to zero width.
  */
 export const MAP_MAX_ZOOM = 19;
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 
 /** The rounding step: 4 decimals. */
 const STEP = 0.0001;

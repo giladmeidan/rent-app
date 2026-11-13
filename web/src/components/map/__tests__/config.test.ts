@@ -3,7 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import style from '../../../../public/map/osm-raster.json';
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
-import { mapLocale, roundBbox } from '../config';
+import {
+  APPROXIMATE_RADIUS_M,
+  inLaunchArea,
+  mapLocale,
+  metersToPixels,
+  roundBbox,
+  snapToGrid,
+} from '../config';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -70,5 +77,26 @@ describe('map config', () => {
     expect(e).toBeLessThanOrEqual(180);
     expect(s).toBeLessThan(n);
     expect(n).toBeLessThanOrEqual(90);
+  });
+
+  it('ac1_launch_area_meters_and_grid', () => {
+    // Tel Aviv is inside the launch area, Haifa is not.
+    expect(inLaunchArea(34.78, 32.08)).toBe(true);
+    expect(inLaunchArea(34.99, 32.79)).toBe(false);
+    // The box's edges count as inside; one step past them does not.
+    expect(inLaunchArea(34.74, 31.95)).toBe(true);
+    expect(inLaunchArea(34.95, 32.17)).toBe(true);
+    expect(inLaunchArea(34.7399, 32.08)).toBe(false);
+    expect(inLaunchArea(34.8, 32.1701)).toBe(false);
+
+    // 300 m at Tel Aviv's latitude: ~74 px at zoom 14, half that at zoom 13.
+    expect(APPROXIMATE_RADIUS_M).toBe(300);
+    const z14 = metersToPixels(300, 32.08, 14);
+    expect(Math.abs(z14 - 74)).toBeLessThanOrEqual(1);
+    expect(metersToPixels(300, 32.08, 13)).toBeCloseTo(z14 / 2, 6);
+
+    // The ~200 m grid, then 4 decimals: never the raw fix.
+    expect(snapToGrid([34.78123, 32.08167])).toEqual([34.782, 32.082]);
+    expect(snapToGrid([34.7809, 32.0809])).toEqual([34.78, 32.08]);
   });
 });
