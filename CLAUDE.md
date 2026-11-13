@@ -35,20 +35,22 @@ and delegates. It never writes application code itself. Delegation chain:
    ux, qa and perf reviews of small specs, review fixes that are mechanical, and docs. When in doubt, the
    stronger one.
 7. **One push per spec (Gilad, 2026-11-10).** Agents commit locally and run `make lint` / `make test` there; the
-   review round runs on the local branch. **CI e2e is back on, under supervision (Gilad, 2026-11-12)**: `main`'s full suite went green in CI
-   (run 43227959268). The orchestrator checks the `e2e` job on every merge and tells Gilad about any failure; if
-   the runners break again it sets `gh variable set E2E_IN_CI --body off` and specs go back to local `make e2e`.
-   Local `make e2e` is optional meanwhile (useful before the push; the Mac flakes under load). Each
-   worktree sets its own `WEB_PORT` (`WEB_ORIGIN` follows it; delete any old `WEB_ORIGIN=` line from a worktree `.env` when setting `WEB_PORT`); check `lsof -nP -iTCP:$WEB_PORT -sTCP:LISTEN` is empty before `make dev` / `make e2e`.
-   The spec is
+   review round runs on the local branch. No local `make e2e`: e2e runs only in CI (rule 8). Each worktree sets
+   its own `WEB_PORT` (`WEB_ORIGIN` follows it; delete any old `WEB_ORIGIN=` line from a worktree `.env` when
+   setting `WEB_PORT`); check `lsof -nP -iTCP:$WEB_PORT -sTCP:LISTEN` is empty before `make dev`. The spec is
    pushed **once**, when it is finished (build + review fixes), with the PR opened and the `ready-to-merge`
-   label added at that push so the full CI runs once. A further push is allowed only to fix a CI failure.
-8. **Light CI on push, full CI before merge.** A push runs only the fast jobs (`api`, `web`: lint, types, unit
-   tests, i18n-check; about a minute). The slow `e2e` job runs only when the PR carries the `ready-to-merge`
-   label — the spec session adds it at the spec's single push (rule 7) — and on `main`. A PR, or a push to `main`, whose
-   changes are only `*.md`, `specs/` or `design/` runs no CI (the filter looks at the whole PR, not one push). Nothing merges unless `api`, `web` and `e2e` are all green on the
-   PR's head commit (only while `E2E_IN_CI=off`, see rule 7: `api` and `web` green in CI and `make e2e` green locally
-   on that head). Any new slow job (anything over ~1 minute) joins the label-gated tier, not the push tier.
+   label added at that push so CI runs once. A further push is allowed only to fix a CI failure.
+8. **CI runs once per merge attempt, on the Mac (Gilad, 2026-11-13).** The `ci` workflow is one job — lint,
+   types, i18n-check, pytest, vitest, build + build-check, e2e — on the self-hosted Mac runner (`rent-app-mac`,
+   no Actions minutes; the account has 2,000 a month). It runs only while the PR carries the `ready-to-merge`
+   label (rule 7's push; a later push to the PR runs it again) or by hand (Actions → ci → Run workflow). Plain
+   pushes, pushes to `main`, and PRs that change only `*.md`, `specs/` or `design/` run nothing. e2e runs a
+   shard's failed tests once more; a pass on that retry is a "Flaky e2e" warning on the run: log it in
+   `specs/FOLLOWUPS.md`, never ignore it. **Merge only with `make merge PR=N`**: it refuses unless the `ci`
+   check passed on the PR's head and the head contains `origin/main`, so the PR's run tested exactly what lands
+   on `main` (no re-run after the merge). A PR behind `main`: merge `origin/main` into its branch and push; CI
+   runs again. Mac away: `gh variable set CI_ON_GITHUB --body on` (GitHub-hosted, ~16 paid minutes a run);
+   `gh variable delete CI_ON_GITHUB` when it is back.
 
 9. **Consult Gilad on high-value calls (Gilad, 2026-11-10).** While a spec is being built or reviewed, anything
    that changes what the product does, what it costs, or what a later slice can do is Gilad's choice, not the
@@ -87,7 +89,8 @@ Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/
     make lint       # api: ruff + mypy strict; web: eslint + prettier + tsc
     make migrate    # alembic upgrade head
     make client     # regenerate web/src/api from the OpenAPI schema
-    make e2e        # playwright smoke suite against the compose stack
+    make e2e        # playwright smoke suite against the compose stack (CI only, rule 8)
+    make merge PR=N # merge a PR whose ci passed and whose head contains main (rule 8)
     make i18n-check # fail on hardcoded strings or missing keys
 
 ## Layout

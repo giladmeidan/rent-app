@@ -158,8 +158,8 @@ api/            FastAPI app (app/), Alembic migrations (alembic/), scripts/, tes
 web/            Vite + React + TS app: src/{app,features,components,locales,api}, e2e/, scripts/
 infra/          docker-compose.yml, Dockerfile.api, Dockerfile.web
 specs/          one spec per slice + PRODUCT.md
-.github/        CI: api (ruff, mypy --strict, pytest) and web (client, i18n-check, eslint, prettier, tsc, vitest, build, build-check) on every PR push;
-                e2e (compose + playwright) only on PRs labelled `ready-to-merge` and on pushes to main; Markdown/specs/design-only changes run no CI
+.github/        CI: one job on the self-hosted Mac runner, only on PRs labelled `ready-to-merge` (CLAUDE.md rule 8): client, i18n-check,
+                lint, pytest, vitest, build, build-check, e2e (compose + playwright); Markdown/specs/design-only changes run no CI
 ```
 
 ## Scripts

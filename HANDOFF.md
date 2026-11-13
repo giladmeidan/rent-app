@@ -35,12 +35,12 @@ Last updated:
 2026-11-13 evening (Slice 10 orchestrator: 0010a/b/d/g/j built and merged)
 
 ## Current Work
-- **Next task: the CI e2e 30 s timeouts** (Gilad). Seen on #69's first run: `flatmates.spec.ts::ac5_group_chat_flow`
-  (30.3 s) and `inbox.spec.ts::ac12_shortlist_chat_decline` (30.9 s), both chat flows; the rerun on the next head
-  passed. Earlier: ac9 needed `test.slow()` (#64), `/areas` slow in CI unconfirmed. Start from failed runs
-  (`gh run list --status failure`, `gh run view <id> --log-failed`); CI keeps no trace artifact, so adding one on
-  failure is a likely first step. Also: four Slice 8 PR runs (0008b, 0008c) have sat `queued` for ~46 h
-  (runs 43098114144, 43098113265, 43097722508, 43097722080) — cancel them.
+- **CI moved to the Mac (2026-11-13, CLAUDE.md rule 8).** The 30 s e2e timeouts came from GitHub's 2-vCPU
+  runners (private repo on GitHub Free: 1 Playwright/vitest worker, ~8.5 min e2e) and the account had used
+  ~1,760 of its 2,000 monthly Actions minutes by 2026-11-13. CI is now one job on the self-hosted Mac runner,
+  only on `ready-to-merge`, merged with `make merge PR=N`; failed e2e tests retry once and upload traces. Also:
+  four Slice 8 PR runs (0008b, 0008c) have sat `queued` for ~46 h (runs 43098114144, 43098113265, 43097722508,
+  43097722080) — cancel them.
 - **Slice 10, paused.** Remaining waves (≤3 builds at a time): `0010c` ∥ `0010e` → `0010k` ∥ `0010f` → `0010h` →
   `0010i`. Readiness: c ← b + g (both merged, so c is ready), e ← a + d (ready), k ← c + d + j, f ← c + d,
   h ← c + g + f, i ← h + k. Migration chain: `0015` (c) → `0016` (f) → `0017` (h); merge each only when its
@@ -58,8 +58,7 @@ Last updated:
   Gilad's Q-A rule (reopen only on a new *mutual* like) covers it — keep it mutual.
 - **Done builds' sessions** (archive them): a `local_08e87eb7…`, d `local_1e1b3da6…`, g `local_0b1eeeb7…`,
   j `local_956c59f6…`, b `local_59add869…`. Their worktrees and branches are removed.
-- Merge routine (unchanged): `gh pr checks N` green (api, web, e2e) → `gh pr merge N --merge --match-head-commit
-  <sha>` → in `../rent-app-orch` (detached on origin/main) set `status: done`, push `HEAD:main` → remove worktree,
+- Merge routine: `make merge PR=N` (refuses unless `ci` passed on the head and the head contains main) → in `../rent-app-orch` (detached on origin/main) set `status: done`, push `HEAD:main` → remove worktree,
   delete local + remote branch. A duplicate `cancelled` run on a fresh PR is the concurrency rule cancelling the
   twin started by the label (harmless).
 - Rate limit: all sessions share Gilad's 5-hour usage limit; 0010a and 0010d hit it once (reset 19:30) and resumed
@@ -144,7 +143,7 @@ Last updated:
   `auth`, `listings`, `search`, `map`, `applications`, `inbox`, `people`, `likes`, `flatmates` + `helpers.ts`.
 - `infra/docker-compose.yml`: db, redis, api, worker, web; ports on `127.0.0.1`, overridable via
   `DB_PORT`/`REDIS_PORT`/`API_PORT`; web on `WEB_PORT` (default 5173); `COMPOSE_PROJECT_NAME` isolates a worktree's stack.
-- CI: `api` and `web` on every PR push; `e2e` only with the `ready-to-merge` label and on `main`;
+- CI: one `ci` job on the self-hosted Mac runner, only on PRs labelled `ready-to-merge` (CLAUDE.md rule 8);
   docs-only changes run nothing. A PR in conflict with `main` gets no `pull_request` run at all.
 
 ## Important Files
@@ -196,13 +195,12 @@ Last updated:
   flatmate is shown on a room's page only by their own choice; report button waits for Slice 11. The `listings`
   table stays shared (orchestrator's stance, not challenged). Full list: `specs/MARKET-PLAN.md` sections 1 and 6.
 - Merging: Gilad merges PRs or delegates a slice (Slices 7 and 8 were delegated). The orchestrator merges with
-  `gh pr merge N --merge --match-head-commit <full sha>` only after `api` + `web` + `e2e` are green in CI on that
-  head and the PR merges cleanly, and holds merges while GitHub Actions is down (Gilad, 2026-11-11). Slice 9 + 9b
-  merging was delegated too.
-- e2e runs **only in GitHub CI** (Gilad 2026-11-12 evening: "lets not make e2e locally only on git hub ci"):
-  merges need `api` + `web` + `e2e` green in CI on the PR head; no local `make e2e` / Playwright e2e (Gilad allowed
-  one-off local trace runs only by explicit OK). Lint, unit tests, i18n-check, build-web and `make screens` stay
-  local. Fallback if runners break: `gh variable set E2E_IN_CI --body off` and ask Gilad.
+  `make merge PR=N` (the `ci` check green on the head, head contains main), and holds merges while CI is down
+  (Gilad, 2026-11-11). Slice 9 + 9b merging was delegated too.
+- e2e runs **only in CI** (Gilad 2026-11-12 evening), which since 2026-11-13 is the self-hosted Mac runner
+  (CLAUDE.md rule 8): no local `make e2e` / Playwright e2e outside it (Gilad allowed one-off local trace runs only
+  by explicit OK). Lint, unit tests, i18n-check, build-web and `make screens` stay local. Mac away:
+  `gh variable set CI_ON_GITHUB --body on` (paid GitHub minutes) and tell Gilad.
 - Brand (Slice 9, Gilad): product name homie / `הומי`; `design/brand/` beats `design/screens-v1/` for colour, type,
   shape, voice; Fredoka + Rubik self-hosted; no slash forms in copy (plural/infinitive/noun). See
   `specs/0009-brand-amendment.md` and PRODUCT.md "Slice 9 copy + UX".
