@@ -202,6 +202,28 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   await expect(smallCanvas).not.toHaveAttribute('aria-label', /.*/);
   await expectNoAxeViolations(page, 'listing page (visitor)');
 
+  await test.step('ac7_listing_page_link', async () => {
+    // Spec 0009y: "show on the search map" opens the full map at this listing, its card in the map
+    // and its pin pressed (newest first, so this fresh listing is among the box's results).
+    await page.getByRole('link', { name: he.listing.showOnMap }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/search');
+    expect(query(page).get('view')).toBe('map');
+    expect(query(page).get('listing_type')).toBe('apartment');
+    expect(query(page).get('pin')).toBe(id ?? '');
+    const linked = page.getByRole('region', { name: he.search.map.label });
+    await expect(linked).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    await expect(
+      linked.locator('[data-map-card]').getByRole('article').filter({ hasText: street }),
+    ).toHaveCount(1, { timeout: 15_000 });
+    await expect(linked.getByRole('button', { name: street })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // Back to the listing page, where the next lines start.
+    await page.goBack();
+    await expect(page).toHaveURL(`/listings/${id ?? ''}`);
+  });
+
   // Back on the map view, a reload keeps it.
   await page.goBack();
   await expect.poll(onTheMap).toEqual(mapOfSearch);
