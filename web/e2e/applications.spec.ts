@@ -7,6 +7,7 @@ import { test } from './fixtures';
 
 const MESSAGE = 'Hi, we are a quiet couple';
 const ROOM = he.profile.room;
+const ABOUT = he.profile.about;
 
 /** `YYYY-MM-DD`, `days` from today in Israel (the profile form's calendar). */
 function israelDay(days: number): string {
@@ -58,7 +59,9 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   // Fill the profile (0006a `P`: budget 7500, move-in in 30 days, the listing's area, a couple,
   // no pets, a non-smoker, 24 months, one parking spot) and come back to the listing.
   await section.getByRole('link', { name: he.applications.fillProfile }).click();
-  await expect(page).toHaveURL(`/me/profile?next=${encodeURIComponent(`/listings/${id}`)}`);
+  await expect(page).toHaveURL(
+    `/me/profile?section=looking&next=${encodeURIComponent(`/listings/${id}`)}`,
+  );
   await expect(page.getByRole('heading', { level: 1, name: he.profile.title })).toBeVisible();
   const moveIn = israelDay(30);
   await page.getByLabel(he.profile.fields.budget).fill('7500');
@@ -69,15 +72,16 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();
-  // The room section (0007d): a woman born 30 years ago, women as flatmates, one answer. Labels
-  // are found inside their group: "גבר" is a substring of "גברים".
+  // The personal part "עליי" (0007d's room section, 0010c): a woman born 30 years ago, women as
+  // flatmates (in "מה מחפשים", shown once "עליי" is on), one answer. Labels are found inside their
+  // group: "גבר" is a substring of "גברים".
   const roomGroup = (legend: string) => page.getByRole('group', { name: legend, exact: true });
   const roomRadio = (legend: string, name: string) =>
     roomGroup(legend).getByRole('radio', { name, exact: true });
   const cleanliness = he.lifestyle.cleanliness.question.seeker;
   const birthYear = String(new Date().getUTCFullYear() - 30);
-  await page.getByRole('switch', { name: ROOM.switch }).check();
-  await expect(page.getByText(ROOM.privacy)).toBeVisible();
+  await page.getByRole('switch', { name: ABOUT.switch }).check();
+  await expect(page.getByText(ABOUT.privacy)).toBeVisible();
   await roomGroup(ROOM.fields.gender).getByText(ROOM.gender.woman, { exact: true }).click();
   await page.getByLabel(ROOM.fields.birthYear).fill(birthYear);
   await roomGroup(ROOM.fields.flatmates)
@@ -130,7 +134,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(page.getByRole('switch', { name: he.profile.fields.smoker })).not.toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.contract['24'] })).toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.parking['1'] })).toBeChecked();
-  await expect(page.getByRole('switch', { name: ROOM.switch })).toBeChecked();
+  await expect(page.getByRole('switch', { name: ABOUT.switch })).toBeChecked();
   await expect(roomRadio(ROOM.fields.gender, ROOM.gender.woman)).toBeChecked();
   await expect(page.getByLabel(ROOM.fields.birthYear)).toHaveValue(birthYear);
   await expect(roomRadio(ROOM.fields.flatmates, he.rooms.genderPreference.women)).toBeChecked();
@@ -184,16 +188,17 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
   });
 
-  // The gate's entry point lands on the room heading; switching off and saving clears the section.
-  await page.goto('/me/profile?section=room');
-  await expect(page.getByRole('heading', { level: 2, name: ROOM.title })).toBeFocused();
-  await page.getByRole('switch', { name: ROOM.switch }).uncheck();
+  // The gate's entry point lands on the "עליי" heading; switching it off and saving clears the
+  // personal part and keeps the looking part.
+  await page.goto('/me/profile?section=about');
+  await expect(page.getByRole('heading', { level: 2, name: ABOUT.title })).toBeFocused();
+  await page.getByRole('switch', { name: ABOUT.switch }).uncheck();
   await page.getByRole('button', { name: he.profile.save }).click();
   await expect(page.getByText(he.profile.saved, { exact: true })).toBeVisible();
-  // `goto`, not `reload`: `section=room` would open the switch again.
+  // `goto`, not `reload`: `section=about` would open the switch again.
   await page.goto('/me/profile');
   await expect(page.getByLabel(he.profile.fields.budget)).toHaveValue('7500');
-  await expect(page.getByRole('switch', { name: ROOM.switch })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: ABOUT.switch })).not.toBeChecked();
   await expect(page.getByRole('group', { name: ROOM.fields.gender, exact: true })).toHaveCount(0);
   await expect(page.getByLabel(ROOM.fields.birthYear)).toHaveCount(0);
   await expect(page.getByRole('region', { name: he.lifestyle.title.seeker })).toHaveCount(0);
@@ -204,6 +209,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     birth_year: null,
     flatmate_gender: 'any',
     lifestyle: {},
+    budget_max_ils: 7500,
   });
 
   await test.step('ac10 search and the listing pages show the match', async () => {
@@ -239,7 +245,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     await page.goto(`/listings/${roomId}`);
     const gate = section.getByRole('link', { name: he.rooms.apply.fillRoomSection });
     await expect(gate).toBeVisible();
-    expect(await gate.getAttribute('href')).toContain('section=room');
+    expect(await gate.getAttribute('href')).toContain('section=about');
     await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
     // A signed-in seeker gets the ages and the answers (room privacy, the counterpart of AC12).
     const facts = page.getByRole('region', { name: he.rooms.facts.title });

@@ -28,7 +28,7 @@ import { todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
-import type { SeekerProfileOut } from '../profile/api';
+import type { LookingProfile } from '../profile/api';
 import type { ListingPublic } from './api';
 import type { Filters } from './filters';
 import { LocateButton, type LocateMessage } from './LocateButton';
@@ -80,8 +80,9 @@ const dock = 'absolute inset-x-3 bottom-8 z-10 lg:inset-x-auto lg:bottom-3 lg:en
 type Props = {
   /** The URL's filters, without `view`. */
   filters: Filters;
-  /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
-  profile: SeekerProfileOut | undefined;
+  /** The seeker's profile, which words the match chips (`undefined`: none, no looking part, or not
+   * loaded). */
+  profile: LookingProfile | undefined;
   /** Switches to the list view (the fallback when the map cannot be shown). */
   onShowList: () => void;
   /** The count line, focused by the page after a filter change (spec 0009t). */

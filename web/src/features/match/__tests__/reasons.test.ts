@@ -5,7 +5,7 @@ import type { ApplicantProfileOut } from '../../applicants/api';
 import { applicantProfile } from '../../applicants/__tests__/fixtures';
 import { formatDate, todayInIsrael } from '../../listings/format';
 import type { ListingPublic } from '../../listings/api';
-import type { SeekerProfileOut } from '../../profile/api';
+import type { LookingProfile } from '../../profile/api';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { publicListing } from '../../search/__tests__/fixtures';
 import he from '../../../locales/he.json';
@@ -24,7 +24,7 @@ type Row = {
   criterion: Criterion;
   kind: ReasonKind;
   listing?: Partial<ListingPublic>;
-  profile?: Partial<SeekerProfileOut>;
+  profile?: Partial<LookingProfile>;
   /** The listing page's line. */
   reason?: string;
   /** The search card's chip; `null` = left out. */

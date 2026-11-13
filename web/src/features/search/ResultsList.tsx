@@ -12,7 +12,7 @@ import { todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
-import type { SeekerProfileOut } from '../profile/api';
+import type { LookingProfile } from '../profile/api';
 import type { ListingSearchOut } from './api';
 import { flattenPages } from './useSearch';
 
@@ -21,8 +21,9 @@ type Props = {
   /** Whether any filter is set: the empty state then offers to clear them. */
   hasFilters: boolean;
   onClear: () => void;
-  /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
-  profile: SeekerProfileOut | undefined;
+  /** The seeker's profile, which words the match chips (`undefined`: none, no looking part, or not
+   * loaded). */
+  profile: LookingProfile | undefined;
   /** The count line, focused by the page after a filter change (spec 0009t). */
   countRef?: Ref<HTMLParagraphElement>;
   /** Beside the side map (spec 0009x): one card per row, the highlighted card's cue, and each

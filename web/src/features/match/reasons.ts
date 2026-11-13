@@ -11,13 +11,13 @@ import { compareLifestyle } from '../lifestyle/keys';
 import { lifestyleTopic } from '../lifestyle/topic';
 import type { ListingPublic } from '../listings/api';
 import { formatDate, formatIls, todayInIsrael } from '../listings/format';
-import type { ContractMonths, Household, SeekerProfileOut } from '../profile/api';
+import type { ContractMonths, Household, LookingProfile } from '../profile/api';
 import type { Criterion, ReasonKind } from './types';
 
-type Line = (listing: ListingPublic, profile: SeekerProfileOut, t: TFunction) => string;
+type Line = (listing: ListingPublic, profile: LookingProfile, t: TFunction) => string;
 type Short = (
   listing: ListingPublic,
-  profile: SeekerProfileOut | undefined,
+  profile: LookingProfile | undefined,
   t: TFunction,
 ) => string | null;
 
@@ -25,7 +25,7 @@ type Short = (
 const later = (a: string, b: string) => (a > b ? a : b);
 
 /** Whether the listing's entry (a past date = now) is after the seeker's move-in (likewise). */
-function entersLater(listing: ListingPublic, profile: SeekerProfileOut): boolean {
+function entersLater(listing: ListingPublic, profile: LookingProfile): boolean {
   const today = todayInIsrael();
   return later(listing.available_from, today) > later(profile.move_in_date, today);
 }
@@ -193,7 +193,7 @@ export function seekerReason(
   criterion: Criterion,
   kind: ReasonKind,
   listing: ListingPublic,
-  profile: SeekerProfileOut,
+  profile: LookingProfile,
   t: TFunction,
 ): string {
   return SEEKER[criterion][kind](listing, profile, t);
@@ -205,7 +205,7 @@ export function seekerShort(
   criterion: Criterion,
   kind: ReasonKind,
   listing: ListingPublic,
-  profile: SeekerProfileOut | undefined,
+  profile: LookingProfile | undefined,
   t: TFunction,
 ): string | null {
   return SEEKER_SHORT[criterion][kind](listing, profile, t);

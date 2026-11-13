@@ -18,6 +18,7 @@ from sqlalchemy import Engine, event, text
 
 from app.redis_client import get_redis
 from tests.conftest import (
+    NO_LOOKING,
     Outbox,
     make_application,
     make_owner,
@@ -671,3 +672,49 @@ def test_ac7_room_privacy_seeker_rule(
 
     mine = {item["id"]: item for item in room_owner.get("/me/listings").json()}
     assert (mine[room]["flatmate_ages"], mine[room]["lifestyle"]) == (ages, answers)
+
+
+def test_ac4_personal_only_has_no_match(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID, owner: uuid.UUID
+) -> None:
+    """Spec 0010c AC4: a personal-only profile counts as no profile for search and the listing
+    page: no match, no room fit (so a misfit room is not hidden), the default sort falls back to
+    newest; and an owner-role account with only the personal part gets no seekers-only fields."""
+    ages, answers = [27, 30], {"night": 3}
+    older = _located(db_engine, _l0(db_engine, owner, gush_dan, price_ils=9000))
+    newer = _located(db_engine, _l0(db_engine, owner, gush_dan, price_ils=5000))
+    women = _located(
+        db_engine,
+        _r0(
+            db_engine,
+            owner,
+            gush_dan,
+            gender_preference="women",
+            flatmate_ages=ages,
+            lifestyle=answers,
+        ),
+    )
+    _execute(
+        db_engine,
+        "UPDATE listings SET created_at = now() - interval '1 day' WHERE id = :id",
+        id=older,
+    )
+    man = _seeker(client, outbox, db_engine, gush_dan, gender="man", **NO_LOOKING)
+    personal_owner = signup(client, outbox, "owner2@example.com", "owner")
+    make_profile(db_engine, _user_id(personal_owner), gush_dan, gender="woman", **NO_LOOKING)
+
+    for query in ("", "sort=match"):
+        body = _search(man, query)
+        assert body["sort"] == "newest", query
+        assert _ids(body) == [newer, older], query
+        assert [item["match"] for item in body["items"]] == [None, None], query
+    rooms = _search(man, "listing_type=room")
+    assert _ids(rooms) == [women]  # no fit: not hidden from a man
+    assert rooms["items"][0]["match"] is None
+    detail = _detail(man, women)
+    assert (detail["match"], detail["room_fit"]) == (None, None)
+    assert (detail["flatmate_ages"], detail["lifestyle"]) == (ages, answers)  # seeker by role
+
+    owner_detail = _detail(personal_owner, women)
+    assert (owner_detail["match"], owner_detail["room_fit"]) == (None, None)
+    assert (owner_detail["flatmate_ages"], owner_detail["lifestyle"]) == ([], {})

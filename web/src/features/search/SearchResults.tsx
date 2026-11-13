@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FocusEvent, type Ref } from 
 
 import type { MapView } from '../../components/map/MapCanvas';
 import { useIsWide } from '../../components/useMediaQuery';
-import type { SeekerProfileOut } from '../profile/api';
+import type { LookingProfile } from '../profile/api';
 import type { ListingPublic, ListingSearchOut } from './api';
 import { ResultsList, type CardEvents } from './ResultsList';
 import { SideMap } from './SideMap';
@@ -15,7 +15,7 @@ type Props = {
   search: UseInfiniteQueryResult<InfiniteData<ListingSearchOut>>;
   hasFilters: boolean;
   onClear: () => void;
-  profile: SeekerProfileOut | undefined;
+  profile: LookingProfile | undefined;
   countRef?: Ref<HTMLParagraphElement>;
   /** The filters part of the URL: a first page for another key refits the side map. */
   filtersKey: string;

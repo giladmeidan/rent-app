@@ -5,7 +5,7 @@ import { useLocation } from 'react-router';
 import { Button } from '../../components/Button';
 import { hasStatus } from '../applications/api';
 import { ApiError } from '../listings/api';
-import { roomSectionHref } from '../profile/links';
+import { profileHref } from '../profile/links';
 import type { LikeStateOut } from './api';
 import { likeProblem, useLikeRoom, useUnlikeRoom } from './useLikeRoom';
 
@@ -120,7 +120,7 @@ export function LikeRoomButton({
       {problem === 'roomSection' && (
         <div role="alert" className="flex flex-col items-start gap-1">
           <p className={fieldError}>{t('likes.errors.roomSection')}</p>
-          <Button variant="ghost" to={roomSectionHref(location.pathname)}>
+          <Button variant="ghost" to={profileHref(location.pathname, 'about', 'looking')}>
             {t('likes.toProfile')}
           </Button>
         </div>

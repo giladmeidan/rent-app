@@ -31,6 +31,7 @@ from app.services import chat_events
 from app.services import people as people_service
 from app.services.applications import AlreadyAppliedError
 from tests.conftest import (
+    NO_LOOKING,
     Outbox,
     make_application,
     make_owner,
@@ -1137,3 +1138,107 @@ def test_ac12_withdrawn_applicant_like_not_revived(
     for seeker in (a, b):
         assert _ok(seeker.get(f"/listings/{room}"))["like"] == NO_LIKE
         assert _likes(seeker) == {"liked_me": [], "mine": []}
+
+
+# --- 0010c: the personal part and the looking part -----------------------------------------
+
+
+def _personal_only(caller: TestClient) -> None:
+    """`caller` PUTs only the personal part (spec 0010c): the looking part clears."""
+    _ok(caller.put("/me/profile", json={"gender": "woman", "about_me": "Quiet and tidy"}))
+
+
+def test_ac5_like_room_needs_both_parts(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _room(db_engine, _user_id(owner), gush_dan)
+    r = get_redis()
+    personal = signup(client, outbox, "p@example.com", "seeker")
+    make_profile(db_engine, _user_id(personal), gush_dan, gender="woman", **NO_LOOKING)
+    looking = signup(client, outbox, "l@example.com", "seeker")
+    make_profile(db_engine, _user_id(looking), gush_dan)
+    both = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat")
+
+    for caller, detail in (
+        (personal, "seeker_profile_required"),
+        (looking, "room_section_required"),
+    ):
+        response = _like_room(caller, room)
+        assert response.status_code == 409, response.text
+        assert response.json() == {"detail": detail}
+        assert not r.exists(f"rl:like:user:{_user_id(caller)}")
+    assert _pair_count(db_engine) == 0
+
+    assert _ok(_like_room(both, room)) == {"liked": True, "application_id": None}
+    assert _pair_count(db_engine) == 1
+
+
+def test_ac6_no_looking_part_leaves_people_browse(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _room(db_engine, _user_id(owner), gush_dan)
+    s = _seeker(client, outbox, db_engine, gush_dan, "s@example.com", "Sara")
+    _seeker(client, outbox, db_engine, gush_dan, "v@example.com", "Vered")
+    _ok(_like_room(s, room))
+    before = _page(owner, room)
+    assert sorted(_names(before)) == ["Sara", "Vered"]
+    assert before["total"] == 2
+
+    _personal_only(s)
+
+    after = _page(owner, room)
+    assert _names(after) == ["Vered"]
+    assert after["total"] == 1
+    assert (
+        _scalar(
+            db_engine,
+            "SELECT people_visible FROM seeker_profiles WHERE user_id = :id",
+            id=_user_id(s),
+        )
+        is False
+    )
+    # The pair (and its like) stays; only the card is gone.
+    assert _pair(db_engine, room, _user_id(s)).seeker_liked_at is not None
+
+
+def test_ac6b_my_likes_without_looking_part(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """`GET /me/likes` without the looking part is 200 with both lists empty (no NULL score
+    reaches `explain`), so a personal-only caller never sees flatmate ages or answers there; with
+    both parts, an owner-role account is a seeker by decision 13 and sees them."""
+    ages, answers = [27, 30], {"night": 3}
+    owner_id = _user_id(owner)
+    mine = _room(db_engine, owner_id, gush_dan, flatmate_ages=ages, lifestyle=answers)
+    liked_me = _room(db_engine, owner_id, gush_dan, flatmate_ages=ages, lifestyle=answers)
+    s = _seeker(client, outbox, db_engine, gush_dan, "s@example.com", "Sara")
+    s_id = _user_id(s)
+    _ok(_like_room(s, mine))
+    make_pair(db_engine, uuid.UUID(liked_me), s_id, price_ils_seen=7000, lister_liked=True)
+    assert _likes(s) == {"liked_me": [liked_me], "mine": [mine]}
+
+    _personal_only(s)
+
+    response = s.get("/me/likes")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"liked_me": [], "mine": []}
+
+    # The seeker rule on `/me/likes` (decision 13): an owner-role account with the looking part.
+    flat_owner = signup(client, outbox, "o2@example.com", "owner", display_name="Other")
+    _visible(db_engine, _user_id(flat_owner), gush_dan, people_visible=False)
+    _ok(_like_room(flat_owner, mine))
+    [item] = _ok(flat_owner.get("/me/likes"))["mine"]
+    assert (item["listing"]["flatmate_ages"], item["listing"]["lifestyle"]) == (ages, answers)
+    assert item["listing"]["match"] is not None

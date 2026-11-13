@@ -32,6 +32,7 @@ from app.matching.score import explain_row
 from app.models import User
 from app.redis_client import RedisClient, get_redis
 from app.routers.applications import _SESSION
+from app.routers.search import _profile_user_id, _sees_room_privacy
 from app.schemas.error import ErrorOut
 from app.schemas.people import (
     LikedRoomOut,
@@ -198,9 +199,10 @@ def unlike_person(
         },
         409: {
             "model": ErrorOut,
-            "description": "seeker_profile_required; room_section_required: the profile has no "
-            "room section; room_gender_mismatch: the room does not fit the seeker; "
-            "already_applied. Only already_applied costs rate-limit budget",
+            "description": "seeker_profile_required: the profile has no looking part (0010c); "
+            "room_section_required: the profile has no personal part; room_gender_mismatch: the "
+            "room does not fit the seeker; already_applied. Only already_applied costs "
+            "rate-limit budget",
         },
         **_RATE_LIMITED,
     },
@@ -237,6 +239,10 @@ def unlike_room(listing_id: uuid.UUID, user: UserDep, db: DbDep) -> Response:
 def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
     liked_me: list[LikedRoomOut] = []
     mine: list[LikedRoomOut] = []
+    # Decision 13 (the search router's rule): the seeker role, or a profile with the looking part.
+    # `liked_rooms` returns nothing without the looking part (spec 0010c), so a caller with rows
+    # has it; asked anyway, so the rule lives in one place.
+    seeker = _sees_room_privacy(user, _profile_user_id(db, user))
     for (
         listing,
         match,
@@ -245,11 +251,10 @@ def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
         cover_id,
         cover_key,
     ) in search_service.liked_rooms(db, user.id):
-        # `seeker=True`: only a profile holder has likes (decision 13). Never the caller's own room
-        # (`liked_rooms` excludes it), so `is_mine` is false.
+        # Never the caller's own room (`liked_rooms` excludes it), so `is_mine` is false.
         room = ListingPublic.from_listing(
             listing,
-            seeker=True,
+            seeker=seeker,
             match=match,
             cover=photos_service.cover_out(cover_id, cover_key),
             is_mine=False,

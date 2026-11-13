@@ -16,7 +16,7 @@ import {
 import { LoginPage } from '../../auth/LoginPage';
 import { ListingPage } from '../../listings/ListingPage';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
-import { profile } from '../../profile/__tests__/fixtures';
+import { personalOnlyProfile, profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
 import { MY_APPLICATIONS_KEY } from '../useMyApplications';
@@ -561,7 +561,7 @@ describe('ApplySection', () => {
     let api = renderSeeker([json([])], { [PROFILE]: [noProfile()] });
     let s = await settled();
     expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
-    expect(gateLink(s)).toHaveAttribute('href', `/me/profile?next=${NEXT}`);
+    expect(gateLink(s)).toHaveAttribute('href', `/me/profile?section=looking&next=${NEXT}`);
     expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
     expect(api.calls(PROFILE)).toHaveLength(1);
     expect(api.calls(PROFILE)[0]?.request.credentials).toBe('include');
@@ -730,7 +730,7 @@ describe('ApplySection', () => {
 
   it('ac9_room_section_gate', async () => {
     const GATE =
-      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.';
+      "החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך למלא בפרופיל את 'עליי' ואת 'מה מחפשים'.";
     const noProfile = () => json({ detail: 'seeker_profile_not_found' }, 404);
     const room = (gender_preference: 'any' | 'women') => [
       () =>
@@ -744,7 +744,7 @@ describe('ApplySection', () => {
       expect(await s.findByText(GATE)).toBeVisible();
       expect(s.getByRole('link', { name: he.rooms.apply.fillRoomSection })).toHaveAttribute(
         'href',
-        `/me/profile?section=room&next=${NEXT}`,
+        `/me/profile?section=about&section=looking&next=${NEXT}`,
       );
       expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
       expect(s.queryByText(he.applications.profileRequired)).toBeNull();
@@ -777,10 +777,49 @@ describe('ApplySection', () => {
     expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
   });
 
+  it('ac12_gates_by_part', async () => {
+    // Spec 0010c. An apartment, and a profile with only "עליי": `ProfileGate`, to "מה מחפשים".
+    renderSeeker([json([])], { [PROFILE]: [json(personalOnlyProfile())] });
+    let s = await settled();
+    expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
+    expect(s.getByRole('link', { name: he.applications.fillProfile })).toHaveAttribute(
+      'href',
+      `/me/profile?section=looking&next=${NEXT}`,
+    );
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    cleanup();
+
+    // A women-only room, and a profile with only "מה מחפשים": `RoomGate`, to both parts.
+    const womenRoom = () =>
+      json(listingDetail({ id: 'A', listing_type: 'room', gender_preference: 'women' }));
+    renderSeeker([json([])], {
+      [LISTING]: [womenRoom],
+      [PROFILE]: [json(profile({ gender: null }))],
+    });
+    s = await settled();
+    expect(s.getByRole('link', { name: he.rooms.apply.fillRoomSection })).toHaveAttribute(
+      'href',
+      `/me/profile?section=about&section=looking&next=${NEXT}`,
+    );
+    expect(s.queryByText(he.applications.profileRequired)).toBeNull();
+    cleanup();
+
+    // The same room, and a woman with only "עליי": the room gate is passed, `ProfileGate` asks
+    // for the looking part.
+    renderSeeker([json([])], {
+      [LISTING]: [womenRoom],
+      [PROFILE]: [json(personalOnlyProfile({ gender: 'woman' }))],
+    });
+    s = await settled();
+    expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
+    expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+  });
+
   it('ac10_room_409s', async () => {
     const MISFIT = 'החדר לא מתאים לפרטים שבפרופיל שלך, ולכן אי אפשר להגיש אליו מועמדות.';
     const GATE =
-      'החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך להשלים בפרופיל את החלק ״חדר בדירת שותפים״.';
+      "החדר מיועד לנשים בלבד. כדי להגיש מועמדות צריך למלא בפרופיל את 'עליי' ואת 'מה מחפשים'.";
     const room = (gender_preference: 'any' | 'women') => () =>
       json(listingDetail({ id: 'A', listing_type: 'room', gender_preference, room_fit: null }));
     const noBanners = (s: ReturnType<typeof within>) => {

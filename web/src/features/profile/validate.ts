@@ -4,13 +4,14 @@
 import type { LifestyleAnswers } from '../lifestyle/keys';
 import { addDays, todayInIsrael } from '../listings/format';
 import { cleanText, visibleLength } from '../listings/validate';
-import type {
-  ContractMonths,
-  FlatmateGender,
-  Gender,
-  Household,
-  SeekerProfileIn,
-  SeekerProfileOut,
+import {
+  hasLooking,
+  type ContractMonths,
+  type FlatmateGender,
+  type Gender,
+  type Household,
+  type SeekerProfileIn,
+  type SeekerProfileOut,
 } from './api';
 
 /** The client's latest move-in date. The API allows `today + 365` in UTC; the client's today is
@@ -44,15 +45,18 @@ export type ProfileForm = {
   smoker: boolean;
   contract_months: ContractMonths | null;
   parking_needed: number;
-  /** The room section's switch. Off, the four room keys are left out of the body (PUT replaces,
-   * so the server clears them); what was typed stays in memory. */
-  room: boolean;
+  /** The "what I am looking for" part's switch (0010c). Off, its 7 fields go as `null` (PUT
+   * replaces, so the server clears them); what was typed stays in memory. */
+  looking: boolean;
+  /** The personal part's switch ("עליי"; 0007a's room section). Off, gender, birth year, about me
+   * and the answers go empty; what was typed stays in memory. */
+  personal: boolean;
   gender: Gender | null;
   /** As typed. */
   birth_year: string;
   flatmate_gender: FlatmateGender;
   lifestyle: LifestyleAnswers;
-  /** Opt-in to people browse (0008a); sent only with the room section on. */
+  /** Opt-in to people browse (0008a); sent only with both parts on. */
   people_visible: boolean;
   /** "A little about me", as typed (up to 300 characters). */
   about_me: string;
@@ -68,7 +72,8 @@ export const emptyProfileForm: ProfileForm = {
   smoker: false,
   contract_months: null,
   parking_needed: 0,
-  room: false,
+  looking: true,
+  personal: false,
   gender: null,
   birth_year: '',
   flatmate_gender: 'any',
@@ -77,19 +82,36 @@ export const emptyProfileForm: ProfileForm = {
   about_me: '',
 };
 
-/** A stored profile as the form's starting state. */
+/** A stored profile as the form's starting state. Without the looking part its fields start as an
+ * empty form's (never `String(null)`). */
 export function formFromProfile(profile: SeekerProfileOut): ProfileForm {
+  const looking = hasLooking(profile)
+    ? {
+        budget_max_ils: String(profile.budget_max_ils),
+        move_in_date: profile.move_in_date,
+        move_in_flexible: profile.move_in_flexible,
+        area_ids: new Set(profile.area_ids),
+        household: profile.household,
+        has_pets: profile.has_pets,
+        smoker: profile.smoker,
+        contract_months: profile.contract_months,
+        parking_needed: profile.parking_needed,
+      }
+    : {
+        budget_max_ils: emptyProfileForm.budget_max_ils,
+        move_in_date: emptyProfileForm.move_in_date,
+        move_in_flexible: emptyProfileForm.move_in_flexible,
+        area_ids: new Set<string>(),
+        household: emptyProfileForm.household,
+        has_pets: emptyProfileForm.has_pets,
+        smoker: emptyProfileForm.smoker,
+        contract_months: emptyProfileForm.contract_months,
+        parking_needed: emptyProfileForm.parking_needed,
+      };
   return {
-    budget_max_ils: String(profile.budget_max_ils),
-    move_in_date: profile.move_in_date,
-    move_in_flexible: profile.move_in_flexible,
-    area_ids: new Set(profile.area_ids),
-    household: profile.household,
-    has_pets: profile.has_pets,
-    smoker: profile.smoker,
-    contract_months: profile.contract_months,
-    parking_needed: profile.parking_needed,
-    room: profile.gender !== null,
+    ...looking,
+    looking: hasLooking(profile),
+    personal: profile.gender !== null,
     gender: profile.gender,
     birth_year: String(profile.birth_year ?? ''),
     flatmate_gender: profile.flatmate_gender,
@@ -110,6 +132,8 @@ export const FIELD_ORDER = [
   'gender',
   'birth_year',
   'about_me',
+  // No input carries it: both parts off (0010c). The page shows it as the save bar's alert.
+  'form',
 ] as const;
 export type FieldName = (typeof FIELD_ORDER)[number];
 
@@ -120,6 +144,7 @@ export type FieldError =
   | { key: 'profile.errors.areas' }
   | { key: 'profile.errors.areaInactive' }
   | { key: 'profile.errors.aboutMeTooLong' }
+  | { key: 'profile.errors.onePart' }
   /** The API rejected the field (a 422 naming it); its English `msg` is never shown. */
   | { key: 'listings.errors.invalid' };
 
@@ -188,18 +213,23 @@ export function validate(
   areas: readonly { id: string }[],
   today: string,
 ): FieldErrors {
+  // Each part is checked only while its switch is on; with both off, only that is said (0010c).
+  if (!form.looking && !form.personal) return { form: { key: 'profile.errors.onePart' } };
+  const looking = form.looking;
   const found: Record<FieldName, FieldError | undefined> = {
-    budget_max_ils: budget(form.budget_max_ils),
-    move_in_date: moveIn(form.move_in_date, today),
+    budget_max_ils: looking ? budget(form.budget_max_ils) : undefined,
+    move_in_date: looking ? moveIn(form.move_in_date, today) : undefined,
     area_ids:
-      visibleAreaIds(form, areas).length === 0 ? { key: 'profile.errors.areas' } : undefined,
-    household: form.household === null ? required : undefined,
-    contract_months: form.contract_months === null ? required : undefined,
+      looking && visibleAreaIds(form, areas).length === 0
+        ? { key: 'profile.errors.areas' }
+        : undefined,
+    household: looking && form.household === null ? required : undefined,
+    contract_months: looking && form.contract_months === null ? required : undefined,
     parking_needed: undefined,
-    // The room section is checked only while its switch is on.
-    gender: form.room && form.gender === null ? required : undefined,
-    birth_year: form.room ? birthYear(form.birth_year) : undefined,
-    about_me: form.room ? aboutMe(form.about_me) : undefined,
+    gender: form.personal && form.gender === null ? required : undefined,
+    birth_year: form.personal ? birthYear(form.birth_year) : undefined,
+    about_me: form.personal ? aboutMe(form.about_me) : undefined,
+    form: undefined,
   };
   const errors: FieldErrors = {};
   for (const name of FIELD_ORDER) {
@@ -213,37 +243,60 @@ export function firstInvalid(errors: FieldErrors): FieldName | undefined {
   return FIELD_ORDER.find((name) => errors[name] !== undefined);
 }
 
-/** The `PUT /me/profile` body for a form that `validate` accepts. */
+/** The `PUT /me/profile` body for a form that `validate` accepts (0010c: each part, or `null` /
+ * its defaults when its switch is off; the people switch and the flatmates preference need both). */
 export function toProfileIn(form: ProfileForm, areas: readonly { id: string }[]): SeekerProfileIn {
-  if (form.household === null || form.contract_months === null) {
-    throw new Error('toProfileIn: household and contract are required');
+  const both = form.looking && form.personal;
+  let looking: SeekerProfileIn;
+  if (form.looking) {
+    if (form.household === null || form.contract_months === null) {
+      throw new Error('toProfileIn: household and contract are required');
+    }
+    looking = {
+      budget_max_ils: Number(form.budget_max_ils.trim()),
+      move_in_date: form.move_in_date,
+      move_in_flexible: form.move_in_flexible,
+      area_ids: visibleAreaIds(form, areas),
+      household: form.household,
+      has_pets: form.has_pets,
+      smoker: form.smoker,
+      contract_months: form.contract_months,
+      parking_needed: form.parking_needed,
+    };
+  } else {
+    looking = {
+      budget_max_ils: null,
+      move_in_date: null,
+      move_in_flexible: false,
+      area_ids: null,
+      household: null,
+      has_pets: null,
+      smoker: null,
+      contract_months: null,
+      parking_needed: 0,
+    };
   }
-  const body: SeekerProfileIn = {
-    budget_max_ils: Number(form.budget_max_ils.trim()),
-    move_in_date: form.move_in_date,
-    move_in_flexible: form.move_in_flexible,
-    area_ids: visibleAreaIds(form, areas),
-    household: form.household,
-    has_pets: form.has_pets,
-    smoker: form.smoker,
-    contract_months: form.contract_months,
-    parking_needed: form.parking_needed,
-  };
-  // Room off: the four keys are omitted, so the server clears the section; the API refuses the
-  // people fields without a gender, so they go as `false` / `null`.
-  if (!form.room) return { ...body, people_visible: false, about_me: null };
-  if (form.gender === null)
-    throw new Error('toProfileIn: gender is required with the room switch on');
-  const birthYear = form.birth_year.trim();
-  const about = cleanText(form.about_me, { multiline: true });
+  let personal: Pick<SeekerProfileIn, 'gender' | 'birth_year' | 'lifestyle' | 'about_me'>;
+  if (form.personal) {
+    if (form.gender === null) {
+      throw new Error('toProfileIn: gender is required with the personal switch on');
+    }
+    const birthYear = form.birth_year.trim();
+    const about = cleanText(form.about_me, { multiline: true });
+    personal = {
+      gender: form.gender,
+      ...(birthYear === '' ? {} : { birth_year: Number(birthYear) }),
+      lifestyle: { ...form.lifestyle },
+      about_me: about === '' ? null : about,
+    };
+  } else {
+    personal = { gender: null, birth_year: null, lifestyle: {}, about_me: null };
+  }
   return {
-    ...body,
-    gender: form.gender,
-    ...(birthYear === '' ? {} : { birth_year: Number(birthYear) }),
-    flatmate_gender: form.flatmate_gender,
-    lifestyle: { ...form.lifestyle },
-    people_visible: form.people_visible,
-    about_me: about === '' ? null : about,
+    ...looking,
+    ...personal,
+    flatmate_gender: both ? form.flatmate_gender : 'any',
+    people_visible: both ? form.people_visible : false,
   };
 }
 

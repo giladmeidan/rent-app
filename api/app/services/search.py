@@ -233,7 +233,8 @@ def liked_rooms(
     0010d; `None`, `None` without photos), newest like first. Only rooms (a room
     switched to an apartment keeps its pairs; `room_fit` is NULL for it), whose fit is not false,
     that are not the seeker's own and have no non-withdrawn application from them (the
-    application took over). Never names the owner. One statement."""
+    application took over). Empty while the seeker's profile has no looking part (spec 0010c: no
+    budget, no score). Never names the owner. One statement."""
     # Imported here: `services/people.py` imports this module.
     from app.services.people import open_application
 
@@ -243,6 +244,8 @@ def liked_rooms(
         .where(
             Listing.listing_type == "room",
             Listing.owner_id != seeker_id,
+            # The looking part (spec 0010c): without it the score is NULL.
+            SeekerProfile.budget_max_ils.is_not(None),
             room_fit(Listing, SeekerProfile).is_not(False),
             or_(RoomPair.lister_liked_at.is_not(None), RoomPair.seeker_liked_at.is_not(None)),
             ~open_application(Listing.id, seeker_id),

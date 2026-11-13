@@ -136,7 +136,7 @@ const STATES: State[] = [
     setup: { profile: PROFILE_ROOM },
     path: PROFILE_PATH,
     act: async (page) => {
-      await expect(page.getByRole('switch', { name: he.profile.room.switch })).toBeChecked();
+      await expect(page.getByRole('switch', { name: he.profile.about.switch })).toBeChecked();
       await expect(page.getByRole('region', { name: he.lifestyle.title.seeker })).toBeVisible();
     },
   },
@@ -173,11 +173,11 @@ const STATES: State[] = [
   {
     name: 'p10-section-room',
     setup: { profile: 'none' },
-    path: `${PROFILE_PATH}?section=room`,
+    path: `${PROFILE_PATH}?section=about`,
     viewport: true,
     act: async (page) => {
       await expect(
-        page.getByRole('heading', { level: 2, name: he.profile.room.title }),
+        page.getByRole('heading', { level: 2, name: he.profile.about.title }),
       ).toBeFocused();
     },
   },

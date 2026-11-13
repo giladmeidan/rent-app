@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Tag, type TagTone } from '../../components/Tag';
 import type { ApplicantProfileOut } from '../applicants/api';
 import type { ListingPublic } from '../listings/api';
-import type { SeekerProfileOut } from '../profile/api';
+import type { LookingProfile } from '../profile/api';
 import type { PersonOut } from '../people/api';
 import { ownerShort, personShort, seekerShort } from './reasons';
 import type { Criterion, MatchOut, ReasonKind } from './types';
@@ -13,9 +13,9 @@ type SeekerProps = {
   voice?: 'seeker';
   match: MatchOut;
   listing: ListingPublic;
-  /** The seeker's profile; `undefined` while it loads or when it failed (the `move_in` differ chip
-   * is then left out). */
-  profile: SeekerProfileOut | undefined;
+  /** The seeker's profile with its looking part (0010c); `undefined` while it loads, when it failed
+   * or without that part (the `move_in` differ chip is then left out). */
+  profile: LookingProfile | undefined;
 };
 
 /** An inbox card's chips, about an applicant (the owner's voice). */

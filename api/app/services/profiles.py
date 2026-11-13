@@ -1,14 +1,15 @@
-"""Seeker housing profiles (spec 0006a): one per seeker, read and replaced by that seeker only.
+"""Profiles (spec 0006a): one per account (0010b), read and replaced by that account only.
 
-Privacy (NF2): a profile is personal data. This module returns it only to its own seeker
-(`get_profile`, `put_profile`); `has_profile` answers existence only (the listing page in
-`routers/search.py`; the apply gate in `services/applications.py` asks the same inline, 0008d).
-From 0006b / 0006c the matching queries read it too.
+Privacy (NF2): a profile is personal data. This module returns it only to its own account
+(`get_profile`, `put_profile`); `has_profile` answers only whether the looking part is filled (the
+listing page in `routers/search.py`; the apply gate in `services/applications.py` asks the same
+inline, 0008d). From 0006b / 0006c the matching queries read it too.
 
-The room section (spec 0007a: `gender`, `birth_year`, `flatmate_gender`, `lifestyle`) is personal
-data too. `put_profile` writes it on every `PUT` (omitting it clears it); in 0007a only its seeker
-reads it. From 0007b the room fit rule and the match score read it, and from 0007c the owner inbox
-shows it on room applications only.
+Two independent parts (spec 0010c): the looking part (the 7 housing fields, all or none) and the
+personal part (spec 0007a's room section: `gender`, `birth_year`, `lifestyle`, `about_me`).
+`put_profile` writes both on every `PUT` (omitting a part clears it). From 0007b the room fit rule
+and the match score read the personal part, and from 0007c the owner inbox shows it on room
+applications only.
 
 `area_ids` has no FK (an array cannot carry one): `put_profile` checks every id is an active area
 in one statement and refuses the whole profile otherwise (`UnknownAreaError`, as listings do)."""
@@ -33,8 +34,18 @@ def get_profile(db: Session, user_id: uuid.UUID) -> SeekerProfile | None:
 
 
 def has_profile(db: Session, user_id: uuid.UUID) -> bool:
-    """Whether the seeker has a profile; reads nothing of it. One statement."""
-    return bool(db.scalar(select(exists().where(SeekerProfile.user_id == user_id))))
+    """Whether the account's profile has the looking part filled (spec 0010c: a NULL budget means
+    it is empty; a personal-only profile counts as no profile for matching, search and the seeker
+    rule). Reads nothing else of it. One statement."""
+    return bool(
+        db.scalar(
+            select(
+                exists().where(
+                    SeekerProfile.user_id == user_id, SeekerProfile.budget_max_ils.is_not(None)
+                )
+            )
+        )
+    )
 
 
 def _check_areas(db: Session, area_ids: list[uuid.UUID]) -> None:
@@ -49,11 +60,13 @@ def _check_areas(db: Session, area_ids: list[uuid.UUID]) -> None:
 
 def put_profile(db: Session, seeker: User, data: SeekerProfileIn) -> SeekerProfile:
     """Create or replace `seeker`'s profile with `data` (already validated by `SeekerProfileIn`)
-    and return it. Raises `UnknownAreaError` (nothing written). Two statements: the area check,
-    then one `INSERT ... ON CONFLICT (user_id) DO UPDATE ... RETURNING`, so two concurrent PUTs
-    leave one row (the later one's values). Commits."""
+    and return it: both parts, so a part left out is cleared (spec 0010c). Raises
+    `UnknownAreaError` (nothing written). Two statements: the area check (only when the looking
+    part is sent), then one `INSERT ... ON CONFLICT (user_id) DO UPDATE ... RETURNING`, so two
+    concurrent PUTs leave one row (the later one's values). Commits."""
     try:
-        _check_areas(db, data.area_ids)
+        if data.area_ids is not None:
+            _check_areas(db, data.area_ids)
         values = data.model_dump()
         stmt = insert(SeekerProfile).values(user_id=seeker.id, **values)
         stmt = stmt.on_conflict_do_update(

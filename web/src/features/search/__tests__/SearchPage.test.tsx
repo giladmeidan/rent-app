@@ -709,7 +709,7 @@ describe('SearchPage', () => {
     const link = screen.getByRole('link', { name: he.match.fillProfile });
     expect(link).toHaveAttribute(
       'href',
-      `/me/profile?next=${encodeURIComponent('/search?price_max=8000&pets=true')}`,
+      `/me/profile?section=looking&next=${encodeURIComponent('/search?price_max=8000&pets=true')}`,
     );
     view.unmount();
     vi.unstubAllGlobals();

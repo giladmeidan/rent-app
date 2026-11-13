@@ -79,7 +79,7 @@ describe('MyLikesPage', () => {
     expect(screen.getByText(he.likes.mutual)).toBeVisible();
     expect(
       within(section(he.likes.likedMe)).getByRole('link', { name: he.likes.toProfile }),
-    ).toHaveAttribute('href', '/me/profile?section=room');
+    ).toHaveAttribute('href', '/me/profile?section=about&section=looking&next=%2Fme%2Flikes');
     expect(within(section(he.likes.mine)).getAllByRole('article')).toHaveLength(3);
 
     // Unlike a room of "mine": the DELETE, then the refetch drops it.
@@ -271,7 +271,7 @@ describe('MyLikesPage', () => {
     ).toHaveLength(1);
     expect(
       within(section(he.likes.likedMe)).getByRole('link', { name: he.likes.toProfile }),
-    ).toHaveAttribute('href', '/me/profile?section=room');
+    ).toHaveAttribute('href', '/me/profile?section=about&section=looking&next=%2Fme%2Flikes');
     unmount();
     vi.unstubAllGlobals();
 
