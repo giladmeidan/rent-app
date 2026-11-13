@@ -4,6 +4,7 @@
 // `overlay` and the `panel`, records the last props and every distinct `camera` (`cameras()`), and
 // lets the test fire the map's callbacks. A bubble press reads `separates` as the real one does: a
 // zoom is recorded (`lastZoomedTo`), or `onBubbleOpen` is called.
+// `approximateRadiusM` and `userPosition` are recorded in the props only; nothing is drawn for them.
 import { act, useLayoutEffect, type ComponentProps } from 'react';
 
 import type { Bbox } from '../config';
