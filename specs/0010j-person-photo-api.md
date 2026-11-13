@@ -145,3 +145,16 @@ separate round (one verifier round).
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+Spec 0010j — person photo API   READY TO MERGE (stacked on 0010d's #69; merge after it)
+Shipped: any signed-in account sets, replaces or removes one photo of themselves (`PUT`/`DELETE /me/photo`); its
+small address shows only where the caller already sees that person (own account, applicants inbox and status
+PATCH, people page, chat list/thread/members, flatmates list). Demo (API only; web is 0010k): sign in → `PUT /me/photo`
+with a JPEG → `photo_url`; `GET /me` shows it and the URL opens; `DELETE /me/photo` → null, the files are gone.
+Tests: +0 unit, +4 integration (`test_person_photo.py` AC1–AC4; 5 test files' key sets amended, AC5 counts unchanged), +0 e2e
+Findings (code Opus, qa Sonnet, security Opus/high; one round): 0 blockers, 0 majors; 4 minors: 1 decided by Gilad
+(keep both sizes; `-l` reachable by the same audience as `-s`, written in Risks and the module docstring), 2 logged in
+FOLLOWUPS (test helpers to `conftest.py`, extra person-route input tests), 1 spec-text fix (`GET /me`,
+`/listings/{id}/applications`); 8 nits dropped.
+Changed in PRODUCT.md: nothing here (the orchestrator records "keep both sizes").
+Next spec I propose: 0010k — photos display web (after 0010c).
