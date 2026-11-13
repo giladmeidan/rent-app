@@ -27,9 +27,8 @@ test('ac5_public_pages_pass_axe', async ({ page }) => {
   const region = page.getByRole('region', { name: he.search.map.label });
   await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
   await settled(page);
-  // Pins at their listings' true positions overlap when listings sit close together: only the
-  // pins are exempt from target-size (WCAG 2.5.8 "essential", accepted by Gilad 2026-11-12).
-  await expectNoAxeViolations(page, '/search?view=map', { markerTargetSizeExempt: true });
+  // Pins that would overlap fold into count bubbles (spec 0009v): no exemption for the pins.
+  await expectNoAxeViolations(page, '/search?view=map');
 
   // Log in and sign up.
   await page.goto('/login');

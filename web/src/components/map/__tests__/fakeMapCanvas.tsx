@@ -1,19 +1,29 @@
 // A stand-in for `MapCanvas` (jsdom has no WebGL). Use it with
 //   vi.mock('<path>/components/map/MapCanvas', () => import('<path>/components/map/__tests__/fakeMapCanvas'));
-// It renders the labelled region and one button per pin, records the last props, and lets the test
-// fire the map's callbacks.
+// It renders the labelled region and one button per pin and per bubble, records the last props, and
+// lets the test fire the map's callbacks. A bubble press reads `separates` as the real one does: a
+// zoom is recorded (`lastZoomedTo`), or `onBubbleOpen` is called.
 import { act, useLayoutEffect, type ComponentProps } from 'react';
 
 import type { Bbox } from '../config';
-import type { MapCanvas as RealMapCanvas, Pin } from '../MapCanvas';
+import type { Bubble, MapCanvas as RealMapCanvas, MapView, Pin } from '../MapCanvas';
 
-export type { Pin };
+export type { Bubble, Pin };
 type Props = ComponentProps<typeof RealMapCanvas>;
 
-const fakeMap: { props: Props | undefined } = { props: undefined };
+const fakeMap: { props: Props | undefined; zoomedTo: string[] | undefined } = {
+  props: undefined,
+  zoomedTo: undefined,
+};
 
 export function resetFakeMap() {
   fakeMap.props = undefined;
+  fakeMap.zoomedTo = undefined;
+}
+
+/** The members' ids of the last bubble press that zoomed in (`separates`), if any. */
+export function lastZoomedTo(): string[] | undefined {
+  return fakeMap.zoomedTo;
 }
 
 /** The last props, failing the test when the map has not rendered. */
@@ -22,11 +32,15 @@ export function lastProps(): Props {
   return fakeMap.props;
 }
 
-/** The map reports a visible box, as after a pan or zoom. */
-export function moveTo(bbox: Bbox) {
+/** The map reports a visible box, as after a pan or zoom; with `view` only when given, so a test
+ * that passes none keeps its pins unclustered. */
+export function moveTo(bbox: Bbox, view?: MapView) {
   const { onMoveEnd } = lastProps();
   if (onMoveEnd === undefined) throw new Error('no onMoveEnd');
-  act(() => onMoveEnd(bbox));
+  act(() => {
+    if (view === undefined) onMoveEnd(bbox);
+    else onMoveEnd(bbox, view);
+  });
 }
 
 /** The map cannot be shown (no WebGL, the library failed to load). */
@@ -48,9 +62,29 @@ export function MapCanvas(props: Props) {
           type="button"
           aria-label={pin.label}
           aria-pressed={pin.id === props.selectedId}
+          data-pin-id={pin.id}
+          data-tier={pin.tier}
+          data-mark={pin.mark ?? undefined}
+          data-seen={pin.seen}
           onClick={() => props.onPinClick?.(pin.id)}
         >
           {pin.text}
+        </button>
+      ))}
+      {(props.bubbles ?? []).map((bubble: Bubble) => (
+        <button
+          key={bubble.id}
+          type="button"
+          aria-label={bubble.label}
+          data-pin-id={bubble.id}
+          data-tier={bubble.tier}
+          onClick={() => {
+            const ids = bubble.members.map((member) => member.id);
+            if (bubble.separates) fakeMap.zoomedTo = ids;
+            else props.onBubbleOpen?.(ids);
+          }}
+        >
+          {bubble.count}
         </button>
       ))}
       {props.overlay}

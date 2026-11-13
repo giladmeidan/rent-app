@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-q
 import { api, type UserOut } from '../../api/client';
 import { clearAllDrafts } from '../../app/drafts';
 import { clearInviteToken } from '../flatmates/inviteToken';
+import { clearSeen } from '../listings/seen';
 import { ME_KEY } from './useMe';
 
 async function logout(): Promise<void> {
@@ -49,6 +50,7 @@ export function useLogout() {
     mutationFn: logout,
     onSuccess: () => {
       clearAllDrafts();
+      clearSeen();
       clearSession(queryClient);
     },
   });

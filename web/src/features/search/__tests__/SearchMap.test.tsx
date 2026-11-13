@@ -7,6 +7,7 @@ import { emptyStateBox } from '../../../components/EmptyState';
 import {
   failMap,
   lastProps,
+  lastZoomedTo,
   moveTo,
   resetFakeMap,
 } from '../../../components/map/__tests__/fakeMapCanvas';
@@ -19,6 +20,8 @@ import {
   noa,
   renderRoutes,
 } from '../../auth/__tests__/harness';
+import { application } from '../../applications/__tests__/fixtures';
+import { owner } from '../../listings/__tests__/fixtures';
 import { formatIls, formatRooms } from '../../listings/format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import type { ListingPublic } from '../api';
@@ -36,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 const SEARCH = 'GET /listings';
@@ -565,5 +569,220 @@ describe('SearchMap', () => {
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 2 }));
     });
+  });
+
+  it('ac6_bubbles_zoom_or_list', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 8 };
+    const bubbles = () => lastProps().bubbles ?? [];
+
+    // Three results about 300 m apart, at zoom 8: one bubble of 3 with its plural name.
+    const a = located({ lat: 32.08, street: 'אחד' });
+    const b = located({ lat: 32.083, street: 'שתיים' });
+    const c = located({ lat: 32.086, street: 'שלוש' });
+    mockApi({ [SEARCH]: [json(page([a, b, c]))] });
+    let view = render('/search?view=map');
+    moveTo(BOX, VIEW);
+    await vi.waitFor(() => {
+      expect(bubbles()).toHaveLength(1);
+    });
+    expect(pins()).toEqual([]);
+    const label = i18n.t('search.map.bubble', { count: 3 });
+    expect(label).toBe('3 מודעות קרובות, לחיצה מקרבת את המפה');
+    expect(bubbles()[0]).toMatchObject({ count: 3, label, separates: true });
+    const bubble = screen.getByRole('button', { name: label });
+    expect(bubble).toHaveTextContent('3');
+    expect(bubble).not.toHaveAttribute('aria-pressed');
+
+    // They separate at max zoom: pressing zooms to them, no card opens.
+    fireEvent.click(bubble);
+    expect(lastZoomedTo()).toEqual([a.id, b.id, c.id]);
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(
+      screen.queryByRole('heading', { name: i18n.t('search.map.samePlace', { count: 3 }) }),
+    ).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // Three results at one point (never separating) and one elsewhere.
+    const x = located({ street: 'אלף' });
+    const y = located({ street: 'בית' });
+    const z = located({ street: 'גימל' });
+    const away = located({ lat: 32.5, lng: 35.2, street: 'רחוק' });
+    const next = deferred();
+    mockApi({ [SEARCH]: [json(page([x, y, z, away])), next.promise] });
+    view = render('/search?view=map');
+    moveTo(BOX, VIEW);
+    const samePlace = i18n.t('search.map.bubbleSamePlace', { count: 3 });
+    const sameBubble = await screen.findByRole('button', { name: samePlace });
+    expect(pinIds()).toEqual([away.id]);
+
+    // A selected pin first; opening the list clears it.
+    fireEvent.click(screen.getByRole('button', { name: pinLabel(away) }));
+    expect(lastProps().selectedId).toBe(away.id);
+    fireEvent.click(sameBubble);
+    expect(lastProps().selectedId).toBeUndefined();
+    const heading = screen.getByRole('heading', {
+      name: i18n.t('search.map.samePlace', { count: 3 }),
+    });
+    expect(heading.tagName).toBe('H2');
+    expect(heading).toHaveTextContent('3 מודעות בנקודה הזו');
+    const section = screen.getByRole('region', { name: heading.textContent ?? '' });
+    const cards = within(section).getAllByRole('article');
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => within(card).getByRole('link').getAttribute('href'))).toEqual(
+      [x, y, z].map((l) => `/listings/${l.id}`),
+    );
+    expect(within(cards[0] as HTMLElement).getByRole('link')).toHaveFocus();
+    // No pin stays pressed without its card.
+    for (const button of screen.getAllByRole('button', { pressed: true })) {
+      expect(button.dataset['pinId']).toBeUndefined();
+    }
+    expect(screen.getByRole('button', { name: pinLabel(away) })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+
+    const listHeading = () =>
+      screen.queryByRole('heading', { name: i18n.t('search.map.samePlace', { count: 3 }) });
+    // A pin press replaces the list with its one card.
+    fireEvent.click(screen.getByRole('button', { name: pinLabel(away) }));
+    expect(listHeading()).toBeNull();
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+
+    // Opened again; a zoom in and back out removes it for good.
+    fireEvent.click(screen.getByRole('button', { name: samePlace }));
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+    moveTo(BOX, { ...VIEW, zoom: 9 });
+    expect(listHeading()).toBeNull();
+    moveTo(BOX, VIEW);
+    expect(listHeading()).toBeNull();
+    expect(screen.queryByRole('article')).toBeNull();
+
+    // Opened again; the members leaving the results remove the list.
+    fireEvent.click(await screen.findByRole('button', { name: samePlace }));
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+    moveTo(OTHER_BOX, VIEW);
+    next.resolve(json(page([away])));
+    await vi.waitFor(() => {
+      expect(listHeading()).toBeNull();
+    });
+    expect(screen.queryByRole('article')).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // The fake reporting no view (`moveTo(bbox)`): pins unclustered, no bubble.
+    mockApi({ [SEARCH]: [json(page([x, y, z]))] });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(3);
+    });
+    expect(bubbles()).toEqual([]);
+  });
+
+  it('ac7_seeker_marks_only', async () => {
+    const room = located({ listing_type: 'room' });
+    const flat = located();
+    const plain = located();
+    const declined = located();
+    const mark = (l: ListingPublic) =>
+      document.querySelector(`[data-pin-id="${l.id}"]`)?.getAttribute('data-mark') ?? null;
+    // Replies are built per request: a Response body is read once.
+    const likes = () =>
+      json({
+        liked_me: [],
+        mine: [{ listing: room, liked_at: '2026-11-10T10:00:00Z' }],
+      });
+    const applications = () =>
+      json([
+        application({ listing: { ...application().listing, id: flat.id } }),
+        application({ status: 'declined', listing: { ...application().listing, id: declined.id } }),
+      ]);
+
+    // A signed-in seeker: likes and applications are each asked once; the marks join by id.
+    let api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/profile': [json(profile())],
+      'GET /me/likes': [likes],
+      'GET /me/applications': [applications],
+      [SEARCH]: [json(page([room, flat, plain, declined]))],
+    });
+    let view = render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(mark(room)).toBe('liked');
+    });
+    await vi.waitFor(() => {
+      expect(mark(flat)).toBe('applied');
+    });
+    expect(mark(plain)).toBeNull();
+    expect(mark(declined)).toBeNull();
+    await settle();
+    expect(api.calls('GET /me/likes')).toHaveLength(1);
+    expect(api.calls('GET /me/applications')).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A visitor and an owner: neither request, no marks.
+    for (const me of [json({ detail: 'unauthenticated' }, 401), json(owner)]) {
+      api = mockApi({
+        'GET /me': [me],
+        'GET /me/likes': [likes],
+        'GET /me/applications': [applications],
+        [SEARCH]: [json(page([room, flat, plain]))],
+      });
+      view = render('/search?view=map');
+      moveTo(BOX);
+      await vi.waitFor(() => {
+        expect(pins()).toHaveLength(3);
+      });
+      await vi.waitFor(() => {
+        expect(api.calls('GET /me')).toHaveLength(1);
+      });
+      await settle();
+      expect(api.calls('GET /me/likes')).toHaveLength(0);
+      expect(api.calls('GET /me/applications')).toHaveLength(0);
+      expect(pins().map((p) => p.mark)).toEqual([null, null, null]);
+      expect(document.querySelectorAll('[data-mark]')).toHaveLength(0);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // GET /me/likes failing with 500: the pins render without the liked mark.
+    api = mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/profile': [json(profile())],
+      'GET /me/likes': [json({ detail: 'boom' }, 500)],
+      'GET /me/applications': [applications],
+      [SEARCH]: [json(page([room, flat, plain]))],
+    });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(mark(flat)).toBe('applied');
+    });
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/likes')).toHaveLength(1);
+    });
+    await settle();
+    expect(mark(room)).toBeNull();
+    expect(pins()).toHaveLength(3);
+  });
+
+  it('seen_pins_from_this_device', async () => {
+    // A listing opened on this device draws its pin as seen.
+    const opened = located();
+    const fresh = located();
+    window.localStorage.setItem('rent-app:seen', JSON.stringify([opened.id]));
+    mockApi({ [SEARCH]: [json(page([opened, fresh]))] });
+    render('/search?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(2);
+    });
+    expect(pins().map((p) => p.seen)).toEqual([true, false]);
+    expect(pins()[0]?.label).toBe(`${pinLabel(opened)}${he.search.map.pinSeen}`);
   });
 });

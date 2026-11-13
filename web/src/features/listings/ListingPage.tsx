@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
@@ -25,6 +25,7 @@ import { entryFact, floorFact, sizeFact } from './facts';
 import { formatIls, todayInIsrael } from './format';
 import { ListingFacts } from './ListingFacts';
 import { OwnerPreferences } from './OwnerPreferences';
+import { markSeen } from './seen';
 import { usePublicListing } from './usePublicListing';
 
 // The main column and the 24 rem action column, from `lg`: no scale step is a fixed 24 rem.
@@ -35,6 +36,11 @@ export function ListingPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const listing = usePublicListing(id);
+  // "Seen" on this device means this page opened the listing (spec 0009v), not that a pin was pressed.
+  const seenId = listing.isSuccess ? listing.data.id : undefined;
+  useEffect(() => {
+    if (seenId !== undefined) markSeen(seenId);
+  }, [seenId]);
   // The small map is dropped when it cannot be shown; the address text stays.
   const [mapFailed, setMapFailed] = useState(false);
   // Set by a like that made the pair mutual; it replaces the control and outlives the cache writes.
