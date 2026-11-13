@@ -9,6 +9,8 @@ import { WEB_ORIGIN } from './origin';
 // copy the artboards (Search.dc.html / SearchDesktop.dc.html). Spec 0009v adds the map's tiers,
 // marks, seen chip, a bubble and the same-place list (into screens/0009v/); on the map the four
 // listings' points are spread north to south, so their pins stay apart at the first (fitted) view.
+// Spec 0009w docks the pin's card and the same-place list inside the map: states `map`,
+// `map-card-match` and `map-same-place` go to screens/0009w/.
 
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 
@@ -324,19 +326,50 @@ test('error', async ({ page }, info) => {
   await shot(page, info.project.name, 'error');
 });
 
-test('map', async ({ page }, info) => {
-  await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
-  const pin = page.getByRole('button', { name: /כצנלסון/ });
-  await pin.waitFor();
-  await pin.click();
-  await page.getByRole('article').waitFor();
-  await shot(page, info.project.name, 'map');
-});
-
 async function shot0009v(page: Page, project: string, state: string) {
   await page.screenshot({ path: `screens/0009v/${state}-${project}.png`, fullPage: true });
 }
+
+async function shot0009w(page: Page, project: string, state: string) {
+  await page.screenshot({ path: `screens/0009w/${state}-${project}.png`, fullPage: true });
+}
+
+/** The map has stopped: no answer pending and the URL (its `c` / `z`) unchanged for a moment, so
+ * the first-open fit and the pin's keep-visible pan are done. */
+async function mapSettled(page: Page) {
+  let url = '';
+  for (let i = 0; i < 20 && url !== page.url(); i += 1) {
+    url = page.url();
+    await page.waitForTimeout(500);
+    await mapReady(page);
+  }
+}
+
+/** Presses the pin named `name` and waits for its card docked in the map. */
+async function openCard(page: Page, name: RegExp) {
+  await mapReady(page);
+  await mapSettled(page);
+  await page.getByRole('button', { name }).click();
+  await page.locator('[data-map-card]').getByRole('article').waitFor();
+  await mapSettled(page);
+}
+
+test('map', async ({ page }, info) => {
+  // A visitor's card, docked in the map (spec 0009w): no badge, the close button at its top end.
+  await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
+  await page.goto('/search?view=map');
+  await openCard(page, /כצנלסון/);
+  await shot0009w(page, info.project.name, 'map');
+});
+
+test('map-card-match', async ({ page }, info) => {
+  // A seeker's card: the match badge in the price row clears the close button.
+  await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
+  await page.goto('/search?view=map');
+  await openCard(page, /כצנלסון/);
+  await page.locator('[data-map-card]').getByTestId('match-badge').waitFor();
+  await shot0009w(page, info.project.name, 'map-card-match');
+});
 
 /** The map has loaded and its answer landed. */
 async function mapReady(page: Page) {
@@ -377,11 +410,15 @@ test('map-bubble', async ({ page }, info) => {
 });
 
 test('map-same-place', async ({ page }, info) => {
-  // Two listings at one point: their bubble lists both cards under the map.
+  // Two listings at one point: their bubble lists both cards in the map's panel (spec 0009w).
   await mockApi(page, { seeker: true, search: 'items', map: 'samePlace' });
   await page.goto('/search?view=map');
   await mapReady(page);
+  await mapSettled(page);
   await page.getByRole('button', { name: he.search.map.bubbleSamePlace_two }).click();
-  await page.getByRole('heading', { name: he.search.map.samePlace_two }).waitFor();
-  await shot0009v(page, info.project.name, 'map-same-place');
+  await page
+    .locator('[data-map-card]')
+    .getByRole('heading', { name: he.search.map.samePlace_two })
+    .waitFor();
+  await shot0009w(page, info.project.name, 'map-same-place');
 });
