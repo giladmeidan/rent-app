@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { EmptyState, emptyStateBox } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM, roundBbox, type Bbox } from '../../components/map/config';
-import { MapCanvas, type Pin } from '../../components/map/MapCanvas';
-import { cardTitle } from '../listings/cardTitle';
-import { formatIls, todayInIsrael } from '../listings/format';
+import { clusterPins } from '../../components/map/cluster';
+import { MapCanvas, type Bubble } from '../../components/map/MapCanvas';
+import { todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
 import type { SeekerProfileOut } from '../profile/api';
+import type { ListingPublic } from './api';
 import type { Filters } from './filters';
+import { bubbleLabel } from './pins';
+import { useListingPins } from './useListingPins';
 import { useMapSearch } from './useMapSearch';
+
+const NO_ITEMS: ListingPublic[] = [];
 
 type Props = {
   /** The URL's filters, without `view`. */
@@ -28,53 +33,73 @@ type Props = {
 
 /**
  * The map view of `/search`: the filters' results inside the visible box as price pins. The box is
- * component state by design (spec 0003d amends 0003b NF3); the filters stay in the URL.
+ * component state by design (spec 0003d amends 0003b NF3); the filters stay in the URL. Pins whose
+ * hit areas would overlap fold into count bubbles at the map's zoom (spec 0009v); a bubble whose
+ * members never separate lists their cards under the map.
  */
 export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
   const { t } = useTranslation();
   const [bbox, setBbox] = useState<Bbox>();
+  // The zoom of the last reported view; until one arrives the pins are drawn unclustered.
+  const [zoom, setZoom] = useState<number>();
   const [selectedId, setSelectedId] = useState<string>();
+  // A pressed bubble whose members never separate: their ids, listed under the map.
+  const [samePlace, setSamePlace] = useState<{ ids: string[]; zoom: number | undefined }>();
   const [unavailable, setUnavailable] = useState(false);
   // Bumped on every pin press, so focus moves to the card even when the same pin is pressed again.
   const [focusRequest, setFocusRequest] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
+  const samePlaceHeadingId = useId();
   const search = useMapSearch(filters, bbox);
   const { data } = search;
   // The pill over the map while results update; visual only, the count line is the announcement.
   const updating = search.isPending || search.isPlaceholderData;
 
-  const pins = useMemo<Pin[]>(() => {
-    const result: Pin[] = [];
-    for (const item of data?.items ?? []) {
-      if (item.lat === null || item.lng === null) continue;
-      const price = formatIls(item.price_ils);
-      const label = t('search.map.pin', {
-        title: cardTitle(t, item),
-        price,
-      });
-      result.push({
-        id: item.id,
-        lng: item.lng,
-        lat: item.lat,
-        text:
-          item.match === null
-            ? `${price} ${t('listings.units.ils')}`
-            : t('search.map.pinTextMatch', { price, score: item.match.score }),
-        label:
-          item.match === null
-            ? label
-            : label + t('search.map.pinMatch', { score: item.match.score }),
-      });
-    }
-    return result;
-  }, [data, t]);
+  const items = data?.items ?? NO_ITEMS;
+  const pins = useListingPins(items);
 
   // A new answer without the selected listing removes its card.
-  const selected = data?.items.find((item) => item.id === selectedId);
+  const selected = items.find((item) => item.id === selectedId);
+  // The listed members still in the results; none left removes the list. A zoom (another bubble
+  // pressed, or the map zoomed) regroups the map and removes it too.
+  const listed =
+    samePlace === undefined || samePlace.zoom !== zoom
+      ? []
+      : samePlace.ids.flatMap((id) => items.filter((item) => item.id === id));
+
+  // Regrouped on a zoom, a data or a selection change only, never per pan frame (`moveend` is the
+  // only zoom source).
+  const clustered = useMemo(() => {
+    if (zoom === undefined) return { pins, bubbles: [] as Bubble[] };
+    const { pins: single, bubbles } = clusterPins(
+      pins,
+      zoom,
+      // The selected pin is always drawn alone (an id no longer in the results matches no pin).
+      new Set(selectedId === undefined ? [] : [selectedId]),
+    );
+    return {
+      pins: single,
+      bubbles: bubbles.map((bubble): Bubble => ({ ...bubble, label: bubbleLabel(t, bubble) })),
+    };
+  }, [pins, zoom, selectedId, t]);
 
   useEffect(() => {
     if (focusRequest > 0) cardRef.current?.querySelector('a')?.focus();
   }, [focusRequest]);
+
+  // A listing's card under the map: as the list's, with the match badge and chips.
+  const card = (listing: ListingPublic, titleAs: 'h2' | 'h3' = 'h2') => (
+    <ListingCard
+      listing={listing}
+      titleAs={titleAs}
+      today={todayInIsrael()}
+      to={`/listings/${listing.id}`}
+      seekerBirthYear={profile?.birth_year}
+      badge={listing.match && <MatchBadge score={listing.match.score} />}
+    >
+      {listing.match && <MatchChips match={listing.match} listing={listing} profile={profile} />}
+    </ListingCard>
+  );
 
   // The states sit above the 60vh map (spec 0009t): the empty state is the count line itself (one
   // live region on the page, announced when it fills), and an error comes before the map.
@@ -130,13 +155,24 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
               </p>
             )
           }
-          pins={pins}
+          pins={clustered.pins}
+          bubbles={clustered.bubbles}
           selectedId={selected?.id}
           onPinClick={(id) => {
             setSelectedId(id);
+            setSamePlace(undefined);
             setFocusRequest((n) => n + 1);
           }}
-          onMoveEnd={(box) => setBbox(roundBbox(box))}
+          onBubbleOpen={(ids) => {
+            // No pin stays pressed without its card.
+            setSelectedId(undefined);
+            setSamePlace({ ids, zoom });
+            setFocusRequest((n) => n + 1);
+          }}
+          onMoveEnd={(box, view) => {
+            setBbox(roundBbox(box));
+            if (view !== undefined) setZoom(view.zoom);
+          }}
           onError={() => setUnavailable(true)}
           // The map keeps today's height at every width (no token fits a viewport-relative height).
           className="h-[60vh] min-h-[360px] rounded-lg border border-border"
@@ -144,17 +180,19 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
       )}
       {selected !== undefined && (
         <div ref={cardRef} className="max-w-md">
-          <ListingCard
-            listing={selected}
-            today={todayInIsrael()}
-            to={`/listings/${selected.id}`}
-            seekerBirthYear={profile?.birth_year}
-            badge={selected.match && <MatchBadge score={selected.match.score} />}
-          >
-            {selected.match && (
-              <MatchChips match={selected.match} listing={selected} profile={profile} />
-            )}
-          </ListingCard>
+          {card(selected)}
+        </div>
+      )}
+      {listed.length > 0 && (
+        <div ref={cardRef} className="max-w-md">
+          <section aria-labelledby={samePlaceHeadingId} className="flex flex-col gap-3">
+            <h2 id={samePlaceHeadingId} className="text-start text-h3">
+              {t('search.map.samePlace', { count: listed.length })}
+            </h2>
+            {listed.map((listing) => (
+              <Fragment key={listing.id}>{card(listing, 'h3')}</Fragment>
+            ))}
+          </section>
         </div>
       )}
     </div>

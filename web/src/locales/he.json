@@ -336,7 +336,19 @@
       "pin": "{{title}}, {{price}} ₪ לחודש",
       "pinMatch": ", התאמה {{score}}%",
       "pinTextMatch": "{{price}} ₪ · {{score}}%",
-      "updating": "התוצאות מתעדכנות…"
+      "updating": "התוצאות מתעדכנות…",
+      "pinLiked": ", בחדרים שאהבתי",
+      "pinApplied": ", כבר הגשת מועמדות",
+      "pinSeen": ", כבר נפתחה",
+      "bubble_one": "מודעה אחת קרובה, לחיצה מגדילה את המפה",
+      "bubble_two": "2 מודעות קרובות, לחיצה מגדילה את המפה",
+      "bubble_other": "{{count}} מודעות קרובות, לחיצה מגדילה את המפה",
+      "bubbleSamePlace_one": "מודעה אחת באותה נקודה, לחיצה מציגה אותה",
+      "bubbleSamePlace_two": "2 מודעות באותה נקודה, לחיצה מציגה אותן",
+      "bubbleSamePlace_other": "{{count}} מודעות באותה נקודה, לחיצה מציגה אותן",
+      "samePlace_one": "מודעה אחת בנקודה הזאת",
+      "samePlace_two": "2 מודעות בנקודה הזאת",
+      "samePlace_other": "{{count}} מודעות בנקודה הזאת"
     },
     "tags": {
       "label": "מסננים פעילים",
