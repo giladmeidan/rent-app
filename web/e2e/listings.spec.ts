@@ -46,7 +46,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByText(he.listings.type.apartment, { exact: true }).click();
   await page.getByRole('button', { name: he.listings.next }).click();
 
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill('כצנלסון');
   await page.getByLabel(f.rooms).selectOption('3.5');
@@ -147,7 +147,7 @@ test('ac12_owner_edits_listing', async ({ page }) => {
   await card.getByRole('link', { name: he.listings.actions.edit }).click();
   await expect(page).toHaveURL(`/me/listings/${id}/edit`);
   await expect(page.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
   await expect(page.getByLabel(f.arnona, { exact: true })).toHaveValue('480');
 
   // Price 7500, arnona cleared, preview, save.
@@ -192,7 +192,7 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     await page.getByText(he.listings.type.room, { exact: true }).click();
     await page.getByRole('button', { name: he.listings.next }).click();
 
-    await expect(page.getByLabel(f.area)).toBeEnabled();
+    await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
     await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
     await page.getByLabel(f.street, { exact: true }).fill(roomStreet);
     await page.getByLabel(f.rooms).selectOption('4');
