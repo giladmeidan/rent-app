@@ -415,13 +415,15 @@ test('ac7_card_keeps_the_pin_clear', async ({ page, request }) => {
 });
 
 // Spec 0009y AC7: "show on the search map" opens the full map at this listing, its card in the map
-// and its pin pressed (newest first, so this fresh listing is among the box's results). The link
-// carries no price, so the range only keeps the listing's own price apart from the other tests'.
+// and its pin pressed (newest first, so this fresh listing is among the box's results; the pressed
+// pin is kept out of bubbles). The link carries no price filter. Its price sits above 0009v's
+// 7001-7899 (every sub-range taken), so it never joins a map test's one-price view (ac8 expects a
+// bubble of exactly 2).
 test('ac7_listing_page_link', async ({ page, request }) => {
   const {
     streets: [street = ''],
     ids: [id = ''],
-  } = await postAtOnePrice(page, request, 1, [7250, 7299]);
+  } = await postAtOnePrice(page, request, 1, [8301, 8399]);
   await asVisitor(page);
   const { region, pin, dockedCard } = mapOf(page, street);
 
