@@ -59,10 +59,10 @@ function SearchView({ type }: Props) {
   const active = countActive(filters);
   // The map view sends its own query; the list's key never holds `view`.
   const search = useSearch(filtersWithoutView, view !== 'map');
-  // A visitor or an owner never requests the profile; it words the match chips and decides the
-  // sort select until the API has answered.
+  // A visitor never requests the profile; any signed-in account may have one (spec 0010b). It
+  // words the match chips and decides the sort select until the API has answered.
   const me = useMe();
-  const profile = useProfile(me.data?.role === 'seeker').data ?? undefined;
+  const profile = useProfile(me.data != null).data ?? undefined;
   const hasProfile = profile !== undefined;
   // The API picks the order from the cookie on the search itself, so its answer decides; before
   // it, the URL's sort, where `match` without a profile is `newest`, as the API will answer.

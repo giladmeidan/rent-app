@@ -25,7 +25,16 @@ from tests.conftest import (
     set_location,
     signup,
 )
-from tests.test_matching import _area, _execute, _ids, _l0, _search, _seeker, _user_id
+from tests.test_matching import (
+    _area,
+    _execute,
+    _expire_sessions,
+    _ids,
+    _l0,
+    _search,
+    _seeker,
+    _user_id,
+)
 from tests.test_search import PUBLIC_KEYS
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
@@ -177,8 +186,9 @@ def test_ac1_rooms_are_public_with_room_fields(
 
         page = _detail(caller, room)
         assert page["room_fit"] is None, name
-        no_like = {"liked_by_me": False, "liked_me": False}  # 0008a: a seeker on a room only
-        assert page["like"] == (no_like if name == "seeker without a profile" else None), name
+        # 0008a; spec 0010b: any signed-in account on a room it does not own.
+        no_like = {"liked_by_me": False, "liked_me": False}
+        assert page["like"] == (None if name == "visitor" else no_like), name
         # `like`: 0008a; `photos`: 0010d
         detail_only = {"applicant_count", "room_fit", "like", "photos"}
         assert {k: v for k, v in page.items() if k not in detail_only} == items[room]
@@ -585,9 +595,11 @@ def test_ac5_repost_after_gender_change_is_room_gender_mismatch(
     assert row() == ("submitted", "room")
 
 
-def test_ac7_room_ages_and_answers_only_to_seekers(
+def test_ac7_room_privacy_seeker_rule(
     client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID
 ) -> None:
+    """Spec 0007b AC7, widened by spec 0010b AC7 (decision 13): a room's flatmate ages and answers
+    go to a signed-in seeker by role, or to any account with a profile; to no one else."""
     room_owner = signup(client, outbox, "room-owner@example.com", "owner")
     ages, answers = [27, 30], {"night": 3, "kosher": 2}
     room = _r0(
@@ -598,6 +610,10 @@ def test_ac7_room_ages_and_answers_only_to_seekers(
         flatmate_ages=ages,
         lifestyle=answers,
     )
+    owner_with_profile = signup(client, outbox, "owner3@example.com", "owner")
+    make_profile(db_engine, _user_id(owner_with_profile), gush_dan)
+    expired = signup(client, outbox, "expired@example.com", "seeker")
+    _expire_sessions(db_engine, expired)
     seekers = {
         "seeker without a profile": signup(client, outbox, "seeker@example.com", "seeker"),
         "seeker without a room section": _seeker(
@@ -612,11 +628,13 @@ def test_ac7_room_ages_and_answers_only_to_seekers(
             gender="woman",
             flatmate_gender="any",
         ),
+        "owner with a profile": owner_with_profile,
     }
     others = {
         "visitor": client,
-        "another owner": signup(client, outbox, "owner2@example.com", "owner"),
+        "owner without a profile": signup(client, outbox, "owner2@example.com", "owner"),
         "the room's own owner": room_owner,
+        "an expired cookie": expired,
     }
 
     def reads(caller: TestClient) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -630,13 +648,26 @@ def test_ac7_room_ages_and_answers_only_to_seekers(
             assert (body["flatmate_ages"], body["lifestyle"]) == (ages, answers), name
             assert (body["gender_preference"], body["flatmates_count"]) == ("women", 2), name
 
-    # Compared with a seeker who has no match or fit: only the ages and answers differ.
+    # An owner with a profile is scored like a seeker: `match` set, and search sorts by it.
+    owner_search = _search(owner_with_profile, "listing_type=room")
+    assert owner_search["sort"] == "match"
+    assert owner_search["items"][0]["match"] is not None
+    assert _detail(owner_with_profile, room)["match"] is not None
+
+    # Compared with a seeker who has no match or fit: only the ages and answers differ (and
+    # `is_mine`, spec 0010b, for the room's own owner).
     seeker_reads = reads(seekers["seeker without a profile"])
     for name, caller in others.items():
         for body, seeker_body in zip(reads(caller), seeker_reads, strict=True):
             assert (body["flatmate_ages"], body["lifestyle"]) == ([], {}), name
             assert (body["gender_preference"], body["flatmates_count"]) == ("women", 2), name
-            assert {**body, "flatmate_ages": ages, "lifestyle": answers} == seeker_body, name
+            assert body["is_mine"] is (caller is room_owner), name
+            assert {
+                **body,
+                "flatmate_ages": ages,
+                "lifestyle": answers,
+                "is_mine": False,
+            } == seeker_body, name
 
     mine = {item["id"]: item for item in room_owner.get("/me/listings").json()}
     assert (mine[room]["flatmate_ages"], mine[room]["lifestyle"]) == (ages, answers)

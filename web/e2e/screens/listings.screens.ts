@@ -82,7 +82,7 @@ async function toDetails(page: Page, type: 'apartment' | 'room') {
   await page.goto('/listings/new');
   await page.getByText(he.listings.type[type], { exact: true }).click();
   await next(page).click();
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
 }
 
 /** The required details, with the artboard's values (the price is typed last, so it keeps focus). */
@@ -155,7 +155,7 @@ const EDIT = `/me/listings/${LISTING_ID}/edit`;
 const NEW = '/listings/new';
 const editOpened = async (page: Page) => {
   await expect(page.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
 };
 
 const STATES: State[] = [

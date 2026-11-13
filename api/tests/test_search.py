@@ -47,6 +47,7 @@ PUBLIC_KEYS = {
     "lng",
     "match",  # spec 0006b: null unless the caller is a seeker with a profile
     "cover",  # spec 0010d: the position-0 photo, null without photos
+    "is_mine",  # spec 0010b: the caller owns it
 }
 
 TODAY = dt.date.today()
@@ -211,6 +212,7 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "lng": None,
         "match": None,  # a visitor (spec 0006b)
         "cover": None,  # no photos (spec 0010d)
+        "is_mine": False,  # a visitor (spec 0010b)
     }
 
     response = client.get(f"/listings/{world.a}")
@@ -411,3 +413,67 @@ def test_ac9_public_listing_by_id(client: TestClient, world: World) -> None:
     assert own_paused.content == responses[0].content
 
     assert client.get("/listings/not-a-uuid").status_code == 422
+
+
+def test_ac8_is_mine_and_own_room_never_hidden(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    """Spec 0010b AC8: `is_mine` on search, map and the listing page; no `match` or `like` on the
+    caller's own listing; `/me/likes` says false; a room that does not fit its own lister is still
+    shown to them (labelled, not hidden), and to no one else it does not fit."""
+    lister = signup(client, outbox, "w@example.com", "seeker")
+    other_woman = signup(client, outbox, "w2@example.com", "seeker")
+    for caller in (lister, other_woman):
+        user_id = uuid.UUID(caller.get("/me").json()["id"])
+        make_profile(db_engine, user_id, gush_dan, gender="woman", flatmate_gender="any")
+    lister_id = uuid.UUID(lister.get("/me").json()["id"])
+    owner = make_owner(db_engine, "owner@example.com")
+    own = str(
+        make_listing(
+            db_engine,
+            lister_id,
+            gush_dan,
+            listing_type="room",
+            flatmates_count=2,
+            gender_preference="men",
+        )
+    )
+    theirs = str(make_listing(db_engine, owner, gush_dan, listing_type="room", flatmates_count=2))
+    for listing_id in (own, theirs):
+        set_location(db_engine, uuid.UUID(listing_id), 34.80, 32.05)
+    box = "west=34.75&south=32.00&east=34.85&north=32.10"
+
+    for query in ("listing_type=room", f"listing_type=room&{box}"):
+        body = _search(lister, query)
+        assert body["total"] == 2, query
+        items = {item["id"]: item for item in body["items"]}
+        assert (items[own]["is_mine"], items[own]["match"]) == (True, None), query
+        assert items[theirs]["is_mine"] is False, query
+        assert items[theirs]["match"] is not None, query
+
+        # The men-only room does not fit another woman: hidden from her page and total.
+        body = _search(other_woman, query)
+        assert (_ids(body), body["total"]) == ([theirs], 1), query
+        assert body["items"][0]["is_mine"] is False, query
+
+        body = _search(client, query)
+        assert {item["id"]: item["is_mine"] for item in body["items"]} == {
+            own: False,
+            theirs: False,
+        }
+
+    page = lister.get(f"/listings/{own}").json()
+    assert (page["is_mine"], page["match"], page["like"]) == (True, None, None)
+    page = lister.get(f"/listings/{theirs}").json()
+    assert page["is_mine"] is False
+    assert page["match"] is not None
+    assert page["like"] == {"liked_by_me": False, "liked_me": False}
+    assert client.get(f"/listings/{own}").json()["is_mine"] is False
+    assert other_woman.get(f"/listings/{own}").json()["is_mine"] is False
+
+    assert lister.put(f"/listings/{theirs}/like").status_code == 200
+    likes = lister.get("/me/likes")
+    assert likes.status_code == 200
+    rooms = [entry["listing"] for entry in likes.json()["mine"]]
+    assert [room["id"] for room in rooms] == [theirs]
+    assert all(room["is_mine"] is False for room in rooms)

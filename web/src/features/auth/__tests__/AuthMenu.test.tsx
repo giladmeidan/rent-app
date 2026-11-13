@@ -320,14 +320,28 @@ describe('AuthMenu', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner (the market's owner bar): no link and no request.
+    // An owner: the same market bar (spec 0010b), with the link and its count.
+    api = mockApi({
+      'GET /me': [json({ ...noa, role: 'owner' })],
+      [LIST]: [json([])],
+      'GET /me/likes': [json({ liked_me: [room()], mine: [] })],
+    });
+    view = renderRoutes('/market', menu);
+    const ownerLink = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
+    expect(ownerLink).toHaveAttribute('href', '/me/likes');
+    expect(await within(ownerLink).findByText('1')).toHaveAttribute('aria-hidden', 'true');
+    expect(api.calls('GET /me/likes')).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // On the apartments side an owner has no likes tab and never requests the list.
     api = mockApi({
       'GET /me': [json({ ...noa, role: 'owner' })],
       [LIST]: [json([])],
       'GET /me/likes': [json({ liked_me: [], mine: [] })],
     });
-    renderRoutes('/market', menu);
-    expect(await screen.findByRole('link', { name: he.nav.mine })).toBeVisible();
+    renderRoutes('/search', menu);
+    expect(await screen.findByRole('link', { name: he.header.myListings })).toBeVisible();
     expect(screen.queryByRole('link', { name: he.header.likes })).toBeNull();
     expect(api.calls('GET /me/likes')).toHaveLength(0);
   });

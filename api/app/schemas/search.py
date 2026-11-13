@@ -9,22 +9,27 @@ the listing's **approximate** point (the street's point plus a fixed per-listing
 listings whose approximate point is inside it.
 
 `ListingPublic.match` (spec 0006b) is the caller's match score and its explanation: only a score and
-criterion codes, never a profile value; `null` for everyone but a seeker with a profile.
+criterion codes, never a profile value; `null` for everyone but an account with a profile (any role,
+spec 0010b), and on the caller's own listing.
 
 Rooms are public (spec 0007b). Each type is searched on its own (spec 0010a):
 `SearchParams.listing_type` is `apartment` when omitted, and the market asks for `room` explicitly.
 `ListingPublic` carries the four room fields (`gender_preference`, `flatmates_count`,
 `flatmate_ages`, `lifestyle`; an apartment holds `'any'`, null, `[]` and `{}`). The flatmates' ages
-and the questionnaire answers (`SEEKER_ONLY_FIELDS`) go only to a signed-in seeker, with or without
-a profile (Gilad (b), 2026-11-11): a visitor or an owner, the listing's own owner included, gets
-`[]` and `{}`. Both stay required in the schema; only the values are emptied. The owner reads their
-own values through `ListingOut` (`GET /me/listings`). `ListingPublic.from_listing` is the one place
+and the questionnaire answers (`SEEKER_ONLY_FIELDS`) go only to a signed-in seeker, or any account
+with a profile (decision 13) (Gilad (b), 2026-11-11; Gilad 2026-11-13): a visitor, or an owner
+without a profile (the listing's own lister included), gets `[]` and `{}`. Both stay required in
+the schema; only the values are emptied. The lister reads their own values through `ListingOut`
+(`GET /me/listings`). `ListingPublic.from_listing` is the one place
 that applies this.
 `ListingDetail.room_fit` is the caller's own fit to a room: `true` / `false` exactly when the
-listing is a room and the caller is a seeker whose profile has a room section, else `null`. Search
+listing is a room and the caller (any role) has a profile with a room section, else `null`. Search
 items do not carry it: a room that does not fit the caller never reaches them.
 `ListingDetail.like` (spec 0008a) is the caller's like state on a room (`LikeStateOut`): set only
-for a seeker on a room they have no non-withdrawn application to, else `null`."""
+for a signed-in account on a room it does not own and has no non-withdrawn application to, else
+`null` (spec 0010b: any role).
+`ListingPublic.is_mine` (spec 0010b) says the caller owns the listing (false for a visitor); on an
+own listing `match` is `null`."""
 
 import datetime as dt
 import uuid
@@ -67,7 +72,7 @@ class SearchParams(BaseModel):
     parking: bool | None = None
     # Omitted: `apartment` (spec 0010a); rooms are asked for explicitly by the market.
     listing_type: ListingType = "apartment"
-    # Omitted: `match` for a seeker with a profile, else `newest` (`services/search.py`).
+    # Omitted: `match` for an account with a profile, else `newest` (`services/search.py`).
     sort: SearchSort | None = None
     limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = SEARCH_LIMIT_DEFAULT
     offset: Annotated[int, Field(ge=0, le=SEARCH_OFFSET_MAX)] = 0
@@ -108,8 +113,9 @@ class SearchParams(BaseModel):
         return (self.west, self.south, self.east, self.north)
 
 
-# The listing fields only a signed-in seeker sees (Gilad (b), 2026-11-11), each with the empty value
-# everyone else gets. `ListingPublic.from_listing` is the only reader.
+# The listing fields only a signed-in seeker, or any account with a profile (decision 13), sees
+# (Gilad (b), 2026-11-11), each with the empty value everyone else gets.
+# `ListingPublic.from_listing` is the only reader.
 SEEKER_ONLY_FIELDS: Mapping[str, Callable[[], object]] = {
     "flatmate_ages": list,
     "lifestyle": dict,
@@ -149,7 +155,7 @@ class ListingPublic(BaseModel):
     smoking_allowed: bool
     min_contract_months: ContractMonths | None
     # The room fields (spec 0007b), as stored; `lifestyle` holds only the answered keys. The last
-    # two are `SEEKER_ONLY_FIELDS`: `[]` and `{}` unless the caller is a seeker.
+    # two are `SEEKER_ONLY_FIELDS`: `[]` and `{}` unless the caller is a seeker (decision 13).
     gender_preference: GenderPreference
     flatmates_count: int | None
     flatmate_ages: list[int]
@@ -160,19 +166,21 @@ class ListingPublic(BaseModel):
     # The cover photo (spec 0010d): the listing's position-0 photo, null without photos. Not an ORM
     # attribute: every caller passes it to `from_listing`.
     cover: PhotoOut | None
-    # The caller's match (spec 0006b): set exactly when the caller is a seeker with a profile; the
-    # router passes it to `from_listing`.
+    # The caller's match (spec 0006b): set exactly when the caller has a profile and the listing is
+    # not their own; the router passes it to `from_listing`.
     match: MatchOut | None = None
+    # The caller owns it (spec 0010b); false for a visitor. The router passes it to `from_listing`.
+    is_mine: bool
 
     @classmethod
     def from_listing(
         cls, listing: Any, *, seeker: bool, match: MatchOut | None, **fields: Any
     ) -> Self:
         """The public shape of a listing row for one caller. `seeker`: the caller is signed in
-        as a seeker; otherwise `SEEKER_ONLY_FIELDS` hold their empty values. `match` and
-        `fields` (on `ListingDetail`: `applicant_count`, `room_fit`) are the router's
-        caller-dependent values, as is `cover` (and `photos` on `ListingDetail`, spec 0010d);
-        every other field is read from `listing`."""
+        as a seeker, or has a profile (decision 13); otherwise `SEEKER_ONLY_FIELDS` hold their
+        empty values. `match` and `fields` (`is_mine`; on `ListingDetail` also `applicant_count`,
+        `room_fit`, `like`) are the router's caller-dependent values, as is `cover` (and `photos`
+        on `ListingDetail`, spec 0010d); every other field is read from `listing`."""
         given: dict[str, Any] = {"match": match, **fields}
         if not seeker:
             given |= {name: empty() for name, empty in SEEKER_ONLY_FIELDS.items()}
@@ -183,7 +191,7 @@ class ListingPublic(BaseModel):
 # Defined here, not in `schemas/people.py` (which re-exports it): `ListingDetail` needs it, and
 # `people` imports `ListingPublic` from this module.
 class LikeStateOut(BaseModel):
-    """The likes between the caller (a seeker) and one room (spec 0008a)."""
+    """The likes between the caller (any account, spec 0010b) and one room (spec 0008a)."""
 
     liked_by_me: bool
     liked_me: bool

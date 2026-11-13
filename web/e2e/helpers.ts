@@ -42,22 +42,33 @@ type SignUpOptions = {
   expectUrl?: string;
   /** The display name, to tell two people in one test apart. */
   name?: string;
+  /** Signup from the market (spec 0010b): opens `/signup?next=%2Fmarket`, where no role is asked
+   * (the account is stored as a seeker), and ends on `/market` unless `start` / `expectUrl` say
+   * otherwise. `role` must be `'seeker'`. */
+  market?: boolean;
 };
 
 /** Signs up a fresh `role` through the outbox (as 0001b AC7) and returns the address. The page
- * ends on `expectUrl` with the session cookie set. */
+ * ends on `expectUrl` with the session cookie set. `{ market: true }`: from the market, with no
+ * role question (spec 0010b). */
 export async function signUp(
   page: Page,
   role: 'owner' | 'seeker',
   {
-    start = '/signup',
-    expectUrl = role === 'owner' ? '/me/listings' : '/search',
+    market = false,
+    start = market ? '/signup?next=%2Fmarket' : '/signup',
+    expectUrl = market ? '/market' : role === 'owner' ? '/me/listings' : '/search',
     name = '\u05d3\u05e0\u05d4',
   }: SignUpOptions = {},
 ): Promise<string> {
+  expect(market && role !== 'seeker', 'a market signup stores a seeker').toBe(false);
   const email = uniqueEmail();
   await page.goto(start);
-  await page.getByText(he.auth.role[role], { exact: true }).click();
+  if (market) {
+    await expect(page.getByRole('group', { name: he.auth.role.label })).toHaveCount(0);
+  } else {
+    await page.getByText(he.auth.role[role], { exact: true }).click();
+  }
   await page.getByLabel(he.auth.name.label).fill(name);
   await page.getByLabel(he.auth.email.label).fill(email);
   await page.getByRole('button', { name: he.auth.sendCode }).click();

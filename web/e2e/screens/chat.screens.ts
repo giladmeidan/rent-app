@@ -167,7 +167,7 @@ const STATES: State[] = [
     setup: { user: 'owner', list: [ok([])] },
     path: '/chat',
     act: async (page) => {
-      await expect(page.getByText(he.chat.list.emptyOwner)).toBeVisible();
+      await expect(page.getByText(he.chat.list.empty)).toBeVisible();
     },
   },
   {

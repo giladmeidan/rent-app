@@ -38,7 +38,8 @@ type Props = {
 type LikeError = 'alreadyApplied' | 'gone' | 'notLive' | 'rateLimited' | 'failed';
 type InlineError = Exclude<LikeError, 'alreadyApplied' | 'gone'>;
 
-/** The alert a failed like / unlike shows; `null` for 401 / 403 (`RequireOwner` leaves the page). */
+/** The alert a failed like / unlike shows; `null` for 401 (`RequireUser` leaves the page) and 403
+ * (no role gate since spec 0010b; `/me` is re-checked). */
 function errorKind(error: unknown): LikeError | null {
   if (hasStatus(error, 401) || hasStatus(error, 403)) return null;
   if (hasStatus(error, 404)) return 'gone';

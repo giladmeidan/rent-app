@@ -139,7 +139,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
         if (next !== '/') void navigate(next, { replace: true });
       },
       onError: (error) => {
-        // 401: the hook forgets the session and RequireSeeker leaves the page.
+        // 401: the hook forgets the session and RequireUser leaves the page.
         if (hasStatus(error, 401)) return;
         if (error instanceof ApiError && error.status === 422) {
           if (error.detail === 'unknown_area') {
@@ -609,7 +609,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
 }
 
 /**
- * `/me/profile`, seekers only (`RequireSeeker`): the housing profile, empty or prefilled, and the
+ * `/me/profile`, any account (`RequireUser`, spec 0010b): the housing profile, empty or prefilled, and the
  * optional room section. Saved with a safe `?next=` it returns there (the listing page's gate);
  * otherwise it stays. `?section=room` opens the room section and focuses its heading.
  */

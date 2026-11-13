@@ -38,6 +38,7 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     lng: null,
     match: null,
     cover: null, // spec 0010d
+    is_mine: false,
     ...overrides,
   };
 }

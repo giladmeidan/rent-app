@@ -16,6 +16,7 @@ import { useProfile } from '../profile/useProfile';
 import { RoomGate } from '../rooms/RoomGate';
 import { hasStatus, type MyApplicationOut } from './api';
 import { ApplicationStatusChip } from './ApplicationStatusChip';
+import { canApply } from './canApply';
 import { appliedOn } from './format';
 import { ProfileGate } from './ProfileGate';
 import { loginPath, useApply } from './useApply';
@@ -48,6 +49,7 @@ type Branch =
   | 'loading'
   | 'visitor'
   | 'none'
+  | 'own'
   | 'error'
   | 'applied'
   | 'misfit'
@@ -313,7 +315,9 @@ function Applied({ application }: { application: MyApplicationOut }) {
 
 /**
  * The listing page's apply section: the applicant count for everyone, then the visitor prompt,
- * nothing (an owner), or the seeker's applied state or apply form. A room adds two states (0007f):
+ * the own-listing note (the caller's own listing, spec 0010b), nothing (a non-seeker on an
+ * apartment), or the applicant's applied state or apply form (any account on a room, a seeker on
+ * an apartment: `canApply`). A room adds two states (0007f):
  * one that cannot take this seeker (`room_fit: false`), and a women- or men-only room that needs
  * the profile's room section first.
  */
@@ -328,19 +332,20 @@ export function ApplySection({
   const { t } = useTranslation();
   const headingId = useId();
   const me = useMe();
-  const isSeeker = me.data?.role === 'seeker';
-  // The API does not say whose listing this is, and no owner can apply anywhere.
-  const isOwner = me.data?.role === 'owner';
-  // A visitor or an owner never requests the seeker's list or profile.
-  const mine = useMyApplications(isSeeker);
-  const profile = useProfile(isSeeker);
+  // The list and the profile are requested exactly when the form can show (spec 0010b).
+  const mayApply = me.data != null && canApply(me.data, listing);
+  // The lister's wording: their own listing, and an owner on any apartment (who cannot apply).
+  const ownerView =
+    listing.is_mine || (me.data?.role === 'owner' && listing.listing_type === 'apartment');
+  const mine = useMyApplications(mayApply);
+  const profile = useProfile(mayApply);
   const apply = useApply(listing.id);
   // A submit in this tab (spec 0009t): set by the form before each request, it lives here because
   // every swapping 409 unmounts the form. The branch that replaces the form then takes focus.
   const submitted = useRef(false);
   const controlsRef = useRef<HTMLDivElement>(null);
 
-  const countLine = isOwner
+  const countLine = ownerView
     ? t('applications.countOwner', { count: listing.applicant_count })
     : t('applications.count', { count: listing.applicant_count });
 
@@ -372,7 +377,7 @@ export function ApplySection({
 
   let controls;
   let branch: Branch;
-  if (me.isPending || (isSeeker && mine.isPending)) {
+  if (me.isPending || (mayApply && mine.isPending)) {
     branch = 'loading';
     controls = skeleton;
   } else if (
@@ -386,7 +391,21 @@ export function ApplySection({
     // the session (useMyApplications, useProfile), which lands here too.
     branch = 'visitor';
     controls = visitor;
-  } else if (!isSeeker) {
+  } else if (listing.is_mine) {
+    branch = 'own';
+    controls = (
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-start text-body">{t('applications.own')}</p>
+        <Button
+          variant="ghost"
+          to={listing.listing_type === 'room' ? '/market/mine' : '/me/listings'}
+        >
+          {t('applications.manage')}
+        </Button>
+      </div>
+    );
+  } else if (!mayApply) {
+    // A signed-in non-seeker on an apartment (apartments keep the roles).
     branch = 'none';
     controls = null;
   } else if (mine.isError && mine.data === undefined) {
@@ -467,7 +486,7 @@ export function ApplySection({
         tabIndex={-1}
         className="text-h3 font-semibold focus:outline-none"
       >
-        {isOwner ? t('applications.headingOwner') : t('applications.heading')}
+        {ownerView ? t('applications.headingOwner') : t('applications.heading')}
       </h2>
       <p className="text-start text-body text-ink-muted">{countLine}</p>
       <div ref={controlsRef} className="contents">

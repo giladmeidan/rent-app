@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { useMe } from '../auth/useMe';
+import { canApply } from '../applications/canApply';
 import { useMyApplications } from '../applications/useMyApplications';
 import type { ListingDetail } from './api';
 
@@ -17,19 +18,20 @@ type Props = {
 /**
  * The phone's sticky bar: one button that jumps to the apply section. It shows only while the
  * action column is below the viewport (never over the footer), only to someone who can still
- * apply (a visitor, or a seeker with no live application on a room that fits), and only where
+ * apply (a visitor, or an account that `canApply` here with no live application, on a room that
+ * fits; never on its own listing, spec 0010b), and only where
  * `IntersectionObserver` exists. The apply form stays in `ApplySection`.
  */
 export function ApplyBar({ listing, target, headingRef }: Props) {
   const { t } = useTranslation();
   const me = useMe();
-  const isSeeker = me.data?.role === 'seeker';
-  const mine = useMyApplications(isSeeker);
+  const mayApply = me.data != null && canApply(me.data, listing);
+  const mine = useMyApplications(mayApply);
   const [below, setBelow] = useState(false);
 
-  const canApply =
+  const showBar =
     me.data === null ||
-    (isSeeker &&
+    (mayApply &&
       !me.isError &&
       mine.isSuccess &&
       !mine.data.some((a) => a.listing.id === listing.id && a.status !== 'withdrawn') &&
@@ -37,7 +39,7 @@ export function ApplyBar({ listing, target, headingRef }: Props) {
 
   useEffect(() => {
     const node = target.current;
-    if (!canApply || node === null || typeof IntersectionObserver === 'undefined') return;
+    if (!showBar || node === null || typeof IntersectionObserver === 'undefined') return;
     // The bottom margin counts the action column as "below" a little before it is out of sight.
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -51,9 +53,9 @@ export function ApplyBar({ listing, target, headingRef }: Props) {
     return () => {
       observer.disconnect();
     };
-  }, [canApply, target]);
+  }, [showBar, target]);
 
-  if (!canApply || !below) return null;
+  if (!showBar || !below) return null;
 
   function jump() {
     target.current?.scrollIntoView({ block: 'start' });

@@ -641,7 +641,8 @@ describe('MyListingsPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // The rooms panel: an <h2>, the room only, "חדר חדש" → the wizard on a room.
+    // The rooms panel: no heading of its own (its tab labels it, spec 0010b), the room only,
+    // "חדר חדש" → the wizard on a room.
     mockApi({ 'GET /me/listings': [json([flat, room])] });
     view = renderRooms();
     cards = await screen.findAllByRole('article');
@@ -653,9 +654,7 @@ describe('MyListingsPage', () => {
     expect(hrefs.some((h) => h.includes(flat.id))).toBe(false);
     expect(screen.getByText(count)).toBeVisible();
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
-    expect(
-      screen.getByRole('heading', { level: 2, name: he.market.mine.tabs.listings }),
-    ).toBeVisible();
+    expect(screen.queryByRole('heading', { name: he.market.mine.tabs.listings })).toBeNull();
     expect(screen.getByRole('link', { name: he.market.mine.newRoom })).toHaveAttribute(
       'href',
       '/listings/new?type=room',

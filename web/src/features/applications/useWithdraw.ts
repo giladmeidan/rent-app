@@ -7,7 +7,7 @@ import { MY_APPLICATIONS_KEY } from './useMyApplications';
 /**
  * Withdraws application `id`. On 200 it is replaced in the seeker's list. A 409 `not_withdrawable`
  * or a 404 means the list is out of date: it is refetched. A 401 forgets the session
- * (`RequireSeeker` then redirects to `/login`).
+ * (`RequireSeeker` on `/me/applications`, `RequireUser` on the market panel, then redirects to `/login`).
  */
 export function useWithdraw(id: string) {
   const queryClient = useQueryClient();

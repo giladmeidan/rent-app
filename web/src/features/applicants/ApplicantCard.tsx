@@ -139,7 +139,7 @@ export function ApplicantCard({
       const updated = await change.mutateAsync(status);
       onSettled({ kind: 'changed', applicant: updated }, null);
     } catch (error) {
-      // 401 / 403: `RequireOwner` leaves the page.
+      // 401: `RequireUser` leaves the page; 403: none since spec 0010b (`/me` is re-checked).
       if (hasStatus(error, 401) || hasStatus(error, 403)) return;
       if (hasStatus(error, 404)) onSettled({ kind: 'gone' }, null);
       else if (hasStatus(error, 409)) onSettled({ kind: 'conflict' }, null);

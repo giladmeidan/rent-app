@@ -134,6 +134,7 @@ function room(overrides: Partial<ListingPublic> = {}): LikedRoomOut {
       lng: null,
       match: null,
       cover: null, // spec 0010d
+      is_mine: false,
       ...overrides,
     },
     liked_at: '2026-11-11T09:00:00Z',

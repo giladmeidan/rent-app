@@ -236,7 +236,7 @@ describe('ChatLayout', () => {
     // No chats: the empty state alone, without the panel.
     stubDesktop();
     ({ api, view } = renderChat('/chat', { [LIST]: [() => json([])] }));
-    expect(await screen.findByText(he.chat.list.emptySeeker)).toBeVisible();
+    expect(await screen.findByText(he.chat.list.empty)).toBeVisible();
     await settle();
     expect(screen.queryByText(he.chat.pickOne)).toBeNull();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);

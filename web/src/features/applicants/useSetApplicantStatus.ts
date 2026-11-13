@@ -12,8 +12,9 @@ import { applicantsKey } from './useApplicants';
  * so an error has nothing to roll back. On 200 the applicant is replaced in the list and "my
  * listings" (its counts) is refetched. A 404 (withdrawn meanwhile) or 409 (declined meanwhile)
  * is not trusted on its own (0004c FOLLOWUPS): the list is refetched, and the mutation settles
- * only once it is back. 401 forgets the person and 403 re-checks `/me`, so `RequireOwner` leaves
- * the page (as `ListingWizard.onSaveError`).
+ * only once it is back. 401 forgets the person, so `RequireUser` leaves the page; a 403 (no
+ * endpoint here sends one since spec 0010b: any account manages its own room) re-checks `/me`
+ * (as `ListingWizard.onSaveError`).
  */
 export function useSetApplicantStatus(listingId: string, applicationId: string) {
   const queryClient = useQueryClient();

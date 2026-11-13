@@ -118,27 +118,66 @@ def test_ac1_owner_creates_listing(
     assert row["city"] == "גבעתיים"
 
 
-def test_ac2_requires_owner_session(
-    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+def test_ac2_rooms_for_any_account_apartments_for_owners(
+    client: TestClient,
+    outbox: Outbox,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    statements: list[str],
 ) -> None:
+    """Spec 0010b AC1: a seeker posts, lists, edits and pauses a room; the cap of 3 live listings is
+    shared with apartments; an apartment by a non-owner is 403 before anything is locked."""
     some_id = uuid.uuid4()
-
-    def calls(c: TestClient) -> list[httpx.Response]:
-        return [
-            c.post("/listings", json=_body(gush_dan)),
-            c.get("/me/listings"),
-            c.patch(f"/listings/{some_id}", json={"price_ils": 7000}),
-        ]
-
-    for response in calls(client):
+    for response in (
+        client.post("/listings", json=_room(gush_dan)),
+        client.get("/me/listings"),
+        client.patch(f"/listings/{some_id}", json={"price_ils": 7000}),
+    ):
         assert response.status_code == 401
         assert response.json() == {"detail": "unauthenticated"}
 
     seeker = signup(client, outbox, "seeker@example.com", "seeker")
-    for response in calls(seeker):
-        assert response.status_code == 403
-        assert response.json() == {"detail": "owner_only"}
+    owner = signup(client, outbox, "owner@example.com", "owner")
+    seeker_id = seeker.get("/me").json()["id"]
+
+    # An apartment by a seeker: 403, no row, and the cap's row lock is never taken.
+    statements.clear()
+    response = seeker.post("/listings", json=_body(gush_dan))
+    assert response.status_code == 403
+    assert response.json() == {"detail": "owner_only"}
+    assert not any("FOR UPDATE" in statement for statement in statements), statements
     assert _count(db_engine) == 0
+
+    room = _create_room(seeker, gush_dan)
+    assert room["owner_id"] == seeker_id
+    mine = seeker.get("/me/listings")
+    assert mine.status_code == 200
+    assert [item["id"] for item in mine.json()] == [room["id"]]
+
+    patched = _patch(seeker, room["id"], {"price_ils": 3900})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["price_ils"] == 3900
+    paused = _patch(seeker, room["id"], {"status": "paused"})
+    assert paused.status_code == 200
+    assert paused.json()["status"] == "paused"
+
+    # Another account's PATCH is the unknown id's 404.
+    other = _patch(owner, room["id"], {"price_ils": 1000})
+    assert other.status_code == 404
+    assert other.json() == {"detail": "not_found"}
+    assert _row(db_engine, room["id"])["price_ils"] == 3900
+
+    # The cap is shared by both types: one live apartment (inserted directly; a seeker cannot post
+    # one) and two live rooms make three, so the fourth live listing is refused.
+    make_listing(db_engine, uuid.UUID(seeker_id), gush_dan)
+    _create_room(seeker, gush_dan)
+    _create_room(seeker, gush_dan)
+    response = seeker.post("/listings", json=_room(gush_dan))
+    assert response.status_code == 409
+    assert response.json() == {"detail": "listing_cap_reached"}
+    # Resuming the paused room would be a fourth live one too.
+    assert _patch(seeker, room["id"], {"status": "active"}).status_code == 409
+    assert len(seeker.get("/me/listings").json()) == 4
 
 
 def test_ac3_cap_counts_live_listings_only(

@@ -68,18 +68,11 @@ describe('ChatListPage', () => {
     const failing = renderPage([json({ detail: 'boom' }, 500), json([])]);
     view = failing.view;
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
-    expect(await screen.findByText(he.chat.list.emptySeeker)).toBeVisible();
+    expect(await screen.findByText(he.chat.list.empty)).toBeVisible();
     expect(failing.api.calls(LIST)).toHaveLength(2);
     reset(view);
 
-    // Empty: the copy depends on the role.
-    ({ view } = renderPage([json([])], owner));
-    expect(await screen.findByText(he.chat.list.emptyOwner)).toBeVisible();
-    expect(screen.queryByText(he.chat.list.emptySeeker)).toBeNull();
-    reset(view);
-    ({ view } = renderPage([json([])], seeker));
-    expect(await screen.findByText(he.chat.list.emptySeeker)).toBeVisible();
-    reset(view);
+    // Empty: one line for every role (`ac15_generic_empty`).
 
     // Four chats, in the API's order.
     const mine = conversation({
@@ -253,32 +246,46 @@ describe('ChatListPage', () => {
       const { view } = renderPage([json([])], me, [() => json([flat])]);
       expect(await screen.findByText(flatmateLine)).toBeVisible();
       expect(screen.getByText(flatmateLine).textContent).toBe(he.chat.list.emptyFlatmate);
-      expect(screen.queryByText(he.chat.list.emptyOwner)).toBeNull();
-      expect(screen.queryByText(he.chat.list.emptySeeker)).toBeNull();
+      expect(screen.queryByText(he.chat.list.empty)).toBeNull();
       reset(view);
     }
 
-    // No flats: the role lines, as before.
-    for (const [me, line] of [
-      [owner, he.chat.list.emptyOwner],
-      [seeker, he.chat.list.emptySeeker],
-    ] as const) {
+    // No flats: the generic line (spec 0010b), for both roles.
+    for (const me of [owner, seeker]) {
       const { api, view } = renderPage([json([])], me, [() => json([])]);
-      expect(await screen.findByText(line)).toBeVisible();
+      expect(await screen.findByText(he.chat.list.empty)).toBeVisible();
       await waitFor(() => expect(api.calls('GET /me/flats')).toHaveLength(1));
       await settle();
       expect(screen.queryByText(flatmateLine)).toBeNull();
       reset(view);
     }
 
-    // While /me/flats is pending: the role line, then the flatmate line once the flats arrive.
+    // While /me/flats is pending: the generic line, then the flatmate line once the flats arrive.
     const flats = deferred();
     const { view } = renderPage([json([])], seeker, [flats.promise]);
-    expect(await screen.findByText(he.chat.list.emptySeeker)).toBeVisible();
+    expect(await screen.findByText(he.chat.list.empty)).toBeVisible();
     expect(screen.queryByText(flatmateLine)).toBeNull();
     flats.resolve(json([flat]));
     expect(await screen.findByText(flatmateLine)).toBeVisible();
-    expect(screen.queryByText(he.chat.list.emptySeeker)).toBeNull();
+    expect(screen.queryByText(he.chat.list.empty)).toBeNull();
+    reset(view);
+  });
+
+  it('ac15_generic_empty', async () => {
+    // Spec 0010b: any account lists rooms and applies, so the empty list has one line for an owner
+    // and a seeker; a flatmate keeps the flat's line.
+    const plain = conversation();
+    const flat = { listing: plain.listing, owner_name: 'Roni', joined_at: '2026-11-01T08:00:00Z' };
+    for (const me of [owner, seeker]) {
+      const { view } = renderPage([json([])], me, [() => json([])]);
+      expect(await screen.findByText(he.chat.list.empty)).toBeVisible();
+      expect(screen.queryByText(he.chat.list.emptyFlatmate)).toBeNull();
+      await settle();
+      reset(view);
+    }
+    const { view } = renderPage([json([])], seeker, [() => json([flat])]);
+    expect(await screen.findByText(he.chat.list.emptyFlatmate)).toBeVisible();
+    expect(screen.queryByText(he.chat.list.empty)).toBeNull();
     reset(view);
   });
 

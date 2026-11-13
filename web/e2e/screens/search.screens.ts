@@ -63,6 +63,7 @@ function listing(n: number, overrides: Record<string, unknown>) {
     lat: null,
     lng: null,
     match: null,
+    is_mine: false,
     ...overrides,
   };
 }

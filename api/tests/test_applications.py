@@ -187,31 +187,65 @@ def _listing_body(area_id: uuid.UUID) -> dict[str, Any]:
     }
 
 
-def test_ac2_only_seekers_apply_never_to_own_listing(
+def test_ac2_apartments_need_a_seeker_rooms_anyone(
     client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
-    own_owner = signup(client, outbox, "own@example.com", "owner")
-    other_owner = signup(client, outbox, "other@example.com", "owner")
+    """Spec 0010b AC2: any account applies to someone else's room; only a seeker applies to an
+    apartment (403 `seeker_only`, checked before the profile and never counted); never the
+    caller's own listing; an unknown or non-public id stays the counted 404."""
+    lister = signup(client, outbox, "own@example.com", "owner")
+    owner = signup(client, outbox, "other@example.com", "owner")
+    make_profile(db_engine, _user_id(owner), gush_dan)
+    bare_owner = signup(client, outbox, "bare@example.com", "owner")  # no profile
     seeker = _seeker_with_profile(client, outbox, "s@example.com", gush_dan, db_engine)
-    created = own_owner.post("/listings", json=_listing_body(gush_dan))
+    created = lister.post("/listings", json=_listing_body(gush_dan))
     assert created.status_code == 201, created.text
-    listing_a = created.json()["id"]
+    apartment = created.json()["id"]
+    room = make_listing(
+        db_engine, _user_id(lister), gush_dan, listing_type="room", flatmates_count=2
+    )
+    paused = make_listing(db_engine, _user_id(lister), gush_dan, status="paused")
 
-    anonymous = _apply(client, listing_a)
+    anonymous = _apply(client, apartment)
     assert anonymous.status_code == 401
     assert anonymous.json() == {"detail": "unauthenticated"}
-    for owner in (other_owner, own_owner):
-        response = _apply(owner, listing_a)
+
+    # An owner applies to someone else's room, lists it and withdraws it.
+    applied = _applied(owner, room)
+    _assert_application_shape(applied)
+    assert _hourly(_user_id(owner)) == 1
+    mine = owner.get("/me/applications")
+    assert mine.status_code == 200
+    assert [item["id"] for item in mine.json()] == [applied["id"]]
+    assert _withdraw(owner, applied["id"]).status_code == 200
+
+    # An apartment needs the seeker role: 403 for an owner, with or without a profile (the role
+    # is checked first), and the hourly counter does not move.
+    for caller in (owner, bare_owner, lister):
+        response = _apply(caller, apartment)
         assert response.status_code == 403
         assert response.json() == {"detail": "seeker_only"}
+        assert _hourly(_user_id(caller)) == (1 if caller is owner else 0)
 
-    # A listing owned by the seeker (their role switched later) is never theirs to apply to.
-    listing_b = make_listing(db_engine, _user_id(seeker), gush_dan)
-    own = _apply(seeker, listing_b)
-    assert own.status_code == 404
-    assert own.json() == NOT_FOUND
+    # An unknown id, or a paused apartment, has no public type: the counted 404, never a 403.
+    for missing in (uuid.uuid4(), paused):
+        response = _apply(owner, missing)
+        assert response.status_code == 404
+        assert response.json() == NOT_FOUND
+    assert _hourly(_user_id(owner)) == 3
 
-    assert _count(db_engine) == 0
+    # A seeker still applies to an apartment.
+    _applied(seeker, apartment)
+    # The caller's own listing, of either type, is never theirs to apply to.
+    for own_listing in (
+        make_listing(db_engine, _user_id(seeker), gush_dan),
+        make_listing(db_engine, _user_id(seeker), gush_dan, listing_type="room", flatmates_count=1),
+    ):
+        own = _apply(seeker, own_listing)
+        assert own.status_code == 404
+        assert own.json() == NOT_FOUND
+
+    assert _count(db_engine) == 2  # the owner's withdrawn one and the seeker's
 
 
 def test_ac3_non_public_listing_is_404(
@@ -424,10 +458,11 @@ def test_ac6_my_applications_own_only_newest_first(
     anonymous = client.get("/me/applications")
     assert anonymous.status_code == 401
     assert anonymous.json() == {"detail": "unauthenticated"}
+    # Spec 0010b: any account lists its own applications; an owner with none gets [].
     owner = signup(client, outbox, "o@example.com", "owner")
-    forbidden = owner.get("/me/applications")
-    assert forbidden.status_code == 403
-    assert forbidden.json() == {"detail": "seeker_only"}
+    own_only = owner.get("/me/applications")
+    assert own_only.status_code == 200
+    assert own_only.json() == []
 
 
 def test_ac7_withdraw_own_application(
@@ -478,10 +513,11 @@ def test_ac7_withdraw_own_application(
     assert _status(db_engine, others) == "submitted"
 
     assert _withdraw(client, others).status_code == 401
+    # Spec 0010b: an owner withdrawing another account's application is the unknown id's 404.
     owner = signup(client, outbox, "o@example.com", "owner")
-    forbidden = _withdraw(owner, others)
-    assert forbidden.status_code == 403
-    assert forbidden.json() == {"detail": "seeker_only"}
+    not_theirs = _withdraw(owner, others)
+    assert not_theirs.status_code == 404
+    assert not_theirs.json() == NOT_FOUND
     assert _withdraw(seeker, "not-a-uuid").status_code == 422
     assert _status(db_engine, others) == "submitted"
 

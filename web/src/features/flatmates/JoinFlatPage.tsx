@@ -44,7 +44,7 @@ const COPY = {
  * flat is a room's, so every way out is the market's (spec 0010a). */
 const WAY_OUT = {
   own: { to: '/market/mine', label: 'flatmates.join.toMyListings' },
-  applied: { to: '/market/mine', label: 'flatmates.join.toApplications' },
+  applied: { to: '/market/mine?tab=applications', label: 'flatmates.join.toApplications' },
   declined: { to: '/market', label: 'flatmates.join.toSearch' },
   full: { to: '/market', label: 'flatmates.join.toSearch' },
   invalid: { to: '/market', label: 'flatmates.join.toSearch' },

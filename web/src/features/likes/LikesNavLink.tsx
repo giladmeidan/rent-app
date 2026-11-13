@@ -4,7 +4,7 @@ import { NavIcon, NavTab } from '../../components/NavTab';
 import { useMyLikes } from './useMyLikes';
 
 /**
- * The seeker's "לייקים" tab, to `/me/likes`, with a count of the rooms that liked them (built as
+ * Any account's "לייקים" tab, to `/me/likes`, with a count of the rooms that liked them (built as
  * `ChatNavLink`'s: the number is hidden from assistive tech, the sentence completes the tab's
  * name). A pending or failed list shows no count and never blocks the header.
  */

@@ -167,20 +167,27 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   await chat.click();
   await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
 
-  // The market's "שלי" (a seeker's room applications, spec 0010a) shows the room tagged as a
-  // mutual match, with no message block.
-  await page.goto('/market/mine');
+  // The market's "שלי", its room applications panel (spec 0010a; 0010b: the second of two),
+  // shows the room tagged as a mutual match, with no message block.
+  await page.goto('/market/mine?tab=applications');
   const card = page.getByRole('article').filter({ hasText: street });
   await expect(card.getByTestId('application-mutual')).toHaveText(he.applications.mutual);
   await expect(card.getByTestId('application-message')).toHaveCount(0);
 
   await test.step('0009qa lists at 1440 and 390', async () => {
-    // Desktop: a 720px list, centred. Phone: the card fills the column between the 16px gutters.
+    // Desktop: a 720px list. "שלי" keeps one page width for both panels (spec 0010b), so the
+    // list's reading column starts at the page's start edge, under the <h1> and the tabs (the
+    // inline end is the left in RTL). Phone: the card fills the column between the 16px gutters.
     await page.setViewportSize({ width: 1440, height: 900 });
+    const h1 = page.getByRole('heading', { level: 1, name: he.market.mine.title, exact: true });
     await expect(async () => {
-      const { box, clientWidth } = await layoutOf(page, card);
+      const { box } = await layoutOf(page, card);
+      const title = await h1.boundingBox();
+      expect(title).not.toBeNull();
       expect(Math.abs(box.width - 720)).toBeLessThanOrEqual(2);
-      expect(Math.abs(box.x - (clientWidth - (box.x + box.width)))).toBeLessThanOrEqual(2);
+      expect(
+        Math.abs(box.x + box.width - ((title?.x ?? 0) + (title?.width ?? 0))),
+      ).toBeLessThanOrEqual(2);
     }).toPass();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(async () => {

@@ -293,7 +293,7 @@ function FlatmateRow({
 }
 
 /**
- * `/me/listings/:id/flatmates`, owners only (`RequireOwner`): the room's invite link and its
+ * `/me/listings/:id/flatmates`, any account (`RequireUser`, spec 0010b): the room's invite link and its
  * flatmates. The listing comes from `GET /me/listings` (an id not in it, or an apartment, is "not
  * found" and its flatmates are never requested).
  */

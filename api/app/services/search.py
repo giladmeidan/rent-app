@@ -10,14 +10,16 @@ serves both.
 The optional map box (spec 0003c) filters on the listing's **approximate** point, the same point the
 response's `lat` / `lng` show, so it reveals nothing the response does not.
 
-The caller's match (spec 0006b): given the id of a seeker who has a profile, the statement joins
-that one profile row and adds `matching.score.match_columns`, so the score is computed, ordered on
-and explained in the same statement. The match never filters and never changes the count.
+The caller's match (spec 0006b): given the id of an account (any role, spec 0010b) that has a
+profile, the statement joins that one profile row and adds `matching.score.match_columns`, so the
+score is computed, ordered on and explained in the same statement. The match never filters and
+never changes the count.
 
 The room fit (spec 0007b, PRODUCT.md "Rooms"): the same joined select also keeps only rows whose
 `matching.fit.room_fit` is not false, so a room whose gender preference does not fit the seeker is
-missing from their page, their map and their `total` alike. It is the first caller-dependent filter
-and it bites only for a seeker whose profile has a room section, so `total` differs per caller
+missing from their page, their map and their `total` alike; never the caller's own room (spec
+0010b: it is labelled `is_mine`, not hidden). It is the first caller-dependent filter and it bites
+only for an account whose profile has a room section, so `total` differs per caller
 (the router's `Vary: Cookie` / `Cache-Control: private` cover it). The listing page never filters on
 the fit: it reports it. A non-public listing is indistinguishable from an unknown id
 (`ListingNotFoundError`, a 404).
@@ -155,12 +157,16 @@ def search_listings(
     `profile_user_id`) and cover photo id and key (`None`, `None` without photos), the total
     matching (ignoring `limit` / `offset`, and never the score), and the sort applied. With a
     `profile_user_id` the filtered select itself joins the profile and drops the rooms that do not
-    fit it (`room_fit` false), so the count and the page agree.
+    fit it (`room_fit` false) but the caller's own (spec 0010b), so the count and the page agree.
     Exactly two statements: the count, then the page."""
     filtered: Select[Any] = _filtered(params)
     if profile_user_id is not None:
+        # The caller's own room is never hidden from them (spec 0010b): labelled, not filtered.
         filtered = _with_profile(filtered, profile_user_id).where(
-            room_fit(Listing, SeekerProfile).is_not(False)
+            or_(
+                room_fit(Listing, SeekerProfile).is_not(False),
+                Listing.owner_id == profile_user_id,
+            )
         )
     sort = _effective_sort(params.sort, profile_user_id is not None)
     # Count over a subquery of the whole filtered select, so the joins are kept.

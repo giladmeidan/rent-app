@@ -136,19 +136,32 @@ def test_ac2_put_replaces_profile(
     assert seeker.get("/me/profile").json() == body
 
 
-def test_ac3_profile_is_seeker_only(
+def test_ac3_profile_for_any_account(
     client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
+    """Spec 0010b AC6: the profile ("a person looking") is open to every account."""
     client.cookies.clear()
     for anonymous in (client.get("/me/profile"), _put(client, _p(gush_dan))):
         assert anonymous.status_code == 401
         assert anonymous.json() == {"detail": "unauthenticated"}
+    assert _profile_count(db_engine) == 0
 
     owner = signup(client, outbox, "o@example.com", "owner")
-    for forbidden in (owner.get("/me/profile"), _put(owner, _p(gush_dan))):
-        assert forbidden.status_code == 403
-        assert forbidden.json() == {"detail": "seeker_only"}
-    assert _profile_count(db_engine) == 0
+    missing = owner.get("/me/profile")
+    assert missing.status_code == 404
+    assert missing.json() == NOT_FOUND
+    body = _p(gush_dan)
+    saved = _put(owner, body)
+    assert saved.status_code == 200, saved.text
+    assert {k: v for k, v in saved.json().items() if k != "updated_at"} == {
+        **ROOM_OFF,
+        **PEOPLE_OFF,
+        **body,
+    }
+    read = owner.get("/me/profile")
+    assert read.status_code == 200
+    assert read.json() == saved.json()
+    assert _profile_count(db_engine) == 1
 
 
 def _inactive_area(engine: Engine) -> uuid.UUID:

@@ -28,8 +28,9 @@ const PAGES: Record<string, { file: string; width: TableWidth }> = {
   PeoplePage: { file: 'features/people/PeoplePage.tsx', width: 'wide' },
   FlatmatesPage: { file: 'features/flatmates/FlatmatesPage.tsx', width: 'default' },
   MyApplicationsPage: { file: 'features/applications/MyApplicationsPage.tsx', width: 'default' },
-  // Each panel at its own page's width (spec 0010a): the rooms grid, the applications column.
-  MarketMinePage: { file: 'features/market/MarketMinePage.tsx', width: ['default', 'wide'] },
+  // One width for both panels (spec 0010b), so switching tabs never moves the tablist; the
+  // applications keep their reading column inside it.
+  MarketMinePage: { file: 'features/market/MarketMinePage.tsx', width: 'wide' },
   MyLikesPage: { file: 'features/likes/MyLikesPage.tsx', width: 'wide' },
   ProfilePage: { file: 'features/profile/ProfilePage.tsx', width: 'wide' },
   // The phone's column and the desktop's two panes (spec 0009s); the pages sit inside it.

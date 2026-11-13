@@ -547,7 +547,7 @@ describe('MyApplicationsPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // The rooms panel: an <h2>, no page title of its own, the room only.
+    // The rooms panel: no page title or heading of its own, the room only.
     ({ view } = renderRooms([json([flat, room])]));
     await vi.waitFor(() => {
       expect(cards()).toHaveLength(1);
@@ -556,10 +556,9 @@ describe('MyApplicationsPage', () => {
       'href',
       '/listings/R1',
     );
+    // No heading of its own: its tab labels it (spec 0010b).
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
-    expect(
-      screen.getByRole('heading', { level: 2, name: he.market.mine.tabs.applications }),
-    ).toBeVisible();
+    expect(screen.queryByRole('heading', { name: he.market.mine.tabs.applications })).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
 

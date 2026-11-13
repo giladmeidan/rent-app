@@ -337,4 +337,33 @@ describe('ListingCard', () => {
     render(<ListingCard listing={listing} today={TODAY} />);
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('הרצל');
   });
+
+  it('ac14_own_tag', () => {
+    // Spec 0010b: the caller's own listing carries a neutral tag as the first chip.
+    const own = renderCard({
+      listing_type: 'room',
+      flatmates_count: 2,
+      gender_preference: 'women',
+      is_mine: true,
+    });
+    expect(own.chips()).toEqual([he.listings.card.mineRoom, 'לנשים בלבד']);
+    expect(own.card.getByText(he.listings.card.mineRoom)).toHaveClass('bg-surface-subtle');
+    own.view.unmount();
+
+    let { view, chips } = renderCard({ is_mine: true });
+
+    expect(chips()).toEqual([he.listings.card.mineApartment]);
+    view.unmount();
+
+    // Someone else's listing, or one with no `is_mine` (my listings): no tag.
+    for (const overrides of [
+      { is_mine: false },
+      { listing_type: 'room', flatmates_count: 2, is_mine: false },
+    ] as const) {
+      ({ view, chips } = renderCard(overrides));
+      expect(chips()).not.toContain(he.listings.card.mineRoom);
+      expect(chips()).not.toContain(he.listings.card.mineApartment);
+      view.unmount();
+    }
+  });
 });
