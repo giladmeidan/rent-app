@@ -2,13 +2,14 @@
 // per state at each project's size, in web/screens/0009u/. The `d-*` states are the desktop layout
 // (0009u) and run in the desktop project only; the 390 set shows the phone layout is unchanged. Every API request is answered here, so it needs only
 // the vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { MyListingOut } from '../../src/features/listings/api';
 import type { ApplicantOut } from '../../src/features/applicants/api';
 import { API } from '../helpers';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 // --- fixtures, shaped as features/applicants/__tests__/fixtures.ts ---------------------------------
 

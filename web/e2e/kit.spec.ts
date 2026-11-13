@@ -1,6 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { test } from './fixtures';
 
 // The dev-only kit gallery (spec 0009d): the real <dialog> modal, the RTL tabs, the brand assets
 // and fonts in Chromium. No sign-up, no API call.

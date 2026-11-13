@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
@@ -11,6 +11,7 @@ import {
   signUp,
   uniqueEmail,
 } from './helpers';
+import { newTileContext, test } from './fixtures';
 
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 
@@ -65,7 +66,7 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   await expect(page.getByText(he.flatmates.invite.onceWarning)).toBeVisible();
 
   // F, logged out, opens the link and is sent to the login with a bare `next`.
-  const flatmateContext = await browser.newContext();
+  const flatmateContext = await newTileContext(browser);
   const flatmateRequests = recordRequests(flatmateContext);
   const flatmatePage = await flatmateContext.newPage();
   const flatmateUrls: string[] = [];
@@ -182,7 +183,7 @@ test('ac5_group_chat_flow', async ({ page, browser }) => {
   const token = await createInvite(page, roomId);
 
   // 2. F signs up and joins through the UI.
-  const flatmateContext = await browser.newContext();
+  const flatmateContext = await newTileContext(browser);
   const flatmatePage = await flatmateContext.newPage();
   await signUp(flatmatePage, 'seeker', { name: FLATMATE });
   await flatmatePage.goto(`/flatmates/join#${token}`);
@@ -191,7 +192,7 @@ test('ac5_group_chat_flow', async ({ page, browser }) => {
   await expect(flatmatePage.getByText(he.flatmates.join.done)).toBeVisible();
 
   // 3. S applies through the API; O shortlists in the inbox.
-  const seekerContext = await browser.newContext();
+  const seekerContext = await newTileContext(browser);
   const seekerPage = await seekerContext.newPage();
   await signUp(seekerPage, 'seeker', { name: SEEKER });
   await putProfile(seekerPage);

@@ -1,7 +1,7 @@
 // The visual check for the seeker's lists (spec 0009qa, AC6): one screenshot per state at each
 // project's size, in web/screens/0009qa/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { MyApplicationOut } from '../../src/features/applications/api';
@@ -9,6 +9,7 @@ import type { MyLikesOut } from '../../src/features/likes/api';
 import { API } from '../helpers';
 import { FIVE_APPLICATIONS, LIKED_ME, LIKES, PROFILE, SEEKER } from './fixtures-seeker';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 type Mode = 'pending' | 'error' | 'ok';
 type Setup = {

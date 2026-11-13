@@ -41,7 +41,7 @@ import { useMapSearch } from './useMapSearch';
 const NO_ITEMS: ListingPublic[] = [];
 
 /** The first-open fit never zooms past this, so a single pin does not land at street level. */
-const FIT_MAX_ZOOM = 15;
+export const FIT_MAX_ZOOM = 15;
 
 /**
  * Where focus goes once the render reflects a press (react-router applies every URL change in a
@@ -58,7 +58,7 @@ const contains = (outer: Bbox, inner: Bbox) =>
   outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
 
 /** The `[west, south, east, north]` extent of the pins. */
-function extentOf(pins: readonly Pin[]): Bbox {
+export function extentOf(pins: readonly Pin[]): Bbox {
   let west = Infinity;
   let south = Infinity;
   let east = -Infinity;

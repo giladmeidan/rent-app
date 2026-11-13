@@ -1,6 +1,7 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
+import { test } from './fixtures';
 
 // The full-width shell (spec 0009h): public pages only, no sign-up. A screen spec that changes a
 // measured page's width updates this test.

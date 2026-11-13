@@ -368,6 +368,11 @@
       "roomsAtLeast": "{{min}} ומעלה",
       "roomsUpTo": "עד {{max}}",
       "availableBy": "כניסה עד {{date}}"
+    },
+    "sideMap": {
+      "label": "מפת התוצאות שברשימה",
+      "open": "פתיחת המפה המלאה",
+      "unavailable": "המפה לא זמינה בדפדפן הזה."
     }
   },
   "listing": {

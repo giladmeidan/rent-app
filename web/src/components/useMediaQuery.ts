@@ -25,3 +25,8 @@ export function useMediaQuery(query: string): boolean {
 export function useIsDesktop(): boolean {
   return useMediaQuery('(min-width: 1024px)');
 }
+
+/** The side map's switch (spec 0009x): Tailwind's `xl` (1280px). */
+export function useIsWide(): boolean {
+  return useMediaQuery('(min-width: 1280px)');
+}

@@ -1,8 +1,9 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { API, likePerson, postListing, signUp } from './helpers';
+import { newTileContext, test } from './fixtures';
 
 const ROOM = he.profile.room;
 
@@ -108,7 +109,7 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   await expect(page.getByText(he.profile.saved)).toBeVisible();
 
   // An owner (a second browser context) posts a room and likes the seeker through the API.
-  const ownerContext = await browser.newContext();
+  const ownerContext = await newTileContext(browser);
   const ownerPage = await ownerContext.newPage();
   await signUp(ownerPage, 'owner');
   const roomId = await postListing(ownerPage, street, {

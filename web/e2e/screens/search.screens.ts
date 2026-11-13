@@ -1,8 +1,9 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import { intoTheDockedCard, latNorthBy, routeTiles } from '../helpers';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 // The visual check of spec 0009i (`make screens`): /search in seven states at 390px and 1440px.
 // Every API call is mocked, so the data is deterministic and nothing signs up. The four listings
@@ -10,7 +11,9 @@ import { WEB_ORIGIN } from './origin';
 // marks, seen chip, a bubble and the same-place list (into screens/0009v/); on the map the four
 // listings' points are spread north to south, so their pins stay apart at the first (fitted) view.
 // Spec 0009w docks the pin's card and the same-place list inside the map: states `map`,
-// `map-card-match` and `map-same-place` go to screens/0009w/.
+// `map-card-match` and `map-same-place` go to screens/0009w/. Spec 0009x adds the side map beside
+// the list at 1440 (states `side-map`, `side-map-highlight`, `side-map-unavailable`, into
+// screens/0009x/); the 1440 list states wait for it to load.
 
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 
@@ -277,6 +280,20 @@ async function shot(page: Page, project: string, state: string) {
   await page.screenshot({ path: `screens/0009i/${state}-${project}.png`, fullPage: true });
 }
 
+/** From 1280 px the list has the side map (spec 0009x): the shot waits until it has loaded and its
+ * first fit has eased in. */
+async function sideMapReady(page: Page, project: string) {
+  if (project !== 'desktop') return;
+  const region = page.getByRole('region', { name: he.search.sideMap.label });
+  await region.waitFor({ timeout: 15_000 });
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await page.waitForTimeout(1_000);
+}
+
+async function shot0009x(page: Page, project: string, state: string) {
+  await page.screenshot({ path: `screens/0009x/${state}-${project}.png`, fullPage: true });
+}
+
 /** The count line has text once results landed (or the empty message is shown). */
 const settled = async (page: Page) => {
   await page.getByText(he.common.loading).waitFor({ state: 'detached' });
@@ -286,6 +303,7 @@ test('list-visitor', async ({ page }, info) => {
   await mockApi(page, { seeker: false, search: 'items' });
   await page.goto('/search');
   await page.getByRole('article').first().waitFor();
+  await sideMapReady(page, info.project.name);
   await shot(page, info.project.name, 'list-visitor');
 });
 
@@ -294,6 +312,7 @@ test('list-seeker', async ({ page }, info) => {
   await page.goto('/search');
   await page.getByTestId('match-badge').first().waitFor();
   await page.getByText(he.rooms.card.similarAge).first().waitFor();
+  await sideMapReady(page, info.project.name);
   await shot(page, info.project.name, 'list-seeker');
 });
 
@@ -305,6 +324,7 @@ test('filters-active', async ({ page }, info) => {
   if (info.project.name === 'mobile') {
     await page.getByRole('button', { name: /^מסננים/ }).click();
   }
+  await sideMapReady(page, info.project.name);
   await shot(page, info.project.name, 'filters-active');
 });
 
@@ -533,4 +553,54 @@ test('map-empty-actions', async ({ page }, info) => {
   await mapReady(page);
   await page.getByRole('button', { name: he.search.map.showAll }).waitFor();
   await shot0009y(page, info.project.name, 'map-empty-actions');
+});
+
+test('side-map', async ({ page }, info) => {
+  // A seeker's list with the side map beside it (spec 0009x): tiers and marks, every pin apart.
+  test.skip(info.project.name !== 'desktop', 'the side map is shown from 1280 px only');
+  await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
+  await page.goto('/search');
+  await page.getByTestId('match-badge').first().waitFor();
+  await sideMapReady(page, info.project.name);
+  await shot0009x(page, info.project.name, 'side-map');
+});
+
+test('side-map-highlight', async ({ page }, info) => {
+  // The card under the pointer (listing 1) and its pin highlighted, next to a focused card (3):
+  // the highlight is not the focus ring.
+  test.skip(info.project.name !== 'desktop', 'the side map is shown from 1280 px only');
+  await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
+  await page.goto('/search');
+  await page.getByTestId('match-badge').first().waitFor();
+  await sideMapReady(page, info.project.name);
+  const cards = page.getByRole('article');
+  await cards.nth(2).getByRole('link').first().focus();
+  await cards.nth(0).hover();
+  await page.locator('li[data-highlighted]').waitFor();
+  await expect(
+    page.locator('[data-pin-id="00000000-0000-0000-0000-000000000001"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await shot0009x(page, info.project.name, 'side-map-highlight');
+});
+
+test('side-map-unavailable', async ({ page }, info) => {
+  // No WebGL: the column says the map is unavailable; the list is unaffected.
+  test.skip(info.project.name !== 'desktop', 'the side map is shown from 1280 px only');
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    const withoutWebgl = function (this: HTMLCanvasElement, type: string, options?: unknown) {
+      if (type.startsWith('webgl')) return null;
+      return (original as (type: string, options?: unknown) => RenderingContext | null).call(
+        this,
+        type,
+        options,
+      );
+    };
+    HTMLCanvasElement.prototype.getContext = withoutWebgl as typeof original;
+  });
+  await mockApi(page, { seeker: false, search: 'items' });
+  await page.goto('/search');
+  await page.getByRole('article').first().waitFor();
+  await page.getByText(he.search.sideMap.unavailable).waitFor({ timeout: 15_000 });
+  await shot0009x(page, info.project.name, 'side-map-unavailable');
 });

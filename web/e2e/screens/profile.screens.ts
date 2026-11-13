@@ -1,13 +1,14 @@
 // The visual check for the seeker profile (spec 0009r, AC8): one screenshot per state at each
 // project's size, in web/screens/0009r/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { SeekerProfileOut } from '../../src/features/profile/api';
 import { API } from '../helpers';
 import { AREAS, PROFILE, PROFILE_ROOM, SEEKER } from './fixtures-profile';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 type Setup = {
   /** What `GET /me/profile` answers: a stored profile, 404 (a new seeker), 500, or never. */

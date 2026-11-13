@@ -1,7 +1,8 @@
-import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
+import { test } from './fixtures';
 import { intoTheDockedCard, latNorthBy, routeTiles, signUpOwner } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -47,7 +48,8 @@ type Posted = { price: number; streets: string[]; ids: string[]; points: Map<str
  * (every 10 s, GEOCODER=fake) to give each a point. The price is one no other test posts (spec
  * 0009v Scope 9): filtered to it, only these listings are on the map, whatever else CI's shared
  * database holds. 0009v reserved 7001-7899 (7200 is every other test's price); each map test
- * draws from its own sub-range of it (`range`), so two tests in one CI run never share a price.
+ * draws from its own sub-range of it (`range`), so two tests in one CI run never share a price;
+ * 0009x's side map test takes 7901-7999.
  */
 async function postAtOnePrice(
   page: Page,
@@ -200,9 +202,10 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   const urls: string[] = [];
   page.context().on('request', (r) => urls.push(r.url()));
 
-  // A visitor on the list: the library is never downloaded.
+  // A visitor on the list below 1280 px (no side map, spec 0009x): the library is never downloaded.
   const search = `/search?price_min=${String(price)}&price_max=${String(price)}`;
   await page.context().clearCookies();
+  await page.setViewportSize({ width: 1024, height: 800 });
   await page.goto(search);
   await expect(page.getByRole('article').filter({ hasText: street })).toHaveCount(1);
   expect(urls.filter((url) => url.includes('maplibre'))).toEqual([]);
@@ -474,4 +477,111 @@ test('map_max_zoom_never_422_on_390px', async ({ page }) => {
   expect(statuses.length).toBeGreaterThan(1);
   expect(statuses.filter((status) => status !== 200)).toEqual([]);
   await expect(page.getByText(he.common.error)).toHaveCount(0);
+});
+
+test('ac6_side_map_mirrors_the_list', async ({ page, request }) => {
+  // One listing at its own price: filtered to it, the list (and so the side map) holds only it.
+  const {
+    price,
+    streets: [street = ''],
+    ids: [id = ''],
+  } = await postAtOnePrice(page, request, 1, [7901, 7999]);
+
+  // Tiles are answered by the auto fixture; every request URL is recorded.
+  const urls: string[] = [];
+  page.context().on('request', (r) => urls.push(r.url()));
+  const search = `/search?price_min=${String(price)}&price_max=${String(price)}`;
+  const card = page.getByRole('article').filter({ hasText: street });
+  const region = page.getByRole('region', { name: he.search.sideMap.label });
+  const open = page.getByRole('button', { name: he.search.sideMap.open });
+  await page.context().clearCookies();
+
+  await test.step('below 1280 px: no side map, no library', async () => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto(search, { waitUntil: 'domcontentloaded' });
+    await expect(card).toHaveCount(1);
+    // Past the idle mount's 2 s timeout: nothing mounted, nothing downloaded.
+    await page.waitForTimeout(2_500);
+    await expect(region).toHaveCount(0);
+    expect(urls.filter((url) => url.includes('maplibre'))).toEqual([]);
+  });
+
+  await test.step('at 1440 px the side map follows the list', async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(search, { waitUntil: 'domcontentloaded' });
+    await expect(card).toBeVisible();
+    await expect(region).toBeVisible({ timeout: 15_000 });
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    await expect(region.getByText('OpenStreetMap')).toBeVisible();
+  });
+
+  await test.step('hovering the card highlights its pin', async () => {
+    await card.hover();
+    // Highlighted, it is kept apart from any bubble and drawn as the selected chip.
+    const pin = region.locator(`[data-pin-id="${id}"]`);
+    await expect(pin).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
+    await expect(pin.locator('span').first()).toHaveClass(/(^| )bg-accent( |$)/);
+    await expect(page.locator('li[data-highlighted]')).toHaveCount(1);
+    // Every marker is hidden from assistive tech and none is a tab stop.
+    const markers = region.locator('.maplibregl-marker');
+    expect(await markers.count()).toBeGreaterThan(0);
+    for (const marker of await markers.all()) {
+      await expect(marker).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
+  await test.step('the keyboard reaches "open" and never the map', async () => {
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    let reachedOpen = false;
+    const intoTheMap: string[] = [];
+    let first: string | undefined;
+    for (let i = 0; i < 150; i += 1) {
+      await page.keyboard.press('Tab');
+      const focused = await page.evaluate((label) => {
+        const element = document.activeElement;
+        if (element === null || element === document.body) return { key: 'body', inMap: '' };
+        const map = document.querySelector(`[role="region"][aria-label="${label}"]`);
+        const inMap =
+          map?.contains(element) === true && element.closest('.maplibregl-ctrl-attrib') === null
+            ? element.outerHTML.slice(0, 120)
+            : '';
+        return { key: element.outerHTML.slice(0, 200), inMap, text: element.textContent };
+      }, he.search.sideMap.label);
+      if (focused.inMap !== '') intoTheMap.push(focused.inMap);
+      if (focused.text === he.search.sideMap.open) reachedOpen = true;
+      if (first === undefined) first = focused.key;
+      else if (focused.key === first) break;
+    }
+    expect(intoTheMap).toEqual([]);
+    expect(reachedOpen).toBe(true);
+  });
+
+  await test.step('axe passes with the side map', async () => {
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    await expect(page.locator('li[data-highlighted]')).toHaveCount(0);
+    await expect(region).toHaveAttribute('aria-busy', 'false');
+    await expectNoAxeViolations(page, '/search (side map)');
+  });
+
+  await test.step('"open" lands on the full map at the same place', async () => {
+    await open.click();
+    await expect.poll(() => query(page).get('view')).toBe('map');
+    const params = query(page);
+    expect(params.get('price_min')).toBe(String(price));
+    expect(params.get('price_max')).toBe(String(price));
+    expect(params.get('c')).toMatch(/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/);
+    expect(params.get('z')).toMatch(/^\d+(\.\d+)?$/);
+    await expect(
+      page
+        .getByRole('group', { name: he.search.view.label })
+        .getByRole('button', { name: he.search.view.map }),
+    ).toBeFocused();
+    await expect(page.getByRole('region', { name: he.search.map.label })).toBeVisible();
+  });
 });

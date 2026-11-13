@@ -1,8 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { API, latestCode, uniqueEmail } from './helpers';
+import { test } from './fixtures';
 
 test('ac7_signup_via_outbox_and_logout', async ({ page }) => {
   const name = 'נועה';
