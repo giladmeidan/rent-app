@@ -34,7 +34,7 @@ describe('logout drops the match scores', () => {
       <>
         <AuthMenu />
         <Routes>
-          <Route path="/search" element={<SearchPage />} />
+          <Route path="/search" element={<SearchPage type="apartment" />} />
         </Routes>
       </>,
     );

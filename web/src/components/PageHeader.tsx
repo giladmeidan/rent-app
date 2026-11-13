@@ -57,11 +57,15 @@ export type PageHeaderProps = {
    * is never below 24px); at `lg` it renders as `default`.
    */
   size?: 'default' | 'compact';
+  /** `2`: the header of a panel inside a page that owns the `<h1>` (spec 0010a); the title is an
+   * `<h2>` at the `h2` scale. */
+  level?: 1 | 2;
   /** Layout only. */
   className?: string;
 };
 
-/** The page's back link, `<h1>`, subtitle and actions. Landmarks are the page's (0009c). */
+/** The page's back link, `<h1>` (or a panel's `<h2>`), subtitle and actions. Landmarks are the
+ * page's (0009c). */
 export function PageHeader({
   title,
   eyebrow,
@@ -71,9 +75,11 @@ export function PageHeader({
   titleRef,
   titleId,
   size = 'default',
+  level = 1,
   className,
 }: PageHeaderProps) {
   const compact = size === 'compact';
+  const Heading = level === 2 ? 'h2' : 'h1';
   return (
     <div
       className={cx(
@@ -90,14 +96,16 @@ export function PageHeader({
         )}
       >
         <div className="flex min-w-0 flex-col gap-1">
-          <h1
+          <Heading
             ref={titleRef}
             id={titleId}
             tabIndex={-1}
             className={cx(
               compact
                 ? 'font-sans text-body font-medium lg:font-display lg:text-h1'
-                : 'font-display text-h2 lg:text-h1',
+                : level === 2
+                  ? 'font-display text-h2'
+                  : 'font-display text-h2 lg:text-h1',
               'break-words focus:outline-none',
             )}
           >
@@ -108,7 +116,7 @@ export function PageHeader({
               </>
             )}
             {title}
-          </h1>
+          </Heading>
           {subtitle !== undefined && <p className="text-body-sm text-ink-muted">{subtitle}</p>}
         </div>
         {actions !== undefined && actions !== null && (

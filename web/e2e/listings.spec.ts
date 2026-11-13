@@ -2,7 +2,7 @@ import { expect, type Locator } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { latestCode, signUpOwner, uniqueEmail } from './helpers';
+import { latestCode, postListing, signUpOwner, uniqueEmail } from './helpers';
 import { test } from './fixtures';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -46,7 +46,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByText(he.listings.type.apartment, { exact: true }).click();
   await page.getByRole('button', { name: he.listings.next }).click();
 
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill('כצנלסון');
   await page.getByLabel(f.rooms).selectOption('3.5');
@@ -147,7 +147,7 @@ test('ac12_owner_edits_listing', async ({ page }) => {
   await card.getByRole('link', { name: he.listings.actions.edit }).click();
   await expect(page).toHaveURL(`/me/listings/${id}/edit`);
   await expect(page.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
   await expect(page.getByLabel(f.arnona, { exact: true })).toHaveValue('480');
 
   // Price 7500, arnona cleared, preview, save.
@@ -192,7 +192,7 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     await page.getByText(he.listings.type.room, { exact: true }).click();
     await page.getByRole('button', { name: he.listings.next }).click();
 
-    await expect(page.getByLabel(f.area)).toBeEnabled();
+    await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
     await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
     await page.getByLabel(f.street, { exact: true }).fill(roomStreet);
     await page.getByLabel(f.rooms).selectOption('4');
@@ -234,7 +234,8 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     );
     await page.getByRole('button', { name: he.listings.publish }).click();
     const { id: roomId } = (await (await published).json()) as { id: string };
-    await expect(page).toHaveURL('/me/listings');
+    // A room lands in the market's "שלי" (spec 0010a).
+    await expect(page).toHaveURL('/market/mine');
 
     const after = await page.request.get(API + '/me/listings');
     expect(after.ok()).toBe(true);
@@ -295,8 +296,11 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     expect(button.y + button.height).toBeLessThanOrEqual(844);
   });
 
-  // Spec 0009o AC4, on the same owner, who holds the apartment and the room by now.
+  // Spec 0009o AC4, on the same owner, who holds the apartment and the room by now. "My listings"
+  // shows apartments only (spec 0010a), so a second apartment (the third live listing, the cap)
+  // makes the two cards.
   await test.step('0009o my listings at 1440 and 390', async () => {
+    await postListing(page, `${street}b`);
     const articles = page.getByRole('article');
     const boxes = async () => {
       await expect(articles).toHaveCount(2);

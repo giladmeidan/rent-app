@@ -301,8 +301,9 @@ describe('RoomFields', () => {
     expect(list.parentElement?.nextElementSibling).toHaveTextContent(r.privacyNote);
 
     fireEvent.click(publishButton());
+    // A room lands in the market's "שלי" (spec 0010a).
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/me/listings');
+      expect(currentPath()).toBe('/market/mine');
     });
     expect(api.calls('POST /listings')).toHaveLength(1);
     let body: unknown = api.calls('POST /listings')[0]?.body;
@@ -349,7 +350,7 @@ describe('RoomFields', () => {
 
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
-      expect(currentPath()).toBe('/me/listings');
+      expect(currentPath()).toBe('/market/mine');
     });
     expect(api.calls('POST /listings')).toHaveLength(1);
     body = api.calls('POST /listings')[0]?.body;

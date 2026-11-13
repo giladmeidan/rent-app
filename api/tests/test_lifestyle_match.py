@@ -145,7 +145,9 @@ def test_ac1_lifestyle_score_and_explanation(
     assert page.status_code == 200, page.text
     assert page.json()["match"] == expected
 
-    body = _search(seeker)
+    # Rooms are asked for explicitly; the default is apartments only (spec 0010a).
+    room = listing_overrides.get("listing_type") == "room"
+    body = _search(seeker, "listing_type=room" if room else "")
     assert [item["id"] for item in body["items"]] == [listing_id]
     assert body["items"][0]["match"] == expected
 

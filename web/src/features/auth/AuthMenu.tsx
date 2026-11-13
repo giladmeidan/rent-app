@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next';
-import { Link, matchPath, NavLink, useLocation } from 'react-router';
+import { Link, matchPath, useLocation } from 'react-router';
 
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { focusRing } from '../../components/focusRing';
 import { NavIcon, NavTab } from '../../components/NavTab';
 import { Skeleton } from '../../components/Skeleton';
+import { useSide } from '../../app/side';
 import { ChatNavLink } from '../chat/ChatNavLink';
 import { LikesNavLink } from '../likes/LikesNavLink';
 import { useLogout } from './useLogout';
@@ -34,18 +35,41 @@ const searchIcon = (
   </NavIcon>
 );
 
+const houseIcon = (
+  <NavIcon>
+    <path d="M3 11l9-8 9 8" />
+    <path d="M5 10v10h14V10" />
+  </NavIcon>
+);
+
+const applicationsIcon = (
+  <NavIcon>
+    <path d="M4 5h16v14H4z" />
+    <path d="M4 9h16" />
+    <path d="M8 13h5" />
+  </NavIcon>
+);
+
+const profileIcon = (
+  <NavIcon>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21a8 8 0 0 1 16 0" />
+  </NavIcon>
+);
+
 /**
  * The header's inline end: who is logged in, or the login link. Never blocks the shell.
- * - Anonymous: one named `<nav>` with "חיפוש דירות" (not on `/`, whose seeker CTA is the same link)
- *   and "כניסה".
- * - Signed in: one named `<nav data-bottom-nav>` with the role's tabs (a bottom tab bar below
- *   `lg`, the top bar's text tabs from `lg`), then the greeting and logout outside it.
+ * - Anonymous: one named `<nav>` with "כניסה" (the side switch, spec 0010a, leads to the search).
+ * - Signed in: one named `<nav data-bottom-nav>` with the tabs of the current side and role (a
+ *   bottom tab bar below `lg`, the top bar's text tabs from `lg`; MARKET-PLAN section 7), then the
+ *   greeting and logout outside it. Chat is on both sides.
  */
 export function AuthMenu() {
   const { t } = useTranslation();
   const me = useMe();
   const logout = useLogout();
   const { pathname } = useLocation();
+  const side = useSide();
 
   // Data wins: a failed background refetch keeps the cached person (TanStack Query v5 sets
   // `isError` beside `data`), so a signed-in tab bar never flips to the anonymous nav.
@@ -63,11 +87,6 @@ export function AuthMenu() {
   if (user === undefined || user === null) {
     return (
       <nav aria-label={t('nav.label')} className="ms-auto flex items-center gap-1">
-        {pathname !== '/' && (
-          <NavLink to="/search" className={headerLink}>
-            {t('header.search')}
-          </NavLink>
-        )}
         <Link to="/login" className={headerLink}>
           {t('header.login')}
         </Link>
@@ -76,6 +95,44 @@ export function AuthMenu() {
   }
 
   const focused = FOCUSED_ROUTES.some((pattern) => matchPath(pattern, pathname) !== null);
+  const owner = user.role === 'owner';
+  const search = <NavTab to="/search" icon={searchIcon} label={t('nav.search')} />;
+  const market = <NavTab to="/market" end icon={searchIcon} label={t('nav.market')} />;
+  const mine = <NavTab to="/market/mine" icon={houseIcon} label={t('nav.mine')} />;
+  const profile = <NavTab to="/me/profile" icon={profileIcon} label={t('nav.profile')} />;
+  let tabs;
+  if (side === 'market') {
+    tabs = owner ? (
+      <>
+        {mine}
+        <ChatNavLink />
+        {market}
+      </>
+    ) : (
+      <>
+        {market}
+        <LikesNavLink />
+        {mine}
+        <ChatNavLink />
+        {profile}
+      </>
+    );
+  } else {
+    tabs = owner ? (
+      <>
+        <NavTab to="/me/listings" icon={houseIcon} label={t('header.myListings')} />
+        <ChatNavLink />
+        {search}
+      </>
+    ) : (
+      <>
+        {search}
+        <NavTab to="/me/applications" icon={applicationsIcon} label={t('nav.applications')} />
+        <ChatNavLink />
+        {profile}
+      </>
+    );
+  }
 
   return (
     <>
@@ -92,49 +149,7 @@ export function AuthMenu() {
           focused && 'max-lg:hidden',
         )}
       >
-        {user.role === 'owner' ? (
-          <>
-            <NavTab
-              to="/me/listings"
-              icon={
-                <NavIcon>
-                  <path d="M3 11l9-8 9 8" />
-                  <path d="M5 10v10h14V10" />
-                </NavIcon>
-              }
-              label={t('header.myListings')}
-            />
-            <ChatNavLink />
-            <NavTab to="/search" icon={searchIcon} label={t('nav.search')} />
-          </>
-        ) : (
-          <>
-            <NavTab to="/search" icon={searchIcon} label={t('nav.search')} />
-            <LikesNavLink />
-            <NavTab
-              to="/me/applications"
-              icon={
-                <NavIcon>
-                  <path d="M4 5h16v14H4z" />
-                  <path d="M4 9h16" />
-                  <path d="M8 13h5" />
-                </NavIcon>
-              }
-              label={t('nav.applications')}
-            />
-            <ChatNavLink />
-            <NavTab
-              to="/me/profile"
-              icon={
-                <NavIcon>
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M4 21a8 8 0 0 1 16 0" />
-                </NavIcon>
-              }
-              label={t('nav.profile')}
-            />
-          </>
-        )}
+        {tabs}
       </nav>
       <div className="ms-auto flex min-w-0 items-center gap-3">
         <span className="truncate text-label max-sm:hidden">

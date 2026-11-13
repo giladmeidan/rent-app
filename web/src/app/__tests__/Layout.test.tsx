@@ -229,7 +229,16 @@ describe('Layout', () => {
       expect(banner.textContent).not.toContain(he.app.tagline);
     };
 
-    // On `/`: the brand link (named by the lockup's app.title) and, in the nav, "כניסה" only.
+    // The side switch (spec 0010a) replaces the old "חיפוש דירות" link, on every route.
+    const sides = () =>
+      linksOf(within(screen.getByRole('banner')).getByRole('navigation', { name: he.side.label }));
+    const SIDES = [
+      [he.side.apartments, '/search'],
+      [he.side.market, '/market'],
+    ];
+
+    // On `/`: the brand link (named by the lockup's app.title), the switch and, in the nav,
+    // "כניסה" only.
     mockApi({ 'GET /me': [unauthenticated] });
     let view = renderRoutes('/', <AppRoutes />);
     await screen.findByRole('heading', { level: 1 });
@@ -237,25 +246,27 @@ describe('Layout', () => {
     const brand = within(banner).getByRole('link', { name: he.app.title });
     expect(brand).toHaveAttribute('href', '/');
     expect(linksOf(nav())).toEqual([[he.header.login, '/login']]);
-    expect(within(banner).getAllByRole('navigation')).toHaveLength(1);
+    expect(sides()).toEqual(SIDES);
+    expect(within(banner).getAllByRole('navigation')).toHaveLength(2);
     noSignupOrTagline();
     view.unmount();
     vi.unstubAllGlobals();
 
-    // On /search: "חיפוש דירות", then "כניסה".
+    // On /search: "כניסה" only; no "חיפוש דירות" link anywhere in the header.
     mockApi({ 'GET /me': [unauthenticated], 'GET /listings': [() => json(page([]))] });
     view = renderRoutes('/search', <AppRoutes />);
     await screen.findByRole('heading', { level: 1, name: he.search.title });
     await within(screen.getByRole('banner')).findByRole('navigation', { name: he.nav.label });
-    expect(linksOf(nav())).toEqual([
-      [he.header.search, '/search'],
-      [he.header.login, '/login'],
-    ]);
+    expect(linksOf(nav())).toEqual([[he.header.login, '/login']]);
+    expect(sides()).toEqual(SIDES);
+    expect(
+      within(screen.getByRole('banner')).queryByRole('link', { name: he.header.search }),
+    ).toBeNull();
     noSignupOrTagline();
     view.unmount();
     vi.unstubAllGlobals();
 
-    // While /me is pending: the brand and the skeleton; no "חיפוש דירות" and no nav yet.
+    // While /me is pending: the brand, the switch and the skeleton; no "חיפוש דירות" and no nav.
     const me = deferred();
     mockApi({ 'GET /me': [me.promise], 'GET /listings': [() => json(page([]))] });
     renderRoutes('/search', <AppRoutes />);
@@ -263,7 +274,8 @@ describe('Layout', () => {
     expect(within(pending).getByRole('link', { name: he.app.title })).toHaveAttribute('href', '/');
     expect(within(pending).getByTestId('skeleton')).toBeInTheDocument();
     expect(within(pending).queryByRole('link', { name: he.header.search })).toBeNull();
-    expect(within(pending).queryByRole('navigation')).toBeNull();
+    expect(within(pending).queryByRole('navigation', { name: he.nav.label })).toBeNull();
+    expect(sides()).toEqual(SIDES);
     noSignupOrTagline();
   });
 
@@ -288,18 +300,21 @@ describe('Layout', () => {
         ...extra,
       });
 
-    // A seeker: one nav, five tabs in order; logout sits outside it.
+    // A seeker on the apartments side: one tab nav (beside the side switch), four tabs in order
+    // (spec 0010a: "לייקים" is the market's); logout sits outside it.
     signedIn(seeker);
     let view = renderRoutes('/search', <AppRoutes />);
     let { nav, links } = await tabs();
     expect(links).toEqual([
       [he.nav.search, '/search'],
-      [he.header.likes, '/me/likes'],
       [he.nav.applications, '/me/applications'],
       [he.header.chat, '/chat'],
       [he.nav.profile, '/me/profile'],
     ]);
-    expect(screen.getAllByRole('navigation')).toHaveLength(1);
+    expect(screen.getAllByRole('navigation').map((n) => n.getAttribute('aria-label'))).toEqual([
+      he.side.label,
+      he.nav.label,
+    ]);
     expect(nav).toHaveAttribute('data-bottom-nav');
     const logout = screen.getByRole('button', { name: he.header.logout });
     expect(nav.contains(logout)).toBe(false);
@@ -369,5 +384,90 @@ describe('Layout', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('ac7_bar_per_side', async () => {
+    const tabsOf = async () => {
+      const nav = await within(screen.getByRole('banner')).findByRole('navigation', {
+        name: he.nav.label,
+      });
+      return within(nav)
+        .getAllByRole('link')
+        .map((a) => [a.textContent, a.getAttribute('href')]);
+    };
+    const signedIn = (me: typeof owner) =>
+      mockApi({
+        'GET /me': [() => json(me)],
+        'GET /me/conversations': [() => json([])],
+        'GET /me/likes': [() => json({ liked_me: [], mine: [] })],
+        'GET /me/listings': [() => json([])],
+        'GET /me/applications': [() => json([])],
+        'GET /listings': [() => json(page([]))],
+      });
+    // MARKET-PLAN section 7 "Bottom bar per side", roles still applying (spec 0010a).
+    const BARS = {
+      owner: {
+        apartments: [
+          [he.header.myListings, '/me/listings'],
+          [he.header.chat, '/chat'],
+          [he.nav.search, '/search'],
+        ],
+        market: [
+          [he.nav.mine, '/market/mine'],
+          [he.header.chat, '/chat'],
+          [he.nav.market, '/market'],
+        ],
+      },
+      seeker: {
+        apartments: [
+          [he.nav.search, '/search'],
+          [he.nav.applications, '/me/applications'],
+          [he.header.chat, '/chat'],
+          [he.nav.profile, '/me/profile'],
+        ],
+        market: [
+          [he.nav.market, '/market'],
+          [he.header.likes, '/me/likes'],
+          [he.nav.mine, '/market/mine'],
+          [he.header.chat, '/chat'],
+          [he.nav.profile, '/me/profile'],
+        ],
+      },
+    } as const;
+
+    for (const [name, me] of [
+      ['owner', owner],
+      ['seeker', seeker],
+    ] as const) {
+      for (const [path, side] of [
+        ['/search', 'apartments'],
+        ['/market', 'market'],
+        // A shared page follows the last side: `/market` above stored it.
+        ['/chat', 'market'],
+        ['/search', 'apartments'],
+        ['/chat', 'apartments'],
+      ] as const) {
+        signedIn(me);
+        const view = renderRoutes(path, <AppRoutes />);
+        expect(await tabsOf(), `${name} ${path}`).toEqual(BARS[name][side]);
+        view.unmount();
+        vi.unstubAllGlobals();
+      }
+      window.localStorage.removeItem('homie.side');
+    }
+
+    // On "שלי" only "שלי" is current, not "שוק" (`/market` is exact).
+    signedIn(seeker);
+    renderRoutes('/market/mine', <AppRoutes />);
+    const nav = await within(screen.getByRole('banner')).findByRole('navigation', {
+      name: he.nav.label,
+    });
+    expect(within(nav).getByRole('link', { name: he.nav.mine })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(nav).getByRole('link', { name: he.nav.market })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 });

@@ -68,7 +68,8 @@ const render = (path: string) =>
     path,
     <>
       <Routes>
-        <Route path="/search" element={<SearchPage />} />
+        <Route path="/search" element={<SearchPage type="apartment" />} />
+        <Route path="/market" element={<SearchPage type="room" />} />
         <Route path="/listings/:id" element={<p>listing</p>} />
       </Routes>
       <Back />
@@ -170,6 +171,7 @@ describe('SearchMap', () => {
     });
     expect(query(sent(api, 0))).toEqual(
       expected({
+        listing_type: 'apartment',
         price_max: '8000',
         west: '34.7712',
         south: '32.0412',
@@ -199,6 +201,7 @@ describe('SearchMap', () => {
     });
     expect(query(sent(api, 1))).toEqual(
       expected({
+        listing_type: 'apartment',
         price_max: '8000',
         west: '34.78',
         south: '32.05',
@@ -395,7 +398,8 @@ describe('SearchMap', () => {
 
   it('ac3_map_sends_type', async () => {
     const api = mockApi({ [SEARCH]: [json(page([located({ listing_type: 'room' })]))] });
-    render('/search?listing_type=room&view=map');
+    // The market's map asks for rooms (spec 0010a).
+    render('/market?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(api.calls(SEARCH)).toHaveLength(1);

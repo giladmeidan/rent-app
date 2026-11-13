@@ -1,5 +1,6 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
-import { Route, Routes, useNavigate } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render as renderUi, screen, within } from '@testing-library/react';
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
@@ -68,7 +69,8 @@ const render = (path: string, client = testQueryClient()) =>
     path,
     <>
       <Routes>
-        <Route path="/search" element={<SearchPage />} />
+        <Route path="/search" element={<SearchPage type="apartment" />} />
+        <Route path="/market" element={<SearchPage type="room" />} />
         <Route path="/listings/:id" element={<p>listing</p>} />
       </Routes>
       <Back />
@@ -105,6 +107,7 @@ describe('SearchPage', () => {
     expect(api.calls(SEARCH)).toHaveLength(1);
     expect(query(sent(api, 0))).toEqual(
       expected({
+        listing_type: 'apartment',
         price_max: '8000',
         rooms_min: '3',
         pets: 'true',
@@ -141,7 +144,9 @@ describe('SearchPage', () => {
     expect(await screen.findByText(he.search.empty)).toBeVisible();
     await settle();
     expect(api.calls(SEARCH)).toHaveLength(1);
-    expect(query(sent(api, 0))).toEqual(expected({ limit: '20', offset: '0' }));
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'apartment', limit: '20', offset: '0' }),
+    );
     expect(screen.getByRole('button', { name: he.search.filters })).toBeVisible();
     expect(screen.getByLabelText(he.search.sort.label)).toHaveValue('newest');
     view.unmount();
@@ -152,7 +157,9 @@ describe('SearchPage', () => {
     render('/search?price_min=9000&price_max=8000');
     expect(await screen.findByText(he.search.empty)).toBeVisible();
     expect(api.calls(SEARCH)).toHaveLength(1);
-    expect(query(sent(api, 0))).toEqual(expected({ price_min: '9000', limit: '20', offset: '0' }));
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'apartment', price_min: '9000', limit: '20', offset: '0' }),
+    );
     expect(
       screen.getByRole('button', { name: i18n.t('search.filtersActive', { count: 1 }) }),
     ).toBeVisible();
@@ -192,7 +199,13 @@ describe('SearchPage', () => {
       expect(api.calls(SEARCH)).toHaveLength(2);
     });
     expect(query(sent(api, 1))).toEqual(
-      expected({ price_max: '8000', pets: 'true', limit: '20', offset: '0' }),
+      expected({
+        listing_type: 'apartment',
+        price_max: '8000',
+        pets: 'true',
+        limit: '20',
+        offset: '0',
+      }),
     );
     // The panel stays open across the URL change; the form shows the URL's values.
     expect(priceTo()).toHaveValue('8000');
@@ -442,7 +455,9 @@ describe('SearchPage', () => {
     await vi.waitFor(() => {
       expect(api.calls(SEARCH)).toHaveLength(2);
     });
-    expect(query(sent(api, 1))).toEqual(expected({ pets: 'true', limit: '20', offset: '20' }));
+    expect(query(sent(api, 1))).toEqual(
+      expected({ listing_type: 'apartment', pets: 'true', limit: '20', offset: '20' }),
+    );
     await vi.waitFor(() => {
       expect(more).toBeDisabled();
     });
@@ -470,7 +485,9 @@ describe('SearchPage', () => {
       expect(screen.getAllByRole('article')).toHaveLength(25);
     });
     expect(api.calls(SEARCH)).toHaveLength(3);
-    expect(query(sent(api, 2))).toEqual(expected({ pets: 'true', limit: '20', offset: '20' }));
+    expect(query(sent(api, 2))).toEqual(
+      expected({ listing_type: 'apartment', pets: 'true', limit: '20', offset: '20' }),
+    );
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
@@ -503,7 +520,13 @@ describe('SearchPage', () => {
       expect(api.calls(SEARCH)).toHaveLength(2);
     });
     expect(query(sent(api, 1))).toEqual(
-      expected({ pets: 'true', sort: 'price_desc', limit: '20', offset: '0' }),
+      expected({
+        listing_type: 'apartment',
+        pets: 'true',
+        sort: 'price_desc',
+        limit: '20',
+        offset: '0',
+      }),
     );
     expect(select).toHaveValue('price_desc');
     await settle();
@@ -601,14 +624,18 @@ describe('SearchPage', () => {
       expect(options()).toEqual(all);
     });
     expect(select()).toHaveValue('match');
-    expect(query(sent(api, 0))).toEqual(expected({ limit: '20', offset: '0' }));
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'apartment', limit: '20', offset: '0' }),
+    );
     // Choosing newest: in the URL and the request.
     fireEvent.change(select(), { target: { value: 'newest' } });
     expect(currentPath()).toBe('/search?sort=newest');
     await vi.waitFor(() => {
       expect(api.calls(SEARCH)).toHaveLength(2);
     });
-    expect(query(sent(api, 1))).toEqual(expected({ sort: 'newest', limit: '20', offset: '0' }));
+    expect(query(sent(api, 1))).toEqual(
+      expected({ listing_type: 'apartment', sort: 'newest', limit: '20', offset: '0' }),
+    );
     await settle();
     expect(select()).toHaveValue('newest');
     // Still offered: the seeker has a profile.
@@ -661,7 +688,9 @@ describe('SearchPage', () => {
     });
     render('/search?sort=match');
     await screen.findByText(i18n.t('search.count', { count: 1 }));
-    expect(query(sent(api, 0))).toEqual(expected({ sort: 'match', limit: '20', offset: '0' }));
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'apartment', sort: 'match', limit: '20', offset: '0' }),
+    );
     expect(select()).toHaveValue('newest');
     expect(options()).toEqual(withoutMatch);
     expect(liveRegion()?.textContent).toBe(i18n.t('search.count', { count: 1 }));
@@ -717,78 +746,6 @@ describe('SearchPage', () => {
     }
   });
 
-  it('ac2_type_filter', async () => {
-    const typeGroup = () => group(he.search.type.legend);
-    const apartmentBox = () =>
-      typeGroup().getByRole('checkbox', { name: he.search.type.apartment });
-    const roomBox = () => typeGroup().getByRole('checkbox', { name: he.search.type.room });
-
-    // Both on by default, and nothing is sent for them.
-    let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
-    let view = render('/search');
-    await screen.findByText(i18n.t('search.count', { count: 1 }));
-    openPanel();
-    expect(apartmentBox()).toBeChecked();
-    expect(roomBox()).toBeChecked();
-    expect(apartmentBox()).toBeEnabled();
-    expect(roomBox()).toBeEnabled();
-    expect(screen.queryByText(he.search.type.hint)).toBeNull();
-    expect(apartmentBox()).not.toHaveAttribute('aria-describedby');
-    expect(query(sent(api, 0))).toEqual(expected({ limit: '20', offset: '0' }));
-
-    // Rooms only: in the URL and the request, one active filter, the last box locked and explained.
-    fireEvent.click(apartmentBox());
-    apply();
-    expect(currentPath()).toBe('/search?listing_type=room');
-    await vi.waitFor(() => {
-      expect(api.calls(SEARCH)).toHaveLength(2);
-    });
-    expect(query(sent(api, 1))).toEqual(
-      expected({ listing_type: 'room', limit: '20', offset: '0' }),
-    );
-    expect(
-      screen.getByRole('button', { name: i18n.t('search.filtersActive', { count: 1 }) }),
-    ).toBeVisible();
-    expect(apartmentBox()).not.toBeChecked();
-    expect(roomBox()).toBeChecked();
-    expect(roomBox()).toBeDisabled();
-    expect(apartmentBox()).toBeEnabled();
-    expect(screen.getByText(he.search.type.hint)).toBeVisible();
-    expect(roomBox()).toHaveAccessibleDescription(he.search.type.hint);
-    expect(apartmentBox()).toHaveAccessibleDescription(he.search.type.hint);
-
-    // Both again: the key goes.
-    fireEvent.click(apartmentBox());
-    expect(screen.queryByText(he.search.type.hint)).toBeNull();
-    expect(roomBox()).toBeEnabled();
-    apply();
-    expect(currentPath()).toBe('/search');
-    await vi.waitFor(() => {
-      expect(api.calls(SEARCH)).toHaveLength(3);
-    });
-    expect(query(sent(api, 2))).toEqual(expected({ limit: '20', offset: '0' }));
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // From the URL: apartments only; a type with no results offers "ניקוי", which re-checks both.
-    api = mockApi({ [SEARCH]: [json(page([], 0)), json(page([publicListing()]))] });
-    view = render('/search?listing_type=apartment');
-    expect(await screen.findByText(he.search.empty)).toBeVisible();
-    expect(query(sent(api, 0))).toEqual(
-      expected({ listing_type: 'apartment', limit: '20', offset: '0' }),
-    );
-    openPanel();
-    expect(apartmentBox()).toBeChecked();
-    expect(apartmentBox()).toBeDisabled();
-    expect(roomBox()).not.toBeChecked();
-    fireEvent.click(screen.getAllByRole('button', { name: he.search.clear })[0] as HTMLElement);
-    expect(currentPath()).toBe('/search');
-    expect(apartmentBox()).toBeChecked();
-    expect(roomBox()).toBeChecked();
-    expect(screen.queryByText(he.search.type.hint)).toBeNull();
-    view.unmount();
-  });
-
   it('ac5_similar_age_chip', async () => {
     const year = new Date().getUTCFullYear();
     const room = publicListing({
@@ -822,7 +779,7 @@ describe('SearchPage', () => {
       [PROFILE]: [json(profile({ gender: 'woman', birth_year: year - 28 }))],
       [SEARCH]: [json(page([room, flat]))],
     });
-    let view = render('/search');
+    let view = render('/market');
     expect(await screen.findByText(he.rooms.card.similarAge)).toBeVisible();
     expect(listChips('חדר')[0]).toBe(he.rooms.card.similarAge);
     expect(within(cardOf('חדר')).getByText(he.rooms.card.similarAge)).toHaveClass(
@@ -845,7 +802,7 @@ describe('SearchPage', () => {
         [PROFILE]: [reply],
         [SEARCH]: [json(page([room, flat]))],
       });
-      view = render('/search');
+      view = render('/market');
       await screen.findByText(i18n.t('search.count', { count: 2 }));
       await vi.waitFor(() => {
         expect(api.calls(PROFILE)).toHaveLength(1);
@@ -863,7 +820,7 @@ describe('SearchPage', () => {
         [PROFILE]: [json(profile({ birth_year: year - 28 }))],
         [SEARCH]: [json(page([room, flat]))],
       });
-      view = render('/search');
+      view = render('/market');
       await screen.findByText(i18n.t('search.count', { count: 2 }));
       await vi.waitFor(() => {
         expect(api.calls(ME)).toHaveLength(1);
@@ -904,7 +861,7 @@ describe('SearchPage', () => {
       [PROFILE]: [json(profile({ lifestyle: { cleanliness: 3 } }))],
       [SEARCH]: [json(page([alike, unlike, flat], 3, 'match'))],
     });
-    render('/search');
+    render('/market');
     expect(await screen.findByText('התאמה 88%')).toBeVisible();
     const [first, second, third] = screen.getAllByRole('article');
     if (first === undefined || second === undefined || third === undefined) {
@@ -972,8 +929,7 @@ describe('SearchPage', () => {
       within(screen.getByRole('list', { name: he.search.tags.label }))
         .getAllByRole('listitem')
         .map((li) => li.textContent);
-    const url =
-      '/search?price_max=8000&rooms_min=3&rooms_max=4&available_by=2027-01-01&listing_type=room&pets=true';
+    const url = '/search?price_max=8000&rooms_min=3&rooms_max=4&available_by=2027-01-01&pets=true';
     mockApi({ [SEARCH]: [json(page([publicListing()]))] });
     let view = render(url);
     await screen.findAllByRole('article');
@@ -981,7 +937,6 @@ describe('SearchPage', () => {
       'עד 8,000 ₪',
       'חדרים: 3–4',
       `כניסה עד ${formatDate('2027-01-01')}`,
-      he.search.type.room,
       he.search.feature.pets,
     ]);
     // Static: no button inside the list.
@@ -1201,5 +1156,125 @@ describe('SearchPage', () => {
     expect(lastProps().center).toEqual([34.8123, 32.0712]);
     expect(lastProps().zoom).toBe(13.5);
     expect(lastProps().bounds).toBeUndefined();
+  });
+  it('ac8_type_per_side_and_redirect', async () => {
+    // /search: apartments only, in the list and on the map; no type fieldset or tag.
+    let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    let view = render('/search?pets=true');
+    await screen.findAllByRole('article');
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'apartment', pets: 'true', limit: '20', offset: '0' }),
+    );
+    openPanel();
+    expect(screen.queryByRole('group', { name: 'סוג' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'חדר בדירת שותפים' })).toBeNull();
+    expect(screen.getByText(he.search.availableByHint)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: he.search.tags.label }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([he.search.feature.pets]);
+    fireEvent.click(viewToggle().getByRole('button', { name: he.search.view.map }));
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    expect(new URL(sent(api, 1).url).searchParams.getAll('listing_type')).toEqual(['apartment']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // /market: rooms, the market's title and date hint; the map asks for rooms too.
+    api = mockApi({ [SEARCH]: [json(page([publicListing({ listing_type: 'room' })]))] });
+    view = render('/market');
+    expect(await screen.findByRole('heading', { level: 1, name: he.market.title })).toBeVisible();
+    await screen.findAllByRole('article');
+    expect(document.title).toContain(he.market.title);
+    expect(query(sent(api, 0))).toEqual(
+      expected({ listing_type: 'room', limit: '20', offset: '0' }),
+    );
+    openPanel();
+    expect(screen.getByText(he.market.availableByHint)).toBeInTheDocument();
+    expect(screen.queryByText(he.search.availableByHint)).toBeNull();
+    fireEvent.click(viewToggle().getByRole('button', { name: he.search.view.map }));
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    expect(new URL(sent(api, 1).url).searchParams.getAll('listing_type')).toEqual(['room']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // One cache, two sides: `/search`'s cached apartment is never shown on `/market`.
+    const client = testQueryClient();
+    const flat = publicListing({ street: 'דירה בלבד' });
+    const rooms = deferred();
+    api = mockApi({ [SEARCH]: [json(page([flat])), rooms.promise] });
+    view = renderRoutes(
+      '/search',
+      <>
+        <Routes>
+          <Route path="/search" element={<SearchPage key="apartment" type="apartment" />} />
+          <Route path="/market" element={<SearchPage key="room" type="room" />} />
+        </Routes>
+        <Link to="/market">to-market</Link>
+      </>,
+      client,
+    );
+    expect(await screen.findByRole('link', { name: /דירה בלבד/ })).toBeVisible();
+    fireEvent.click(screen.getByRole('link', { name: 'to-market' }));
+    expect(await screen.findByRole('heading', { level: 1, name: he.market.title })).toBeVisible();
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    expect(screen.queryByRole('link', { name: /דירה בלבד/ })).toBeNull();
+    expect(new URL(sent(api, 1).url).searchParams.get('listing_type')).toBe('room');
+    rooms.resolve(json(page([])));
+    expect(await screen.findByText(he.search.empty)).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An old rooms link lands on the market with its other params, replacing the entry: Back goes
+    // to the page before it.
+    api = mockApi({ [SEARCH]: [json(page([]))] });
+    function Where() {
+      const location = useLocation();
+      return <output data-testid="where">{location.pathname + location.search}</output>;
+    }
+    view = renderUi(
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter
+          initialEntries={['/before', '/search?listing_type=room&price_max=5000&view=map']}
+          initialIndex={1}
+        >
+          <Routes>
+            <Route path="/before" element={<p>before</p>} />
+            <Route path="/search" element={<SearchPage type="apartment" />} />
+            <Route path="/market" element={<SearchPage type="room" />} />
+          </Routes>
+          <Back />
+          <Where />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: he.market.title })).toBeVisible();
+    expect(screen.getByTestId('where')).toHaveTextContent('/market?price_max=5000&view=map');
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+    expect(await screen.findByText('before')).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // `listing_type=apartment` (or anything else) stays on /search; requests carry the page's type
+    // once.
+    for (const value of ['apartment', 'house']) {
+      api = mockApi({ [SEARCH]: [json(page([]))] });
+      view = render(`/search?listing_type=${value}`);
+      expect(await screen.findByText(he.search.empty)).toBeVisible();
+      expect(currentPath()).toBe(`/search?listing_type=${value}`);
+      expect(query(sent(api, 0))).toEqual(
+        expected({ listing_type: 'apartment', limit: '20', offset: '0' }),
+      );
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 });

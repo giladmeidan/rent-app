@@ -184,9 +184,8 @@ class ListingPatch(BaseModel):
     never written: the service reads only `model_fields_set` and re-validates the merged row with
     `ListingIn` (cross-field rules)."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    listing_type: ListingType | None = None
     area_id: uuid.UUID | None = None
     city: City | None = None
     street: Street | None = None

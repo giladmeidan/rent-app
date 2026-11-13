@@ -322,9 +322,10 @@ describe('MyLikesPage', () => {
     expect(await screen.findByText(he.likes.errors.alreadyApplied)).toBeVisible();
     line = screen.getByRole('alert');
     expect(line).toHaveFocus();
+    // A room application: the market's "שלי" (spec 0010a).
     expect(within(line).getByRole('link', { name: he.applications.viewMine })).toHaveAttribute(
       'href',
-      '/me/applications',
+      '/market/mine',
     );
     after(await h1(), line);
     expect(await screen.findByText(he.likes.likedMeEmpty)).toBeVisible();

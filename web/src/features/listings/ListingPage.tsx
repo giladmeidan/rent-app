@@ -6,6 +6,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { BackLink } from '../../components/PageHeader';
 import { PageContainer } from '../../components/PageContainer';
+import { setSide, useSide } from '../../app/side';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -44,6 +45,14 @@ export function ListingPage() {
   useEffect(() => {
     if (seenId !== undefined) markSeen(seenId);
   }, [seenId]);
+  // A room is the market's (spec 0010a): the header's side and bottom bar follow the listing. While
+  // it loads, or on an error, the page follows the last side.
+  const loadedType = listing.isSuccess ? listing.data.listing_type : undefined;
+  useEffect(() => {
+    if (loadedType !== undefined) setSide(loadedType === 'room' ? 'market' : 'apartments');
+  }, [loadedType]);
+  const market = useSide() === 'market';
+  const backToMarket = loadedType === undefined ? market : loadedType === 'room';
   // The small map is dropped when it cannot be shown; the address text stays.
   const [mapFailed, setMapFailed] = useState(false);
   // Set by a like that made the pair mutual; it replaces the control and outlives the cache writes.
@@ -84,8 +93,8 @@ export function ListingPage() {
     body = notFound ? (
       <div className="flex flex-col items-start gap-4">
         <h1 className="text-start font-display text-h2">{t('listing.notFound')}</h1>
-        <Button variant="primary" to="/search">
-          {t('listing.toSearch')}
+        <Button variant="primary" to={market ? '/market' : '/search'}>
+          {market ? t('market.toSearch') : t('listing.toSearch')}
         </Button>
       </div>
     ) : (
@@ -178,8 +187,8 @@ export function ListingPage() {
                 the small map failed. */}
             {l.lat !== null && l.lng !== null && (
               <Link
-                to={`/search?${writeMapPosition(
-                  new URLSearchParams({ listing_type: l.listing_type, view: 'map' }),
+                to={`${l.listing_type === 'room' ? '/market' : '/search'}?${writeMapPosition(
+                  new URLSearchParams({ view: 'map' }),
                   { center: [l.lng, l.lat], zoom: 15, pin: l.id },
                 ).toString()}`}
                 className={`inline-flex min-h-tap items-center self-start rounded text-body-sm font-medium text-accent-strong underline underline-offset-4 ${focusRing}`}
@@ -225,7 +234,10 @@ export function ListingPage() {
 
   return (
     <PageContainer width="wide" className="flex flex-col gap-4">
-      <BackLink to="/search" label={t('listing.backToSearch')} />
+      <BackLink
+        to={backToMarket ? '/market' : '/search'}
+        label={backToMarket ? t('listing.backToMarket') : t('listing.backToSearch')}
+      />
       {body}
       {listing.isSuccess && (
         <ApplyBar listing={listing.data} target={actionsRef} headingRef={applyHeadingRef} />

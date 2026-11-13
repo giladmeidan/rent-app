@@ -11,7 +11,8 @@ listings whose approximate point is inside it.
 `ListingPublic.match` (spec 0006b) is the caller's match score and its explanation: only a score and
 criterion codes, never a profile value; `null` for everyone but a seeker with a profile.
 
-Rooms are public (spec 0007b), next to apartments; `SearchParams.listing_type` narrows to one type.
+Rooms are public (spec 0007b). Each type is searched on its own (spec 0010a):
+`SearchParams.listing_type` is `apartment` when omitted, and the market asks for `room` explicitly.
 `ListingPublic` carries the four room fields (`gender_preference`, `flatmates_count`,
 `flatmate_ages`, `lifestyle`; an apartment holds `'any'`, null, `[]` and `{}`). The flatmates' ages
 and the questionnaire answers (`SEEKER_ONLY_FIELDS`) go only to a signed-in seeker, with or without
@@ -64,8 +65,8 @@ class SearchParams(BaseModel):
     furnished: bool | None = None
     elevator: bool | None = None
     parking: bool | None = None
-    # Omitted: both types (spec 0007b).
-    listing_type: ListingType | None = None
+    # Omitted: `apartment` (spec 0010a); rooms are asked for explicitly by the market.
+    listing_type: ListingType = "apartment"
     # Omitted: `match` for a seeker with a profile, else `newest` (`services/search.py`).
     sort: SearchSort | None = None
     limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = SEARCH_LIMIT_DEFAULT

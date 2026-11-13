@@ -14,6 +14,8 @@ export type NavTabProps = {
   count?: number;
   /** The count as a sentence, which completes the tab's name ("צ'אט <sentence>"). */
   countLabel?: string;
+  /** Current on `to` itself only, not on the paths below it (`/market` beside `/market/mine`). */
+  end?: boolean;
 };
 
 /**
@@ -22,10 +24,11 @@ export type NavTabProps = {
  * bar, the active one with the accent bottom border of InboxDesktop.dc.html. `NavLink` marks the
  * current tab `aria-current="page"`, nested paths included.
  */
-export function NavTab({ to, icon, label, count = 0, countLabel }: NavTabProps) {
+export function NavTab({ to, icon, label, count = 0, countLabel, end = false }: NavTabProps) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={cx(
         'relative flex min-h-tap min-w-0 items-center text-ink-muted aria-[current=page]:font-medium aria-[current=page]:text-accent',
         // The bottom bar: equal widths, the icon above the label.
