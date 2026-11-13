@@ -48,7 +48,10 @@ export function mockApi(routes: Record<string, Reply[]>) {
   const used: Record<string, number> = {};
   const fetchMock = vi.fn(async (request: Request) => {
     const route = `${request.method} ${new URL(request.url).pathname}`;
-    const text = request.method === 'GET' ? '' : await request.clone().text();
+    // A photo upload's body is the image itself (spec 0010e): `body` stays undefined and a test
+    // reads the bytes from `request`.
+    const image = request.headers.get('Content-Type')?.startsWith('image/') === true;
+    const text = request.method === 'GET' || image ? '' : await request.clone().text();
     calls.push({ route, request, body: text === '' ? undefined : JSON.parse(text) });
     const queue = routes[route];
     if (queue === undefined || queue.length === 0)

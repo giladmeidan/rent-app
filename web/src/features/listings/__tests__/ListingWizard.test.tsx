@@ -1,19 +1,22 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import {
   currentPath,
   deferred,
+  empty,
   json,
   mockApi,
   networkError,
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
-import type { GenderPreference, Household, ListingOut } from '../api';
+import { ME_KEY } from '../../auth/useMe';
+import type { GenderPreference, Household, ListingOut, PhotoOut } from '../api';
+import { EditListingPage } from '../EditListingPage';
 import { ListingWizard } from '../ListingWizard';
 import { MarketMinePage } from '../../market/MarketMinePage';
 import { NewListingPage } from '../NewListingPage';
@@ -45,7 +48,7 @@ const publishButton = () => screen.getByRole('button', { name: he.listings.publi
 async function toPreview(client = testQueryClient()) {
   const view = await toPreferences(client);
   fireEvent.click(nextButton());
-  expect(progress()).toHaveAttribute('aria-valuenow', '4');
+  expect(progress()).toHaveAttribute('aria-valuenow', '5');
   return view;
 }
 
@@ -93,11 +96,11 @@ const expectedBody = {
 const l = he.listings;
 const h1 = () => screen.getByRole('heading', { level: 1 });
 const h2 = (name: string) => screen.getByRole('heading', { level: 2, name });
-const stepOf = (n: number, total = 4) => i18n.t('listings.stepOf', { n, total });
+const stepOf = (n: number, total = 5) => i18n.t('listings.stepOf', { n, total });
 /** The stepper: the `<ol>` that holds the step names (the type step only when reachable). */
 const stepper = () => screen.getByText(l.steps.details).closest('ol') as HTMLOListElement;
-/** Shown step `n` of `total` (3 when the type step is skipped, spec 0010a). */
-const expectStep = (n: number, total = 4) => {
+/** Shown step `n` of `total` (4 when the type step is skipped, spec 0010a; 0010e adds photos). */
+const expectStep = (n: number, total = 5) => {
   const items = within(stepper()).getAllByRole('listitem');
   expect(items).toHaveLength(total);
   items.forEach((item, i) => {
@@ -137,25 +140,36 @@ describe('ListingWizard', () => {
     fillValidDetails();
     fireEvent.click(nextButton());
 
-    // Step 3: the preferences' heading and hint come from the wizard, once.
+    // Step 3: the photos (spec 0010e), with the wizard's heading and hint.
     expectStep(3);
+    expect(h1()).toHaveFocus();
+    expect(h2(l.stepTitle.photos)).toBeVisible();
+    expect(screen.getAllByText(l.photos.hint)).toHaveLength(1);
+    fireEvent.click(nextButton());
+
+    // Step 4: the preferences' heading and hint come from the wizard, once.
+    expectStep(4);
     expect(h1()).toHaveFocus();
     expect(h2(p.title)).toBeVisible();
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
     expect(screen.getAllByText(p.hint)).toHaveLength(1);
     fireEvent.click(nextButton());
 
-    // Step 4: the preview.
-    expectStep(4);
+    // Step 5: the preview.
+    expectStep(5);
     expect(h1()).toHaveFocus();
     expect(h2(l.stepTitle.preview)).toBeVisible();
     expect(screen.getAllByText(l.preview.hint)).toHaveLength(1);
 
-    // Back to 3 and 2: the same headings, the h1 focused each time.
+    // Back to 4, 3 and 2: the same headings, the h1 focused each time.
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expectStep(4);
+    expect(h1()).toHaveFocus();
+    expect(h2(p.title)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     expectStep(3);
     expect(h1()).toHaveFocus();
-    expect(h2(p.title)).toBeVisible();
+    expect(h2(l.stepTitle.photos)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     expectStep(2);
     expect(h1()).toHaveFocus();
@@ -172,6 +186,9 @@ describe('ListingWizard', () => {
     fillValidDetails('room');
     fireEvent.click(nextButton());
     expectStep(3);
+    expect(h2(l.stepTitle.photosRoom)).toBeVisible();
+    fireEvent.click(nextButton());
+    expectStep(4);
     expect(h2(p.titleRoom)).toBeVisible();
     view.unmount();
     vi.unstubAllGlobals();
@@ -189,8 +206,9 @@ describe('ListingWizard', () => {
     await areasLoaded();
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    // No type step in edit mode (spec 0010a): the preview is step 3 of 3.
-    expectStep(3, 3);
+    fireEvent.click(nextButton());
+    // No type step in edit mode (spec 0010a): the preview is step 4 of 4.
+    expectStep(4, 4);
     expect(h2(l.stepTitle.previewEdit)).toBeVisible();
   });
 
@@ -234,8 +252,11 @@ describe('ListingWizard', () => {
     fillValidDetails();
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
     fireEvent.click(publishButton());
-    expect(await screen.findByTestId('state')).toHaveTextContent('{"published":true}');
+    expect(await screen.findByTestId('state')).toHaveTextContent(
+      '{"published":true,"photosFailed":0}',
+    );
     expect(api.calls('POST /listings')).toHaveLength(1);
     expect(currentPath()).toBe('/me/listings');
     published.unmount();
@@ -258,8 +279,9 @@ describe('ListingWizard', () => {
     fireEvent.change(screen.getByLabelText(l.fields.price), { target: { value: '7500' } });
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
     fireEvent.click(screen.getByRole('button', { name: l.save }));
-    expect(await screen.findByTestId('state')).toHaveTextContent('{"saved":true}');
+    expect(await screen.findByTestId('state')).toHaveTextContent('{"saved":true,"photosFailed":0}');
   });
 
   it('ac2_type_step_and_back_keeps_state', async () => {
@@ -268,7 +290,7 @@ describe('ListingWizard', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: he.listings.new.title })).toBeVisible();
     expect(progress()).toHaveAttribute('aria-valuenow', '1');
-    expect(progress()).toHaveAttribute('aria-valuemax', '4');
+    expect(progress()).toHaveAttribute('aria-valuemax', '5');
     expect(progress()).toHaveAccessibleName(he.listings.new.title);
     expect(stepItem(he.listings.steps.type)).toHaveAttribute('aria-current', 'step');
     expect(screen.getByRole('group', { name: he.listings.type.label })).toBeVisible();
@@ -417,7 +439,7 @@ describe('ListingWizard', () => {
       i18n.t('listings.errors.capReached', { cap: 3 }),
     );
     expect(alertText()).toContain('3');
-    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
     expect(publishButton()).toBeEnabled();
     view.unmount();
     vi.unstubAllGlobals();
@@ -544,15 +566,15 @@ describe('ListingWizard', () => {
     mockApi({ 'GET /areas': [json([gushDan])] });
     const view = renderWizard();
     const s = he.listings.steps;
-    const names = [s.type, s.details, s.preferences, s.preview];
+    const names = [s.type, s.details, s.photos, s.preferences, s.preview];
 
     const items = within(stepItem(s.type).closest('ol') as HTMLElement).getAllByRole('listitem');
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(5);
     items.forEach((item, i) => {
       expect(item).toHaveTextContent(names[i] as string);
     });
     expect(progress()).toHaveAttribute('aria-valuemin', '1');
-    expect(progress()).toHaveAttribute('aria-valuemax', '4');
+    expect(progress()).toHaveAttribute('aria-valuemax', '5');
     const at = (n: number) => {
       expect(progress()).toHaveAttribute('aria-valuenow', String(n));
       names.forEach((name, i) => {
@@ -568,6 +590,8 @@ describe('ListingWizard', () => {
     fillValidDetails();
     fireEvent.click(nextButton());
     at(3);
+    fireEvent.click(nextButton());
+    at(4);
     expect(screen.getByRole('heading', { level: 2, name: p.title })).toBeVisible();
     expect(screen.getByText(p.hint)).toBeVisible();
     // The defaults: every household, smokers welcome, no minimum.
@@ -579,17 +603,19 @@ describe('ListingWizard', () => {
     fireEvent.click(noSmokers());
     fireEvent.change(minContract(), { target: { value: '36' } });
     fireEvent.click(nextButton());
-    at(4);
+    at(5);
     expect(screen.getByRole('button', { name: he.listings.publish })).toBeVisible();
 
-    // Back: preview → preferences → details → type, every value kept.
+    // Back: preview → preferences → photos → details → type, every value kept.
     const back = () => fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     back();
-    at(3);
+    at(4);
     expect(household(p.household.single)).toBeChecked();
     expect(household(p.household.family)).not.toBeChecked();
     expect(noSmokers()).toBeChecked();
     expect(minContract()).toHaveDisplayValue(p.contract['36']);
+    back();
+    at(3);
     back();
     at(2);
     expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue('גבעתיים');
@@ -601,13 +627,14 @@ describe('ListingWizard', () => {
     // And forward again: still there.
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    at(3);
+    fireEvent.click(nextButton());
+    at(4);
     expect(household(p.household.family)).not.toBeChecked();
     expect(minContract()).toHaveValue('36');
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Edit mode opens on details, shown as step 1 of 3, with no back button: the type step is
+    // Edit mode opens on details, shown as step 1 of 4, with no back button: the type step is
     // unreachable (spec 0010a).
     const a = listing();
     mockApi({
@@ -620,7 +647,7 @@ describe('ListingWizard', () => {
       await screen.findByRole('heading', { level: 1, name: he.listings.edit.title }),
     ).toBeVisible();
     await areasLoaded();
-    expectStep(1, 3);
+    expectStep(1, 4);
     expect(screen.queryByText(s.type)).toBeNull();
     expect(screen.queryByRole('button', { name: he.common.back })).toBeNull();
     expect(screen.queryByRole('radio', { name: he.listings.type.apartment })).toBeNull();
@@ -645,7 +672,7 @@ describe('ListingWizard', () => {
     fireEvent.change(minContract(), { target: { value: '12' } });
     expect(minContract()).toHaveDisplayValue(p.contract['12']);
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
 
     // The preview: the three chips under the card.
     const card = screen.getByRole('article');
@@ -684,11 +711,12 @@ describe('ListingWizard', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(nextButton());
 
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
     expect(document.activeElement).toBe(household(p.household.single));
 
     // A round trip to details (with a blur there) keeps it.
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
     act(() => {
@@ -696,7 +724,8 @@ describe('ListingWizard', () => {
       screen.getByLabelText(he.listings.fields.street).focus();
     });
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(errorFor(households())).toHaveTextContent(he.listings.errors.households);
 
     // Another preference changing keeps the error; a household fixes it.
@@ -710,15 +739,17 @@ describe('ListingWizard', () => {
     expect(screen.queryByText(he.listings.errors.households)).toBeNull();
 
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
     expect(api.calls('POST /listings')).toHaveLength(0);
   });
 
   it('ac5_server_error_on_preference_returns_to_step_3', async () => {
+    // The preferences are step 4 since spec 0010e; the name keeps the AC's.
     const invalid = (...fields: string[]) =>
       json({ detail: fields.map((f) => ({ loc: ['body', f], msg: 'bad', type: 'x' })) }, 422);
 
-    // The minimum contract named: back on step 3, the error on the select and focus there.
+    // The minimum contract named: back on the preferences, the error on the select and focus
+    // there.
     mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [invalid('min_contract_months')],
@@ -726,7 +757,7 @@ describe('ListingWizard', () => {
     let view = await toPreview();
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
-      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
     });
     expect(errorFor(minContract())).toHaveTextContent(he.listings.errors.invalid);
     expect(document.activeElement).toBe(minContract());
@@ -738,7 +769,7 @@ describe('ListingWizard', () => {
     vi.unstubAllGlobals();
 
     // A details field and the households named: details first (step 2), the households' error
-    // waiting on step 3.
+    // waiting on the preferences.
     mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [invalid('accepted_households', 'city')],
@@ -752,7 +783,8 @@ describe('ListingWizard', () => {
     expect(errorFor(city)).toHaveTextContent(he.listings.errors.invalid);
     expect(document.activeElement).toBe(city);
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(errorFor(households())).toHaveTextContent(he.listings.errors.invalid);
     view.unmount();
   });
@@ -768,7 +800,7 @@ describe('ListingWizard', () => {
       </Routes>
     );
 
-    // `?type=room`: the room details first, "1 of 3", no back button there.
+    // `?type=room`: the room details first, "1 of 4", no back button there.
     let api = mockApi({
       'GET /me': [json(owner)],
       'GET /areas': [json([gushDan])],
@@ -778,18 +810,21 @@ describe('ListingWizard', () => {
     });
     let view = renderRoutes('/listings/new?type=room', newRoutes, meClient());
     expect(h2(l.stepTitle.detailsRoom)).toBeVisible();
-    expectStep(1, 3);
+    expectStep(1, 4);
     expect(screen.queryByText(l.steps.type)).toBeNull();
     expect(backButton()).toBeNull();
     await areasLoaded();
     fillValidDetails('room');
     fireEvent.click(nextButton());
-    expectStep(2, 3);
-    expect(h2(p.titleRoom)).toBeVisible();
+    expectStep(2, 4);
+    expect(h2(l.stepTitle.photosRoom)).toBeVisible();
     expect(backButton()).toBeVisible();
+    fireEvent.click(nextButton());
+    expectStep(3, 4);
+    expect(h2(p.titleRoom)).toBeVisible();
     fireEvent.change(screen.getByLabelText(l.room.flatmatesCount), { target: { value: '2' } });
     fireEvent.click(nextButton());
-    expectStep(3, 3);
+    expectStep(4, 4);
     fireEvent.click(publishButton());
     // Published: the market's "שלי", with the celebration.
     expect(await screen.findByText(l.mine.published)).toBeVisible();
@@ -808,25 +843,28 @@ describe('ListingWizard', () => {
     });
     view = renderRoutes('/listings/new?type=apartment', newRoutes, meClient());
     expect(h2(l.stepTitle.details)).toBeVisible();
-    expectStep(1, 3);
+    expectStep(1, 4);
     expect(backButton()).toBeNull();
     await areasLoaded();
     fillValidDetails();
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
     fireEvent.click(publishButton());
-    expect(await screen.findByTestId('state')).toHaveTextContent('{"published":true}');
+    expect(await screen.findByTestId('state')).toHaveTextContent(
+      '{"published":true,"photosFailed":0}',
+    );
     expect(currentPath()).toBe('/me/listings');
     expect(api.calls('POST /listings')[0]?.body).toMatchObject({ listing_type: 'apartment' });
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Anything else, or no param: the type step, "1 of 4".
+    // Anything else, or no param: the type step, "1 of 5".
     for (const path of ['/listings/new?type=house', '/listings/new']) {
       mockApi({ 'GET /areas': [json([gushDan])] });
       view = renderRoutes(path, newRoutes, meClient());
       expect(h2(l.stepTitle.type)).toBeVisible();
-      expectStep(1, 4);
+      expectStep(1, 5);
       expect(screen.getByRole('radio', { name: l.type.room })).not.toBeChecked();
       expect(screen.getByRole('radio', { name: l.type.apartment })).not.toBeChecked();
       view.unmount();
@@ -836,7 +874,7 @@ describe('ListingWizard', () => {
 
   it('ac10_non_owner_room_only', async () => {
     // Spec 0010b: only an owner posts an apartment. A seeker gets the room flow whatever `?type=`
-    // says: no type step, the room details first, "1 of 3", published as a room to "שלי".
+    // says: no type step, the room details first, "1 of 4", published as a room to "שלי".
     const room = withoutCounts(listing({ listing_type: 'room', flatmates_count: 2 }));
     const newRoutes = (
       <Routes>
@@ -852,11 +890,12 @@ describe('ListingWizard', () => {
       });
       const view = renderRoutes(path, newRoutes, meClient(seeker));
       expect(h2(l.stepTitle.detailsRoom)).toBeVisible();
-      expectStep(1, 3);
+      expectStep(1, 4);
       expect(screen.queryByText(l.steps.type)).toBeNull();
       expect(screen.queryByRole('radio', { name: l.type.apartment })).toBeNull();
       await areasLoaded();
       fillValidDetails('room');
+      fireEvent.click(nextButton());
       fireEvent.click(nextButton());
       fireEvent.change(screen.getByLabelText(l.room.flatmatesCount), { target: { value: '2' } });
       fireEvent.click(nextButton());
@@ -867,5 +906,348 @@ describe('ListingWizard', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('ListingWizard photos (spec 0010e)', () => {
+  const createObjectURL = vi.fn<(file: Blob) => string>();
+  const revokeObjectURL = vi.fn<(url: string) => void>();
+
+  // jsdom has no object URLs.
+  beforeEach(() => {
+    let n = 0;
+    createObjectURL.mockImplementation(() => {
+      n += 1;
+      return `blob:wizard-${String(n)}`;
+    });
+    Object.defineProperty(URL, 'createObjectURL', { value: createObjectURL, configurable: true });
+    Object.defineProperty(URL, 'revokeObjectURL', { value: revokeObjectURL, configurable: true });
+  });
+
+  afterEach(() => {
+    createObjectURL.mockReset();
+    revokeObjectURL.mockReset();
+    Reflect.deleteProperty(URL, 'createObjectURL');
+    Reflect.deleteProperty(URL, 'revokeObjectURL');
+  });
+
+  const ph = l.photos;
+  const out = (id: string): PhotoOut => ({
+    id,
+    small_url: `https://media.example.test/${id}-s.webp`,
+    large_url: `https://media.example.test/${id}-l.webp`,
+  });
+  /** A file whose body is `size` real bytes. */
+  const file = (name: string, size = 4, type = 'image/jpeg') =>
+    new File([new Uint8Array(size)], name, { type });
+  const pick = (...files: File[]) => {
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(input as HTMLInputElement, { target: { files } });
+  };
+  const tileSources = () =>
+    Array.from(document.querySelectorAll('li[data-photo] img')).map((img) =>
+      img.getAttribute('src'),
+    );
+  const coverOf = (card: HTMLElement) => card.querySelector('img')?.getAttribute('src');
+  const backButton = () => screen.getByRole('button', { name: he.common.back });
+  /** Every non-GET request, in the order sent. */
+  const writes = (api: ReturnType<typeof mockApi>) =>
+    api.fetchMock.mock.calls
+      .map(([request]) => `${request.method} ${new URL(request.url).pathname}`)
+      .filter((route) => !route.startsWith('GET '));
+  const newRoutes = (
+    <Routes>
+      <Route path="/listings/new" element={<NewListingPage />} />
+      <Route path="/me/listings" element={<StatePrinter />} />
+    </Routes>
+  );
+
+  /** A new apartment, its details filled, on the photos step. */
+  async function newToPhotos(client = meClient(), tree = newRoutes) {
+    const view = renderRoutes('/listings/new', tree, client);
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    fillValidDetails();
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    return view;
+  }
+
+  /** From the photos step to the preview, then publish. */
+  function publishFromPhotos() {
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
+    fireEvent.click(publishButton());
+  }
+
+  it('ac2_publish_then_upload', async () => {
+    const created = withoutCounts(listing());
+    const upload = `POST /listings/${created.id}/photos`;
+    const post = deferred();
+    const first = deferred();
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [post.promise],
+      [upload]: [first.promise, json(out('d0000000-0000-0000-0000-0000000000d2'), 201)],
+    });
+    await newToPhotos();
+    pick(file('one.jpg', 5, 'image/jpeg'), file('two.png', 7, 'image/png'));
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+
+    // The preview card shows the first photo as the cover.
+    expect(coverOf(screen.getByRole('article'))).toBe('blob:wizard-1');
+
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(api.calls('POST /listings')).toHaveLength(1);
+    });
+    // Nothing is uploaded before the listing exists.
+    expect(api.calls(upload)).toHaveLength(0);
+    post.resolve(json(created, 201));
+
+    // The first upload in flight: the button stays disabled and busy, with the progress line.
+    await vi.waitFor(() => {
+      expect(api.calls(upload)).toHaveLength(1);
+    });
+    expect(publishButton()).toBeDisabled();
+    expect(publishButton()).toHaveAttribute('aria-busy', 'true');
+    expect(backButton()).toBeDisabled();
+    const line = screen.getByText('מעלים תמונה 1 מתוך 2…');
+    expect(line).toHaveAttribute('role', 'status');
+    expect(line).toHaveTextContent(i18n.t('listings.photos.uploading', { done: 1, total: 2 }));
+    first.resolve(json(out('d0000000-0000-0000-0000-0000000000d1'), 201));
+
+    expect(await screen.findByTestId('state')).toHaveTextContent(
+      '{"published":true,"photosFailed":0}',
+    );
+    // One after the other, after the POST, each body the file itself with its type.
+    expect(writes(api)).toEqual(['POST /listings', upload, upload]);
+    const [one, two] = api.calls(upload);
+    expect((await one?.request.arrayBuffer())?.byteLength).toBe(5);
+    expect(one?.request.headers.get('Content-Type')).toBe('image/jpeg');
+    expect((await two?.request.arrayBuffer())?.byteLength).toBe(7);
+    expect(two?.request.headers.get('Content-Type')).toBe('image/png');
+    // The wizard is gone: its object URLs too.
+    expect(revokeObjectURL.mock.calls.map(([url]) => url).sort()).toEqual([
+      'blob:wizard-1',
+      'blob:wizard-2',
+    ]);
+  });
+
+  it('ac3_partial_upload_failure', async () => {
+    const created = withoutCounts(listing());
+    const upload = `POST /listings/${created.id}/photos`;
+    const one = out('d0000000-0000-0000-0000-0000000000d1');
+    const three = out('d0000000-0000-0000-0000-0000000000d3');
+    let api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(created, 201)],
+      [upload]: [
+        json(one, 201),
+        json({ detail: 'photo_storage_unavailable' }, 503),
+        json(three, 201),
+      ],
+      'GET /me/listings': [
+        json([
+          {
+            ...listing({ id: created.id, street: created.street }),
+            photos: [one, three],
+          },
+        ]),
+      ],
+    });
+    let view = await newToPhotos(meClient(), routes);
+    pick(file('one.jpg'), file('two.jpg'), file('three.jpg'));
+    publishFromPhotos();
+
+    // The second failed, the third still went, and no reorder (the server order is right).
+    expect(await screen.findByText(l.mine.published)).toBeVisible();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'תמונה אחת לא הועלתה. אפשר להוסיף אותה שוב בעריכה.',
+    );
+    expect(currentPath()).toBe('/me/listings');
+    expect(writes(api)).toEqual(['POST /listings', upload, upload, upload]);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A POST that fails uploads nothing.
+    api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json({ detail: 'listing_cap_reached' }, 409)],
+    });
+    view = await newToPhotos();
+    pick(file('one.jpg'));
+    publishFromPhotos();
+    expect(await screen.findByText(i18n.t('listings.errors.capReached', { cap: 3 }))).toBeVisible();
+    expect(writes(api)).toEqual(['POST /listings']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A 401 on an upload: the cached user is cleared (the app sends the lister to log in), no
+    // navigation, nothing more is sent.
+    const client = meClient();
+    api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(created, 201)],
+      [upload]: [json({ detail: 'unauthenticated' }, 401)],
+    });
+    await newToPhotos(client);
+    pick(file('one.jpg'), file('two.jpg'));
+    publishFromPhotos();
+    await vi.waitFor(() => {
+      expect(client.getQueryData(ME_KEY)).toBeNull();
+    });
+    expect(currentPath()).toBe('/listings/new');
+    expect(writes(api)).toEqual(['POST /listings', upload]);
+  });
+
+  it('ac4_edit_photo_sync', async () => {
+    const [A, B, C] = [
+      out('a0000000-0000-0000-0000-00000000000a'),
+      out('b0000000-0000-0000-0000-00000000000b'),
+      out('c0000000-0000-0000-0000-00000000000c'),
+    ];
+    const D = out('d0000000-0000-0000-0000-00000000000d');
+    const stored = listing({ photos: [A, B, C] });
+    const base = `/listings/${stored.id}/photos`;
+    const editRoutes = (
+      <Routes>
+        <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
+        <Route path="/me/listings" element={<StatePrinter />} />
+      </Routes>
+    );
+    const open = async (replies: Parameters<typeof mockApi>[0] = {}) => {
+      const api = mockApi({
+        'GET /me': [() => json(owner)],
+        'GET /areas': [() => json([gushDan])],
+        'GET /me/listings': [() => json([stored]), () => deferred().promise],
+        ...replies,
+      });
+      const view = renderRoutes(`/me/listings/${stored.id}/edit`, editRoutes);
+      expect(await screen.findByRole('heading', { level: 1, name: l.edit.title })).toBeVisible();
+      await areasLoaded();
+      return { api, view };
+    };
+
+    const { api, view } = await open({
+      [`DELETE ${base}/${B.id}`]: [empty()],
+      [`POST ${base}`]: [json(D, 201)],
+      [`PUT ${base}/order`]: [json([D, A, C])],
+    });
+    // The photos step starts from the stored photos.
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    expect(tileSources()).toEqual([A.small_url, B.small_url, C.small_url]);
+
+    // Remove B (a stored photo: no object URL to revoke), add D, move D first.
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('listings.photos.remove', { n: 2 }) }),
+    );
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    pick(file('d.jpg'));
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('listings.photos.moveEarlier', { n: 3 }) }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('listings.photos.moveEarlier', { n: 2 }) }),
+    );
+    expect(tileSources()).toEqual(['blob:wizard-1', A.small_url, C.small_url]);
+
+    // Unsaved photo changes: the back link asks first.
+    fireEvent.click(screen.getByRole('link', { name: l.edit.backToMine }));
+    const dialog = await screen.findByRole('dialog', { name: l.edit.leaveConfirm });
+    fireEvent.click(within(dialog).getByRole('button', { name: l.edit.stay }));
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(currentPath()).toBe(`/me/listings/${stored.id}/edit`);
+
+    // No field changed: no PATCH; B deleted, D uploaded, one reorder with [D, A, C].
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    expect(coverOf(screen.getByRole('article'))).toBe('blob:wizard-1');
+    fireEvent.click(screen.getByRole('button', { name: l.save }));
+    expect(await screen.findByTestId('state')).toHaveTextContent('{"saved":true,"photosFailed":0}');
+    expect(writes(api)).toEqual([`DELETE ${base}/${B.id}`, `POST ${base}`, `PUT ${base}/order`]);
+    expect(api.calls(`PUT ${base}/order`)[0]?.body).toEqual({ photo_ids: [D.id, A.id, C.id] });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No change at all: nothing is sent, and "my listings" gets no message.
+    const quiet = await open();
+    fireEvent.click(nextButton());
+    expect(tileSources()).toEqual([A.small_url, B.small_url, C.small_url]);
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: l.save }));
+    expect(await screen.findByTestId('state')).toHaveTextContent('null');
+    expect(writes(quiet.api)).toEqual([]);
+  });
+
+  it('ac5_step_list', async () => {
+    const s = l.steps;
+    const names = () =>
+      within(stepper())
+        .getAllByRole('listitem')
+        .map((item) => item.textContent?.replace(/^\d/, ''));
+
+    // `?type=room`: four steps, the photos second ("שלב 2 מתוך 4" on it).
+    const api = mockApi({ 'GET /areas': [json([gushDan])], 'POST /listings': [] });
+    let view = renderRoutes('/listings/new?type=room', newRoutes, meClient());
+    expect(names()).toEqual([s.details, s.photos, s.preferences, s.preview]);
+    await areasLoaded();
+    fillValidDetails('room');
+    fireEvent.click(nextButton());
+    expectStep(2, 4);
+    expect(stepItem(s.photos)).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('שלב 2 מתוך 4')).toBeVisible();
+    expect(h2(l.stepTitle.photosRoom)).toBeVisible();
+    expect(screen.getByText(ph.hint)).toBeVisible();
+    // "Next" on the photos step goes to the preferences and never publishes.
+    fireEvent.click(nextButton());
+    expectStep(3, 4);
+    expect(h2(p.titleRoom)).toBeVisible();
+    expect(api.calls('POST /listings')).toHaveLength(0);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No type: five steps.
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    view = renderWizard();
+    expect(names()).toEqual([s.type, s.details, s.photos, s.preferences, s.preview]);
+    expectStep(1, 5);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Edit: from details, "1 of 4".
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    view = renderRoutes(
+      '/edit',
+      <Routes>
+        <Route path="/edit" element={<ListingWizard listing={listing()} />} />
+      </Routes>,
+    );
+    expect(names()).toEqual([s.details, s.photos, s.preferences, s.preview]);
+    expectStep(1, 4);
+    expect(screen.getByText('שלב 1 מתוך 4')).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A 422 naming a preference still lands on the preferences (step 4 of 5).
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [
+        json({ detail: [{ loc: ['body', 'min_contract_months'], msg: 'bad', type: 'x' }] }, 422),
+      ],
+    });
+    await toPreview();
+    fireEvent.click(publishButton());
+    await vi.waitFor(() => {
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    });
+    expectStep(4);
+    expect(h2(p.title)).toBeVisible();
   });
 });

@@ -97,7 +97,7 @@ async function openEdit(a: ListingOut, patchReplies: Parameters<typeof mockApi>[
   return { api, client, view };
 }
 
-/** Changes the price, goes to the preview and saves. */
+/** Changes the price, goes to the preview (through the photos and the preferences) and saves. */
 async function changePriceAndSave(
   a: ListingOut,
   patchReplies: Parameters<typeof mockApi>[0][string],
@@ -108,6 +108,8 @@ async function changePriceAndSave(
   expect(progress()).toHaveAttribute('aria-valuenow', '2');
   fireEvent.click(nextButton());
   expect(progress()).toHaveAttribute('aria-valuenow', '3');
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '4');
   fireEvent.click(saveButton());
   await vi.waitFor(() => {
     expect(opened.api.calls(`PATCH /listings/${a.id}`)).toHaveLength(1);
@@ -115,16 +117,24 @@ async function changePriceAndSave(
   return opened;
 }
 
-/** From the preferences (shown step 2): on to the preview, save, back on "my listings"; the PATCH bodies sent. */
+/** From the preferences (shown step 3): on to the preview, save, back on "my listings"; the PATCH bodies sent. */
 async function saveFromPreferences(api: ReturnType<typeof mockApi>, a: ListingOut) {
   fireEvent.click(nextButton());
-  expect(progress()).toHaveAttribute('aria-valuenow', '3');
+  expect(progress()).toHaveAttribute('aria-valuenow', '4');
   fireEvent.click(saveButton());
   // A room's "my" page is the market's (spec 0010a).
   await vi.waitFor(() => {
     expect(currentPath()).toBe(a.listing_type === 'room' ? '/market/mine' : '/me/listings');
   });
   return api.calls(`PATCH /listings/${a.id}`).map((c) => c.body);
+}
+
+/** From details to the preferences, through the photos step (spec 0010e). */
+function detailsToPreferences() {
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '2');
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '3');
 }
 
 const beforeUnloadPrevented = () => {
@@ -211,6 +221,7 @@ describe('EditListingPage', () => {
     expect(field(f.street)).toHaveValue(a.street);
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
     fireEvent.click(saveButton());
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/me/listings');
@@ -267,8 +278,8 @@ describe('EditListingPage', () => {
     expect(field(f.vaad)).toHaveValue(null);
     expect(field(f.description)).toHaveValue('שורה\nשנייה');
 
-    // No type step in edit mode (spec 0010a): details is step 1 of 3.
-    expect(progress()).toHaveAttribute('aria-valuemax', '3');
+    // No type step in edit mode (spec 0010a): details is step 1 of 4.
+    expect(progress()).toHaveAttribute('aria-valuemax', '4');
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -292,6 +303,7 @@ describe('EditListingPage', () => {
     await areasLoaded();
     change(f.price, '7500');
     change(f.arnona, '');
+    fireEvent.click(nextButton());
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
 
@@ -327,6 +339,7 @@ describe('EditListingPage', () => {
   it('ac4_unchanged_form_saves_nothing', async () => {
     const a = stored();
     const { api } = await openEdit(a);
+    fireEvent.click(nextButton());
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
     fireEvent.click(saveButton());
@@ -387,7 +400,7 @@ describe('EditListingPage', () => {
       json({ detail: [{ loc: ['body'], type: 'value_error', msg: 'bad row' }] }, 422),
     ]);
     expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     expect(document.body.textContent).not.toContain('bad row');
     opened.view.unmount();
@@ -626,8 +639,7 @@ describe('EditListingPage', () => {
     // Only the minimum changes: the PATCH carries it alone.
     let a = stored({ ...prefs, accepted_households: [...prefs.accepted_households] });
     let opened = await openEdit(a, [() => json({ ...a, min_contract_months: 24 })]);
-    fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    detailsToPreferences();
     expect(household(p.household.single)).toBeChecked();
     expect(household(p.household.couple)).toBeChecked();
     expect(household(p.household.family)).not.toBeChecked();
@@ -638,7 +650,7 @@ describe('EditListingPage', () => {
     expect(minContract()).toHaveDisplayValue(p.contract['24']);
     expect(beforeUnloadPrevented()).toBe(true);
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     fireEvent.click(saveButton());
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/me/listings');
@@ -649,13 +661,14 @@ describe('EditListingPage', () => {
     opened.view.unmount();
     vi.unstubAllGlobals();
 
-    // Untouched: not dirty, and next → next → save sends nothing.
+    // Untouched: not dirty, and next → next → next → save sends nothing.
     a = stored({ ...prefs, accepted_households: [...prefs.accepted_households] });
     opened = await openEdit(a);
     expect(beforeUnloadPrevented()).toBe(false);
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     fireEvent.click(saveButton());
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/me/listings');
@@ -668,7 +681,7 @@ describe('EditListingPage', () => {
     // No smokers stored: the switch opens checked.
     a = stored({ smoking_allowed: false, min_contract_months: 36 });
     await openEdit(a);
-    fireEvent.click(nextButton());
+    detailsToPreferences();
     expect(noSmokers()).toBeChecked();
     expect(minContract()).toHaveDisplayValue(p.contract['36']);
     expect(beforeUnloadPrevented()).toBe(false);
@@ -688,8 +701,7 @@ describe('EditListingPage', () => {
     // Opens on the stored values, the ages sorted; untouched, nothing is dirty or sent.
     let opened = await openEdit(room);
     expect(beforeUnloadPrevented()).toBe(false);
-    fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    detailsToPreferences();
     expect(genderRadio(g.men)).toBeChecked();
     expect(genderRadio(g.any)).not.toBeChecked();
     expect(flatmatesCount()).toHaveValue('2');
@@ -708,7 +720,7 @@ describe('EditListingPage', () => {
 
     // Only the gender.
     opened = await openEdit(room, [reply]);
-    fireEvent.click(nextButton());
+    detailsToPreferences();
     fireEvent.click(genderRadio(g.any));
     expect(beforeUnloadPrevented()).toBe(true);
     expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
@@ -719,7 +731,7 @@ describe('EditListingPage', () => {
 
     // Only one age: the whole list, sorted.
     opened = await openEdit(room, [reply]);
-    fireEvent.click(nextButton());
+    detailsToPreferences();
     change(r.ageOf.replace('{{n}}', '1'), '28');
     expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
       { flatmate_ages: [28, 30] },
@@ -729,7 +741,7 @@ describe('EditListingPage', () => {
 
     // Only one answer: the whole questionnaire.
     opened = await openEdit(room, [reply]);
-    fireEvent.click(nextButton());
+    detailsToPreferences();
     fireEvent.click(lifestyleRadio('guests', '3'));
     expect(await saveFromPreferences(opened.api, room)).toStrictEqual([
       { lifestyle: { guests: 3, night: 1 } },
@@ -749,10 +761,9 @@ describe('EditListingPage', () => {
       () => json({ ...legacy, price_ils: 7500, flatmates_count: 2 }),
     ]);
     change(f.price, '7500');
+    detailsToPreferences();
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '2');
-    fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
     expect(errorFor(flatmatesCount())).toHaveTextContent(he.listings.errors.required);
     expect(document.activeElement).toBe(flatmatesCount());
     expect(opened.api.calls(`PATCH /listings/${legacy.id}`)).toHaveLength(0);
@@ -765,7 +776,7 @@ describe('EditListingPage', () => {
   });
 
   it('ac10_edit_never_switches_type', async () => {
-    // Spec 0010a: edit mode opens on details as step 1 of 3, with no back button and no type
+    // Spec 0010a: edit mode opens on details as step 1 of 4, with no back button and no type
     // step; a save never sends `listing_type`, and lands on the listing's own "my" page.
     const room = stored({
       listing_type: 'room',
@@ -776,8 +787,8 @@ describe('EditListingPage', () => {
     });
     let opened = await openEdit(room, [() => json({ ...room, price_ils: 7500 })]);
     expect(progress()).toHaveAttribute('aria-valuenow', '1');
-    expect(progress()).toHaveAttribute('aria-valuemax', '3');
-    expect(screen.getByText(i18n.t('listings.stepOf', { n: 1, total: 3 }))).toBeVisible();
+    expect(progress()).toHaveAttribute('aria-valuemax', '4');
+    expect(screen.getByText(i18n.t('listings.stepOf', { n: 1, total: 4 }))).toBeVisible();
     expect(screen.queryByText(he.listings.steps.type)).toBeNull();
     expect(screen.queryByRole('button', { name: he.common.back })).toBeNull();
     expect(screen.queryByRole('radio', { name: he.listings.type.apartment })).toBeNull();
@@ -790,20 +801,27 @@ describe('EditListingPage', () => {
       screen.getByRole('heading', { level: 2, name: he.listings.stepTitle.detailsRoom }),
     ).toBeVisible();
     change(f.price, '7500');
+    // The room's photos step, then its preferences, still a room.
     fireEvent.click(nextButton());
-    // The room's preferences, still a room.
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    expect(
+      screen.getByRole('heading', { level: 2, name: he.listings.stepTitle.photosRoom }),
+    ).toBeVisible();
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
     expect(
       screen.getByRole('heading', { level: 2, name: he.listings.prefs.titleRoom }),
     ).toBeVisible();
     expect(genderRadio(g.women)).toBeChecked();
     // Back reaches details, never the type step.
     fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     expect(progress()).toHaveAttribute('aria-valuenow', '1');
     expect(screen.queryByRole('button', { name: he.common.back })).toBeNull();
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     fireEvent.click(saveButton());
     await vi.waitFor(() => {
       expect(currentPath()).toBe('/market/mine');
@@ -821,7 +839,7 @@ describe('EditListingPage', () => {
     expect(screen.queryByText(he.listings.steps.type)).toBeNull();
     expect(backLink()).toHaveAttribute('href', '/me/listings');
     change(f.price, '7500');
-    fireEvent.click(nextButton());
+    detailsToPreferences();
     expect(screen.getByRole('heading', { level: 2, name: he.listings.prefs.title })).toBeVisible();
     expect(screen.queryByRole('region', { name: r.title })).toBeNull();
     const bodies = await saveFromPreferences(opened.api, apartment);
