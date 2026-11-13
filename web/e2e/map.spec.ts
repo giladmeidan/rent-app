@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
@@ -7,6 +7,29 @@ import { routeTiles, signUpOwner } from './helpers';
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
+
+type Box = { x: number; y: number; width: number; height: number };
+
+/** The element's box in viewport pixels, failing the test when it is not rendered. */
+async function boxOf(locator: Locator): Promise<Box> {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error('no bounding box');
+  return box;
+}
+
+/** Whether two boxes overlap with a positive area. */
+const intersects = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+/** `inner` lies within `outer` (1 px of rounding allowed). */
+const within = (inner: Box, outer: Box) =>
+  inner.x >= outer.x - 1 &&
+  inner.y >= outer.y - 1 &&
+  inner.x + inner.width <= outer.x + outer.width + 1 &&
+  inner.y + inner.height <= outer.y + outer.height + 1;
+
+/** The current URL's query. */
+const query = (page: Page) => new URL(page.url()).searchParams;
 
 /** `YYYY-MM-DD`, `days` from today in Israel. */
 function israelDay(days: number): string {
@@ -62,12 +85,18 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
 
   // The worker's geocoding sweep (every 10 s, GEOCODER=fake) gives each a point; `request` has no
   // session cookie.
+  const points = new Map<string, { lat: number; lng: number }>();
   for (const listingId of ids) {
     await expect
       .poll(
         async () => {
           const listing = await request.get(`${API}/listings/${listingId}`);
-          return ((await listing.json()) as { lat: number | null }).lat;
+          const { lat, lng } = (await listing.json()) as {
+            lat: number | null;
+            lng: number | null;
+          };
+          if (lat !== null && lng !== null) points.set(listingId, { lat, lng });
+          return lat;
         },
         { timeout: 30_000 },
       )
@@ -92,7 +121,18 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     .getByRole('group', { name: he.search.view.label })
     .getByRole('button', { name: he.search.view.map })
     .click();
-  await expect(page).toHaveURL(`${search}&view=map`);
+  /** The page is `search` in map view; the map adds its `c` / `z` as soon as it loads (0009w). */
+  const onTheMap = () => {
+    const url = new URL(page.url());
+    return [
+      url.pathname,
+      url.searchParams.get('price_min'),
+      url.searchParams.get('price_max'),
+      url.searchParams.get('view'),
+    ];
+  };
+  const mapOfSearch = ['/search', String(price), String(price), 'map'];
+  await expect.poll(onTheMap).toEqual(mapOfSearch);
   const region = page.getByRole('region', { name: he.search.map.label });
   await expect(region).toBeVisible();
   await expect(page.getByText(he.search.map.unavailable)).toHaveCount(0);
@@ -140,12 +180,13 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     await expectNoAxeViolations(page, '/search?view=map (with pins)');
   });
 
-  // Its pin opens its card.
+  // Its pin opens its card, docked in the map.
   const pin = region.getByRole('button', { name: street });
   await pin.press('Enter');
-  const card = page.getByRole('article').filter({ hasText: street });
+  const card = region.locator('[data-map-card]').getByRole('article').filter({ hasText: street });
   await expect(card).toHaveCount(1);
   await expect(card.getByRole('link')).toBeFocused();
+  await expect.poll(() => query(page).get('pin')).toBe(id ?? '');
 
   // The card's title opens the listing page, with its approximate-area map.
   await card.getByRole('link').click();
@@ -163,7 +204,7 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
 
   // Back on the map view, a reload keeps it.
   await page.goBack();
-  await expect(page).toHaveURL(`${search}&view=map`);
+  await expect.poll(onTheMap).toEqual(mapOfSearch);
   await page.reload();
   await expect(page.getByRole('region', { name: he.search.map.label })).toBeVisible();
   await expect(
@@ -171,6 +212,89 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
       .getByRole('group', { name: he.search.view.label })
       .getByRole('button', { name: he.search.view.map }),
   ).toHaveAttribute('aria-pressed', 'true');
+
+  // Spec 0009w AC7: the test pin alone at the centre of the map (its own price, zoom 16, at its
+  // point), so the press is the same on CI's shared database every run.
+  const point = points.get(id ?? '');
+  if (point === undefined) throw new Error('no point for the test listing');
+  // `c` takes at most 6 decimals (the fake geocoder's points have more): about 0.1 m off.
+  const centre = `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`;
+  const atThePin = `/search?view=map&price_min=${String(price)}&price_max=${String(price)}&c=${centre}&z=16`;
+  const docked = region.locator('[data-map-card]');
+  const dockedCard = docked.getByRole('article').filter({ hasText: street });
+
+  /** Presses the pin from the keyboard: the page does not move and the card docks in the map,
+   * clear of the pin and of the OpenStreetMap attribution. */
+  const pressAndCheckTheCard = async () => {
+    await page.goto(atThePin);
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    await expect(pin).toBeVisible({ timeout: 15_000 });
+    await region.scrollIntoViewIfNeeded();
+    await pin.focus();
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    await pin.press('Enter');
+    await expect(dockedCard).toHaveCount(1);
+    await expect(dockedCard.getByRole('link')).toBeFocused();
+    await expect(pin).toHaveAttribute('aria-pressed', 'true');
+    // No page jump (today 342 px on desktop, 374 px on a phone).
+    const scrollAfter = await page.evaluate(() => window.scrollY);
+    expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThanOrEqual(2);
+    // Inside the map region, and painted above the markers: the card's centre hits the card.
+    const regionBox = await boxOf(region);
+    const cardBox = await boxOf(docked);
+    expect(within(cardBox, regionBox)).toBe(true);
+    const hitsTheCard = await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.closest('[data-map-card]') != null,
+      [cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2] as const,
+    );
+    expect(hitsTheCard).toBe(true);
+    // The pin is panned clear of the card (the pan may still be easing), and the attribution
+    // (licence) is never covered.
+    await expect
+      .poll(async () => intersects(await boxOf(pin), await boxOf(docked)), { timeout: 10_000 })
+      .toBe(false);
+    const attribution = region.locator('.maplibregl-ctrl-attrib');
+    await expect(attribution).toBeVisible();
+    expect(intersects(await boxOf(attribution), await boxOf(docked))).toBe(false);
+  };
+
+  await test.step('ac7_card_docked_desktop', async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await pressAndCheckTheCard();
+  });
+
+  await test.step('ac7_card_docked_phone', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await pressAndCheckTheCard();
+  });
+
+  await test.step('ac7_back_restores_the_view', async () => {
+    // The map has settled (the keep-visible pan wrote its `c`): the URL reads the same twice.
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    let settledUrl = '';
+    await expect
+      .poll(
+        () => {
+          const previous = settledUrl;
+          settledUrl = page.url();
+          return previous === settledUrl;
+        },
+        { intervals: [500], timeout: 15_000 },
+      )
+      .toBe(true);
+    const before = new URL(settledUrl).searchParams;
+    expect(before.get('pin')).toBe(id);
+
+    await dockedCard.getByRole('link').click();
+    await expect(page).toHaveURL(`/listings/${id ?? ''}`);
+    await page.goBack();
+
+    // The same centre, zoom and pin by value, the card back once the results load, its pin pressed.
+    await expect(dockedCard).toHaveCount(1, { timeout: 15_000 });
+    await expect(pin).toHaveAttribute('aria-pressed', 'true');
+    const after = query(page);
+    for (const key of ['c', 'z', 'pin']) expect(after.get(key)).toBe(before.get(key));
+  });
 });
 
 test('map_survives_one_failed_tile', async ({ page }) => {
