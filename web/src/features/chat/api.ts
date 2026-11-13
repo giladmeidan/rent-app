@@ -2,7 +2,8 @@ import { api } from '../../api/client';
 import type { components } from '../../api/schema';
 import { ApiError } from '../listings/api';
 
-/** One of the caller's chats on `GET /me/conversations`; its `id` is the application's id. */
+/** One of the caller's chats on `GET /me/conversations`; its `id` is the application's id for an
+ * application chat, its own for a direct chat (spec 0010g: `listing` null, `my_role` `person`). */
 export type ConversationOut = components['schemas']['ConversationOut'];
 /** One chat with its newest messages, oldest first (`truncated`: older ones exist). */
 export type ThreadOut = components['schemas']['ThreadOut'];
