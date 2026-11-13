@@ -48,6 +48,21 @@ def has_profile(db: Session, user_id: uuid.UUID) -> bool:
     )
 
 
+def profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
+    """The caller's id when they have a profile with the looking part, whatever their role (spec
+    0010b; one PK lookup), else None (a visitor runs no statement)."""
+    if user is None:
+        return None
+    return user.id if has_profile(db, user.id) else None
+
+
+def sees_room_privacy(user: User | None, profile_user_id: uuid.UUID | None) -> bool:
+    """Whether the caller gets a room's flatmate ages and answers (decision 13, Gilad 2026-11-13):
+    signed in with the seeker role, or with a profile with the looking part (`profile_user_id`,
+    already read). No statement."""
+    return user is not None and (user.role == "seeker" or profile_user_id is not None)
+
+
 def _check_areas(db: Session, area_ids: list[uuid.UUID]) -> None:
     """Every id (already distinct, `SeekerProfileIn`) is an active area, or `UnknownAreaError`."""
     ids = literal(area_ids, ARRAY(UUID(as_uuid=True)))

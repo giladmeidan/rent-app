@@ -11,12 +11,13 @@ page's `room_fit` (spec 0007b). That is why every 200 says `Vary: Cookie` and a 
 carrying the session cookie is `Cache-Control: private` (0006b): the body may differ per caller. The
 cookie also decides whether a room's flatmates' ages and questionnaire answers are shown: only a
 signed-in seeker gets them, and a seeker is a role seeker **or** any account with a profile with the
-looking part (`_sees_room_privacy`, decision 13, Gilad 2026-11-13); everyone else gets `[]` and `{}`
-(`ListingPublic.from_listing`). Every listing says `is_mine`, whether the caller owns it (spec
-0010b; false for a visitor). Search returns one type: `listing_type` omitted means `apartment` (spec
-0010a), the market asks for `room`; the listing page serves both. A listing that is not public is a
-404 `not_found`, the same body as an unknown id. Any signed-in account on a room it does not own
-also gets the listing page's `like` (spec 0008a), the likes between them and the room."""
+looking part (`services/profiles.py::sees_room_privacy`, decision 13, Gilad 2026-11-13); everyone
+else gets `[]` and `{}` (`ListingPublic.from_listing`). Every listing says `is_mine`, whether the
+caller owns it (spec 0010b; false for a visitor). Search returns one type: `listing_type` omitted
+means `apartment` (spec 0010a), the market asks for `room`; the listing page serves both. A
+listing that is not public is a 404 `not_found`, the same body as an unknown id. Any signed-in
+account on a room it does not own also gets the listing page's `like` (spec 0008a), the likes
+between them and the room."""
 
 import uuid
 from typing import Annotated, Any
@@ -46,21 +47,6 @@ _DB_DOWN: dict[int | str, dict[str, Any]] = {
 }
 
 
-def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
-    """The caller's id when they have a profile with the looking part, whatever their role (spec
-    0010b; one PK lookup), else None (a visitor runs no statement)."""
-    if user is None:
-        return None
-    return user.id if profiles_service.has_profile(db, user.id) else None
-
-
-def _sees_room_privacy(user: User | None, profile_user_id: uuid.UUID | None) -> bool:
-    """Whether the caller gets a room's flatmate ages and answers (decision 13, Gilad 2026-11-13):
-    signed in with the seeker role, or with a profile with the looking part (`profile_user_id`,
-    already read). No statement."""
-    return user is not None and (user.role == "seeker" or profile_user_id is not None)
-
-
 def _is_mine(user: User | None, listing: Listing) -> bool:
     """The caller owns `listing` (spec 0010b; no statement)."""
     return user is not None and listing.owner_id == user.id
@@ -83,9 +69,9 @@ def search_listings(
     request: Request,
     response: Response,
 ) -> ListingSearchOut:
-    profile_user_id = _profile_user_id(db, user)
+    profile_user_id = profiles_service.profile_user_id(db, user)
     page, total, sort = search_service.search_listings(db, params, profile_user_id)
-    seeker = _sees_room_privacy(user, profile_user_id)
+    seeker = profiles_service.sees_room_privacy(user, profile_user_id)
     items: list[ListingPublic] = []
     for listing, match, cover_id, cover_key in page:
         mine = _is_mine(user, listing)
@@ -124,7 +110,7 @@ def get_listing(
     """A public listing with its applicant count, the caller's match, room fit and like state
     (spec 0008a; 0010b: any signed-in account on a room, not their own) and `is_mine`; counts one
     view (`listings.view_count`). A 404 counts nothing."""
-    profile_user_id = _profile_user_id(db, user)
+    profile_user_id = profiles_service.profile_user_id(db, user)
     try:
         listing, match, room_fit = search_service.get_public_listing_with_match(
             db, listing_id, profile_user_id
@@ -144,7 +130,7 @@ def get_listing(
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
         listing,
-        seeker=_sees_room_privacy(user, profile_user_id),
+        seeker=profiles_service.sees_room_privacy(user, profile_user_id),
         match=None if mine else match,
         applicant_count=count,
         room_fit=room_fit,
