@@ -24,22 +24,30 @@ Overall: IN_PROGRESS
 Current focus:
 **Slice 9 + 9b is complete**: all 21 specs `0009a`–`0009u` (no `0009n`) are merged and `status: done` on `main`
 (last: 0009s, #62, merge 36ce546). No PRs open, no build sessions running, no spec worktrees left.
-**Main's CI e2e is red**: `applications.spec.ts::ac9_fill_profile_apply_withdraw` hits its 30 s timeout on most
-`main` runs since 0009j merged (see Known Issues). Fix that before the next slice.
-**Next slice is "שוק השותפים" (the roommates market), now Slice 10** (Gilad, 2026-11-13): trust, admin and launch
-moved to Slices 11, 12, 13, so older text saying "Slice 10" means trust. Planning is finished and every product
-question is answered; **no `0010*` spec is written yet and nothing is built**. The plan lives in
-`specs/MARKET-PLAN.md`. Alembic head on `main` still `0012`. Spec status on `main` is the source of truth;
-`git log` beats this file.
+**Main's CI e2e**: the last `main` run (after #62) was green; `applications.spec.ts::ac9` timed out on earlier
+runs and is a flaky 30 s timeout (see Known Issues).
+**Slice 9c (map)** is being built by its own orchestrator (`local_671e0f86…`): see "Map improvements" below.
+**Slice 10 "שוק השותפים" (the roommates market): all 11 specs `0010a`–`0010k` are written and `verified` on
+`main` (d856e38); nothing is built.** Spec split, migration chain (`0013`–`0017`) and build waves are in
+`specs/MARKET-PLAN.md` section 7. Gilad starts the Slice 10 builds himself in a new chat. Alembic head on `main`
+is still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
-2026-11-13 (market planning session, after Gilad answered all 23 questions)
+2026-11-13 (Slice 10 spec session: 11 specs verified and pushed)
 
 ## Current Work
-- **Market planning done, specs not started.** `specs/MARKET-PLAN.md` (new) holds Gilad's decisions, the five-step
-  build order, code findings per step from five read-only explorers, and section 6 with all 23 answers.
-  `specs/PRODUCT.md` has a new "שוק השותפים" row and the renumbered slice order. Both files and this handoff
-  are on `main` (docs commit `8ef7044`). Gilad starts the spec writing himself in a new chat.
+- **Slice 10 specs done, builds not started.** Waves, at most 3 builds at a time:
+  `0010a` ∥ `0010d` → `0010b` ∥ `0010g` ∥ `0010j` → `0010c` ∥ `0010e` → `0010k` ∥ `0010f` → `0010h` → `0010i`
+  (each spec's `depends_on` is authoritative). The map chain also wants build slots: share the 3 with it.
+  Specs, briefly: a = the move (two-way switch, `/market`, `/market/mine`, apartments-only search, no type switch
+  on edit); b = role-free market (`is_mine`, signup from the market, seeker rule); c = profile split (personal +
+  "looking for", migration `0015`); d = listing photos API (R2 / file store, deps `python-multipart`, `Pillow`,
+  `boto3`, migration `0013`); e = wizard photo step; f = flat profile (room facts, flatmates shown as people,
+  `0016`); g = direct chat (conversations get their own id, `0014`); h = people browse API (`person_pairs`,
+  `card_id`, `0017`); i = people browse web; j = person photo API; k = photo display web (gallery, `Avatar`).
+- Slice 10 planning worktree: `../rent-app-0010-spec` (branch `docs/0010-planning`, at d856e38, clean). The four
+  spec sessions (`local_3afd2925…`, `local_0fefa23d…`, `local_d3f25b94…`, `local_c433ada8…`) are finished; archive
+  them. `../rent-app-map-spec` belongs to the map job.
 - No build sessions running. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
   collisions"), ran 0009j/o/p/r/s/u (PRs #57–#62) and merged them; their worktrees and branches are removed.
   The older orchestrator `local_2b79d58f…` merged 0009e/g/k/m (#53–#56) and is retired.
@@ -69,11 +77,8 @@ Last updated:
   the axe pin exemption) → `0009w` card inside the map + `c`/`z`/`pin` in the URL + fit to results → `0009x` side
   map from 1280 px ∥ `0009y` locate me, places list, empty-area action, honest 300 m listing circle + map link.
 - Also: research moved to `specs/map-research/`, Gilad's seven map decisions as PRODUCT.md row "Map".
-- **Where:** commit `4f4bcae` on local branch `docs/map-planning` in worktree `../rent-app-map-spec` (on top of
-  `2cf09bc`). **Not on `main` yet**: push it (`git push origin docs/map-planning:main` after a fetch/rebase;
-  docs-only, no CI). The untracked `research/map-improvements/` copy in the main checkout can then be deleted.
-- The market session also works in `../rent-app-map-spec` (it committed `2cf09bc` and has untracked `0010*`
-  specs there); commit only your own files.
+- **Where:** on `main` since 397ad44 ("0009v starts now; 0009w on 0009v's PR; 0009x and 0009y on 0009w's PR");
+  worktrees `../rent-app-0009v`…`0009y` exist. Its orchestrator owns that state; check `git log` / its session.
 - Queue (Gilad to decide; recommended): the map chain as the third build slot beside the market waves.
   `/market` reuses `SearchPage` (list + map), so the map work carries over. Shared files with `0010a`/`0010e`:
   `SearchPage.tsx`, `ListingPage.tsx`, `ListingCard.tsx`, `useLogout.ts`, `he.json`; second to merge merges main.
@@ -114,26 +119,19 @@ Last updated:
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. **Fix main's red e2e**: get Gilad's pick (`test.slow()` on `applications.spec.ts::ac9` vs splitting it), then
-   one small e2e-only PR from a build session; merge on green api/web/e2e and confirm the next `main` run is green.
-2. **Write the Slice 10 market specs** (when Gilad says so in a new chat). Instructions:
-   a. Read `specs/MARKET-PLAN.md` in full, then the "שוק השותפים" row in `specs/PRODUCT.md`. Section 6 of the plan
-      is all decisions; **(rec)** items in section 3 are engineering advice for the spec author, not Gilad's.
-   b. Work from a checkout at or after `8ef7044` on `main` (the plan and this handoff landed there).
-   c. Write about seven specs with `/spec`, ids `0010a`…, in the plan's order: (1) the move — two tabs, market
-      search and post flow, apartments-only main search, no schema change; (2) role-free market incl. the profile
-      split; (3) photos as two specs, storage + upload API (new deps `python-multipart`, `Pillow`, `boto3`;
-      `security` reviewer) then web gallery + person photo; (4) flat profile + optional room facts; (5) two specs,
-      chat without an application (existing conversations keep id = application id) then person likes + browse
-      with a rate limit. Full-stack specs, split only where listed (Gilad: fewer specs per slice).
-   d. `depends_on`: 2 and 3 on 1 (they can build in parallel); 4 and 5 on 2. At most 3 builds at a time.
-   e. Spot-check every `path:line` taken from the plan against the code; the explorers' numbers were not verified.
-   f. Confirm with Gilad who counts as a "seeker" for a room's flatmate ages and answers now that the market has
-      no roles (plan decision 13; the recorded reading is a seeker account or a market user who filled the
-      "what I am looking for" part).
-   g. When locking the specs, rewrite the PRODUCT.md rows the market contradicts: "Rooms", "People & likes",
-      "Listing edit", "Search". No new artboards: screen design goes in each spec.
-   h. One verifier round per spec, then a digest to Gilad; builds are pre-started only in a turn Gilad wrote.
+1. **Build Slice 10** (Gilad, in a new chat): prepare a worktree + `.env` per spec (`../rent-app-0010a`, own
+   `COMPOSE_PROJECT_NAME`, ports above the Slice 9 ranges, own `WEB_PORT`), then pre-start the wave's build
+   sessions in a turn Gilad wrote and send each its "go". First wave: `0010a` and `0010d`. Model per spec: Opus/high
+   coder for `0010b/c/d/f/g/h/j` (auth, migrations, uploads, chat); reviewers per each spec's frontmatter. Briefs:
+   no local e2e, merge `origin/main` first, one push with `ready-to-merge`, `make down` last. A migration spec
+   merges only when its `down_revision` is `main`'s head (the chain in section 7).
+2. **Rewrite PRODUCT.md rows** the market contradicts before 0010a merges: "Rooms", "People & likes", "Listing edit",
+   "Search", "Account roles", and record Gilad's 2026-11-13 answers: seeker = seeker account or filled "looking
+   for" part; after a removed match the two may match again; a lister with no visible card browses but cannot
+   like people (403 `card_required`); a lister who says "I live here" shows as a full card (name, photo, age,
+   gender, about me, answers) to seekers only — an exception to "Search" (no owner name) and "Applications"
+   (owner hidden until chat). Then send Gilad the Slice 10 spec digest.
+2b. ac9 e2e flake: if it fails again, `test.slow()` on it in a small e2e-only PR.
 3. Send Gilad a Slice 9 digest (21/21 merged; the FOLLOWUPS each spec added). Listing renewal moves with trust to
    Slice 11.
 4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
@@ -147,7 +145,7 @@ Last updated:
    `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`; update `CLAUDE.md` Speed rule 7
    to "no local e2e" (it still says local `make e2e` is optional).
 
-9. **Map job (Slice 9c):** push `4f4bcae` to `main`, then build `0009v` → `0009w` → `0009x` ∥ `0009y` per Gilad's
+9. **Map job (Slice 9c):** owned by its orchestrator; builds `0009v` → `0009w` → `0009x` ∥ `0009y` per Gilad's
    queue answer (see Current Work → "Map improvements").
 
 ## Architecture
@@ -293,6 +291,10 @@ shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.en
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-13 — Slice 10 spec session: verified the plan's code facts (three explorers), Gilad answered the seeker
+  rule, unmatch and lister-card questions; wrote the split + shared contract (MARKET-PLAN §7, 2cf09bc); four spec
+  sessions wrote and verified the specs; the verifier forced three splits (d→d+j, e→e+k, h→h+i), so 11 specs;
+  pushed d856e38. Moved Slice 10 planning to `../rent-app-0010-spec` so the map job has `../rent-app-map-spec`.
 - 2026-11-13 — Market planning session: Gilad pushed trust back and made "שוק השותפים" Slice 10. Brainstormed the
   scope, ran five read-only explorers over the code, checked R2's free tier and upload limits, wrote
   `specs/MARKET-PLAN.md` and the PRODUCT.md row; Gilad answered all 23 questions. No specs, no code; docs pushed to `main`.
