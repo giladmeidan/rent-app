@@ -1,7 +1,7 @@
 ---
 id: 0010c
 title: Any account fills a personal part of the profile (gender, age, about me, answers) on its own, and the "what I am looking for" part becomes optional, needed only to apply, to like a room or to show a card in שוק השותפים
-status: in-progress
+status: done
 depends_on: [0010b, 0010g]   # 0010b: GET/PUT /me/profile open to every account and `_is_seeker` = seeker role or has_profile; 0010g: migration chain 0014 -> 0015
 reviewers: [code, qa, security, ux]   # security: personal data, a CHECK rewrite on seeker_profiles, every "has a profile" gate (apply, like, people browse, inbox, match); qa: gates and the profile page; ux: the profile page is reorganised
 estimate: 1 coder run   # coder Opus/high (migration on personal data; Speed rule 6)
