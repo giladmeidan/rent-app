@@ -378,12 +378,17 @@ export function MapCanvas({
     for (const pin of pins ?? []) wanted.set(pin.id, { kind: 'pin', pin });
     for (const bubble of bubbles ?? []) wanted.set(bubble.id, { kind: 'bubble', bubble });
 
-    // A focused bubble that this diff removes (its members parted after a zoom): focus lands on
+    // A focused bubble that this diff removes (its members parted after a zoom; never on a map
+    // without keyboard use, whose markers take no focus): focus lands on
     // what replaced it (spec 0009t's rule), the anchor's pin or its new bubble, else the canvas.
     let refocus: string | undefined;
     for (const [id, entry] of markers) {
       if (wanted.has(id)) continue;
-      if (entry.item.kind === 'bubble' && entry.button === document.activeElement) {
+      if (
+        initial.current.keyboard &&
+        entry.item.kind === 'bubble' &&
+        entry.button === document.activeElement
+      ) {
         refocus = entry.item.bubble.members[0]?.id ?? '';
       }
       entry.marker.remove();
@@ -426,6 +431,8 @@ export function MapCanvas({
           // The side map's pins are for the mouse; the cards are the keyboard path (spec 0009x).
           element.setAttribute('aria-hidden', 'true');
           button.tabIndex = -1;
+          // A press never focuses a hidden pin or bubble: focus stays where it is.
+          button.addEventListener('mousedown', (event) => event.preventDefault());
         }
         const text = document.createElement('span');
         button.append(text);

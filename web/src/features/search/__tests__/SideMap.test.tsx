@@ -206,7 +206,11 @@ describe('SideMap', () => {
     expect(pinIds()).toEqual([...first, ...second].map((l) => l.id));
     expect(cameras()).toHaveLength(1);
 
-    // A filter: the same side map, with no pins while the first page loads.
+    // A hovered card's highlight does not outlive its card.
+    fireEvent.pointerEnter(cardItem(at(first, 0)));
+    expect(lastProps().selectedId).toBe(at(first, 0).id);
+
+    // A filter: the same side map, with no pins while the first page loads, nothing highlighted.
     const price = within(screen.getByRole('group', { name: he.search.price }));
     fireEvent.change(price.getByLabelText(he.search.to), { target: { value: '8000' } });
     fireEvent.click(screen.getByRole('button', { name: he.search.apply }));
@@ -215,6 +219,7 @@ describe('SideMap', () => {
       expect(api.calls(SEARCH)).toHaveLength(3);
     });
     expect(pins()).toHaveLength(0);
+    expect(lastProps().selectedId).toBeUndefined();
     expect(sideMap()).toBe(region);
     expect(cameras()).toHaveLength(1);
     // Its answer: exactly one camera fitting the new results.
@@ -250,8 +255,13 @@ describe('SideMap', () => {
     moveTo([34.7, 31.9, 34.95, 32.2], { center: [34.85, 32.04], zoom: 13 });
     const rendersBefore = filtersForm.renders;
 
+    // A touch on a card is a tap, not a hover.
+    fireEvent.pointerEnter(cardItem(a), { pointerType: 'touch' });
+    expect(lastProps().selectedId).toBeUndefined();
+    expect(cardItem(a)).not.toHaveAttribute('data-highlighted');
+
     // Hover A: its pin is selected and drawn alone, out of the bubble.
-    fireEvent.pointerEnter(cardItem(a));
+    fireEvent.pointerEnter(cardItem(a), { pointerType: 'mouse' });
     expect(lastProps().selectedId).toBe(a.id);
     expect(pinIds()).toContain(a.id);
     expect(bubbles().flatMap((bubble) => bubble.members.map((m) => m.id))).not.toContain(a.id);

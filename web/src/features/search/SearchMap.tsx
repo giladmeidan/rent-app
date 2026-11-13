@@ -33,7 +33,7 @@ import { useMapSearch } from './useMapSearch';
 const NO_ITEMS: ListingPublic[] = [];
 
 /** The first-open fit never zooms past this, so a single pin does not land at street level. */
-const FIT_MAX_ZOOM = 15;
+export const FIT_MAX_ZOOM = 15;
 
 /**
  * Where focus goes once the render reflects a press (react-router applies every URL change in a

@@ -13,11 +13,8 @@ import {
 } from '../../components/map/MapCanvas';
 import type { ListingPublic, ListingSearchOut } from './api';
 import { bubbleLabel } from './pins';
-import { extentOf } from './SearchMap';
+import { extentOf, FIT_MAX_ZOOM } from './SearchMap';
 import { useListingPins } from './useListingPins';
-
-/** A fit never zooms past this, so a single pin does not land at street level (as the full map). */
-const FIT_MAX_ZOOM = 15;
 
 type Props = {
   /** The list's loaded listings, in its order; none while a new first page loads or failed. */

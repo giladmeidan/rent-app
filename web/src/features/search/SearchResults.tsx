@@ -72,8 +72,22 @@ export function SearchResults({
   const [highlightedId, setHighlightedId] = useState<string>();
   const pointerId = useRef<string | undefined>(undefined);
   const focusId = useRef<string | undefined>(undefined);
+  // The cards unmount on a filter change or across 1280 px, without their leave or blur events:
+  // nothing they held stays highlighted (state adjusted during render, the refs after it).
+  const resetKey = `${filtersKey}|${String(wide)}`;
+  const [highlightKey, setHighlightKey] = useState(resetKey);
+  if (highlightKey !== resetKey) {
+    setHighlightKey(resetKey);
+    setHighlightedId(undefined);
+  }
+  useEffect(() => {
+    pointerId.current = undefined;
+    focusId.current = undefined;
+  }, [resetKey]);
   const events: CardEvents = {
-    onPointerEnter: (id) => {
+    onPointerEnter: (id, event) => {
+      // A touch is a tap, not a hover: the card's link opens.
+      if (event.pointerType === 'touch') return;
       pointerId.current = id;
       setHighlightedId(id);
     },
@@ -101,9 +115,7 @@ export function SearchResults({
   /** A pin press: highlights its card and scrolls it into view; focus stays where it is. */
   const pressPin = (id: string) => {
     setHighlightedId(id);
-    const card = listRef.current
-      ?.querySelector(`a[href="/listings/${id}"]`)
-      ?.closest<HTMLLIElement>('li');
+    const card = listRef.current?.querySelector<HTMLLIElement>(`li[data-listing-id="${id}"]`);
     card?.scrollIntoView({
       block: 'nearest',
       behavior: prefersReducedMotion() ? 'auto' : 'smooth',
@@ -129,7 +141,8 @@ export function SearchResults({
         {list}
       </div>
       {/* Sticky beside the list; the header is not sticky, so no offset for it. */}
-      <div className="sticky top-4 h-[calc(100vh-2rem)] min-h-[360px]">
+      {/* The height only once mounted: an empty column adds no scroll. */}
+      <div className={`sticky top-4 ${mounted ? 'h-[calc(100vh-2rem)] min-h-[360px]' : ''}`}>
         {mounted && (
           <SideMap
             items={items}
