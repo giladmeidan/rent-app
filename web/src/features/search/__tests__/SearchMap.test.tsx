@@ -784,6 +784,36 @@ describe('SearchMap', () => {
     expect(pins()).toHaveLength(3);
   });
 
+  it('ac7_owner_on_the_market_gets_liked_and_applied_marks', async () => {
+    const room = located({ listing_type: 'room' });
+    const other = located({ listing_type: 'room' });
+    const mark = (l: ListingPublic) =>
+      document.querySelector(`[data-pin-id="${l.id}"]`)?.getAttribute('data-mark') ?? null;
+    const api = mockApi({
+      'GET /me': [json(owner)],
+      'GET /me/likes': [
+        () =>
+          json({
+            liked_me: [],
+            mine: [{ listing: room, liked_at: '2026-11-10T10:00:00Z' }],
+          }),
+      ],
+      'GET /me/applications': [
+        () => json([application({ listing: { ...application().listing, id: other.id } })]),
+      ],
+      [SEARCH]: [json(page([room, other]))],
+    });
+    render('/market?view=map');
+    moveTo(BOX);
+    await vi.waitFor(() => {
+      expect(mark(room)).toBe('liked');
+    });
+    await vi.waitFor(() => {
+      expect(mark(other)).toBe('applied');
+    });
+    expect(api.calls('GET /me/likes')).toHaveLength(1);
+  });
+
   it('ac4_first_open_fits_once', async () => {
     const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 12 };
     const a = located({ lat: 32.05, lng: 34.78 });

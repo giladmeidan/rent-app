@@ -157,7 +157,7 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
                 )}
               </div>
             )}
-            {/* A 401 clears the session and RequireSeeker leaves the page. */}
+            {/* A 401 clears the session and the route guard (`RequireSeeker`, `RequireUser` on the market panel) leaves the page. */}
             {withdraw.isError && !hasStatus(withdraw.error, 401) && (
               <p
                 ref={alertRef}

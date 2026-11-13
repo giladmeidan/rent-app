@@ -7,7 +7,7 @@ import { PROFILE_KEY } from './useProfile';
 
 /**
  * Saves the profile (`PUT /me/profile`). On 200 the answer becomes the cached profile, so the
- * listing page's gate opens with no refetch. A 401 only forgets the session: `RequireSeeker` then
+ * listing page's gate opens with no refetch. A 401 only forgets the session: `RequireUser` then
  * sends the person to `/login` (no return path, as `0004b`). Search results and the listing pages
  * are reset too: their `match` and `room_fit` depend on the profile, so a seeker who completes the
  * room section and returns via `next` must not see a stale apply button before the refetch.

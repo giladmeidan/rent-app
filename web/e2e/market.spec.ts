@@ -171,7 +171,7 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   await expect(
     page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '3')),
   ).toBeVisible();
-  await expect(page.getByLabel(f.area)).toBeEnabled();
+  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('4');
