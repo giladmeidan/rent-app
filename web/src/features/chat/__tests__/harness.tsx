@@ -6,6 +6,7 @@ import { Outlet, Route, Routes } from 'react-router';
 import { Layout } from '../../../app/Layout';
 import type { FakeEventSource } from '../../../test-setup';
 import { RequireUser } from '../../auth/RequireUser';
+import { ChatLayout } from '../ChatLayout';
 import { ChatListPage } from '../ChatListPage';
 import { useChatStreamConnected } from '../ChatStreamProvider';
 import { ChatThreadPage } from '../ChatThreadPage';
@@ -32,8 +33,11 @@ export const chatRoutes = (
         <Route path="login" element={<p>login</p>} />
         <Route path="listings/:id" element={<p>listing</p>} />
         <Route element={<RequireUser />}>
-          <Route path="chat" element={<ChatListPage />} />
-          <Route path="chat/:id" element={<ChatThreadPage />} />
+          {/* As app/routes.tsx nests them (spec 0009s). */}
+          <Route path="chat" element={<ChatLayout />}>
+            <Route index element={<ChatListPage />} />
+            <Route path=":id" element={<ChatThreadPage />} />
+          </Route>
         </Route>
       </Route>
     </Route>

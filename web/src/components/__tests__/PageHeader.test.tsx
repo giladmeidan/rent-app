@@ -120,4 +120,20 @@ describe('PageHeader', () => {
     expect(other).toHaveClass('font-display', 'text-h2', 'lg:text-h1');
     expect(container.lastElementChild).toHaveClass('flex', 'flex-col', 'gap-1');
   });
+  it('title_accepts_a_node', () => {
+    render(
+      <MemoryRouter>
+        <PageHeader title={<span dir="auto">Maya Levi</span>} />
+      </MemoryRouter>,
+    );
+    // The node renders inside the one <h1>, which it names.
+    const headings = screen.getAllByRole('heading', { level: 1 });
+    expect(headings).toHaveLength(1);
+    const h1 = headings[0] as HTMLElement;
+    expect(h1).toHaveAccessibleName('Maya Levi');
+    const span = h1.firstElementChild as HTMLElement;
+    expect(span.tagName).toBe('SPAN');
+    expect(span).toHaveAttribute('dir', 'auto');
+    expect(span).toHaveTextContent('Maya Levi');
+  });
 });

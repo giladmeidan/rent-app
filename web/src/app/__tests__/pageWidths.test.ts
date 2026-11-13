@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 type Width = 'narrow' | 'default' | 'wide';
+/** A page root at one width, a layout that switches between several (spec 0009s), or a page
+ * rendered inside its layout's `PageContainer` (`'inLayout'`: it has none of its own). */
+type TableWidth = Width | Width[] | 'inLayout';
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (file: string) => readFileSync(join(src, file), 'utf8');
 
 /** Every routed page (spec 0009h §2), by the component `app/routes.tsx` imports. */
-const PAGES: Record<string, { file: string; width: Width }> = {
+const PAGES: Record<string, { file: string; width: TableWidth }> = {
   // `/`: its pending state; the landing itself is in INNER.
   HomeRoute: { file: 'features/landing/HomeRoute.tsx', width: 'default' },
   LoginPage: { file: 'features/auth/LoginPage.tsx', width: 'narrow' },
@@ -27,8 +30,10 @@ const PAGES: Record<string, { file: string; width: Width }> = {
   MyApplicationsPage: { file: 'features/applications/MyApplicationsPage.tsx', width: 'default' },
   MyLikesPage: { file: 'features/likes/MyLikesPage.tsx', width: 'wide' },
   ProfilePage: { file: 'features/profile/ProfilePage.tsx', width: 'wide' },
-  ChatListPage: { file: 'features/chat/ChatListPage.tsx', width: 'default' },
-  ChatThreadPage: { file: 'features/chat/ChatThreadPage.tsx', width: 'default' },
+  // The phone's column and the desktop's two panes (spec 0009s); the pages sit inside it.
+  ChatLayout: { file: 'features/chat/ChatLayout.tsx', width: ['default', 'wide'] },
+  ChatListPage: { file: 'features/chat/ChatListPage.tsx', width: 'inLayout' },
+  ChatThreadPage: { file: 'features/chat/ChatThreadPage.tsx', width: 'inLayout' },
   MyFlatsPage: { file: 'features/flatmates/MyFlatsPage.tsx', width: 'default' },
   KitPreview: { file: 'app/KitPreview.tsx', width: 'wide' },
 };
@@ -92,13 +97,23 @@ describe('page roots', () => {
     for (const [name, { file, width }] of Object.entries({ ...PAGES, ...GUARDS, ...INNER })) {
       const text = read(file);
       const tags = openingTags(text);
-      // (a) A PageContainer, at the table's width.
+      // (a) Inside its layout: no PageContainer of its own (no double gutters).
+      if (width === 'inLayout') {
+        if (tags.length > 0) wrong.push(`${name}: a <PageContainer inside its layout's`);
+        continue;
+      }
+      // (a) A PageContainer, at the table's width (each of a layout's widths).
+      const widths: Width[] = Array.isArray(width) ? width : [width];
       if (tags.length === 0) wrong.push(`${name}: no <PageContainer`);
       for (const [, w] of text.matchAll(/\bwidth="(narrow|default|wide)"/g)) {
-        if (w !== width) wrong.push(`${name}: width="${w ?? ''}", expected ${width}`);
+        if (!widths.includes(w as Width)) {
+          wrong.push(`${name}: width="${w ?? ''}", expected ${widths.join(' or ')}`);
+        }
       }
-      if (width !== 'default' && !text.includes(`width="${width}"`)) {
-        wrong.push(`${name}: no width="${width}"`);
+      for (const w of widths) {
+        if ((w !== 'default' || widths.length > 1) && !text.includes(`width="${w}"`)) {
+          wrong.push(`${name}: no width="${w}"`);
+        }
       }
       // (c) The page column's classes only: PageContainer owns the width and centring.
       for (const tag of tags) {

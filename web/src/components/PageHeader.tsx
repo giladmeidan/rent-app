@@ -41,7 +41,8 @@ export function BackLink({ to, label, onClick }: BackLinkProps) {
 }
 
 export type PageHeaderProps = {
-  title: string;
+  /** Text, or a node (a `<span dir="auto">` around a person's name). */
+  title: ReactNode;
   /** A small line above the title, inside the `<h1>`: the accessible name is "eyebrow title". */
   eyebrow?: string;
   subtitle?: string;

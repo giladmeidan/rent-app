@@ -2,6 +2,9 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { readDraft, writeDraft } from '../../app/drafts';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
+import { Textarea } from '../../components/Textarea';
 import { hasStatus } from '../applications/api';
 import { ApiError } from '../listings/api';
 import type { MessageOut } from './api';
@@ -9,10 +12,6 @@ import { useSendMessage } from './useSendMessage';
 
 const MAX_LENGTH = 2000; // the API's limit (0005a)
 const SHOW_REMAINING_BELOW = 200;
-
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const fieldError = 'text-sm font-semibold text-danger';
 
 /** No alert: the thread is refetched (`chat_closed`, 404) or the session is gone (401). */
 function handledByPage(error: unknown): boolean {
@@ -91,50 +90,52 @@ export function Composer({ conversationId, userId, onSent }: Props) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2">
+    // At lg it sticks to the viewport's bottom while the thread scrolls (a desktop has no bottom
+    // bar); below lg it stays in the flow.
+    <form
+      onSubmit={onSubmit}
+      className="flex flex-col gap-2 lg:sticky lg:bottom-0 lg:z-10 lg:bg-surface lg:pb-4 lg:pt-2"
+    >
       {alert !== null && (
-        <p role="alert" className={fieldError}>
+        <p role="alert" className="text-body-sm font-semibold text-danger">
           {alert}
         </p>
       )}
-      <label htmlFor={`${id}-body`} className="sr-only">
-        {t('chat.composer.label')}
-      </label>
-      <textarea
-        ref={textareaRef}
-        id={`${id}-body`}
-        dir="auto"
-        rows={2}
-        maxLength={MAX_LENGTH}
-        value={text}
-        // Read-only while sending, so nothing typed meanwhile is lost when the sent text clears.
-        readOnly={send.isPending}
-        onChange={(event) => setText(event.target.value)}
-        aria-describedby={remaining < SHOW_REMAINING_BELOW ? `${id}-remaining` : undefined}
-        className={`w-full resize-y rounded-xl border-[1.5px] border-border-strong bg-surface px-3 py-2 text-[15px] leading-relaxed ${focusRing}`}
-      />
-      {remaining < SHOW_REMAINING_BELOW && (
-        <p id={`${id}-remaining`} className="text-start text-sm text-ink-muted">
-          {t('chat.composer.remaining', { count: remaining })}
-        </p>
-      )}
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onViewing}
-          className={`inline-flex min-h-[44px] items-center rounded-full border-[1.5px] border-accent bg-accent-soft px-4 text-[14px] font-bold text-accent-strong ${focusRing}`}
-        >
-          {t('chat.composer.viewing')}
-        </button>
-        <button
-          type="submit"
-          disabled={blank || send.isPending}
-          aria-busy={send.isPending}
-          className={`inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-bold text-on-ink disabled:opacity-60 ${focusRing}`}
-        >
-          {send.isPending ? t('chat.composer.sending') : t('chat.composer.send')}
-        </button>
-      </div>
+      <Card padding="sm" className="flex flex-col gap-2">
+        <label htmlFor={`${id}-body`} className="sr-only">
+          {t('chat.composer.label')}
+        </label>
+        <Textarea
+          ref={textareaRef}
+          id={`${id}-body`}
+          dir="auto"
+          rows={2}
+          maxLength={MAX_LENGTH}
+          value={text}
+          // Read-only while sending, so nothing typed meanwhile is lost when the sent text clears.
+          readOnly={send.isPending}
+          onChange={(event) => setText(event.target.value)}
+          aria-describedby={remaining < SHOW_REMAINING_BELOW ? `${id}-remaining` : undefined}
+        />
+        {remaining < SHOW_REMAINING_BELOW && (
+          <p id={`${id}-remaining`} className="text-body-sm text-ink-muted">
+            {t('chat.composer.remaining', { count: remaining })}
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="soft" size="sm" shape="pill" onClick={onViewing}>
+            {t('chat.composer.viewing')}
+          </Button>
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={blank || send.isPending}
+            aria-busy={send.isPending}
+          >
+            {send.isPending ? t('chat.composer.sending') : t('chat.composer.send')}
+          </Button>
+        </div>
+      </Card>
     </form>
   );
 }

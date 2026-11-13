@@ -10,6 +10,7 @@ import { RequireUser } from '../../auth/RequireUser';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut } from '../api';
 import { ChatListPage } from '../ChatListPage';
+import { formatMessageTime } from '../format';
 import { conversation } from './fixtures';
 import { settle } from './harness';
 
@@ -140,6 +141,82 @@ describe('ChatListPage', () => {
     for (const link of [first, second, fourth]) {
       expect(within(link).queryByText(/^\d+$/)).toBeNull();
     }
+  });
+
+  it('ac8_row_anatomy', async () => {
+    const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const at = '2026-11-10T10:00:00Z';
+    const unread = conversation({
+      other_name: 'Noa',
+      unread_count: 2,
+      last_message: { body: 'hello there', mine: false, created_at: at },
+    });
+    const fresh = conversation({ other_name: 'Yael', is_new: true });
+    // A flatmate in a group of 4, closed, unread: every mark and chip in one row.
+    const full = conversation({
+      other_name: 'Roni',
+      my_role: 'flatmate',
+      member_count: 4,
+      can_send: false,
+      unread_count: 2,
+      last_message: { body: 'bye now', mine: false, created_at: at },
+    });
+    const { view } = renderPage([json([unread, fresh, full])]);
+    const link = (c: ConversationOut) =>
+      screen.findByRole('link', { name: new RegExp(c.other_name) });
+    const unreadSentence = i18n.t('chat.list.unread', { count: 2 });
+
+    // Unread: an accent badge (not the solid count), its sentence the accessible text.
+    const unreadRow = await link(unread);
+    const badge = within(unreadRow).getByText('2').parentElement as HTMLElement;
+    expect(badge).toHaveClass('rounded-full', 'bg-accent-soft', 'text-accent-strong');
+    expect(badge).not.toHaveClass('bg-accent');
+    expect(within(badge).getByText(unreadSentence)).toHaveClass('sr-only');
+    expect(badge.textContent).toBe(`2${unreadSentence}`);
+    expect(unreadRow).toHaveAccessibleName(new RegExp(escape(unreadSentence)));
+
+    // New: the "new" badge.
+    expect(within(await link(fresh)).getByText(he.chat.list.new)).toBeVisible();
+
+    // The chips: the accent flatmate tag, the group, closed; on their own line after the name.
+    const fullRow = await link(full);
+    const flatmateTag = within(fullRow).getByText(he.chat.flatmateChip);
+    expect(flatmateTag).toHaveClass('rounded-full', 'bg-accent-soft', 'text-accent-strong');
+    const groupTag = within(fullRow).getByText(i18n.t('chat.group', { count: 4 }));
+    expect(groupTag.textContent).toBe('קבוצה · 4');
+    const closedTag = within(fullRow).getByText(he.chat.list.closed);
+    expect(closedTag.textContent).toBe('סגורה');
+    const nameLine = within(fullRow).getByText('Roni').parentElement as HTMLElement;
+    const chipLine = flatmateTag.parentElement as HTMLElement;
+    expect(chipLine).not.toBe(nameLine);
+    expect(nameLine.contains(flatmateTag)).toBe(false);
+    expect(nameLine.nextElementSibling).toBe(chipLine);
+    expect([...chipLine.children]).toEqual([flatmateTag, groupTag, closedTag]);
+    // The mark sits on the name line, at its inline end.
+    expect(nameLine.lastElementChild).toHaveTextContent(unreadSentence);
+    // Rows without chips have no chip line.
+    const freshName = within(await link(fresh)).getByText('Yael').parentElement as HTMLElement;
+    expect(freshName.nextElementSibling).toHaveTextContent(titleOf(fresh));
+
+    // Still one link per row, named in reading order.
+    expect(within(fullRow).queryAllByRole('link')).toHaveLength(0);
+    expect(fullRow).toHaveAccessibleName(
+      new RegExp(
+        [
+          'Roni',
+          unreadSentence,
+          he.chat.flatmateChip,
+          i18n.t('chat.group', { count: 4 }),
+          he.chat.list.closed,
+          titleOf(full),
+          'bye now',
+          formatMessageTime(at),
+        ]
+          .map(escape)
+          .join('.*'),
+      ),
+    );
+    reset(view);
   });
 
   it('ac4_room_title', async () => {

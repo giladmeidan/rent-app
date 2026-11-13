@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState, type FocusEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useId, useRef, useState, type FocusEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, Navigate, useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 
 import { Button } from '../../components/Button';
-import { PageContainer } from '../../components/PageContainer';
+import { Card } from '../../components/Card';
+import { ClampedText } from '../../components/ClampedText';
+import { Mascot } from '../../components/Mascot';
+import { BackLink, PageHeader } from '../../components/PageHeader';
 import { usePageTitle } from '../../app/usePageTitle';
 import { clearDraft, readDraft } from '../../app/drafts';
 import { hasStatus } from '../applications/api';
@@ -17,35 +21,38 @@ import { formatIls } from '../listings/format';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
 import { formatMessageTime } from './format';
+import { CONVERSATIONS_KEY } from './useConversations';
 import { isThreadNotFound, useThread } from './useThread';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const focusRing =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+/** A system line (the joined and truncated notes), centred as messaging apps mark a date. */
+const systemLine =
+  'self-center rounded-md bg-surface-subtle px-3 py-1 text-center text-caption text-ink-muted';
 
-function BackToChats() {
+/** The back link of every branch: to the list (on a desktop the list is beside it too). */
+function useBack() {
   const { t } = useTranslation();
+  return { to: '/chat', label: t('chat.thread.back') };
+}
+
+/** An outline warning mark (an exclamation), decorative: the note's words carry the meaning. */
+function WarningMark() {
   return (
-    <Link
-      to="/chat"
-      className={`inline-flex min-h-[44px] items-center gap-1 self-start rounded-full pe-3 text-[15px] font-semibold text-accent-strong ${focusRing}`}
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      className="mt-0.5 flex-none text-warning"
     >
-      <svg
-        aria-hidden="true"
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M9 6l6 6-6 6" />
-      </svg>
-      {t('chat.thread.back')}
-    </Link>
+      <path d="M12 6v7" />
+      <path d="M12 17.5h.01" />
+    </svg>
   );
 }
 
@@ -62,14 +69,11 @@ function Bubble({ message }: { message: MessageOut }) {
         <span
           data-testid="message-body"
           dir="auto"
-          className="min-w-0 max-w-full whitespace-pre-wrap break-words text-[15px] leading-relaxed"
+          className="min-w-0 max-w-full whitespace-pre-wrap break-words text-body leading-relaxed"
         >
           {message.body}
         </span>
-        <time
-          dateTime={message.created_at}
-          className={`ms-auto text-[12px] ${mine ? 'text-on-ink' : 'text-ink-muted'}`}
-        >
+        <time dateTime={message.created_at} className="ms-auto text-caption text-ink-muted">
           {formatMessageTime(message.created_at)}
         </time>
       </span>
@@ -78,9 +82,10 @@ function Bubble({ message }: { message: MessageOut }) {
 }
 
 /** The member line of a group thread: the owner and flatmates with their role, the seeker by name,
- * the caller as "you". */
+ * the caller as "you". Two lines, with a "show all" toggle when it is longer (FOLLOWUPS 193). */
 function MemberLine({ members }: { members: ThreadOut['members'] }) {
   const { t } = useTranslation();
+  const id = useId();
   const parts = members.map((m) => {
     if (m.is_me) return t('chat.you');
     if (m.role === 'seeker') return m.name;
@@ -88,14 +93,17 @@ function MemberLine({ members }: { members: ThreadOut['members'] }) {
   });
   const full = parts.join(' · ');
   return (
-    <p
-      role="group"
-      aria-label={t('chat.members')}
-      title={full}
-      className="line-clamp-2 text-start text-sm text-ink-muted [overflow-wrap:anywhere]"
+    <ClampedText
+      lines={2}
+      id={id}
+      textProps={{
+        role: 'group',
+        'aria-label': t('chat.members'),
+        className: 'text-caption text-ink-muted [overflow-wrap:anywhere]',
+      }}
     >
       {full}
-    </p>
+    </ClampedText>
   );
 }
 
@@ -111,6 +119,7 @@ function Thread({
   userId: string | undefined;
 }) {
   const { t } = useTranslation();
+  const back = useBack();
   const { listing, messages } = thread;
   const lastRef = useRef<HTMLLIElement>(null);
   const scrolledFirst = useRef(false);
@@ -170,41 +179,49 @@ function Thread({
   const group = thread.members.length > 2;
   return (
     <>
-      <h1 className="text-start text-2xl font-extrabold [overflow-wrap:anywhere]">
-        {/* Its own direction: a Latin name in an RTL page stays in order. */}
-        <span dir="auto">{thread.other_name}</span>
-      </h1>
+      <PageHeader
+        back={back}
+        // Its own direction: a Latin name in an RTL page stays in order.
+        title={
+          <span dir="auto" className="[overflow-wrap:anywhere]">
+            {thread.other_name}
+          </span>
+        }
+      />
       {group && <MemberLine members={thread.members} />}
-      <p className="flex flex-wrap items-center gap-x-2 text-start text-sm text-ink-muted">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-muted">
         <span>
           {cardTitle(t, listing)} · {formatIls(listing.price_ils)} {t('listings.units.ils')}
         </span>
-        <Link
+        <Button
+          variant="ghost"
+          size="sm"
           to={owner ? `/me/listings/${listing.id}/applicants` : `/listings/${listing.id}`}
-          className={`inline-flex min-h-[44px] items-center rounded font-semibold text-accent-strong underline underline-offset-4 ${focusRing}`}
         >
           {owner ? t('chat.thread.toApplicants') : t('chat.thread.toListing')}
-        </Link>
+        </Button>
       </p>
       <p
         role="note"
-        className="rounded-2xl bg-surface-subtle px-4 py-3 text-start text-[15px] font-semibold leading-relaxed text-warning"
+        className="flex items-start gap-2 rounded-lg border border-border bg-surface-subtle px-4 py-3 text-body leading-relaxed text-ink"
       >
-        {t('chat.thread.warning')}
+        <WarningMark />
+        <span>{t('chat.thread.warning')}</span>
       </p>
       {thread.visible_from !== null && (
-        <p className="text-start text-sm text-ink-muted">
+        <p className={systemLine}>
           {t('chat.joinedNote', { date: formatDay(thread.visible_from) })}
         </p>
       )}
-      {thread.truncated && (
-        <p className="text-start text-sm text-ink-muted">{t('chat.thread.truncated')}</p>
-      )}
+      {thread.truncated && <p className={systemLine}>{t('chat.thread.truncated')}</p>}
       {/* One flex item: the log is mounted even with no messages (so a first pushed message is
           announced, spec 0009t), and an empty log adds no gap. */}
       <div className="flex flex-col">
         {messages.length === 0 && (
-          <p className="text-start text-[15px] text-ink-muted">{t('chat.thread.empty')}</p>
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Mascot pose="sleep" width={96} />
+            <p className="text-body text-ink-muted">{t('chat.thread.empty')}</p>
+          </div>
         )}
         {/* A polite live region: messages pushed in are announced (keyed by id: only new ones). */}
         <div role="log" aria-label={t('chat.thread.log')}>
@@ -221,7 +238,8 @@ function Thread({
                 <li
                   key={message.id}
                   ref={message.id === lastId ? lastRef : undefined}
-                  className={`flex max-w-[85%] flex-col gap-1 ${
+                  // At lg the scroll-to-last leaves room for the sticky composer below it.
+                  className={`flex max-w-[85%] flex-col gap-1 lg:max-w-xl lg:scroll-mb-56 ${
                     message.mine ? 'self-end' : 'self-start'
                   }`}
                 >
@@ -229,15 +247,19 @@ function Thread({
                     <span
                       data-testid="sender-name"
                       dir="auto"
-                      className="text-start text-sm text-ink-muted"
+                      className="text-caption font-semibold text-ink-muted"
                     >
                       {message.sender_name}
                     </span>
                   )}
+                  {/* The small corner is the tail, at the bottom inline end (mine) or start. Not
+                      solid accent: one accent fill per screen, and a thread repeats it. */}
                   <div
-                    className={`rounded-2xl px-3 py-2 ${
-                      message.mine ? 'bg-accent text-on-ink' : 'border border-border bg-surface'
-                    }`}
+                    className={
+                      message.mine
+                        ? 'rounded-lg rounded-ee-sm bg-accent-soft px-3.5 py-2 text-ink'
+                        : 'rounded-lg rounded-es-sm border border-border bg-surface px-3.5 py-2'
+                    }
                   >
                     <Bubble message={message} />
                   </div>
@@ -263,24 +285,24 @@ function Thread({
         </div>
       ) : (
         <>
-          <p
-            ref={closedRef}
-            role="status"
-            tabIndex={-1}
-            className="rounded-2xl border border-border bg-surface px-4 py-3 text-start text-[15px] text-ink-muted focus:outline-none"
-          >
-            {t('chat.thread.closed')}
-          </p>
+          <Card variant="muted" padding="md">
+            <p
+              ref={closedRef}
+              role="status"
+              tabIndex={-1}
+              className="text-body text-ink-muted focus:outline-none"
+            >
+              {t('chat.thread.closed')}
+            </p>
+          </Card>
           {unsent !== '' && (
             <div className="flex flex-col items-start gap-2">
-              <p className="text-start text-sm font-semibold text-ink-muted">
-                {t('chat.thread.unsent')}
-              </p>
+              <p className="text-body-sm font-semibold text-ink-muted">{t('chat.thread.unsent')}</p>
               {/* The person's own text: a text node only, read-only. */}
               <p
                 data-testid="unsent-draft"
                 dir="auto"
-                className="w-full whitespace-pre-wrap break-words rounded-xl border border-border bg-surface-subtle px-3 py-2 text-start text-[15px] leading-relaxed"
+                className="w-full whitespace-pre-wrap break-words rounded-md border border-border bg-surface-subtle px-3 py-2 text-body leading-relaxed"
               >
                 {unsent}
               </p>
@@ -299,22 +321,30 @@ function Thread({
  * composer that had focus is gone, so the heading takes it. */
 function Removed({ id }: { id: string }) {
   const { t } = useTranslation();
+  const back = useBack();
+  const queryClient = useQueryClient();
   const ref = useRef<HTMLHeadingElement>(null);
+  // Once per mount (StrictMode runs the effect twice).
+  const listRefreshed = useRef(false);
   useEffect(() => {
     ref.current?.focus();
     // Nothing more can be sent here: the unsent text goes (spec 0009g).
     clearDraft('chat', id);
   }, [id]);
-  return (
-    <h1 ref={ref} tabIndex={-1} className="text-start text-2xl font-extrabold focus:outline-none">
-      {t('chat.removed')}
-    </h1>
-  );
+  // A removal publishes no event, and on a desktop the list beside this never remounts: ask for
+  // it again, so the chat leaves it (spec 0009s).
+  useEffect(() => {
+    if (listRefreshed.current) return;
+    listRefreshed.current = true;
+    void queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY, exact: true });
+  }, [queryClient]);
+  return <PageHeader back={back} title={t('chat.removed')} titleRef={ref} />;
 }
 
 /** `/chat/:id`, for an owner or a seeker in that chat (`RequireUser`). */
 export function ChatThreadPage() {
   const { t } = useTranslation();
+  const back = useBack();
   const { id: raw = '' } = useParams();
   // A malformed id is not found without asking the API; a valid one is used in its canonical
   // (lowercase) form, the one the event stream names, so its events reach this cache key.
@@ -347,18 +377,25 @@ export function ChatThreadPage() {
 
   if (valid && raw !== id) return <Navigate to={`/chat/${id}`} replace />;
 
+  // `ChatLayout` holds the page column (spec 0009s). The thread, removed and not-found branches
+  // open with their header; loading and error have no <h1> of their own, so the back link alone.
   let body;
   if (removed) {
     body = <Removed id={id} />;
   } else if (notFound) {
-    body = <h1 className="text-start text-2xl font-extrabold">{t('chat.thread.notFound')}</h1>;
+    body = <PageHeader back={back} title={t('chat.thread.notFound')} />;
   } else if (thread.data === undefined) {
-    body = thread.isError ? (
-      <ErrorState page onRetry={() => thread.refetch()} />
-    ) : (
-      <Loading>
-        <Skeleton />
-      </Loading>
+    body = (
+      <>
+        <BackLink {...back} />
+        {thread.isError ? (
+          <ErrorState page onRetry={() => thread.refetch()} />
+        ) : (
+          <Loading>
+            <Skeleton />
+          </Loading>
+        )}
+      </>
     );
   } else {
     // A failed background refetch keeps the thread on the page.
@@ -366,10 +403,5 @@ export function ChatThreadPage() {
     body = <Thread key={id} id={id} thread={thread.data} userId={userId} />;
   }
 
-  return (
-    <PageContainer as="section" className="flex flex-col gap-4">
-      <BackToChats />
-      {body}
-    </PageContainer>
-  );
+  return <section className="flex flex-col gap-4">{body}</section>;
 }
