@@ -430,6 +430,25 @@ def set_location(engine: Engine, listing_id: uuid.UUID, lng: float, lat: float) 
         )
 
 
+def make_direct_chat(
+    engine: Engine, a: uuid.UUID, b: uuid.UUID, *, closed: bool = False
+) -> uuid.UUID:
+    """Insert a direct chat between `a` and `b` (spec 0010g) directly and return its id. The pair
+    is ordered in SQL (`least` / `greatest`), as `chat.open_direct` does; `closed` sets
+    `closed_at` to now(). Bypasses the service."""
+    with engine.begin() as conn:
+        conversation_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO conversations (owner_id, seeker_id, closed_at)"
+                " VALUES (least(CAST(:a AS uuid), CAST(:b AS uuid)),"
+                " greatest(CAST(:a AS uuid), CAST(:b AS uuid)),"
+                " CASE WHEN :closed THEN now() END) RETURNING id"
+            ),
+            {"a": a, "b": b, "closed": closed},
+        ).scalar_one()
+    return conversation_id
+
+
 def make_photo(
     engine: Engine, listing_id: uuid.UUID, *, position: int, key: str | None = None
 ) -> uuid.UUID:

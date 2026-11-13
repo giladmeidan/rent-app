@@ -1,9 +1,14 @@
-"""Chat (spec 0005a; members from 0008d): the conversation an owner opens by shortlisting an
-applicant (`services/applications.set_applicant_status`) or a mutual like opens
-(`services/people.py`), listed, read and written by its members.
+"""Chat (spec 0005a; members from 0008d; direct chats from 0010g): the conversation an owner opens
+by shortlisting an applicant (`services/applications.set_applicant_status`) or a mutual like opens
+(`services/people.py`), and the **direct chat** a mutual person-to-person like opens (`open_direct`,
+called by 0010h), listed, read and written by its members.
 
-Rules (PRODUCT.md "Chat", "Flatmates"):
-- One conversation per application, ever; its id is the application's id. Its **members** are its
+Rules (PRODUCT.md "Chat", "Flatmates", "שוק השותפים"):
+- A conversation has its own `id`. One conversation per application, ever; an application chat's
+  id is the application's id (`ck_conversations_application_id`). A **direct chat** has no
+  application (and no listing): its two people sit in `owner_id` / `seeker_id` (the lower and the
+  higher id), both with the role `person`, one chat per pair, ever (`open_direct`), and it never
+  gains flatmates. `Application` and `Listing` are outer-joined for it. Its **members** are its
   `owner_id`, its `seeker_id` and, on a **room** application (`listing_type_at_apply = 'room'`,
   the 0007b snapshot), the listing's flatmates (`listing_flatmates`, spec 0008d). An apartment
   application never gains flatmates, even after its listing is switched to a room. Membership is
@@ -13,14 +18,16 @@ Rules (PRODUCT.md "Chat", "Flatmates"):
   conversation the caller is not in are one case (`ConversationNotFoundError`, a 404), on a read
   and on a send alike. The list also ANDs in the same rule restated on `conversations`' own
   indexed columns (`_indexed_member`), so it never scans the whole table.
-- The caller's role (`my_role`) resolves in order: owner, then seeker, then flatmate, so a
-  withdrawn seeker who later joined the flat (or a join racing an apply) is never both.
+- The caller's role (`my_role`) resolves in order: `person` in a direct chat, then owner, then
+  seeker, then flatmate, so a withdrawn seeker who later joined the flat (or a join racing an
+  apply) is never both. Read markers and `is_me` go by id, never by role.
 - A flatmate sees the messages sent from their `joined_at` on (`visible_from`; `-infinity` for the
   owner and the seeker), in the thread, the list's newest message and the unread count. A removed
   or departed flatmate loses access at once; a re-join restarts from the new `joined_at`.
-- Sending is open to every member exactly while the application is `shortlisted`; after an
-  un-shortlist, decline or withdraw the thread stays readable and sending is `ChatClosedError`
-  (Q2). The status is checked in the `INSERT ... SELECT`'s own snapshot, without a lock: a decline
+- Sending is open to every member exactly while the application is `shortlisted` (a direct chat:
+  while it is not closed, `close_direct`, Q14); after an un-shortlist, decline or withdraw (or a
+  removed match) the thread stays readable and sending is `ChatClosedError` (Q2). The status is
+  checked in the `INSERT ... SELECT`'s own snapshot, without a lock: a decline
   committing at the same instant can let one message land after it (harmless, by design).
 - Each member has their own read marker: the owner's and the seeker's are `owner_read_at` /
   `seeker_read_at`, a flatmate's is their `conversation_reads` row. Unread = the other members'
@@ -80,7 +87,7 @@ CHAT_RATE_DAY_S = 86_400
 THREAD_LIMIT = 200
 PREVIEW_LENGTH = 120
 
-Role = Literal["owner", "seeker", "flatmate"]
+Role = Literal["owner", "seeker", "flatmate", "person"]
 
 # The listing summary (`ApplicationListingOut`) as `listing_*` columns.
 _LISTING_COLUMNS = (
@@ -101,12 +108,13 @@ _R = aliased(ConversationRead, name="my_read")
 
 
 class ConversationNotFoundError(Exception):
-    """Unknown id, an application never shortlisted, or a conversation the caller is not in
-    (deliberately one case)."""
+    """Unknown id, an application never shortlisted, or a conversation (an application chat or a
+    direct chat) the caller is not in (deliberately one case)."""
 
 
 class ChatClosedError(Exception):
-    """The caller is a member, but the application is not `shortlisted`."""
+    """The caller is a member, but the application is not `shortlisted` (a direct chat: it is
+    closed, the match was removed)."""
 
 
 @dataclass(frozen=True)
@@ -120,10 +128,11 @@ class Member:
 
 @dataclass(frozen=True)
 class Thread:
-    """`get_thread`'s result: the header row (`listing_*`, `other_name`, `status`, `my_role`,
-    `visible_from`), the members (owner, flatmates by `joined_at`, seeker) and the newest
-    `THREAD_LIMIT` visible messages oldest first (rows of `id`, `body`, `mine`, `sender_name`,
-    `created_at`)."""
+    """`get_thread`'s result: the header row (`listing_*`, null for a direct chat; `other_name`,
+    `can_send`, `my_role`, `visible_from`), the members (owner, flatmates by `joined_at`, seeker;
+    a direct chat's are its two people, `owner_id` then `seeker_id`, both role `person`) and the
+    newest `THREAD_LIMIT` visible messages oldest first (rows of `id`, `body`, `mine`,
+    `sender_name`, `created_at`)."""
 
     header: Row[Any]
     members: list[Member]
@@ -137,8 +146,10 @@ def _is_room() -> Any:
 
 def _flatmate_join(me: User) -> Any:
     """The LEFT JOIN condition onto `me`'s own `listing_flatmates` row (`_F`) of the conversation's
-    listing, only on a room application. The statement must join `Application`."""
+    listing, only on a room application (never on a direct chat). The statement must join
+    `Application`."""
     return and_(
+        Conversation.application_id.is_not(None),
         _F.listing_id == Application.listing_id,
         _F.user_id == me.id,
         _is_room(),
@@ -147,7 +158,7 @@ def _flatmate_join(me: User) -> Any:
 
 def _read_join(me: User) -> Any:
     """The LEFT JOIN condition onto `me`'s own flatmate read marker (`_R`)."""
-    return and_(_R.conversation_id == Conversation.application_id, _R.user_id == me.id)
+    return and_(_R.conversation_id == Conversation.id, _R.user_id == me.id)
 
 
 def _is_member(me: User) -> Any:
@@ -165,10 +176,12 @@ def _is_member(me: User) -> Any:
 
 def _indexed_member(me: User) -> Any:
     """`_is_member` restated on `conversations`' own indexed columns, so the planner can BitmapOr
-    `ix_conversations_owner_id`, `ix_conversations_seeker_id` and the primary key: the owner, the
-    seeker, or a conversation (= application) id among the room applications of `me`'s flats (an
-    uncorrelated `array(SELECT ...)`, `ix_listing_flatmates_user_id` -> `applications(listing_id)`,
-    run once). It may only narrow: `_is_member` stays the exact rule."""
+    `ix_conversations_owner_id`, `ix_conversations_seeker_id` and
+    `uq_conversations_application_id`: the owner, the seeker, or a conversation whose application
+    is among the room applications of `me`'s flats (an uncorrelated `array(SELECT ...)`,
+    `ix_listing_flatmates_user_id` -> `applications(listing_id)`, run once). A direct chat never
+    matches the third arm (no application); its two people match through `owner_id` /
+    `seeker_id`. It may only narrow: `_is_member` stays the exact rule."""
     # shortcut: a flatmate of many busy rooms gets one long id array (the room applications of
     # every flat, chat or not); fine at MVP volume (perf review: 13.6 ms for a flatmate of 40
     # rooms at 21k conversations). If it grows, restrict the array to applications that have a
@@ -189,9 +202,19 @@ def _indexed_member(me: User) -> Any:
 
 def _my_role(me: User) -> Any:
     return case(
+        (Conversation.application_id.is_(None), literal("person")),
         (Conversation.owner_id == me.id, literal("owner")),
         (Conversation.seeker_id == me.id, literal("seeker")),
         else_=literal("flatmate"),
+    )
+
+
+def _can_send() -> Any:
+    """Sending is open: an application chat while its application is `shortlisted`, a direct chat
+    while it is not closed. The statement must outer-join `Application`."""
+    return case(
+        (Conversation.application_id.is_(None), Conversation.closed_at.is_(None)),
+        else_=Application.status == "shortlisted",
     )
 
 
@@ -261,7 +284,7 @@ def list_statement(me: User) -> Select[Any]:
             Message.created_at.label("created_at"),
         )
         .where(
-            Message.conversation_id == Conversation.application_id,
+            Message.conversation_id == Conversation.id,
             Message.created_at >= visible_from,
         )
         .order_by(Message.created_at.desc(), Message.id.desc())
@@ -274,7 +297,7 @@ def list_statement(me: User) -> Select[Any]:
         select(func.count())
         .select_from(Message)
         .where(
-            Message.conversation_id == Conversation.application_id,
+            Message.conversation_id == Conversation.id,
             Message.created_at > since,
             Message.created_at >= visible_from,
             Message.sender_id != me.id,
@@ -296,13 +319,13 @@ def list_statement(me: User) -> Select[Any]:
     member_count = literal(2) + case((_is_room(), flatmates), else_=literal(0))
     return (
         select(
-            Conversation.application_id.label("id"),
+            Conversation.id.label("id"),
             Conversation.created_at.label("created_at"),
             *_LISTING_COLUMNS,
             User.display_name.label("other_name"),
             _my_role(me).label("my_role"),
             member_count.label("member_count"),
-            (Application.status == "shortlisted").label("can_send"),
+            _can_send().label("can_send"),
             my_read_at.is_(None).label("is_new"),
             unread.label("unread_count"),
             newest.c.body.label("last_body"),
@@ -310,8 +333,8 @@ def list_statement(me: User) -> Select[Any]:
             newest.c.created_at.label("last_created_at"),
         )
         .select_from(Conversation)
-        .join(Application, Application.id == Conversation.application_id)
-        .join(Listing, Listing.id == Application.listing_id)
+        .outerjoin(Application, Application.id == Conversation.application_id)
+        .outerjoin(Listing, Listing.id == Application.listing_id)
         .outerjoin(_F, _flatmate_join(me))
         .outerjoin(_R, _read_join(me))
         .join(User, _is_other(me))
@@ -319,7 +342,7 @@ def list_statement(me: User) -> Select[Any]:
         .where(_indexed_member(me), _is_member(me))
         .order_by(
             func.coalesce(Conversation.last_message_at, Conversation.created_at).desc(),
-            Conversation.application_id,
+            Conversation.id,
         )
     )
 
@@ -343,7 +366,7 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                 ).label("other_name"),
                 owner.display_name.label("owner_name"),
                 seeker.display_name.label("seeker_name"),
-                Application.status.label("status"),
+                _can_send().label("can_send"),
                 Application.listing_id.label("application_listing_id"),
                 _is_room().label("is_room"),
                 Conversation.seeker_id.label("seeker_id"),
@@ -353,13 +376,13 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                 Conversation.last_message_at.label("last_message_at"),
             )
             .select_from(Conversation)
-            .join(Application, Application.id == Conversation.application_id)
-            .join(Listing, Listing.id == Application.listing_id)
+            .outerjoin(Application, Application.id == Conversation.application_id)
+            .outerjoin(Listing, Listing.id == Application.listing_id)
             .outerjoin(_F, _flatmate_join(me))
             .outerjoin(_R, _read_join(me))
             .join(owner, owner.id == Conversation.owner_id)
             .join(seeker, seeker.id == Conversation.seeker_id)
-            .where(Conversation.application_id == conversation_id, _is_member(me))
+            .where(Conversation.id == conversation_id, _is_member(me))
         ).one_or_none()
         if header is None:
             raise ConversationNotFoundError
@@ -386,7 +409,15 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
             )
         ).all()
         role: Role = header.my_role
-        members = [Member(name=header.owner_name, role="owner", is_me=role == "owner")]
+        # By id, not by role: in a direct chat both people are `person`.
+        i_am_seeker = header.seeker_id == me.id
+        if role == "person":
+            members = [
+                Member(name=header.owner_name, role="person", is_me=not i_am_seeker),
+                Member(name=header.seeker_name, role="person", is_me=i_am_seeker),
+            ]
+        else:
+            members = [Member(name=header.owner_name, role="owner", is_me=role == "owner")]
         if header.is_room:
             flatmates = db.execute(
                 select(User.display_name, (ListingFlatmate.user_id == me.id).label("is_me"))
@@ -401,7 +432,8 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
             members += [
                 Member(name=row.display_name, role="flatmate", is_me=row.is_me) for row in flatmates
             ]
-        members.append(Member(name=header.seeker_name, role="seeker", is_me=role == "seeker"))
+        if role != "person":
+            members.append(Member(name=header.seeker_name, role="seeker", is_me=role == "seeker"))
         my_read_at: dt.datetime | None = header.my_read_at
         last_message_at: dt.datetime | None = header.last_message_at
         if my_read_at is None or (last_message_at is not None and my_read_at < last_message_at):
@@ -416,13 +448,11 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                     )
                 )
             else:
-                column = (
-                    Conversation.owner_read_at if role == "owner" else Conversation.seeker_read_at
-                )
+                column = Conversation.seeker_read_at if i_am_seeker else Conversation.owner_read_at
                 db.execute(
                     update(Conversation)
                     .where(
-                        Conversation.application_id == conversation_id,
+                        Conversation.id == conversation_id,
                         or_(column.is_(None), column < Conversation.last_message_at),
                     )
                     .values({column: func.now()})
@@ -445,8 +475,9 @@ def send_message(
     db: Session, r: RedisClient, me: User, conversation_id: uuid.UUID, body: str
 ) -> tuple[Message, list[uuid.UUID]]:
     """Send `body` (already validated by `MessageIn`) as `me` to one of `me`'s conversations whose
-    application is `shortlisted`, and return the message with the conversation's member ids (owner,
-    seeker, then any flatmates: the router publishes the chat event to them, spec 0005c). Raises
+    application is `shortlisted` (a direct chat: not closed), and return the message with the
+    conversation's member ids (owner, seeker, then any flatmates: the router publishes the chat
+    event to them, spec 0005c). Raises
     `RateLimitedError`, `ConversationNotFoundError` or `ChatClosedError`. Moves the conversation's
     `last_message_at` and `me`'s read marker forward (never back: `greatest` skips nulls, so two
     sends committing out of order are safe): the owner's or the seeker's column, or a flatmate's
@@ -462,17 +493,14 @@ def send_message(
     try:
         source = (
             select(
-                Conversation.application_id,
+                Conversation.id,
                 literal(me.id, UUID(as_uuid=True)),
                 literal(body, Text),
             )
-            .join(Application, Application.id == Conversation.application_id)
+            .select_from(Conversation)
+            .outerjoin(Application, Application.id == Conversation.application_id)
             .outerjoin(_F, _flatmate_join(me))
-            .where(
-                Conversation.application_id == conversation_id,
-                _is_member(me),
-                Application.status == "shortlisted",
-            )
+            .where(Conversation.id == conversation_id, _is_member(me), _can_send())
         )
         message = db.scalar(
             insert(Message)
@@ -481,10 +509,11 @@ def send_message(
         )
         if message is None:
             member = db.scalar(
-                select(Conversation.application_id)
-                .join(Application, Application.id == Conversation.application_id)
+                select(Conversation.id)
+                .select_from(Conversation)
+                .outerjoin(Application, Application.id == Conversation.application_id)
                 .outerjoin(_F, _flatmate_join(me))
-                .where(Conversation.application_id == conversation_id, _is_member(me))
+                .where(Conversation.id == conversation_id, _is_member(me))
             )
             if member is None:
                 raise ConversationNotFoundError
@@ -494,11 +523,11 @@ def send_message(
         flatmate_read = insert(ConversationRead).from_select(
             ["conversation_id", "user_id", "read_at"],
             select(
-                party.application_id,
+                party.id,
                 literal(me.id, UUID(as_uuid=True)),
                 literal(message.created_at, DateTime(timezone=True)),
             ).where(
-                party.application_id == conversation_id,
+                party.id == conversation_id,
                 party.owner_id != me.id,
                 party.seeker_id != me.id,
             ),
@@ -512,7 +541,7 @@ def send_message(
         members = db.execute(
             update(Conversation)
             .add_cte(flatmate_read.cte("flatmate_read"))
-            .where(Conversation.application_id == conversation_id)
+            .where(Conversation.id == conversation_id)
             .values(
                 last_message_at=func.greatest(Conversation.last_message_at, message.created_at),
                 owner_read_at=case(
@@ -575,3 +604,49 @@ def event_members(db: Session, application: Application, owner_id: uuid.UUID) ->
     if application.listing_type_at_apply == "room":
         return member_ids(db, application.id)
     return [owner_id, application.seeker_id]
+
+
+def _pair(a: uuid.UUID, b: uuid.UUID) -> tuple[Any, Any]:
+    """`least(a, b)`, `greatest(a, b)` in SQL: Postgres's uuid order, the one
+    `ck_conversations_direct` checks. The pair is never ordered in Python."""
+    low = func.least(literal(a, UUID(as_uuid=True)), literal(b, UUID(as_uuid=True)))
+    high = func.greatest(literal(a, UUID(as_uuid=True)), literal(b, UUID(as_uuid=True)))
+    return low, high
+
+
+def open_direct(db: Session, a: uuid.UUID, b: uuid.UUID) -> uuid.UUID:
+    """Open the direct chat between people `a` and `b` (either order) and return its id: a new one,
+    or the pair's existing one, reopened (`closed_at` cleared) with its history and read markers
+    (Q14). Both markers of a new chat start null, so it is `is_new` for both until opened. Raises
+    `ValueError` when `a == b`. One statement; does not commit (the caller, 0010h's mutual like,
+    owns the transaction)."""
+    if a == b:
+        raise ValueError("a direct chat needs two different people")
+    low, high = _pair(a, b)
+    stmt = insert(Conversation).values(owner_id=low, seeker_id=high)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["owner_id", "seeker_id"],
+        index_where=Conversation.application_id.is_(None),
+        set_={"closed_at": None},
+    )
+    conversation_id: uuid.UUID = db.execute(stmt.returning(Conversation.id)).scalar_one()
+    return conversation_id
+
+
+def close_direct(db: Session, a: uuid.UUID, b: uuid.UUID) -> uuid.UUID | None:
+    """Close the direct chat between `a` and `b` (either order; the match was removed): it stays
+    readable and sending closes. Returns its id, or `None` when the pair has no direct chat.
+    Idempotent: a second close keeps the first `closed_at`. One statement; does not commit."""
+    low, high = _pair(a, b)
+    conversation_id: uuid.UUID | None = db.execute(
+        update(Conversation)
+        .where(
+            Conversation.owner_id == low,
+            Conversation.seeker_id == high,
+            Conversation.application_id.is_(None),
+        )
+        .values(closed_at=func.coalesce(Conversation.closed_at, func.now()))
+        .returning(Conversation.id)
+        .execution_options(synchronize_session=False)
+    ).scalar_one_or_none()
+    return conversation_id

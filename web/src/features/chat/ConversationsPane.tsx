@@ -94,7 +94,9 @@ function ConversationRow({
               )}
             </span>
           )}
-          <span className="truncate text-caption text-ink-muted">{cardTitle(t, listing)}</span>
+          <span className="truncate text-caption text-ink-muted">
+            {listing ? cardTitle(t, listing) : t('chat.list.direct')}
+          </span>
           {last === null ? (
             <span className="text-body text-ink-muted">{t('chat.list.noMessages')}</span>
           ) : (

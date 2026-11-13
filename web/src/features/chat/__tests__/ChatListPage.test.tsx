@@ -11,7 +11,7 @@ import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut } from '../api';
 import { ChatListPage } from '../ChatListPage';
 import { formatMessageTime } from '../format';
-import { conversation } from './fixtures';
+import { conversation, directConversation } from './fixtures';
 import { settle } from './harness';
 
 afterEach(() => {
@@ -41,13 +41,15 @@ function reset(view: { unmount: () => void }) {
   vi.unstubAllGlobals();
 }
 
-const titleOf = (c: ConversationOut) =>
-  i18n.t('listings.card.title', {
-    count: c.listing.rooms,
-    rooms: String(c.listing.rooms),
-    street: c.listing.street,
-    city: c.listing.city,
+const titleOf = ({ listing }: ConversationOut) => {
+  if (listing === null) throw new Error('titleOf: a direct chat has no listing');
+  return i18n.t('listings.card.title', {
+    count: listing.rooms,
+    rooms: String(listing.rooms),
+    street: listing.street,
+    city: listing.city,
   });
+};
 const heading = () => screen.findByRole('heading', { level: 1, name: he.chat.list.title });
 
 describe('ChatListPage', () => {
@@ -385,6 +387,35 @@ describe('ChatListPage', () => {
       for (const frame of frames.splice(0)) frame(0);
     });
     expect(screen.queryByText(he.flatmates.join.done)).toBeNull();
+    view.unmount();
+  });
+
+  it('ac10_direct_chat_row', async () => {
+    // A direct chat (spec 0010g): the caption under the name reads "a match in the market", with
+    // no listing title; an application chat beside it is as before.
+    const direct = directConversation({ other_name: 'Avi', is_new: true });
+    const closedDirect = directConversation({ other_name: 'Bat', can_send: false });
+    const plain = conversation({ other_name: 'Dana' });
+    const { view } = renderPage([json([direct, closedDirect, plain])]);
+    await heading();
+    const row = (name: string) => screen.getByRole('link', { name: new RegExp(name) });
+    await screen.findByRole('link', { name: /Avi/ });
+
+    const first = row('Avi');
+    expect(first).toHaveAttribute('href', `/chat/${direct.id}`);
+    expect(within(first).getByText(he.chat.list.direct)).toBeVisible();
+    expect(within(first).getByText(he.chat.list.new)).toBeVisible();
+    expect(within(first).queryByText(he.chat.flatmateChip)).toBeNull();
+    expect(within(first).queryByText(he.chat.list.closed)).toBeNull();
+    expect(first).not.toHaveTextContent(titleOf(plain));
+
+    const second = row('Bat');
+    expect(within(second).getByText(he.chat.list.direct)).toBeVisible();
+    expect(within(second).getByText(he.chat.list.closed)).toBeVisible();
+
+    const third = row('Dana');
+    expect(third).toHaveTextContent(titleOf(plain));
+    expect(within(third).queryByText(he.chat.list.direct)).toBeNull();
     view.unmount();
   });
 });

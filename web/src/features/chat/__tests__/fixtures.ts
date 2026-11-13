@@ -5,7 +5,10 @@ import type { ConversationOut, MessageOut, ThreadOut } from '../api';
 let n = 0;
 const uuid = (fill: string) => `00000000-0000-0000-0000-${String(n).padStart(12, fill)}`;
 
-const listingSummary = (): ConversationOut['listing'] => ({
+/** The listing line of an application chat (a direct chat has none, spec 0010g). */
+type ListingSummary = NonNullable<ConversationOut['listing']>;
+
+const listingSummary = (): ListingSummary => ({
   id: '00000000-0000-0000-0000-0000000000a1',
   listing_type: 'apartment',
   city: 'רמת גן',
@@ -14,7 +17,12 @@ const listingSummary = (): ConversationOut['listing'] => ({
   price_ils: 6000,
 });
 
-/** An open, read chat with no messages, as `GET /me/conversations` returns it. */
+/** An open, read application chat with no messages, as `GET /me/conversations` returns it. Its
+ * `listing` is set unless an override (a plain `Partial<ConversationOut>`) says otherwise. */
+export function conversation(
+  overrides?: Partial<ConversationOut & { listing: ListingSummary }>,
+): ConversationOut & { listing: ListingSummary };
+export function conversation(overrides: Partial<ConversationOut>): ConversationOut;
 export function conversation(overrides: Partial<ConversationOut> = {}): ConversationOut {
   n += 1;
   return {
@@ -45,7 +53,12 @@ export function message(overrides: Partial<MessageOut> = {}): MessageOut {
   };
 }
 
-/** An open thread with no messages, as `GET /conversations/{id}` returns it. */
+/** An open application thread with no messages, as `GET /conversations/{id}` returns it. Its
+ * `listing` is set unless an override (a plain `Partial<ThreadOut>`) says otherwise. */
+export function thread(
+  overrides?: Partial<ThreadOut & { listing: ListingSummary }>,
+): ThreadOut & { listing: ListingSummary };
+export function thread(overrides: Partial<ThreadOut>): ThreadOut;
 export function thread(overrides: Partial<ThreadOut> = {}): ThreadOut {
   n += 1;
   return {
@@ -56,6 +69,44 @@ export function thread(overrides: Partial<ThreadOut> = {}): ThreadOut {
     members: [
       { name: 'מיכל', role: 'owner', is_me: false },
       { name: 'דנה', role: 'seeker', is_me: true },
+    ],
+    visible_from: null,
+    can_send: true,
+    messages: [],
+    truncated: false,
+    ...overrides,
+  };
+}
+
+/** An open, read direct chat (two people, no listing, spec 0010g) with no messages. */
+export function directConversation(overrides: Partial<ConversationOut> = {}): ConversationOut {
+  n += 1;
+  return {
+    id: uuid('f'),
+    listing: null,
+    other_name: `Person ${String(n)}`,
+    my_role: 'person',
+    member_count: 2,
+    can_send: true,
+    is_new: false,
+    unread_count: 0,
+    last_message: null,
+    created_at: '2026-11-10T10:00:00Z',
+    ...overrides,
+  };
+}
+
+/** An open direct thread with no messages: the two people, both `person`. */
+export function directThread(overrides: Partial<ThreadOut> = {}): ThreadOut {
+  n += 1;
+  return {
+    id: uuid('b'),
+    listing: null,
+    other_name: 'מיכל',
+    my_role: 'person',
+    members: [
+      { name: 'דנה', role: 'person', is_me: true },
+      { name: 'מיכל', role: 'person', is_me: false },
     ],
     visible_from: null,
     can_send: true,

@@ -1,10 +1,12 @@
-"""Chat endpoints (spec 0005a; members from 0008d). Thin: all logic is in `services/chat.py`.
+"""Chat endpoints (spec 0005a; members from 0008d; direct chats from 0010g). Thin: all logic is in
+`services/chat.py`.
 
 Every endpoint requires a session (`current_user`, any role): 401 `unauthenticated` without one.
 A conversation the caller is not a **member** of (its owner, its seeker or, on a room application,
-a flatmate of its listing) is a 404 `not_found`, identical to an unknown id or an application that
-was never shortlisted. Sending to a conversation whose application is not `shortlisted` is a 409
-`chat_closed`; sending is rate limited (429 `rate_limited` with `Retry-After`). A sent message is
+a flatmate of its listing; one of the two people of a direct chat) is a 404 `not_found`, identical
+to an unknown id or an application that was never shortlisted. Sending to a conversation whose
+application is not `shortlisted`, or to a closed direct chat, is a 409 `chat_closed`; sending is
+rate limited (429 `rate_limited` with `Retry-After`). A sent message is
 published to every member's event streams after the commit (spec 0005c)."""
 
 import uuid
@@ -45,12 +47,14 @@ _NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {
         "model": ErrorOut,
         "description": "not_found: unknown id, an application never shortlisted, or a "
-        "conversation the caller is not a member of",
+        "conversation (an application chat or a direct chat) the caller is not a member of",
     },
 }
 
 
-def _listing(row: Row[Any]) -> ApplicationListingOut:
+def _listing(row: Row[Any]) -> ApplicationListingOut | None:
+    if row.listing_id is None:  # a direct chat
+        return None
     return ApplicationListingOut(
         id=row.listing_id,
         listing_type=row.listing_type,
@@ -104,7 +108,7 @@ def get_thread(conversation_id: uuid.UUID, me: UserDep, db: DbDep) -> ThreadOut:
         my_role=header.my_role,
         members=[MemberOut(name=m.name, role=m.role, is_me=m.is_me) for m in thread.members],
         visible_from=header.visible_from,
-        can_send=header.status == "shortlisted",
+        can_send=header.can_send,
         messages=[
             MessageOut(
                 id=m.id,
@@ -129,7 +133,8 @@ def get_thread(conversation_id: uuid.UUID, me: UserDep, db: DbDep) -> ThreadOut:
         409: {
             "model": ErrorOut,
             "description": "chat_closed: the application is not shortlisted (un-shortlisted, "
-            "declined or withdrawn); the thread stays readable",
+            "declined or withdrawn), or a direct chat is closed (the match was removed); the "
+            "thread stays readable",
         },
         429: {"model": ErrorOut, "description": "rate_limited; see Retry-After"},
     },
