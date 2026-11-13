@@ -275,6 +275,56 @@ describe('ListingCard', () => {
     expect(screen.getByRole('article').textContent).not.toContain('(');
   });
 
+  it('ac6_compact_layout', () => {
+    // The search map's docked card (spec 0009w): the row anatomy with no breakpoint, a 96px photo
+    // box at the inline start, and the price row clear of the close button at the top end.
+    const room = publicListing({
+      listing_type: 'room',
+      gender_preference: 'women',
+      flatmates_count: 2,
+      flatmate_ages: [],
+      price_ils: 3400,
+    });
+    render(
+      <MemoryRouter>
+        <ListingCard
+          listing={room}
+          today={TODAY}
+          to={`/listings/${room.id}`}
+          layout="compact"
+          badge={<span data-testid="the-badge">התאמה 82%</span>}
+        />
+      </MemoryRouter>,
+    );
+    const card = screen.getByRole('article');
+    expect(card).toHaveAttribute('data-layout', 'compact');
+    // The photo box: first in the row, 16:10, w-24, with the same placeholder and the room pill.
+    const pill = within(card).getByText(he.listings.card.room);
+    const photo = pill.parentElement as HTMLElement;
+    expect(photo).toHaveClass('aspect-[16/10]', 'w-24', 'shrink-0');
+    expect(photo.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    const row = photo.parentElement as HTMLElement;
+    expect(row.firstElementChild).toBe(photo);
+    expect(row).toHaveClass('flex-row');
+    // The row anatomy at every width: no breakpoint-only class on the row or the photo box.
+    for (const element of [row, photo]) {
+      expect([...element.classList].filter((name) => name.startsWith('lg:'))).toEqual([]);
+    }
+    // The price row (the badge at its end) gets `pe-12`; title link and facts as in `row`.
+    const badge = screen.getByTestId('the-badge');
+    const priceRow = badge.parentElement as HTMLElement;
+    expect(priceRow).toHaveClass('pe-12');
+    expect(within(priceRow).getByText(/3,400/)).toBeVisible();
+    expect(within(card).getAllByRole('link')).toHaveLength(1);
+    expect(within(card).getByRole('link')).toHaveAttribute('href', `/listings/${room.id}`);
+    expect(screen.getByTestId('listing-facts').textContent?.startsWith('2 שותפים')).toBe(true);
+    // The title's first line can reach the close button's 44 px box: its end is kept clear too.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveClass('pe-12');
+    expect(screen.getByRole('heading', { level: 2 }).nextElementSibling).toBe(
+      screen.getByTestId('listing-facts'),
+    );
+  });
+
   it('ac3_heading_level_none', () => {
     // `titleAs="p"` (0009a's "none"; the one heading prop, shared with 0009c): no heading at all.
     const listing = publicListing({ city: 'תל אביב', street: 'הרצל', rooms: 3 });

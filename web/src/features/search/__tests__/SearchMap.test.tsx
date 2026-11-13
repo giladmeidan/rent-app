@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../app/i18n';
 import { emptyStateBox } from '../../../components/EmptyState';
 import {
+  cameras,
   failMap,
   lastProps,
   lastZoomedTo,
   moveTo,
   resetFakeMap,
 } from '../../../components/map/__tests__/fakeMapCanvas';
+import { GUSH_DAN_BOUNDS } from '../../../components/map/config';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -90,6 +92,11 @@ const pins = () => lastProps().pins ?? [];
 const pinIds = () => pins().map((pin) => pin.id);
 const located = (overrides: Partial<ListingPublic> = {}) =>
   publicListing({ lat: 32.08, lng: 34.8, ...overrides });
+/** The current URL's query. */
+const params = () => new URLSearchParams(currentPath()?.split('?')[1] ?? '');
+/** The docked panel: the card or the same-place list, inside the map region. */
+const dockedCard = () => mapRegion().querySelector<HTMLElement>('[data-map-card]');
+const closeButton = () => screen.getByRole('button', { name: he.search.map.closeCard });
 
 describe('SearchMap', () => {
   it('ac1_view_toggle_lives_in_the_url', async () => {
@@ -302,11 +309,12 @@ describe('SearchMap', () => {
     const pinA = await screen.findByRole('button', { name: pinLabel(a) });
     expect(screen.queryByRole('article')).toBeNull();
 
-    // The first pin: selected, its card under the map, focus on the card's title link.
+    // The first pin: selected, its card inside the map, focus on the card's title link.
     fireEvent.click(pinA);
     expect(lastProps().selectedId).toBe(a.id);
     expect(pinA).toHaveAttribute('aria-pressed', 'true');
     let card = screen.getByRole('article');
+    expect(within(mapRegion()).getByRole('article')).toBe(card);
     let link = within(card).getByRole('link');
     expect(link).toHaveTextContent(a.street);
     expect(link).toHaveAttribute('href', `/listings/${a.id}`);
@@ -769,6 +777,262 @@ describe('SearchMap', () => {
     await settle();
     expect(mark(room)).toBeNull();
     expect(pins()).toHaveLength(3);
+  });
+
+  it('ac4_first_open_fits_once', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 12 };
+    const a = located({ lat: 32.05, lng: 34.78 });
+    const b = located({ lat: 32.1, lng: 34.82 });
+    const c = located({ lat: 32.07, lng: 34.8 });
+    const nowhere = publicListing({ lat: null, lng: null });
+
+    // No position in the URL: the map opens on Gush Dan.
+    let api = mockApi({ [SEARCH]: [() => json(page([a, nowhere, b, c]))] });
+    let view = render('/search?view=map');
+    expect(lastProps().bounds).toEqual(GUSH_DAN_BOUNDS);
+    expect(lastProps().center).toBeUndefined();
+    // The `load` view writes `c`/`z` before the first answer; the fit still follows.
+    moveTo(BOX, VIEW);
+    expect(params().get('c')).toBe('32.08,34.8');
+    expect(params().get('z')).toBe('12');
+    await vi.waitFor(() => {
+      expect(cameras()).toHaveLength(1);
+    });
+    // One camera: the located listings' extent, at most zoom 15.
+    expect(cameras()).toEqual([{ seq: 1, bounds: [34.78, 32.05, 34.82, 32.1], maxZoom: 15 }]);
+    expect(lastProps().camera).toEqual(cameras()[0]);
+    // The fit's move brings a second answer: never a second fit in this mount.
+    moveTo(OTHER_BOX, { center: [34.795, 32.065], zoom: 13 });
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    await settle();
+    expect(pins()).toHaveLength(3);
+    expect(cameras()).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // A restored position: the map opens there, and no camera is sent.
+    api = mockApi({ [SEARCH]: [() => json(page([a, b, c]))] });
+    view = render('/search?view=map&c=32.0712,34.8123&z=13.5');
+    expect(lastProps().center).toEqual([34.8123, 32.0712]);
+    expect(lastProps().zoom).toBe(13.5);
+    expect(lastProps().bounds).toBeUndefined();
+    moveTo(BOX, { center: [34.8123, 32.0712], zoom: 13.5 });
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(3);
+    });
+    await settle();
+    expect(cameras()).toEqual([]);
+    expect(lastProps().camera).toBeUndefined();
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // A first answer with no located listing: no camera (the Gush Dan view stays).
+    mockApi({ [SEARCH]: [json(page([nowhere]))] });
+    render('/search?view=map');
+    moveTo(BOX, VIEW);
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    });
+    await settle();
+    expect(cameras()).toEqual([]);
+  });
+
+  it('ac5_card_in_the_map_close_and_escape', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
+    const a = located({ street: 'אחד' });
+    const b = located({ lat: 32.1, street: 'שתיים' });
+    // Replies are built per request: a Response body is read once.
+    mockApi({ [SEARCH]: [() => json(page([a, b]))] });
+    let view = render('/search?view=map');
+    moveTo(BOX, VIEW);
+    await screen.findByRole('button', { name: pinLabel(a) });
+
+    // A pushed entry first (a filter Apply), so Back shows what the pin presses replaced.
+    const beforeApply = currentPath();
+    expect(beforeApply).toBe('/search?view=map&c=32.08%2C34.8&z=14');
+    fireEvent.click(screen.getByRole('button', { name: /^מסננים/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: he.search.feature.pets }));
+    fireEvent.click(screen.getByRole('button', { name: he.search.apply }));
+    expect(params().get('pets')).toBe('true');
+    await screen.findByRole('button', { name: pinLabel(a) });
+
+    // A pin press: the compact card inside the map region, in the `data-map-card` wrapper, focus
+    // on its link once the URL-driven render shows it, `pin` in the URL.
+    fireEvent.click(screen.getByRole('button', { name: pinLabel(a) }));
+    let docked = dockedCard();
+    if (docked === null) throw new Error('no docked card');
+    const article = within(docked).getByRole('article');
+    expect(article).toHaveAttribute('data-layout', 'compact');
+    const link = within(article).getByRole('link');
+    expect(link).toHaveAttribute('href', `/listings/${a.id}`);
+    await vi.waitFor(() => {
+      expect(link).toHaveFocus();
+    });
+    expect(params().get('pin')).toBe(a.id);
+    expect(params().get('pets')).toBe('true');
+    expect(lastProps().selectedId).toBe(a.id);
+    // The close button: the card's sibling, at its top end, above the card's stretched link.
+    const close = closeButton();
+    expect(close.parentElement).toBe(docked);
+    expect(article.parentElement).toBe(docked);
+    expect(close).toHaveClass('absolute', 'top-2', 'end-2', 'z-10');
+
+    // X: the card is gone, `pin` removed, focus on that pin; nothing navigates.
+    fireEvent.click(close);
+    expect(currentPath()?.startsWith('/search?')).toBe(true);
+    expect(dockedCard()).toBeNull();
+    expect(params().get('pin')).toBeNull();
+    expect(params().get('c')).toBe('32.08,34.8');
+    expect(lastProps().selectedId).toBeUndefined();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: pinLabel(a) })).toHaveFocus();
+    });
+
+    // Escape inside the region (from the card's link) does the same.
+    fireEvent.click(screen.getByRole('button', { name: pinLabel(b) }));
+    docked = dockedCard();
+    if (docked === null) throw new Error('no docked card');
+    const linkB = within(docked).getByRole('link');
+    await vi.waitFor(() => {
+      expect(linkB).toHaveFocus();
+    });
+    fireEvent.keyDown(linkB, { key: 'Escape' });
+    expect(dockedCard()).toBeNull();
+    expect(params().get('pin')).toBeNull();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: pinLabel(b) })).toHaveFocus();
+    });
+
+    // `pin` is written with replace: Back returns to the URL before the Apply.
+    fireEvent.click(screen.getByRole('button', { name: pinLabel(b) }));
+    expect(params().get('pin')).toBe(b.id);
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+    expect(currentPath()).toBe(beforeApply);
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // Three located listings at one point, the middle one selected by the URL: its card shows with
+    // no press, and its pin is kept apart from the other two.
+    const x = located({ street: 'אלף' });
+    const y = located({ street: 'בית' });
+    const z = located({ street: 'גימל' });
+    mockApi({ [SEARCH]: [() => json(page([x, y, z]))] });
+    view = render(`/search?view=map&pin=${y.id}`);
+    moveTo(BOX, VIEW);
+    await vi.waitFor(() => {
+      expect(dockedCard()).not.toBeNull();
+    });
+    const linkY = within(dockedCard() as HTMLElement).getByRole('link');
+    expect(linkY).toHaveAttribute('href', `/listings/${y.id}`);
+    expect(lastProps().selectedId).toBe(y.id);
+    expect(pinIds()).toEqual([y.id]);
+    // Escape: the pin folds back into the bubble of three, which takes focus.
+    act(() => linkY.focus());
+    fireEvent.keyDown(linkY, { key: 'Escape' });
+    expect(dockedCard()).toBeNull();
+    expect(params().get('pin')).toBeNull();
+    const bubbleName = i18n.t('search.map.bubbleSamePlace', { count: 3 });
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: bubbleName })).toHaveFocus();
+    });
+    expect(pinIds()).toEqual([]);
+
+    // The same-place list docks in the panel too, scrolling inside it; X closes it and focus
+    // returns to its bubble.
+    fireEvent.click(screen.getByRole('button', { name: bubbleName }));
+    docked = dockedCard();
+    if (docked === null) throw new Error('no docked list');
+    expect(docked).toHaveClass('max-h-[50%]');
+    const heading = within(docked).getByRole('heading', {
+      name: i18n.t('search.map.samePlace', { count: 3 }),
+    });
+    const cards = within(docked).getAllByRole('article');
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.getAttribute('data-layout'))).toEqual([
+      'compact',
+      'compact',
+      'compact',
+    ]);
+    expect(heading.closest('section')).toHaveClass('overflow-y-auto');
+    await vi.waitFor(() => {
+      expect(within(cards[0] as HTMLElement).getByRole('link')).toHaveFocus();
+    });
+    expect(closeButton().parentElement).toBe(docked);
+    fireEvent.click(closeButton());
+    expect(dockedCard()).toBeNull();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: bubbleName })).toHaveFocus();
+    });
+    // Escape closes it the same way.
+    fireEvent.click(screen.getByRole('button', { name: bubbleName }));
+    const firstLink = within(dockedCard() as HTMLElement).getAllByRole('link')[0] as HTMLElement;
+    await vi.waitFor(() => {
+      expect(firstLink).toHaveFocus();
+    });
+    fireEvent.keyDown(firstLink, { key: 'Escape' });
+    expect(dockedCard()).toBeNull();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: bubbleName })).toHaveFocus();
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // The list's anchor leaves the results while the list stays open (a pan, same zoom): the X
+    // still returns focus to the bubble that now holds the list's members.
+    const later = deferred();
+    mockApi({ [SEARCH]: [() => json(page([x, y, z])), later.promise] });
+    view = render('/search?view=map');
+    moveTo(BOX, VIEW);
+    fireEvent.click(await screen.findByRole('button', { name: bubbleName }));
+    expect(within(dockedCard() as HTMLElement).getAllByRole('article')).toHaveLength(3);
+    moveTo(OTHER_BOX, VIEW);
+    later.resolve(json(page([y, z])));
+    await vi.waitFor(() => {
+      expect(within(dockedCard() as HTMLElement).getAllByRole('article')).toHaveLength(2);
+    });
+    fireEvent.click(closeButton());
+    expect(dockedCard()).toBeNull();
+    const pair = screen.getByRole('button', {
+      name: i18n.t('search.map.bubbleSamePlace', { count: 2 }),
+    });
+    expect(lastProps().bubbles?.[0]?.members.map((m) => m.id)).toContain(y.id);
+    await vi.waitFor(() => {
+      expect(pair).toHaveFocus();
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // A settled answer without the selected listing: the card closes, `pin` is removed, and focus,
+    // which was in the card, goes to the map canvas.
+    const next = deferred();
+    mockApi({ [SEARCH]: [json(page([a, b])), next.promise] });
+    render('/search?view=map');
+    moveTo(BOX, VIEW);
+    fireEvent.click(await screen.findByRole('button', { name: pinLabel(a) }));
+    const linkA = within(dockedCard() as HTMLElement).getByRole('link');
+    await vi.waitFor(() => {
+      expect(linkA).toHaveFocus();
+    });
+    moveTo(OTHER_BOX, VIEW);
+    // Still the previous answer (placeholder data): the card and `pin` stay.
+    await settle();
+    expect(dockedCard()).not.toBeNull();
+    expect(params().get('pin')).toBe(a.id);
+    next.resolve(json(page([b])));
+    await vi.waitFor(() => {
+      expect(params().get('pin')).toBeNull();
+    });
+    expect(dockedCard()).toBeNull();
+    await vi.waitFor(() => {
+      expect(mapRegion().querySelector('canvas')).toHaveFocus();
+    });
   });
 
   it('seen_pins_from_this_device', async () => {

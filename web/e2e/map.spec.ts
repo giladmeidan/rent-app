@@ -1,12 +1,35 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { routeTiles, signUpOwner } from './helpers';
+import { intoTheDockedCard, latNorthBy, routeTiles, signUpOwner } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
+
+type Box = { x: number; y: number; width: number; height: number };
+
+/** The element's box in viewport pixels, failing the test when it is not rendered. */
+async function boxOf(locator: Locator): Promise<Box> {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error('no bounding box');
+  return box;
+}
+
+/** Whether two boxes overlap with a positive area. */
+const intersects = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+/** `inner` lies within `outer` (1 px of rounding allowed). */
+const within = (inner: Box, outer: Box) =>
+  inner.x >= outer.x - 1 &&
+  inner.y >= outer.y - 1 &&
+  inner.x + inner.width <= outer.x + outer.width + 1 &&
+  inner.y + inner.height <= outer.y + outer.height + 1;
+
+/** The current URL's query. */
+const query = (page: Page) => new URL(page.url()).searchParams;
 
 /** `YYYY-MM-DD`, `days` from today in Israel. */
 function israelDay(days: number): string {
@@ -16,23 +39,38 @@ function israelDay(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
+type Point = { lat: number; lng: number };
+type Posted = { price: number; streets: string[]; ids: string[]; points: Map<string, Point> };
+
+/**
+ * A fresh owner posts `count` apartments at one price, then waits for the worker's geocoding sweep
+ * (every 10 s, GEOCODER=fake) to give each a point. The price is one no other test posts (spec
+ * 0009v Scope 9): filtered to it, only these listings are on the map, whatever else CI's shared
+ * database holds. 0009v reserved 7001-7899 (7200 is every other test's price); each map test
+ * draws from its own sub-range of it (`range`), so two tests in one CI run never share a price.
+ */
+async function postAtOnePrice(
+  page: Page,
+  request: APIRequestContext,
+  count: number,
+  [low, high]: [number, number],
+): Promise<Posted> {
   const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const street = `e2e a-${tag}`;
-  const other = `e2e b-${tag}`;
-  // One price no other test posts (spec 0009v Scope 9): filtered to it, only these two listings are
-  // on the map, whatever else CI's shared database holds. 7200 is every other test's price.
-  let price = 7001 + Math.floor(Math.random() * 899);
+  const streets = Array.from(
+    { length: count },
+    (_, i) => `e2e ${String.fromCharCode(97 + i)}-${tag}`,
+  );
+  let price = low + Math.floor(Math.random() * (high - low + 1));
   if (price === 7200) price += 1;
 
-  // A fresh owner posts two listings through the API (as search.spec.ts).
+  // A fresh owner posts them through the API (as search.spec.ts).
   await signUpOwner(page);
   const areas = await page.request.get(API + '/areas');
   expect(areas.ok()).toBe(true);
   const [area] = (await areas.json()) as { id: string }[];
   expect(area).toBeDefined();
   const ids: string[] = [];
-  for (const name of [street, other]) {
+  for (const name of streets) {
     const created = await page.request.post(API + '/listings', {
       data: {
         listing_type: 'apartment',
@@ -58,21 +96,104 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     expect(created.status()).toBe(201);
     ids.push(((await created.json()) as { id: string }).id);
   }
-  const [id] = ids;
 
-  // The worker's geocoding sweep (every 10 s, GEOCODER=fake) gives each a point; `request` has no
-  // session cookie.
+  // `request` has no session cookie.
+  const points = new Map<string, Point>();
   for (const listingId of ids) {
     await expect
       .poll(
         async () => {
           const listing = await request.get(`${API}/listings/${listingId}`);
-          return ((await listing.json()) as { lat: number | null }).lat;
+          const { lat, lng } = (await listing.json()) as {
+            lat: number | null;
+            lng: number | null;
+          };
+          if (lat !== null && lng !== null) points.set(listingId, { lat, lng });
+          return lat;
         },
         { timeout: 30_000 },
       )
       .not.toBeNull();
   }
+  return { price, streets, ids, points };
+}
+
+/** The search map's locators for the listing on `street`. */
+function mapOf(page: Page, street: string) {
+  const region = page.getByRole('region', { name: he.search.map.label });
+  const docked = region.locator('[data-map-card]');
+  return {
+    region,
+    pin: region.getByRole('button', { name: street }),
+    docked,
+    dockedCard: docked.getByRole('article').filter({ hasText: street }),
+  };
+}
+type MapLocators = ReturnType<typeof mapOf>;
+
+/**
+ * Spec 0009w AC7: the map at the test pin, alone at the centre (its own price, zoom 16, at its
+ * point; `c` takes at most 6 decimals, the fake geocoder's points have more: about 0.1 m off), or
+ * centred `north` px north of it.
+ */
+function atThePin(price: number, point: Point, north = 0): string {
+  const lat = north === 0 ? point.lat : latNorthBy(point.lat, north, 16);
+  const centre = `${lat.toFixed(6)},${point.lng.toFixed(6)}`;
+  return `/search?view=map&price_min=${String(price)}&price_max=${String(price)}&c=${centre}&z=16`;
+}
+
+/** Tiles answered locally, and the owner's session dropped: a visitor. */
+async function asVisitor(page: Page) {
+  await routeTiles(page);
+  await page.context().clearCookies();
+}
+
+/** Presses the pin from the keyboard: the page does not move and the card docks in the map,
+ * clear of the pin and of the OpenStreetMap attribution. */
+async function pressAndCheckTheCard(
+  page: Page,
+  { region, pin, docked, dockedCard }: MapLocators,
+  url: string,
+) {
+  // The next lines wait for the map and the pin themselves.
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await expect(pin).toBeVisible({ timeout: 15_000 });
+  await region.scrollIntoViewIfNeeded();
+  await pin.focus();
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await pin.press('Enter');
+  await expect(dockedCard).toHaveCount(1);
+  await expect(dockedCard.getByRole('link')).toBeFocused();
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+  // No page jump (today 342 px on desktop, 374 px on a phone).
+  const scrollAfter = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThanOrEqual(2);
+  // Inside the map region, and painted above the markers: the card's centre hits the card.
+  const regionBox = await boxOf(region);
+  const cardBox = await boxOf(docked);
+  expect(within(cardBox, regionBox)).toBe(true);
+  const hitsTheCard = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x, y)?.closest('[data-map-card]') != null,
+    [cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2] as const,
+  );
+  expect(hitsTheCard).toBe(true);
+  // The pin is panned clear of the card (the pan may still be easing), and the attribution
+  // (licence) is never covered.
+  await expect
+    .poll(async () => intersects(await boxOf(pin), await boxOf(docked)), { timeout: 10_000 })
+    .toBe(false);
+  const attribution = region.locator('.maplibregl-ctrl-attrib');
+  await expect(attribution).toBeVisible();
+  expect(intersects(await boxOf(attribution), await boxOf(docked))).toBe(false);
+}
+
+test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
+  const {
+    price,
+    streets: [street = '', other = ''],
+    ids: [id],
+  } = await postAtOnePrice(page, request, 2, [7001, 7299]);
 
   // Tiles answered locally, MapLibre's workers included; every request URL is recorded.
   await routeTiles(page);
@@ -92,7 +213,18 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     .getByRole('group', { name: he.search.view.label })
     .getByRole('button', { name: he.search.view.map })
     .click();
-  await expect(page).toHaveURL(`${search}&view=map`);
+  /** The page is `search` in map view; the map adds its `c` / `z` as soon as it loads (0009w). */
+  const onTheMap = () => {
+    const url = new URL(page.url());
+    return [
+      url.pathname,
+      url.searchParams.get('price_min'),
+      url.searchParams.get('price_max'),
+      url.searchParams.get('view'),
+    ];
+  };
+  const mapOfSearch = ['/search', String(price), String(price), 'map'];
+  await expect.poll(onTheMap).toEqual(mapOfSearch);
   const region = page.getByRole('region', { name: he.search.map.label });
   await expect(region).toBeVisible();
   await expect(page.getByText(he.search.map.unavailable)).toHaveCount(0);
@@ -140,12 +272,13 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     await expectNoAxeViolations(page, '/search?view=map (with pins)');
   });
 
-  // Its pin opens its card.
+  // Its pin opens its card, docked in the map.
   const pin = region.getByRole('button', { name: street });
   await pin.press('Enter');
-  const card = page.getByRole('article').filter({ hasText: street });
+  const card = region.locator('[data-map-card]').getByRole('article').filter({ hasText: street });
   await expect(card).toHaveCount(1);
   await expect(card.getByRole('link')).toBeFocused();
+  await expect.poll(() => query(page).get('pin')).toBe(id ?? '');
 
   // The card's title opens the listing page, with its approximate-area map.
   await card.getByRole('link').click();
@@ -163,7 +296,7 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
 
   // Back on the map view, a reload keeps it.
   await page.goBack();
-  await expect(page).toHaveURL(`${search}&view=map`);
+  await expect.poll(onTheMap).toEqual(mapOfSearch);
   await page.reload();
   await expect(page.getByRole('region', { name: he.search.map.label })).toBeVisible();
   await expect(
@@ -171,6 +304,114 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
       .getByRole('group', { name: he.search.view.label })
       .getByRole('button', { name: he.search.view.map }),
   ).toHaveAttribute('aria-pressed', 'true');
+});
+
+// Spec 0009w AC7, apart from ac8 so each test fits the 30 s budget: one listing each (the pin is
+// alone at its price), seen by a visitor.
+test('ac7_card_docked_desktop_and_back', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const {
+    price,
+    streets: [street = ''],
+    ids: [id = ''],
+    points,
+  } = await postAtOnePrice(page, request, 1, [7300, 7499]);
+  const point = points.get(id);
+  if (point === undefined) throw new Error('no point for the test listing');
+  await asVisitor(page);
+  const map = mapOf(page, street);
+  const { region, pin, dockedCard } = map;
+
+  await test.step('ac7_card_docked_desktop', async () => {
+    await pressAndCheckTheCard(page, map, atThePin(price, point));
+  });
+
+  await test.step('ac7_back_restores_the_view', async () => {
+    // The map has settled (a keep-visible pan would write its `c`): the URL reads the same twice.
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+    let settledUrl = '';
+    await expect
+      .poll(
+        () => {
+          const previous = settledUrl;
+          settledUrl = page.url();
+          return previous === settledUrl;
+        },
+        { intervals: [500], timeout: 15_000 },
+      )
+      .toBe(true);
+    const before = new URL(settledUrl).searchParams;
+    expect(before.get('pin')).toBe(id);
+
+    await dockedCard.getByRole('link').click();
+    await expect(page).toHaveURL(`/listings/${id}`);
+    await page.goBack();
+
+    // The same centre, zoom and pin by value, the card back once the results load, its pin pressed.
+    await expect(dockedCard).toHaveCount(1, { timeout: 15_000 });
+    await expect(pin).toHaveAttribute('aria-pressed', 'true');
+    const after = query(page);
+    for (const key of ['c', 'z', 'pin']) expect(after.get(key)).toBe(before.get(key));
+  });
+});
+
+test('ac7_card_docked_phone', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const {
+    price,
+    streets: [street = ''],
+    ids: [id = ''],
+    points,
+  } = await postAtOnePrice(page, request, 1, [7500, 7699]);
+  const point = points.get(id);
+  if (point === undefined) throw new Error('no point for the test listing');
+  await asVisitor(page);
+  await pressAndCheckTheCard(page, mapOf(page, street), atThePin(price, point));
+});
+
+// Apart from the Back check: after a pan, the 4-decimal `c` can move the pin a few px on restore and
+// pan it again, so a pan never meets an exact-`c` comparison.
+test('ac7_card_keeps_the_pin_clear', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const {
+    price,
+    streets: [street = ''],
+    ids: [id = ''],
+    points,
+  } = await postAtOnePrice(page, request, 1, [7700, 7899]);
+  const point = points.get(id);
+  if (point === undefined) throw new Error('no point for the test listing');
+  await asVisitor(page);
+  const { region, pin, docked, dockedCard } = mapOf(page, street);
+
+  // The map's height at 390 decides how far below the centre the card docks.
+  await page.goto(atThePin(price, point), { waitUntil: 'domcontentloaded' });
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  const drop = intoTheDockedCard((await boxOf(region)).height);
+  // The centre `drop` px north of the pin: the pin starts low in the map, in the card's band.
+  await page.goto(atThePin(price, point, drop), { waitUntil: 'domcontentloaded' });
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await expect(pin).toBeVisible({ timeout: 15_000 });
+  await region.scrollIntoViewIfNeeded();
+  const regionBox = await boxOf(region);
+  const start = await boxOf(pin);
+  expect(
+    Math.abs(start.y + start.height / 2 - (regionBox.y + regionBox.height / 2) - drop),
+  ).toBeLessThanOrEqual(3);
+
+  await pin.focus();
+  await pin.press('Enter');
+  await expect(dockedCard).toHaveCount(1);
+  // The card covers where the pin started, so the map has to pan.
+  expect(intersects(start, await boxOf(docked))).toBe(true);
+  await expect
+    .poll(async () => intersects(await boxOf(pin), await boxOf(docked)), { timeout: 10_000 })
+    .toBe(false);
+  expect((await boxOf(pin)).y).toBeLessThan(start.y);
+  await expect(pin).toBeInViewport();
+  const attribution = region.locator('.maplibregl-ctrl-attrib');
+  await expect(attribution).toBeVisible();
+  expect(intersects(await boxOf(attribution), await boxOf(docked))).toBe(false);
 });
 
 test('map_survives_one_failed_tile', async ({ page }) => {

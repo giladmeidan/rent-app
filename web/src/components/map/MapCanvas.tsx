@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { focusRing } from '../focusRing';
 import { Skeleton } from '../Skeleton';
 import { MAP_MAX_ZOOM, MAP_STYLE_URL, mapLocale, type Bbox } from './config';
+import { keepClearPan } from './keepClear';
 
 type MapLibre = typeof import('maplibre-gl');
 
@@ -48,6 +49,14 @@ export type Bubble = {
 /** The camera after a move: what `onMoveEnd` reports next to the box. */
 export type MapView = { center: [lng: number, lat: number]; zoom: number };
 
+/**
+ * A camera move after mount (spec 0009w): fit a box (at most `maxZoom`) or go to a centre and zoom.
+ * Each distinct `seq` is applied once, the latest one once the map is ready.
+ */
+export type MapCamera = { seq: number } & (
+  { bounds: Bbox; maxZoom?: number } | { center: [lng: number, lat: number]; zoom: number }
+);
+
 type Props = {
   /** The region's name. */
   label: string;
@@ -55,6 +64,8 @@ type Props = {
   bounds?: Bbox;
   center?: [lng: number, lat: number];
   zoom?: number;
+  /** Moves the map after mount; the initial view props above are read once, at creation. */
+  camera?: MapCamera | undefined;
   /** The single pins (not folded into a bubble). */
   pins?: Pin[];
   /** Count bubbles, drawn as markers in the same diff as the pins. */
@@ -75,6 +86,10 @@ type Props = {
   /** Drawn over the map (inside the region) once it has loaded, e.g. the search map's "updating"
    * pill; it should be `pointer-events-none` so the pins and the pan surface stay usable. */
   overlay?: ReactNode;
+  /** Drawn over the map (inside the region) once it has loaded, after `overlay`, with no wrapper:
+   * its elements position themselves (`absolute`) and take presses (the search map's docked card).
+   * An element marked `data-map-card` is kept clear of the selected pin. */
+  panel?: ReactNode;
   /** The map cannot be shown: the library failed to load, no WebGL, or an error before `load`. */
   onError?: () => void;
   className?: string;
@@ -153,6 +168,7 @@ export function MapCanvas({
   bounds,
   center,
   zoom,
+  camera,
   pins,
   bubbles,
   selectedId,
@@ -164,10 +180,12 @@ export function MapCanvas({
   busy = false,
   minZoom,
   overlay,
+  panel,
   onError,
   className = '',
 }: Props) {
   const { t, i18n } = useTranslation();
+  const regionRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ map: MapLibreMap; lib: MapLibre } | null>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
@@ -306,6 +324,25 @@ export function MapCanvas({
     };
   }, []);
 
+  // The latest camera not applied yet, once the map is ready: one set before `load` is not lost,
+  // and a re-render with the same `seq` never moves the map again. MapLibre skips the animation
+  // under `prefers-reduced-motion` (`essential` is not set).
+  const appliedCamera = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const current = mapRef.current;
+    if (!ready || current === null || camera === undefined) return;
+    if (appliedCamera.current === camera.seq) return;
+    appliedCamera.current = camera.seq;
+    if ('bounds' in camera) {
+      current.map.fitBounds(camera.bounds, {
+        padding: 48,
+        ...(camera.maxZoom !== undefined ? { maxZoom: camera.maxZoom } : {}),
+      });
+    } else {
+      current.map.easeTo({ center: camera.center, zoom: camera.zoom });
+    }
+  }, [ready, camera]);
+
   // Markers, diffed by id: added, moved, restyled or removed, never rebuilt per render. Bubbles are
   // markers too, keyed by their `cluster:` id.
   useEffect(() => {
@@ -407,14 +444,29 @@ export function MapCanvas({
     }
   }, [ready, pins, bubbles, selectedId]);
 
+  // The pressed pin stays visible above the panel's card: when their boxes (8 px apart) meet, the
+  // map pans up by the overlap, vertically only. Once per selection, never per panel render.
+  useEffect(() => {
+    const current = mapRef.current;
+    if (!loaded || current === null || selectedId === undefined) return;
+    const card = regionRef.current?.querySelector('[data-map-card]');
+    const pin = markersRef.current.get(selectedId)?.button;
+    if (card == null || pin === undefined) return;
+    const pan = keepClearPan(pin.getBoundingClientRect(), card.getBoundingClientRect());
+    if (pan !== null) current.map.panBy([0, pan]);
+  }, [selectedId, loaded]);
+
   return (
     <div
+      ref={regionRef}
       role="region"
       aria-label={label}
       aria-busy={busy || !loaded}
       className={`relative overflow-hidden ${className}`}
     >
-      <div ref={containerRef} className="h-full w-full" />
+      {/* Its own stacking context: the markers (z up to the pin count) and the controls stack
+          inside it, and the overlay and the panel after it always paint above them. */}
+      <div ref={containerRef} className="isolate h-full w-full" />
       {approximate && loaded && (
         <div
           aria-hidden="true"
@@ -422,6 +474,7 @@ export function MapCanvas({
         />
       )}
       {loaded && overlay}
+      {loaded && panel}
       {!loaded && <Skeleton className="absolute inset-0 h-full w-full" />}
     </div>
   );

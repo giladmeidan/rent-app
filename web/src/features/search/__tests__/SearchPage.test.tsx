@@ -3,7 +3,7 @@ import { Route, Routes, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
-import { resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
+import { lastProps, moveTo, resetFakeMap } from '../../../components/map/__tests__/fakeMapCanvas';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -12,6 +12,7 @@ import {
   mockApi,
   noa,
   renderRoutes,
+  testQueryClient,
 } from '../../auth/__tests__/harness';
 import { owner } from '../../listings/__tests__/fixtures';
 import { formatDate } from '../../listings/format';
@@ -62,7 +63,7 @@ function Back() {
   );
 }
 
-const render = (path: string) =>
+const render = (path: string, client = testQueryClient()) =>
   renderRoutes(
     path,
     <>
@@ -72,6 +73,7 @@ const render = (path: string) =>
       </Routes>
       <Back />
     </>,
+    client,
   );
 
 const openPanel = () => {
@@ -88,6 +90,10 @@ const apply = () => {
 };
 const liveRegion = () => document.querySelector('[aria-live="polite"]');
 const settle = () => new Promise((r) => setTimeout(r, 20));
+/** The current URL's query. */
+const params = () => new URLSearchParams(currentPath()?.split('?')[1] ?? '');
+const viewToggle = () => within(screen.getByRole('group', { name: he.search.view.label }));
+const BOX: [number, number, number, number] = [34.7712345, 32.0412345, 34.8298765, 32.1098765];
 
 describe('SearchPage', () => {
   it('ac2_url_is_the_filter_state', async () => {
@@ -1071,5 +1077,129 @@ describe('SearchPage', () => {
     expect(await screen.findByText(he.search.empty)).toBeVisible();
     expect(mascots()).toHaveLength(1);
     expect(screen.queryAllByRole('button', { name: he.search.clear })).toHaveLength(0);
+  });
+
+  it('ac2_map_move_keeps_the_form', async () => {
+    // Replies are built per request: a Response body is read once.
+    mockApi({ [SEARCH]: [() => json(page([publicListing({ lat: 32.08, lng: 34.8 })]))] });
+    render('/search?view=map');
+    // A filter Apply first: a pushed entry, so Back shows whether a move adds one.
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    apply();
+    expect(currentPath()).toBe('/search?pets=true&view=map');
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+
+    // A half-typed price, focused.
+    const input = priceTo();
+    fireEvent.change(input, { target: { value: '75' } });
+    act(() => input.focus());
+
+    // The map reports a move with its view: `c` and `z` join the URL, and nothing else changes.
+    moveTo(BOX, { center: [34.8123456, 32.0712345], zoom: 13.456 });
+    expect(params().get('c')).toBe('32.0712,34.8123');
+    expect(params().get('z')).toBe('13.46');
+    expect(params().get('pets')).toBe('true');
+    // The form is the same element (no remount) and keeps the typed value and focus.
+    expect(priceTo()).toBe(input);
+    expect(input).toHaveValue('75');
+    expect(input).toHaveFocus();
+    await settle();
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('75');
+
+    // A second move replaces the position again; Back returns to the URL before the Apply.
+    moveTo(BOX, { center: [34.81, 32.07], zoom: 14 });
+    expect(params().get('z')).toBe('14');
+    expect(input).toHaveValue('75');
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+    expect(currentPath()).toBe('/search?view=map');
+  });
+
+  it('ac3_map_params_ride_along_not_in_queries', async () => {
+    const listing = publicListing({ lat: 32.0712, lng: 34.8123 });
+    const C = '32.0712,34.8123';
+    const client = testQueryClient();
+    const api = mockApi({ [SEARCH]: [() => json(page([listing]))] });
+    render(`/search?view=map&c=${C}&z=13.5&pin=${listing.id}`, client);
+    moveTo(BOX, { center: [34.8123, 32.0712], zoom: 13.5 });
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    });
+    /** `c` and `z` are where the map is. */
+    const atTheSamePlace = () => {
+      expect(params().get('c')).toBe(C);
+      expect(params().get('z')).toBe('13.5');
+    };
+    atTheSamePlace();
+    expect(params().get('pin')).toBe(listing.id);
+
+    // Apply, a sort change and Clear each carry the map's position along.
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    apply();
+    expect(params().get('pets')).toBe('true');
+    atTheSamePlace();
+    fireEvent.change(screen.getByLabelText(he.search.sort.label), {
+      target: { value: 'price_asc' },
+    });
+    expect(params().get('sort')).toBe('price_asc');
+    atTheSamePlace();
+    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    expect(params().get('pets')).toBeNull();
+    expect(params().get('sort')).toBeNull();
+    expect(params().get('view')).toBe('map');
+    atTheSamePlace();
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+
+    // No request and no query key ever holds the map's params.
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH).length).toBeGreaterThanOrEqual(3);
+    });
+    for (const { request } of api.calls(SEARCH)) {
+      const sentParams = new URL(request.url).searchParams;
+      for (const key of ['c', 'z', 'pin']) expect(sentParams.has(key)).toBe(false);
+      expect(request.url).not.toContain(listing.id);
+    }
+    const keys = client
+      .getQueryCache()
+      .getAll()
+      .map((q) => JSON.stringify(q.queryKey));
+    expect(keys.some((key) => key.startsWith('["search-map"'))).toBe(true);
+    for (const key of keys) {
+      for (const name of ['"c"', '"z"', '"pin"', '32.0712', listing.id]) {
+        expect(key).not.toContain(name);
+      }
+    }
+
+    // An Apply that changes nothing keeps focus on Apply (no form remount, no focus flag)...
+    const applyButton = screen.getByRole('button', { name: he.search.apply });
+    act(() => applyButton.focus());
+    apply();
+    await settle();
+    expect(applyButton).toBeInTheDocument();
+    expect(applyButton).toHaveFocus();
+    atTheSamePlace();
+    // ...so the next view toggle leaves focus on the toggle, not on the count line.
+    const list = viewToggle().getByRole('button', { name: he.search.view.list });
+    act(() => list.focus());
+    fireEvent.click(list);
+    expect(params().get('view')).toBeNull();
+    atTheSamePlace();
+    await settle();
+    expect(list).toHaveFocus();
+
+    // Back to the map: it opens at that `c` / `z`.
+    resetFakeMap();
+    fireEvent.click(viewToggle().getByRole('button', { name: he.search.view.map }));
+    expect(params().get('view')).toBe('map');
+    atTheSamePlace();
+    expect(lastProps().center).toEqual([34.8123, 32.0712]);
+    expect(lastProps().zoom).toBe(13.5);
+    expect(lastProps().bounds).toBeUndefined();
   });
 });

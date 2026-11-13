@@ -1,24 +1,36 @@
 // A stand-in for `MapCanvas` (jsdom has no WebGL). Use it with
 //   vi.mock('<path>/components/map/MapCanvas', () => import('<path>/components/map/__tests__/fakeMapCanvas'));
-// It renders the labelled region and one button per pin and per bubble, records the last props, and
+// It renders the labelled region, a focusable canvas, one button per pin and per bubble, the
+// `overlay` and the `panel`, records the last props and every distinct `camera` (`cameras()`), and
 // lets the test fire the map's callbacks. A bubble press reads `separates` as the real one does: a
 // zoom is recorded (`lastZoomedTo`), or `onBubbleOpen` is called.
 import { act, useLayoutEffect, type ComponentProps } from 'react';
 
 import type { Bbox } from '../config';
-import type { Bubble, MapCanvas as RealMapCanvas, MapView, Pin } from '../MapCanvas';
+import type { Bubble, MapCamera, MapCanvas as RealMapCanvas, MapView, Pin } from '../MapCanvas';
 
-export type { Bubble, Pin };
+export type { Bubble, MapCamera, Pin };
 type Props = ComponentProps<typeof RealMapCanvas>;
 
-const fakeMap: { props: Props | undefined; zoomedTo: string[] | undefined } = {
+const fakeMap: {
+  props: Props | undefined;
+  zoomedTo: string[] | undefined;
+  cameras: MapCamera[];
+} = {
   props: undefined,
   zoomedTo: undefined,
+  cameras: [],
 };
 
 export function resetFakeMap() {
   fakeMap.props = undefined;
   fakeMap.zoomedTo = undefined;
+  fakeMap.cameras = [];
+}
+
+/** Every distinct camera the map was given, in order (one per `seq`). */
+export function cameras(): MapCamera[] {
+  return fakeMap.cameras;
 }
 
 /** The members' ids of the last bubble press that zoomed in (`separates`), if any. */
@@ -53,9 +65,15 @@ export function failMap() {
 export function MapCanvas(props: Props) {
   useLayoutEffect(() => {
     fakeMap.props = props;
+    const { camera } = props;
+    if (camera !== undefined && !fakeMap.cameras.some((c) => c.seq === camera.seq)) {
+      fakeMap.cameras.push(camera);
+    }
   });
   return (
     <div role="region" aria-label={props.label} aria-busy={props.busy ?? false}>
+      {/* The pan surface: MapLibre's canvas is focusable when the map is interactive. */}
+      <canvas tabIndex={props.interactive === false ? -1 : 0} />
       {(props.pins ?? []).map((pin) => (
         <button
           key={pin.id}
@@ -88,6 +106,7 @@ export function MapCanvas(props: Props) {
         </button>
       ))}
       {props.overlay}
+      {props.panel}
     </div>
   );
 }
