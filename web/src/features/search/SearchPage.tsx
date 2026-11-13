@@ -168,6 +168,9 @@ export function SearchPage() {
               filters={filtersWithoutView}
               profile={profile}
               countRef={countRef}
+              hasFilters={active > 0}
+              onClear={clear}
+              fullMap
               onShowList={() => {
                 focusListButton.current = true;
                 switchView('list');
