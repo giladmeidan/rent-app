@@ -384,7 +384,7 @@ def _concurrent_joins(
             db.rollback()
             started.wait()
             try:
-                flatmates_service.join(db, get_redis(), user, token)
+                flatmates_service.join(db, get_redis(), user, token, False)
                 outcomes[index] = "joined"
             except flatmates_service.FlatmatesFullError:
                 outcomes[index] = "flatmates_full"
@@ -816,7 +816,7 @@ def test_ac7_leave(
     flats = _ok(mate.get("/me/flats"))
     assert [flat["listing"]["id"] for flat in flats] == [other_room, room]  # newest join first
     assert [flat["owner_name"] for flat in flats] == ["Avi", "Noa"]
-    assert set(flats[0]) == {"listing", "owner_name", "joined_at"}
+    assert set(flats[0]) == {"listing", "owner_name", "joined_at", "shown"}  # shown: 0010f
     assert dt.datetime.fromisoformat(flats[1]["joined_at"]) == _joined_at(db_engine, room, mate_id)
     assert _ok(seeker.get("/me/flats")) == []
     assert client.get("/me/flats").status_code == 401

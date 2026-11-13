@@ -29,6 +29,21 @@ class InviteTokenIn(BaseModel):
     token: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
 
 
+class JoinIn(InviteTokenIn):
+    """The join body: the token, and whether the caller chooses to appear on the room's page
+    (spec 0010f, decision 17; default off). The preview keeps `InviteTokenIn`."""
+
+    shown: bool = False
+
+
+class ShownIn(BaseModel):
+    """A flatmate's choice to appear on the room's page (spec 0010f), from `/me/flats`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shown: bool
+
+
 class InvitePreviewOut(BaseModel):
     """What the invited person sees before joining: the room, who invites them, and whether they
     are already a flatmate there."""
@@ -59,3 +74,5 @@ class MyFlatOut(BaseModel):
     listing: ApplicationListingOut
     owner_name: str
     joined_at: dt.datetime
+    # Whether the caller chose to appear on the room's page (spec 0010f).
+    shown: bool

@@ -27,17 +27,46 @@ Rules:
   delete that user's `conversation_reads` rows for the listing's conversations. A re-join is a new
   membership with a new `joined_at`, so the history restarts.
 - Ownership: every owner query carries `owner_id = :owner`, so another owner's listing is the same
-  404 as an unknown id (`ListingNotFoundError`)."""
+  404 as an unknown id (`ListingNotFoundError`).
+- Shown (spec 0010f, decision 17): a flatmate chooses at join whether to appear on the room's page
+  (`listing_flatmates.shown`, default off) and changes it from `/me/flats` (`set_shown`); a member's
+  re-join keeps the stored choice. `shown_people` reads the people a seeker sees there: the lister
+  when `poster = 'lives_here'`, then the shown flatmates, each hidden from a viewer whose gender
+  contradicts that person's flatmates preference (decision 7). The router decides who may ask."""
 
 import secrets
 import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Row, delete, exists, func, insert, select, update
+from sqlalchemy import (
+    ColumnElement,
+    DateTime,
+    Row,
+    case,
+    cast,
+    delete,
+    exists,
+    false,
+    func,
+    insert,
+    null,
+    or_,
+    select,
+    true,
+    union_all,
+    update,
+)
 from sqlalchemy.orm import Session, aliased
 
-from app.models import Application, ConversationRead, Listing, ListingFlatmate, User
+from app.models import (
+    Application,
+    ConversationRead,
+    Listing,
+    ListingFlatmate,
+    SeekerProfile,
+    User,
+)
 from app.redis_client import RedisClient
 from app.services.applications import AlreadyAppliedError
 from app.services.auth import _token_hash
@@ -140,13 +169,15 @@ def preview(db: Session, r: RedisClient, me: User, token: str) -> Row[Any]:
     return row
 
 
-def join(db: Session, r: RedisClient, me: User, token: str) -> uuid.UUID:
-    """Make `me` a flatmate of the room a live invite token is for and return its id. Counts the
+def join(db: Session, r: RedisClient, me: User, token: str, shown: bool) -> uuid.UUID:
+    """Make `me` a flatmate of the room a live invite token is for and return its id; `shown` is
+    their choice to appear on the room's page (spec 0010f). Counts the
     attempt first (`RateLimitedError`); then locks the listing by hash (`ListingNotFoundError` for
     an unknown, rotated or disabled token or an apartment), and raises `OwnListingError`,
     `AlreadyAppliedError` (a submitted or shortlisted application of `me` to it), `DeclinedError`
     (a declined one) or `FlatmatesFullError`. A
-    member gets the listing id again, membership untouched. Commits."""
+    member gets the listing id again, membership untouched (`shown` and `joined_at` as stored).
+    Commits."""
     _count_attempt(r, me)
     try:
         listing = db.execute(
@@ -186,7 +217,9 @@ def join(db: Session, r: RedisClient, me: User, token: str) -> uuid.UUID:
                 raise DeclinedError
             if state.members >= FLATMATES_MAX:
                 raise FlatmatesFullError
-            db.execute(insert(ListingFlatmate).values(listing_id=listing.id, user_id=me.id))
+            db.execute(
+                insert(ListingFlatmate).values(listing_id=listing.id, user_id=me.id, shown=shown)
+            )
         db.commit()
     except Exception:
         db.rollback()
@@ -263,11 +296,16 @@ def remove_flatmate(
 
 
 def my_flats(db: Session, me: User) -> Sequence[Row[Any]]:
-    """Every flat `me` is a flatmate of, newest join first: rows of the `Listing`, `owner_name` and
-    `joined_at`. One statement."""
+    """Every flat `me` is a flatmate of, newest join first: rows of the `Listing`, `owner_name`,
+    `joined_at` and `shown` (spec 0010f). One statement."""
     owner = aliased(User, name="owner")
     return db.execute(
-        select(Listing, owner.display_name.label("owner_name"), ListingFlatmate.joined_at)
+        select(
+            Listing,
+            owner.display_name.label("owner_name"),
+            ListingFlatmate.joined_at,
+            ListingFlatmate.shown,
+        )
         .select_from(ListingFlatmate)
         .join(Listing, Listing.id == ListingFlatmate.listing_id)
         .join(owner, owner.id == Listing.owner_id)
@@ -291,3 +329,87 @@ def leave(db: Session, me: User, listing_id: uuid.UUID) -> None:
     except Exception:
         db.rollback()
         raise
+
+
+def set_shown(db: Session, me: User, listing_id: uuid.UUID, shown: bool) -> bool:
+    """Set whether `me` appears on the page of the room `listing_id` (spec 0010f). False when `me`
+    is not a flatmate there (or the listing is unknown): nothing written. One statement. Commits."""
+    try:
+        updated = db.scalar(
+            update(ListingFlatmate)
+            .where(ListingFlatmate.listing_id == listing_id, ListingFlatmate.user_id == me.id)
+            .values(shown=shown)
+            .returning(ListingFlatmate.id)
+            .execution_options(synchronize_session=False)
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return updated is not None
+
+
+def _fits_viewer(person: type[SeekerProfile], viewer_id: uuid.UUID) -> ColumnElement[bool]:
+    """Decision 7, both ways: a person whose flatmates preference is not `any` is hidden from a
+    viewer whose gender contradicts it; a viewer with no gender (or `other`) sees only people
+    whose preference is `any`. `person` is the person's (outer-joined) profile."""
+    viewer = aliased(SeekerProfile, name="viewer")
+    wanted = (
+        select(case((viewer.gender == "woman", "women"), (viewer.gender == "man", "men")))
+        .where(viewer.user_id == viewer_id)
+        .scalar_subquery()
+    )
+    return or_(
+        func.coalesce(person.flatmate_gender, "any") == "any", person.flatmate_gender == wanted
+    )
+
+
+def shown_people(db: Session, listing: Listing, viewer_id: uuid.UUID) -> Sequence[Row[Any]]:
+    """The people the seeker `viewer_id` sees on the room `listing`'s page (spec 0010f): the lister
+    when `listing.poster == 'lives_here'` (`lister` true, first), then every flatmate who chose to
+    be shown, by `joined_at`; each filtered by `_fits_viewer`. Rows of `display_name`, `photo_key`,
+    `gender`, `birth_year`, `about_me`, `lifestyle` (NULL without a profile row or a personal
+    part), `lister` and `joined_at`: never a user id, never a looking field. One statement (a
+    `UNION ALL`; the lister's branch only when they live there). The caller checks that the viewer
+    is a seeker (decision 13) and that the room fits them."""
+    flatmate_profile = aliased(SeekerProfile, name="profile")
+    flatmates = (
+        select(
+            User.display_name,
+            User.photo_key,
+            flatmate_profile.gender,
+            flatmate_profile.birth_year,
+            flatmate_profile.about_me,
+            flatmate_profile.lifestyle,
+            false().label("lister"),
+            ListingFlatmate.joined_at,
+        )
+        .select_from(ListingFlatmate)
+        .join(User, User.id == ListingFlatmate.user_id)
+        .outerjoin(flatmate_profile, flatmate_profile.user_id == User.id)
+        .where(
+            ListingFlatmate.listing_id == listing.id,
+            ListingFlatmate.shown.is_(True),
+            _fits_viewer(flatmate_profile, viewer_id),
+        )
+    )
+    if listing.poster != "lives_here":
+        return db.execute(flatmates.order_by(ListingFlatmate.joined_at)).all()
+    lister_profile = aliased(SeekerProfile, name="profile")
+    lister = (
+        select(
+            User.display_name,
+            User.photo_key,
+            lister_profile.gender,
+            lister_profile.birth_year,
+            lister_profile.about_me,
+            lister_profile.lifestyle,
+            true().label("lister"),
+            cast(null(), DateTime(timezone=True)).label("joined_at"),
+        )
+        .select_from(User)
+        .outerjoin(lister_profile, lister_profile.user_id == User.id)
+        .where(User.id == listing.owner_id, _fits_viewer(lister_profile, viewer_id))
+    )
+    people = union_all(lister, flatmates).subquery("people")
+    return db.execute(select(people).order_by(people.c.lister.desc(), people.c.joined_at)).all()
