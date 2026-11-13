@@ -14,6 +14,7 @@ import { useProfile } from '../profile/useProfile';
 import { ActiveFilterTags } from './ActiveFilterTags';
 import { FiltersForm, type FormFilters } from './FiltersForm';
 import { countActive, parseFilters, toSearchParams, type Sort } from './filters';
+import { pickMapParams } from './mapPosition';
 import { ResultsList } from './ResultsList';
 import { SearchMap } from './SearchMap';
 import { SortSelect } from './SortSelect';
@@ -21,8 +22,9 @@ import { useSearch } from './useSearch';
 import { ViewToggle, type View } from './ViewToggle';
 
 /**
- * `/search`: the URL is the only filter state (plus `view=map`); the panel's open state and the
- * map's box are component state.
+ * `/search`: the URL is the only filter state (plus `view=map`, and the map's position `c`, `z`,
+ * `pin`, which are not filters: spec 0009w); the panel's open state and the map's box are
+ * component state.
  */
 export function SearchPage() {
   const { t } = useTranslation();
@@ -57,7 +59,9 @@ export function SearchPage() {
   const listButtonRef = useRef<HTMLButtonElement>(null);
   const focusCount = useRef(false);
   const focusListButton = useRef(false);
-  const query = searchParams.toString();
+  // The filters part of the URL (with `view`, without the map's position): the form's key and what
+  // "did the filters change" compares, so a map move never remounts the form or moves focus.
+  const filtersKey = toSearchParams(filters).toString();
 
   useEffect(() => {
     if (focusCount.current) {
@@ -68,21 +72,30 @@ export function SearchPage() {
       focusListButton.current = false;
       listButtonRef.current?.focus();
     }
-  }, [query, view]);
+  }, [filtersKey, view]);
 
-  /** Goes to `next`; when that changes the URL, focus moves to the count line after it. */
+  /** `next` with the current map position carried along, so the map stays where it is. */
+  const withMapPosition = (next: URLSearchParams) => {
+    for (const [key, value] of pickMapParams(searchParams)) next.set(key, value);
+    return next;
+  };
+  /** Goes to `next`; when that changes the filters, focus moves to the count line after it. */
   const setFilters = (next: URLSearchParams) => {
-    if (next.toString() !== query) focusCount.current = true;
+    if (toSearchParams(parseFilters(next)).toString() !== filtersKey) focusCount.current = true;
     setSearchParams(next);
   };
   const apply = (values: FormFilters) => {
-    setFilters(toSearchParams({ ...parseFilters(searchParams), ...values }));
+    setFilters(withMapPosition(toSearchParams({ ...parseFilters(searchParams), ...values })));
   };
-  // Clear keeps the view: it is not a filter.
-  const clear = () => setFilters(new URLSearchParams(view === 'map' ? { view: 'map' } : {}));
-  const sort = (value: Sort) => setSearchParams(toSearchParams({ ...filters, sort: value }));
+  // Clear keeps the view and the map's position: they are not filters.
+  const clear = () =>
+    setFilters(withMapPosition(new URLSearchParams(view === 'map' ? { view: 'map' } : {})));
+  const sort = (value: Sort) =>
+    setSearchParams(withMapPosition(toSearchParams({ ...filters, sort: value })));
   const switchView = (next: View) =>
-    setSearchParams(toSearchParams({ ...filters, view: next === 'map' ? 'map' : undefined }));
+    setSearchParams(
+      withMapPosition(toSearchParams({ ...filters, view: next === 'map' ? 'map' : undefined })),
+    );
 
   const toggle = (
     <Button
@@ -123,7 +136,7 @@ export function SearchPage() {
           aria-labelledby={titleId}
         >
           <FiltersForm
-            key={searchParams.toString()}
+            key={filtersKey}
             filters={filters}
             onApply={apply}
             onClear={clear}

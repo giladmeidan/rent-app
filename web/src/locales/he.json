@@ -348,7 +348,8 @@
       "bubbleSamePlace_other": "{{count}} מודעות באותה נקודה, לחיצה מציגה אותן",
       "samePlace_one": "מודעה אחת בנקודה הזו",
       "samePlace_two": "2 מודעות בנקודה הזו",
-      "samePlace_other": "{{count}} מודעות בנקודה הזו"
+      "samePlace_other": "{{count}} מודעות בנקודה הזו",
+      "closeCard": "סגירת הכרטיס"
     },
     "tags": {
       "label": "מסננים פעילים",
