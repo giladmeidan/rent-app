@@ -368,7 +368,7 @@ def test_ac4_photo_only_where_person_is_shown(
         ("S /me/flats", seeker.get("/me/flats")),
         ("F /me/flats", mate.get("/me/flats")),
         ("public listing", client.get(f"/listings/{room}")),
-        ("search", client.get("/listings")),
+        ("search", client.get("/listings?listing_type=room")),
         ("S /me/likes", seeker.get("/me/likes")),
         ("invite preview", seeker.post("/flatmate-invites/preview", json={"token": invite})),
         ("O /me/listings", owner.get("/me/listings")),
@@ -378,5 +378,5 @@ def test_ac4_photo_only_where_person_is_shown(
         _assert_no_person_key(response.text, keys, surface)
     assert _ok(mate.get("/me/flats"))[0]["owner_name"] == "Noa"  # the owner is shown, unpictured
     assert _ok(seeker.get("/me/likes"))["mine"]  # the liked room is listed
-    search_ids = {item["id"] for item in _ok(client.get("/listings"))["items"]}
+    search_ids = {item["id"] for item in _ok(client.get("/listings?listing_type=room"))["items"]}
     assert {str(room), str(other_room)} <= search_ids
