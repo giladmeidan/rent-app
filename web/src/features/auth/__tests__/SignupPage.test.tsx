@@ -265,4 +265,27 @@ describe('SignupPage', () => {
     expect(await screen.findByLabelText(he.auth.email.label)).toBeVisible();
     expect(screen.queryByTestId('skeleton')).toBeNull();
   });
+
+  it('ac16_market_next', async () => {
+    // Spec 0010b (Q10): `?next=` on the market side (no `?role`) hides the owner / seeker question.
+    const roleGroup = () => screen.queryByRole('group', { name: he.auth.role.label });
+    for (const [query, asked] of [
+      ['?next=%2Fmarket', false],
+      ['?next=%2Fmarket%2Fmine%3Ftab%3Dapplications', false],
+      ['?role=owner&next=%2Fmarket', true],
+      ['?next=%2Fsearch', true],
+      ['', true],
+    ] as const) {
+      mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)] });
+      const view = renderAt(`/signup${query}`, <SignupPage />);
+      await screen.findByLabelText(he.auth.email.label);
+      expect(nameInput()).toBeVisible();
+      expect(roleGroup() !== null, query).toBe(asked);
+      if (query.startsWith('?role=owner')) {
+        expect(screen.getByRole('radio', { name: he.auth.role.owner })).toBeChecked();
+      }
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
 });

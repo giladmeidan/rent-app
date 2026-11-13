@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router';
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { clearDraftsExcept } from '../../app/drafts';
+import { sideOf } from '../../app/side';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
@@ -79,12 +80,18 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
   }
 }
 
+/** `next`'s path alone (already `safeNext`-ed): its query and hash dropped. */
+function nextPath(next: string): string {
+  return next.split(/[?#]/, 1)[0] ?? next;
+}
+
 /** The request errors' line (too many, a failed verify): the kit `Field`'s error text. */
 const errorText = 'text-body-sm text-danger';
 
 type Props = {
   /** Signup: step 1 collects role and name too. Login: email only; the profile is asked for only
-   * when verify answers `profile_required`. */
+   * when verify answers `profile_required`. Started from the market (`next` on the market side,
+   * no explicit role), the role is not asked and is stored as seeker (spec 0010b, Q10). */
   withProfile: boolean;
   initialRole?: Role | null;
   /** Where a successful verify goes: a path already checked by `safeNext`. */
@@ -105,12 +112,16 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const id = useId();
   const online = useOnline();
 
+  // No roles in the market (spec 0010b): a signup or a new email's login headed there is not asked
+  // owner or seeker. An explicit role (`?role=`) still shows the question, preset.
+  const askRole = !(initialRole === null && sideOf(nextPath(next)) === 'market');
   const [step, setStep] = useState<'request' | 'verify'>('request');
-  const [role, setRole] = useState<Role | null>(initialRole);
+  const [role, setRole] = useState<Role | null>(askRole ? initialRole : 'seeker');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  // Login only: the email has no account yet, so step 2 also asks for role and name.
+  // Login only: the email has no account yet, so step 2 also asks for role (unless `askRole` is
+  // false) and name.
   const [profileNeeded, setProfileNeeded] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [emailError, setEmailError] = useState(false);
@@ -165,10 +176,11 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   }, [step]);
 
   useEffect(() => {
-    // The first `role` radio in the DOM is the owner's.
-    if (profileNeeded)
-      formRef.current?.querySelector<HTMLInputElement>('input[name="role"]')?.focus();
-  }, [profileNeeded]);
+    if (!profileNeeded) return;
+    // The first `role` radio in the DOM is the owner's; without the question, the name.
+    if (askRole) formRef.current?.querySelector<HTMLInputElement>('input[name="role"]')?.focus();
+    else nameRef.current?.focus();
+  }, [profileNeeded, askRole]);
 
   function sendRequest() {
     const nameOk = !withProfile || nameIsValid(name);
@@ -319,7 +331,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   if (step === 'request') {
     return (
       <form noValidate onSubmit={onRequestSubmit} className="flex flex-col gap-6">
-        {withProfile && roleChoice}
+        {withProfile && askRole && roleChoice}
         {withProfile && nameField}
         <Field
           id={`${id}-email`}
@@ -423,7 +435,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
       {profileNeeded && (
         <Card variant="muted" padding="md" className="flex flex-col gap-6">
           <p className="text-body">{t('auth.noAccountYet')}</p>
-          {roleChoice}
+          {askRole && roleChoice}
           {nameField}
         </Card>
       )}

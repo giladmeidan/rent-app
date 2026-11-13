@@ -388,4 +388,87 @@ describe('OtpForm', () => {
     expect(window.sessionStorage.getItem('rent-app:draft:chat:C')).toBeNull();
     expect(readDraft('apply', 'M', noa.id)).toBe('from U');
   });
+
+  it('ac16_market_signup_skips_role', async () => {
+    // Spec 0010b (Q10): signup started from the market asks no owner / seeker question and stores
+    // a seeker; an explicit role, or a `next` off the market, keeps the question.
+    const roleGroup = () => screen.queryByRole('group', { name: he.auth.role.label });
+
+    // Signup, `next` on the market: name and email only, sent as a seeker.
+    for (const next of ['/market', '/market/mine?tab=applications']) {
+      const api = mockApi({
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [json(noa, 201)],
+      });
+      const view = renderAt('/signup', <OtpForm withProfile next={next} />);
+      expect(roleGroup()).toBeNull();
+      expect(screen.queryByText(he.auth.hint.chooseRole)).toBeNull();
+      fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'דנה' } });
+      fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+        target: { value: 'dana@example.com' },
+      });
+      const send = screen.getByRole('button', { name: he.auth.sendCode });
+      expect(send).not.toHaveAttribute('disabled');
+      fireEvent.click(send);
+      await flush();
+      fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(api.calls('POST /auth/otp/verify')[0]?.body).toEqual({
+        email: 'dana@example.com',
+        code: '123456',
+        profile: { display_name: 'דנה', role: 'seeker' },
+      });
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // An explicit role wins (preset); a `next` off the market, or none, asks.
+    for (const [initialRole, next, checked] of [
+      ['owner', '/market', he.auth.role.owner],
+      [null, '/search', null],
+      [null, '/', null],
+      [null, '/listings/abc', null],
+    ] as const) {
+      mockApi({});
+      const view = renderAt(
+        '/signup',
+        <OtpForm withProfile initialRole={initialRole} next={next} />,
+      );
+      expect(roleGroup()).not.toBeNull();
+      if (checked !== null) expect(screen.getByRole('radio', { name: checked })).toBeChecked();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // Login with an unknown email headed to the market (or to a flat's invite, a market path):
+    // step 2 asks the name only, focuses it, and sends a seeker.
+    for (const next of ['/market', '/flatmates/join']) {
+      const api = mockApi({
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [json({ detail: 'profile_required' }, 422), json(noa, 201)],
+      });
+      const view = renderAt('/login', <OtpForm withProfile={false} next={next} />);
+      fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+        target: { value: 'new@example.com' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+      await flush();
+      fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(screen.getByText(he.auth.noAccountYet)).toBeVisible();
+      expect(roleGroup()).toBeNull();
+      expect(screen.getByLabelText(he.auth.name.label)).toHaveFocus();
+      expect(screen.queryByText(he.auth.hint.chooseRole)).toBeNull();
+      fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'דנה' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(api.calls('POST /auth/otp/verify')[1]?.body).toMatchObject({
+        profile: { display_name: 'דנה', role: 'seeker' },
+      });
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
 });
