@@ -6,13 +6,13 @@ rooms. When the second side likes, the pair becomes a **shortlisted application*
 This module is the only writer of `room_pairs` and the only place a like turns into an
 application. Its terms, each stated once here:
 
-- A **candidate** of room listing `L` is a `seeker_profiles` row `P` with a room section
-  (`gender` set) that `room_fit(L, P)` is true for, that is not `L`'s owner nor a flatmate of `L`
-  (`flatmate_of`, spec 0008d: a lister's like never makes their own flatmate mutual), that opted in
-  (`people_visible`) **or** liked `L`, and that has no non-withdrawn application to `L`
-  (`open_application`): declined, submitted and shortlisted applicants live in the inbox, and a
-  decline is final. There is no area filter: another area only lowers the `area` criterion.
-- A **pending seeker like** of `L` (`pending_seeker_like`) is a pair of `L` with
+- A **candidate** of room listing `L` is a `seeker_profiles` row `P` with the looking part filled
+  and a room section (`gender` set) that `room_fit(L, P)` is true for, that is not `L`'s owner nor a
+  flatmate of `L` (`flatmate_of`, spec 0008d: a lister's like never makes their own flatmate
+  mutual), that opted in (`people_visible`) **or** liked `L`, and that has no non-withdrawn
+  application to `L` (`open_application`): declined, submitted and shortlisted applicants live in
+  the inbox, and a decline is final. There is no area filter: another area only lowers the `area`
+criterion. - A **pending seeker like** of `L` (`pending_seeker_like`) is a pair of `L` with
   `seeker_liked_at` set and no non-withdrawn application, while `L` is a room. `liked_me_count`
   (`services/listings.py`) counts these.
 

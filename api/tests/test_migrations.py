@@ -2173,6 +2173,10 @@ def test_ac9_profile_split_upgrade_downgrade(migration_db_url: str) -> None:
             assert set(conn.execute(text("SELECT user_id FROM seeker_profiles")).scalars()) == {
                 users["full"]
             }
+            assert conn.execute(
+                text("SELECT budget_max_ils, gender FROM seeker_profiles WHERE user_id = :id"),
+                {"id": users["full"]},
+            ).one() == (7500, "woman")
             columns = _columns(conn, "seeker_profiles")
             assert all(columns[name] is False for name in _LOOKING_COLUMNS)
             for name in _PROFILE_SPLIT_CHECKS:
