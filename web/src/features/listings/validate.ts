@@ -417,12 +417,14 @@ const ROOM_FIELDS: ReadonlySet<string> = new Set([
  * The `PATCH /listings/{id}` body: every key of `body` (as `toListingIn` builds it) whose value
  * differs from the stored listing's. A cleared nullable field is already `null` in `body`; the
  * households and the ages are compared as sets (the API may store them in any order), the
- * questionnaire by its entries. Never `status` (pausing stays on "my listings"). An apartment
- * never sends room fields: the API resets them on the switch (and a `null` count is a 422).
+ * questionnaire by its entries. Never `status` (pausing stays on "my listings") and never
+ * `listing_type` (spec 0010a: the type is fixed at create, and the API refuses the key). An
+ * apartment never sends room fields (a `null` count is a 422).
  */
 export function changedFields(listing: ListingOut, body: ListingInBody): ListingPatch {
   const patch: Record<string, unknown> = {};
   for (const key of Object.keys(body) as (keyof ListingInBody)[]) {
+    if (key === 'listing_type') continue;
     if (body.listing_type === 'apartment' && ROOM_FIELDS.has(key)) continue;
     let same: boolean;
     if (key === 'rooms') same = Number(listing.rooms) === body.rooms;

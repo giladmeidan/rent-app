@@ -364,12 +364,12 @@ describe('validate', () => {
       toListingIn({ ...valid, smoking_allowed: false, min_contract_months: 24 }),
     ).toMatchObject({ smoking_allowed: false, min_contract_months: 24 });
 
-    // ac9_legacy_room_to_apartment_sends_type_only: a legacy room (no count) switched to
-    // apartment diffs to the type alone.
+    // A legacy room (no count) with the type changed in the form diffs to nothing: the type is
+    // never sent (spec 0010a), and an apartment body carries no room key.
     const legacy = listing({ listing_type: 'room', flatmates_count: null });
     expect(
       changedFields(legacy, toListingIn({ ...formFromListing(legacy), listing_type: 'apartment' })),
-    ).toStrictEqual({ listing_type: 'apartment' });
+    ).toStrictEqual({});
 
     // formFromListing → toListingIn round-trips the three fields.
     const l = listing({
@@ -514,12 +514,10 @@ describe('validate', () => {
     // Fewer flatmates: the ages that still fit go along only when the list changes.
     expect(diff({ flatmates_count: 2 })).toEqual({ flatmates_count: 2 });
     expect(diff({ flatmates_count: 1 })).toEqual({ flatmates_count: 1, flatmate_ages: [27] });
-    // Switched to an apartment: the type alone, no room key (the API resets them).
-    expect(diff({ listing_type: 'apartment' })).toStrictEqual({ listing_type: 'apartment' });
-    expect(diff({ listing_type: 'apartment', gender_preference: 'men' })).toStrictEqual({
-      listing_type: 'apartment',
-    });
-    // An apartment edited into a room sends the type and the chosen room fields.
+    // A type change in the form is never sent (spec 0010a); an apartment body sends no room key.
+    expect(diff({ listing_type: 'apartment' })).toStrictEqual({});
+    expect(diff({ listing_type: 'apartment', gender_preference: 'men' })).toStrictEqual({});
+    // An apartment body with room values: the room fields only, never the type.
     const flat = listing();
     expect(
       changedFields(
@@ -531,7 +529,7 @@ describe('validate', () => {
           flatmate_ages: ['', '29'],
         }),
       ),
-    ).toStrictEqual({ listing_type: 'room', flatmates_count: 2, flatmate_ages: [29] });
+    ).toStrictEqual({ flatmates_count: 2, flatmate_ages: [29] });
 
     // validatePreferences: the count and the age range, for rooms only.
     const required = { key: 'listings.errors.required' };
@@ -570,5 +568,29 @@ describe('validate', () => {
       flatmate_ages: [],
     });
     expect(emptyForm.lifestyle).toStrictEqual({});
+  });
+
+  it('ac10_changed_fields_never_type', () => {
+    // Spec 0010a: `listing_type` is never in a PATCH, whatever the form holds.
+    for (const stored of [
+      listing(),
+      listing({ listing_type: 'room', flatmates_count: 2, flatmate_ages: [27] }),
+      listing({ listing_type: 'room', flatmates_count: null }),
+    ]) {
+      for (const type of ['apartment', 'room'] as const) {
+        const base = formFromListing(stored);
+        const form = {
+          ...base,
+          listing_type: type,
+          price_ils: '5100',
+          flatmates_count: base.flatmates_count ?? 2,
+        };
+        const patch = changedFields(stored, toListingIn(form));
+        expect(Object.keys(patch), `${stored.listing_type} -> ${type}`).not.toContain(
+          'listing_type',
+        );
+        expect(patch, `${stored.listing_type} -> ${type}`).toMatchObject({ price_ils: 5100 });
+      }
+    }
   });
 });

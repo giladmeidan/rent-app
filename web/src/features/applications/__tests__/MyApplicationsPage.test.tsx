@@ -35,6 +35,8 @@ const routes = (
     <Route path="/listings/:id" element={<p>listing</p>} />
     <Route element={<RequireSeeker />}>
       <Route path={PATH} element={<MyApplicationsPage />} />
+      {/* The rooms, as the market's "שלי" embeds them (spec 0010a). */}
+      <Route path="/market/mine" element={<MyApplicationsPage type="room" panel />} />
     </Route>
   </Routes>
 );
@@ -47,6 +49,13 @@ function renderPage(
 ) {
   const api = mockApi({ 'GET /me': [json(seeker)], [MINE]: mine, ...extra });
   const view = renderRoutes(PATH, routes, client);
+  return { api, view };
+}
+
+/** The same seeker's room applications panel. */
+function renderRooms(mine: Reply[]) {
+  const api = mockApi({ 'GET /me': [json(seeker)], [MINE]: mine });
+  const view = renderRoutes('/market/mine', routes);
   return { api, view };
 }
 
@@ -186,7 +195,8 @@ describe('MyApplicationsPage', () => {
         street: '\u05d4\u05e8\u05e6\u05dc',
       },
     };
-    renderPage([json([room])]);
+    // A room application is the market's (spec 0010a).
+    renderRooms([json([room])]);
     expect(
       await screen.findByRole('link', {
         name: '\u05d7\u05d3\u05e8 \u05d1\u05be4 \u05d7\u05d3\u05e8\u05d9\u05dd, \u05e8\u05d7\u05d5\u05d1 \u05d4\u05e8\u05e6\u05dc, \u05e8\u05de\u05ea \u05d2\u05df',
@@ -518,5 +528,56 @@ describe('MyApplicationsPage', () => {
       expect(badge).not.toHaveClass('tabular-nums');
     }
     view.unmount();
+  });
+
+  it('ac11_apartments_only', async () => {
+    // Spec 0010a: one apartment and one room application; each side shows its own.
+    const flat = to('L1');
+    const roomApp = application();
+    const room = {
+      ...roomApp,
+      listing: { ...roomApp.listing, id: 'R1', listing_type: 'room' as const },
+    };
+    let { view } = renderPage([json([flat, room])]);
+    expect(await screen.findByRole('link', { name: titleOf(flat) })).toBeVisible();
+    expect(cards()).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', { level: 1, name: he.applications.mine.title }),
+    ).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The rooms panel: an <h2>, no page title of its own, the room only.
+    ({ view } = renderRooms([json([flat, room])]));
+    await vi.waitFor(() => {
+      expect(cards()).toHaveLength(1);
+    });
+    expect(within(cards()[0] as HTMLElement).getByRole('link')).toHaveAttribute(
+      'href',
+      '/listings/R1',
+    );
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(
+      screen.getByRole('heading', { level: 2, name: he.market.mine.tabs.applications }),
+    ).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Each side's empty state while the other side has applications.
+    ({ view } = renderPage([json([room])]));
+    expect(await screen.findByText(he.applications.mine.empty)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.applications.mine.search })).toHaveAttribute(
+      'href',
+      '/search',
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    renderRooms([json([flat])]);
+    expect(await screen.findByText(he.market.mine.applicationsEmpty)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.market.toSearch })).toHaveAttribute(
+      'href',
+      '/market',
+    );
   });
 });

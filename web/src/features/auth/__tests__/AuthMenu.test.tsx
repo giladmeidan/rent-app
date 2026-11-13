@@ -254,6 +254,7 @@ describe('AuthMenu', () => {
     }
   });
 
+  // The likes tab is the market's (spec 0010a): these render at `/market`.
   it('ac3_likes_badge_forms', async () => {
     const room = () => ({ listing: {}, liked_at: '2026-11-11T09:00:00Z' });
     const forms: [number, string][] = [
@@ -266,7 +267,7 @@ describe('AuthMenu', () => {
         [LIST]: [json([])],
         'GET /me/likes': [json({ liked_me: Array.from({ length: count }, room), mine: [] })],
       });
-      const view = renderRoutes('/', menu);
+      const view = renderRoutes('/market', menu);
       const link = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
       expect(await within(link).findByText(text)).toHaveClass('sr-only');
       view.unmount();
@@ -282,7 +283,7 @@ describe('AuthMenu', () => {
       [LIST]: [json([])],
       'GET /me/likes': [json({ liked_me: [room(), room()], mine: [room()] })],
     });
-    let view = renderRoutes('/', menu);
+    let view = renderRoutes('/market', menu);
     const link = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
     expect(link).toHaveAttribute('href', '/me/likes');
     expect(await within(link).findByText('2')).toHaveAttribute('aria-hidden', 'true');
@@ -297,7 +298,7 @@ describe('AuthMenu', () => {
       [LIST]: [json([])],
       'GET /me/likes': [json({ liked_me: [room()], mine: [] })],
     });
-    view = renderRoutes('/', menu);
+    view = renderRoutes('/market', menu);
     expect(await screen.findByText(i18n.t('likes.badgeLabel', { count: 1 }))).toBeInTheDocument();
     view.unmount();
     vi.unstubAllGlobals();
@@ -309,7 +310,7 @@ describe('AuthMenu', () => {
       'GET /me/likes': [json({ liked_me: [], mine: [room()] })],
     });
     const client = testQueryClient();
-    view = renderRoutes('/', menu, client);
+    view = renderRoutes('/market', menu, client);
     const plain = await screen.findByRole('link', { name: he.header.likes });
     // The list has loaded (one room of `mine`, none of `liked_me`) before "no badge" is asserted.
     await vi.waitFor(() => {
@@ -319,14 +320,14 @@ describe('AuthMenu', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner: no link and no request.
+    // An owner (the market's owner bar): no link and no request.
     api = mockApi({
       'GET /me': [json({ ...noa, role: 'owner' })],
       [LIST]: [json([])],
       'GET /me/likes': [json({ liked_me: [], mine: [] })],
     });
-    renderRoutes('/', menu);
-    expect(await screen.findByRole('link', { name: he.header.myListings })).toBeVisible();
+    renderRoutes('/market', menu);
+    expect(await screen.findByRole('link', { name: he.nav.mine })).toBeVisible();
     expect(screen.queryByRole('link', { name: he.header.likes })).toBeNull();
     expect(api.calls('GET /me/likes')).toHaveLength(0);
   });

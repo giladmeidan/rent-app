@@ -53,6 +53,8 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   // top bar. The viewport is restored for the rest of the test.
   const viewport = page.viewportSize();
   await page.setViewportSize({ width: 390, height: 844 });
+  // The seeker's market bar has five tabs (spec 0010a; the apartments bar has four).
+  await page.goto('/market');
   const banner = page.getByRole('banner');
   const tabBar = page.getByRole('navigation', { name: he.nav.label });
   await expect(tabBar).toBeVisible();
@@ -123,8 +125,8 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   expect(await likePerson(ownerPage, roomId, personId)).toBeNull();
   await ownerContext.close();
 
-  // The seeker's header shows "לייקים" with one room that liked them.
-  await page.goto('/search');
+  // The seeker's header shows "לייקים" with one room that liked them (a market tab, spec 0010a).
+  await page.goto('/market');
   const nav = page
     .getByRole('navigation', { name: he.nav.label })
     .getByRole('link', { name: new RegExp(he.header.likes) });
@@ -165,8 +167,9 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   await chat.click();
   await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
 
-  // "My applications" shows the room tagged as a mutual match, with no message block.
-  await page.goto('/me/applications');
+  // The market's "שלי" (a seeker's room applications, spec 0010a) shows the room tagged as a
+  // mutual match, with no message block.
+  await page.goto('/market/mine');
   const card = page.getByRole('article').filter({ hasText: street });
   await expect(card.getByTestId('application-mutual')).toHaveText(he.applications.mutual);
   await expect(card.getByTestId('application-message')).toHaveCount(0);

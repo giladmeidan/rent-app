@@ -152,18 +152,19 @@ describe('filters', () => {
   });
 
   it('ac1_listing_type_in_url', async () => {
-    // Only the exact `apartment` and `room` are kept, so no URL can 422.
-    expect(parse('listing_type=room')).toEqual({ listing_type: 'room' });
-    expect(parse('listing_type=apartment')).toEqual({ listing_type: 'apartment' });
-    for (const query of ['listing_type=both', 'listing_type=', 'listing_type=Room']) {
+    // Spec 0010a: the type is the page's (`/search` or `/market`), never a URL filter.
+    for (const query of ['listing_type=room', 'listing_type=apartment', 'listing_type=']) {
       expect(parse(query), query).toEqual({});
+      expect(parse(query), query).not.toHaveProperty('listing_type');
     }
-    // Written right after `available_by`, before the features.
+    // Never written, and never counted, even when the page sets it.
     expect(
-      toSearchParams(parse('pets=true&listing_type=room&available_by=2027-01-05')).toString(),
-    ).toBe('available_by=2027-01-05&listing_type=room&pets=true');
-    // One type is one active filter; none is none.
-    expect(countActive(parse('listing_type=room'))).toBe(1);
+      toSearchParams({
+        ...parse('pets=true&available_by=2027-01-05'),
+        listing_type: 'room',
+      }).toString(),
+    ).toBe('available_by=2027-01-05&pets=true');
+    expect(countActive({ listing_type: 'room' })).toBe(0);
     expect(countActive(parse(''))).toBe(0);
 
     // Sent when set, absent otherwise.

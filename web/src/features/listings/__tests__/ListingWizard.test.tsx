@@ -15,6 +15,7 @@ import {
 } from '../../auth/__tests__/harness';
 import type { GenderPreference, Household, ListingOut } from '../api';
 import { ListingWizard } from '../ListingWizard';
+import { MarketMinePage } from '../../market/MarketMinePage';
 import { NewListingPage } from '../NewListingPage';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner, withoutCounts } from './fixtures';
@@ -91,18 +92,20 @@ const expectedBody = {
 const l = he.listings;
 const h1 = () => screen.getByRole('heading', { level: 1 });
 const h2 = (name: string) => screen.getByRole('heading', { level: 2, name });
-const stepOf = (n: number) => i18n.t('listings.stepOf', { n, total: 4 });
-/** The stepper: the `<ol>` that holds the step names. */
-const stepper = () => screen.getByText(l.steps.type).closest('ol') as HTMLOListElement;
-const expectStep = (n: number) => {
+const stepOf = (n: number, total = 4) => i18n.t('listings.stepOf', { n, total });
+/** The stepper: the `<ol>` that holds the step names (the type step only when reachable). */
+const stepper = () => screen.getByText(l.steps.details).closest('ol') as HTMLOListElement;
+/** Shown step `n` of `total` (3 when the type step is skipped, spec 0010a). */
+const expectStep = (n: number, total = 4) => {
   const items = within(stepper()).getAllByRole('listitem');
-  expect(items).toHaveLength(4);
+  expect(items).toHaveLength(total);
   items.forEach((item, i) => {
     if (i + 1 === n) expect(item).toHaveAttribute('aria-current', 'step');
     else expect(item).not.toHaveAttribute('aria-current');
   });
   expect(progress()).toHaveAttribute('aria-valuenow', String(n));
-  expect(screen.getByText(stepOf(n))).toBeVisible();
+  expect(progress()).toHaveAttribute('aria-valuemax', String(total));
+  expect(screen.getByText(stepOf(n, total))).toBeVisible();
 };
 
 /** Prints the `location.state` the wizard navigated with. */
@@ -185,7 +188,8 @@ describe('ListingWizard', () => {
     await areasLoaded();
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    expectStep(4);
+    // No type step in edit mode (spec 0010a): the preview is step 3 of 3.
+    expectStep(3, 3);
     expect(h2(l.stepTitle.previewEdit)).toBeVisible();
   });
 
@@ -601,7 +605,8 @@ describe('ListingWizard', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Edit mode opens on details; back reaches type.
+    // Edit mode opens on details, shown as step 1 of 3, with no back button: the type step is
+    // unreachable (spec 0010a).
     const a = listing();
     mockApi({
       'GET /me': [() => json(owner)],
@@ -613,11 +618,10 @@ describe('ListingWizard', () => {
       await screen.findByRole('heading', { level: 1, name: he.listings.edit.title }),
     ).toBeVisible();
     await areasLoaded();
-    at(2);
-    expect(progress()).toHaveAttribute('aria-valuemax', '4');
-    back();
-    at(1);
-    expect(screen.getByRole('radio', { name: he.listings.type.apartment })).toBeChecked();
+    expectStep(1, 3);
+    expect(screen.queryByText(s.type)).toBeNull();
+    expect(screen.queryByRole('button', { name: he.common.back })).toBeNull();
+    expect(screen.queryByRole('radio', { name: he.listings.type.apartment })).toBeNull();
   });
 
   it('ac3_chosen_preferences_sent', async () => {
@@ -749,5 +753,82 @@ describe('ListingWizard', () => {
     expect(progress()).toHaveAttribute('aria-valuenow', '3');
     expect(errorFor(households())).toHaveTextContent(he.listings.errors.invalid);
     view.unmount();
+  });
+
+  it('ac10_type_param_skips_type_step', async () => {
+    const backButton = () => screen.queryByRole('button', { name: he.common.back });
+    const room = withoutCounts(listing({ listing_type: 'room', flatmates_count: 2 }));
+    const newRoutes = (
+      <Routes>
+        <Route path="/listings/new" element={<NewListingPage />} />
+        <Route path="/me/listings" element={<StatePrinter />} />
+        <Route path="/market/mine" element={<MarketMinePage />} />
+      </Routes>
+    );
+
+    // `?type=room`: the room details first, "1 of 3", no back button there.
+    let api = mockApi({
+      'GET /me': [json(owner)],
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(room, 201)],
+      'GET /me/listings': [json([{ ...room, applicant_count: 0 }])],
+      'GET /me/conversations': [json([])],
+    });
+    let view = renderRoutes('/listings/new?type=room', newRoutes);
+    expect(h2(l.stepTitle.detailsRoom)).toBeVisible();
+    expectStep(1, 3);
+    expect(screen.queryByText(l.steps.type)).toBeNull();
+    expect(backButton()).toBeNull();
+    await areasLoaded();
+    fillValidDetails('room');
+    fireEvent.click(nextButton());
+    expectStep(2, 3);
+    expect(h2(p.titleRoom)).toBeVisible();
+    expect(backButton()).toBeVisible();
+    fireEvent.change(screen.getByLabelText(l.room.flatmatesCount), { target: { value: '2' } });
+    fireEvent.click(nextButton());
+    expectStep(3, 3);
+    fireEvent.click(publishButton());
+    // Published: the market's "שלי", with the celebration.
+    expect(await screen.findByText(l.mine.published)).toBeVisible();
+    expect(currentPath()).toBe('/market/mine');
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({
+      listing_type: 'room',
+      flatmates_count: 2,
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // `?type=apartment`: the apartment details first; published to "my listings".
+    api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(withoutCounts(listing()), 201)],
+    });
+    view = renderRoutes('/listings/new?type=apartment', newRoutes);
+    expect(h2(l.stepTitle.details)).toBeVisible();
+    expectStep(1, 3);
+    expect(backButton()).toBeNull();
+    await areasLoaded();
+    fillValidDetails();
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(publishButton());
+    expect(await screen.findByTestId('state')).toHaveTextContent('{"published":true}');
+    expect(currentPath()).toBe('/me/listings');
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({ listing_type: 'apartment' });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Anything else, or no param: the type step, "1 of 4".
+    for (const path of ['/listings/new?type=house', '/listings/new']) {
+      mockApi({ 'GET /areas': [json([gushDan])] });
+      view = renderRoutes(path, newRoutes);
+      expect(h2(l.stepTitle.type)).toBeVisible();
+      expectStep(1, 4);
+      expect(screen.getByRole('radio', { name: l.type.room })).not.toBeChecked();
+      expect(screen.getByRole('radio', { name: l.type.apartment })).not.toBeChecked();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { useSide } from '../../app/side';
 import { usePageTitle } from '../../app/usePageTitle';
 import { Card } from '../../components/Card';
 import { ErrorState } from '../../components/ErrorState';
@@ -29,6 +30,7 @@ export function EditListingPage() {
   const notFoundHeading = useRef<HTMLHeadingElement>(null);
   const now = new Date();
   const listing = listings.data?.find((l) => l.id === id);
+  const side = useSide();
   const readOnly = listing !== undefined && isPastExpiry(listing, now);
   const notFound = listings.data !== undefined && listing === undefined;
   // Focus the explanation on arrival (the hook runs before any early return).
@@ -50,7 +52,12 @@ export function EditListingPage() {
           : 'listings.edit.title',
     ),
   );
-  const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+  // By the listing's type (spec 0010a): a room's "my" page is the market's. Before the list
+  // loads, the last side.
+  const roomBack = listing === undefined ? side === 'market' : listing.listing_type === 'room';
+  const back = roomBack
+    ? { to: '/market/mine', label: t('market.mine.back') }
+    : { to: '/me/listings', label: t('listings.edit.backToMine') };
   // Loading and a failed list keep the page's <h1>: its text needs no data. The back link needs no
   // guard there: no form is shown.
   const title = <PageHeader title={t('listings.edit.title')} back={back} />;

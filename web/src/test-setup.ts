@@ -94,4 +94,6 @@ afterEach(() => {
   FakeEventSource.instances = [];
   // Drafts (spec 0009g) and other tab storage never leak into the next test.
   window.sessionStorage.clear();
+  // The side (spec 0010a) is device storage: no test inherits another's.
+  window.localStorage.removeItem('homie.side');
 });

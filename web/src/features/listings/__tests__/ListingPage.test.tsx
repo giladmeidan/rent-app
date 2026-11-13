@@ -255,19 +255,36 @@ describe('ListingPage', () => {
     expect(within(location as HTMLElement).getByText(address)).toBeVisible();
     expect(within(location as HTMLElement).getByText(he.listing.locationHint)).toBeVisible();
 
-    // The link to the search map: this kind, the full map, centred on the point, this card open.
+    // The link to the search map: this kind's side (spec 0010a), the full map, centred on the
+    // point, this card open.
     const link = mapLink();
     expect(link).not.toBeNull();
     expect(location).toContainElement(link);
     const href = new URL(link?.getAttribute('href') ?? '', 'http://localhost');
     expect(href.pathname).toBe('/search');
-    expect(href.searchParams.get('listing_type')).toBe('apartment');
+    expect(href.searchParams.get('listing_type')).toBeNull();
     expect(href.searchParams.get('view')).toBe('map');
     expect(href.searchParams.get('z')).toBe('15');
     expect(href.searchParams.get('pin')).toBe(located.id);
     expect(parseMapPosition(href.searchParams).center).toEqual([34.8, 32.08]);
     fireEvent.click(link as HTMLElement);
     expect(currentPath()).toBe(`${href.pathname}${href.search}`);
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // A room's link goes to the market's map.
+    const room = listingDetail({ listing_type: 'room', flatmates_count: 2, lat: 32.08, lng: 34.8 });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${room.id}`]: [json(room)],
+    });
+    view = render(room.id);
+    await screen.findByRole('region', { name: he.listing.mapLabel });
+    const roomHref = new URL(mapLink()?.getAttribute('href') ?? '', 'http://localhost');
+    expect(roomHref.pathname).toBe('/market');
+    expect(roomHref.searchParams.get('listing_type')).toBeNull();
+    expect(roomHref.searchParams.get('pin')).toBe(room.id);
     view.unmount();
     vi.unstubAllGlobals();
     resetFakeMap();
@@ -1239,9 +1256,8 @@ describe('ListingPage', () => {
   });
 
   it('ac11_not_found_links_to_search', async () => {
-    // "חיפוש דירות וחדרים"
-    const TO_SEARCH =
-      '\u05d7\u05d9\u05e4\u05d5\u05e9 \u05d3\u05d9\u05e8\u05d5\u05ea \u05d5\u05d7\u05d3\u05e8\u05d9\u05dd';
+    // "לחיפוש דירות" (spec 0010a: the apartments side, the default)
+    const TO_SEARCH = '\u05dc\u05d7\u05d9\u05e4\u05d5\u05e9 \u05d3\u05d9\u05e8\u05d5\u05ea';
     mockApi({
       'GET /me': [json({ detail: 'unauthenticated' }, 401)],
       [`GET /listings/${katznelson.id}`]: [() => json({ detail: 'not_found' }, 404)],
@@ -1254,5 +1270,62 @@ describe('ListingPage', () => {
       expect.arrayContaining(['min-h-tap', 'focus-visible:outline-accent']),
     );
     expect(heading.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('ac12_back_link_by_type', async () => {
+    const unauthenticated = () => json({ detail: 'unauthenticated' }, 401);
+
+    // A room: "חזרה לשוק השותפים" → /market, and the side becomes the market's.
+    const room = listingDetail({ listing_type: 'room', flatmates_count: 2 });
+    mockApi({ 'GET /me': [unauthenticated], [`GET /listings/${room.id}`]: [json(room)] });
+    let view = render(room.id);
+    const toMarket = await screen.findByRole('link', { name: he.listing.backToMarket });
+    expect(toMarket).toHaveAttribute('href', '/market');
+    expect(screen.queryByRole('link', { name: he.listing.backToSearch })).toBeNull();
+    expect(window.localStorage.getItem('homie.side')).toBe('market');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An apartment: "חזרה לחיפוש" → /search, even after the market side was stored.
+    const flat = listingDetail();
+    mockApi({ 'GET /me': [unauthenticated], [`GET /listings/${flat.id}`]: [json(flat)] });
+    view = render(flat.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(back()).toHaveLength(1);
+    expect(back()[0]).toHaveAttribute('href', '/search');
+    expect(screen.queryByRole('link', { name: he.listing.backToMarket })).toBeNull();
+    expect(window.localStorage.getItem('homie.side')).toBe('apartments');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // While loading, the back link follows the stored side.
+    window.localStorage.setItem('homie.side', 'market');
+    const pending = deferred();
+    mockApi({ 'GET /me': [unauthenticated], [`GET /listings/${flat.id}`]: [pending.promise] });
+    view = render(flat.id);
+    expect(screen.getByRole('link', { name: he.listing.backToMarket })).toHaveAttribute(
+      'href',
+      '/market',
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A 404 after the stored side was the market's: "לשוק השותפים" → /market, back to the market.
+    window.localStorage.setItem('homie.side', 'market');
+    mockApi({
+      'GET /me': [unauthenticated],
+      [`GET /listings/${flat.id}`]: [() => json({ detail: 'not_found' }, 404)],
+    });
+    render(flat.id);
+    await screen.findByRole('heading', { level: 1, name: he.listing.notFound });
+    expect(screen.getByRole('link', { name: he.market.toSearch })).toHaveAttribute(
+      'href',
+      '/market',
+    );
+    expect(screen.queryByRole('link', { name: he.listing.toSearch })).toBeNull();
+    expect(screen.getByRole('link', { name: he.listing.backToMarket })).toHaveAttribute(
+      'href',
+      '/market',
+    );
   });
 });

@@ -16,7 +16,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { Tag } from '../../components/Tag';
 import { useOnline } from '../../components/useOnline';
-import { ApiError } from '../listings/api';
+import { ApiError, type ListingType } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { hasStatus, type MyApplicationOut } from './api';
@@ -181,11 +181,44 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
   );
 }
 
-/** `/me/applications`, seekers only (`RequireSeeker`): each application with its status. */
-export function MyApplicationsPage() {
+type Props = {
+  /** The side's type (spec 0010a): `/me/applications` shows apartment applications, the market's
+   * "שלי" room applications. */
+  type?: ListingType;
+  /** Inside a page that owns the `<h1>`, the container and the tab's title (`MarketMinePage`). */
+  panel?: boolean;
+};
+
+/** `/me/applications`, seekers only (`RequireSeeker`): each application of one type with its
+ * status. */
+export function MyApplicationsPage({ type = 'apartment', panel = false }: Props) {
+  if (panel) {
+    return (
+      <div className="flex flex-col gap-4">
+        <MyApplications type={type} level={2} />
+      </div>
+    );
+  }
+  return <MyApplicationsRoute type={type} />;
+}
+
+/** The page on its own route: its container and the tab's title. */
+function MyApplicationsRoute({ type }: { type: ListingType }) {
   const { t } = useTranslation();
   usePageTitle(t('applications.mine.title'));
+  return (
+    <PageContainer as="section" width="default" className="flex flex-col gap-4">
+      <MyApplications type={type} level={1} />
+    </PageContainer>
+  );
+}
+
+function MyApplications({ type, level }: { type: ListingType; level: 1 | 2 }) {
+  const { t } = useTranslation();
   const applications = useMyApplications();
+  const room = type === 'room';
+
+  const shown = (applications.data ?? []).filter((a) => a.listing.listing_type === type);
 
   let body;
   if (applications.isPending) {
@@ -201,14 +234,14 @@ export function MyApplicationsPage() {
   } else if (applications.isError && applications.data === undefined) {
     // Only when nothing is cached: a failed background refetch keeps the list on the page.
     body = <ErrorState onRetry={() => applications.refetch()} />;
-  } else if (applications.data.length === 0) {
+  } else if (shown.length === 0) {
     body = (
       <EmptyState
         pose="sleep"
-        message={t('applications.mine.empty')}
+        message={room ? t('market.mine.applicationsEmpty') : t('applications.mine.empty')}
         action={
-          <Button variant="primary" to="/search">
-            {t('applications.mine.search')}
+          <Button variant="primary" to={room ? '/market' : '/search'}>
+            {room ? t('market.toSearch') : t('applications.mine.search')}
           </Button>
         }
       />
@@ -216,7 +249,7 @@ export function MyApplicationsPage() {
   } else {
     body = (
       <ul className="flex flex-col gap-4">
-        {applications.data.map((application) => (
+        {shown.map((application) => (
           <ApplicationCard key={application.id} application={application} />
         ))}
       </ul>
@@ -224,9 +257,12 @@ export function MyApplicationsPage() {
   }
 
   return (
-    <PageContainer as="section" width="default" className="flex flex-col gap-4">
-      <PageHeader title={t('applications.mine.title')} />
+    <>
+      <PageHeader
+        level={level}
+        title={room ? t('market.mine.tabs.applications') : t('applications.mine.title')}
+      />
       {body}
-    </PageContainer>
+    </>
   );
 }

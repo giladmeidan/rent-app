@@ -40,13 +40,14 @@ const COPY = {
   rateLimited: 'flatmates.join.rateLimited',
 } as const;
 
-/** Where a final message leads (0009f); a rate limit has no link, the person retries later. */
+/** Where a final message leads (0009f); a rate limit has no link, the person retries later. A
+ * flat is a room's, so every way out is the market's (spec 0010a). */
 const WAY_OUT = {
-  own: { to: '/me/listings', label: 'flatmates.join.toMyListings' },
-  applied: { to: '/me/applications', label: 'flatmates.join.toApplications' },
-  declined: { to: '/search', label: 'flatmates.join.toSearch' },
-  full: { to: '/search', label: 'flatmates.join.toSearch' },
-  invalid: { to: '/search', label: 'flatmates.join.toSearch' },
+  own: { to: '/market/mine', label: 'flatmates.join.toMyListings' },
+  applied: { to: '/market/mine', label: 'flatmates.join.toApplications' },
+  declined: { to: '/market', label: 'flatmates.join.toSearch' },
+  full: { to: '/market', label: 'flatmates.join.toSearch' },
+  invalid: { to: '/market', label: 'flatmates.join.toSearch' },
 } as const;
 
 /** The link out of a final message, in the card's actions row. Never inside the `role="alert"`
