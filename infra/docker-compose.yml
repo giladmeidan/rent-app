@@ -45,12 +45,20 @@ services:
       SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
       EMAIL_BACKEND: file
       EMAIL_OUTBOX_DIR: /outbox
+      # Photos (spec 0010d): the file store, served by the api itself at /media.
+      PHOTO_BACKEND: file
+      PHOTO_DIR: /media
+      PHOTO_PUBLIC_BASE_URL: http://localhost:${API_PORT:-8000}/media
+      # As in the image: two glibc malloc arenas, so photo decodes do not pin memory per thread.
+      MALLOC_ARENA_MAX: "2"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - ../api:/app
       # Dev email outbox: the login code is in the newest file (`make dev` creates it 0777 first).
       - ../.outbox:/outbox
+      # Dev photo store: the uploaded WebP files (`make dev` creates it 0777 first; `make down` empties it).
+      - ../.media:/media
     depends_on:
       db:
         condition: service_healthy

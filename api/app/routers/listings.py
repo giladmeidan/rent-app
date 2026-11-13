@@ -15,6 +15,7 @@ from app.models import User
 from app.schemas.error import ErrorOut
 from app.schemas.listing import ListingIn, ListingOut, ListingPatch, MyListingOut
 from app.services import listings as listings_service
+from app.services import photos as photos_service
 
 router = APIRouter(tags=["listings"])
 
@@ -52,6 +53,9 @@ def create_listing(body: ListingIn, owner: OwnerDep, db: DbDep) -> ListingOut:
 
 @router.get("/me/listings", response_model=list[MyListingOut], responses=_AUTH_ERRORS)
 def my_listings(owner: OwnerDep, db: DbDep) -> list[MyListingOut]:
+    rows = listings_service.list_own_listings(db, owner)
+    # Every listing's photos in one statement, none without listings (spec 0010d).
+    photos = photos_service.photos_by_listing(db, [row[0].id for row in rows])
     return [
         MyListingOut(
             **dict(ListingOut.model_validate(listing)),
@@ -60,14 +64,14 @@ def my_listings(owner: OwnerDep, db: DbDep) -> list[MyListingOut]:
             liked_me_count=liked_me_count,
             flatmate_count=flatmate_count,
             flatmate_invite_active=listing.flatmate_invite_hash is not None,
-        )
+        ).model_copy(update={"photos": photos_service.photos_out(photos[listing.id])})
         for (
             listing,
             applicant_count,
             new_applicant_count,
             liked_me_count,
             flatmate_count,
-        ) in listings_service.list_own_listings(db, owner)
+        ) in rows
     ]
 
 
@@ -92,4 +96,7 @@ def update_listing(
         raise HTTPException(status_code=409, detail="listing_cap_reached") from None
     except listings_service.UnknownAreaError:
         raise HTTPException(status_code=422, detail="unknown_area") from None
-    return ListingOut.model_validate(listing)
+    photos = photos_service.photos_by_listing(db, [listing.id])[listing.id]
+    return ListingOut.model_validate(listing).model_copy(
+        update={"photos": photos_service.photos_out(photos)}
+    )

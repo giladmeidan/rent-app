@@ -6,6 +6,10 @@ ENV UV_COMPILE_BYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
+# glibc keeps a malloc arena per thread; a photo decode (spec 0010d) leaves hundreds of MB in each
+# thread's arena, so cap them at two.
+ENV MALLOC_ARENA_MAX=2
+
 WORKDIR /app
 
 # Dependencies first so the layer is cached while application code changes.

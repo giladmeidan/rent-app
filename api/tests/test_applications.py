@@ -504,7 +504,8 @@ def test_ac8_applicant_count_and_view_counter(
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like"}  # `like`: 0008a
+    # `like`: 0008a; `photos`: 0010d
+    assert set(body) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like", "photos"}
     assert body["applicant_count"] == 3
     assert _view_count(db_engine, listing_a) == 1
     assert client.get(f"/listings/{listing_a}").status_code == 200
@@ -526,10 +527,11 @@ def test_ac8_applicant_count_and_view_counter(
     sent = list(statements)
     assert measured.status_code == 200
     assert measured.json()["applicant_count"] == 3
-    assert len(sent) == 3, sent
+    assert len(sent) == 4, sent
     assert "FROM listings" in sent[0]
     assert "FROM applications" in sent[1]
     assert sent[2].lstrip().startswith("UPDATE listings")
+    assert "FROM listing_photos" in sent[3]  # spec 0010d: the photos, last
 
 
 def _hourly(seeker_id: uuid.UUID) -> int:

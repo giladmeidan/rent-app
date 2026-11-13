@@ -18,3 +18,13 @@ LIFESTYLE_CHECK = (
     " AND NOT jsonb_path_exists(lifestyle,"
     f" 'strict $.* ? (@.type() != \"number\" || ({_NOT_AN_ANSWER}))')"
 )
+
+# A photo key (spec 0010d): `secrets.token_urlsafe(32)`, 43 characters of the URL-safe base64
+# alphabet. `ck_listing_photos_key` and `ck_users_photo_key` (migration 0013) hold every stored key
+# to it, so nothing else (an id, a `/`) can ever become part of an object name.
+PHOTO_KEY_PATTERN = "^[A-Za-z0-9_-]{43}$"
+
+
+def photo_key_check(column: str) -> str:
+    """The CHECK text holding `column` to `PHOTO_KEY_PATTERN`."""
+    return f"{column} ~ '{PHOTO_KEY_PATTERN}'"

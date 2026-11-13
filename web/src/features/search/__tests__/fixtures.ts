@@ -37,14 +37,22 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     lat: null,
     lng: null,
     match: null,
+    cover: null, // spec 0010d
     ...overrides,
   };
 }
 
-/** `GET /listings/{id}`'s shape: a public listing plus its applicant count and the caller's room
- * fit (0007b; `null` for an apartment). */
+/** `GET /listings/{id}`'s shape: a public listing plus its applicant count, the caller's room
+ * fit (0007b; `null` for an apartment) and its photos (0010d; none here). */
 export function listingDetail(overrides: Partial<ListingDetail> = {}): ListingDetail {
-  return { ...publicListing(), applicant_count: 0, room_fit: null, like: null, ...overrides };
+  return {
+    ...publicListing(),
+    applicant_count: 0,
+    room_fit: null,
+    like: null,
+    photos: [], // spec 0010d
+    ...overrides,
+  };
 }
 
 /** `count` fresh listings. */

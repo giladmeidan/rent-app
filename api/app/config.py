@@ -70,6 +70,40 @@ class Settings(DatabaseSettings):
     geocoder: Literal["fake", "nominatim"] = "fake"
     nominatim_url: str = "https://nominatim.openstreetmap.org"
     nominatim_user_agent: str = DEV_NOMINATIM_USER_AGENT
+    # Photos (spec 0010d). `file` = `photo_dir` on local disk, served by the api at `/media` (dev,
+    # CI, e2e); `r2` = the Cloudflare R2 bucket `r2_bucket`. `photo_public_base_url` is where the
+    # objects are read from (`{base}/{key}-s.webp`), never with a trailing `/`.
+    photo_backend: Literal["file", "r2"] = "file"
+    photo_dir: Path = Path("./.media")
+    photo_public_base_url: str = "http://localhost:8000/media"
+    r2_account_id: str | None = None
+    r2_access_key_id: SecretStr | None = None
+    r2_secret_access_key: SecretStr | None = None
+    r2_bucket: str | None = None
+
+    @field_validator("photo_public_base_url")
+    @classmethod
+    def _photo_base_url_is_a_plain_url(cls, value: str) -> str:
+        """Trimmed, an http(s) URL with a host and no query or fragment, without a trailing `/`.
+        The message names the rule only, never the value."""
+        value = value.strip().rstrip("/")
+        try:
+            parts = urlsplit(value)
+            parts.port  # noqa: B018  (raises ValueError on a malformed port)
+        except ValueError:
+            raise ValueError("PHOTO_PUBLIC_BASE_URL must be an http(s) URL") from None
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.query
+            or parts.fragment
+            or "?" in value
+            or "#" in value
+        ):
+            raise ValueError(
+                "PHOTO_PUBLIC_BASE_URL must be an http(s) URL with a host and no query or fragment"
+            )
+        return value
 
     @field_validator("nominatim_user_agent")
     @classmethod
@@ -96,6 +130,20 @@ class Settings(DatabaseSettings):
             parse_smtp_url(self.smtp_url.get_secret_value())
         if self.email_backend == "smtp" and self.smtp_url is None:
             raise ValueError("SMTP_URL is required when EMAIL_BACKEND=smtp")
+        if self.photo_backend == "r2" and not all(
+            value is not None
+            and (value.get_secret_value() if isinstance(value, SecretStr) else value).strip()
+            for value in (
+                self.r2_account_id,
+                self.r2_access_key_id,
+                self.r2_secret_access_key,
+                self.r2_bucket,
+            )
+        ):
+            raise ValueError(
+                "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are all"
+                " required when PHOTO_BACKEND=r2"
+            )
         # An https web origin means a real deployment: refuse the dev defaults there.
         if self.web_origin.startswith("https://"):
             if self.secret_key.get_secret_value() == DEV_SECRET_KEY:
@@ -112,6 +160,16 @@ class Settings(DatabaseSettings):
                 raise ValueError(
                     "NOMINATIM_USER_AGENT must not be the dev value when GEOCODER=nominatim and "
                     "WEB_ORIGIN is https"
+                )
+            # Local disk is not durable on the deploy target: photos go to R2 there.
+            if "photo_backend" not in self.model_fields_set:
+                raise ValueError("PHOTO_BACKEND must be set explicitly when WEB_ORIGIN is https")
+            if self.photo_backend != "r2":
+                raise ValueError("PHOTO_BACKEND must be r2 when WEB_ORIGIN is https")
+            base = urlsplit(self.photo_public_base_url)
+            if base.scheme != "https" or base.hostname in {"localhost", "127.0.0.1"}:
+                raise ValueError(
+                    "PHOTO_PUBLIC_BASE_URL must be https and not localhost when WEB_ORIGIN is https"
                 )
         return self
 

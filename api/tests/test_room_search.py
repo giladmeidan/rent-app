@@ -179,7 +179,8 @@ def test_ac1_rooms_are_public_with_room_fields(
         assert page["room_fit"] is None, name
         no_like = {"liked_by_me": False, "liked_me": False}  # 0008a: a seeker on a room only
         assert page["like"] == (no_like if name == "seeker without a profile" else None), name
-        detail_only = {"applicant_count", "room_fit", "like"}  # `like`: 0008a
+        # `like`: 0008a; `photos`: 0010d
+        detail_only = {"applicant_count", "room_fit", "like", "photos"}
         assert {k: v for k, v in page.items() if k not in detail_only} == items[room]
 
         for listing_id in hidden:

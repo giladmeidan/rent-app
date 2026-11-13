@@ -46,10 +46,10 @@ endef
 ## dev: start db+redis, wait for Postgres, migrate, seed, start api (reload), worker and web (vite),
 ## then wait for /health (a settings error leaves the uvicorn reloader running but serving nothing)
 ## and for the web. -V gives web a fresh node_modules volume, so a changed lockfile is picked up.
-## `.outbox` is created 0777 first: the api (uid 10001) writes it, and Docker would create a missing
-## bind-mount source as root:root 755.
+## `.outbox` (the email outbox) and `.media` (the file photo store, spec 0010d) are created 0777 first:
+## the api (uid 10001) writes both, and Docker would create a missing bind-mount source as root:root 755.
 dev:
-	mkdir -p .outbox && chmod 0777 .outbox
+	mkdir -p .outbox .media && chmod 0777 .outbox .media
 	$(COMPOSE) up -d --wait db redis
 	$(MAKE) migrate
 	$(MAKE) seed
@@ -60,17 +60,18 @@ dev:
 ## dev-api: `dev` without the web: db+redis, migrate, seed, then api (reload) and worker, waiting on
 ## /health only. For an API spec built while another session needs no web port (WEB_PORT is per worktree).
 dev-api:
-	mkdir -p .outbox && chmod 0777 .outbox
+	mkdir -p .outbox .media && chmod 0777 .outbox .media
 	$(COMPOSE) up -d --wait db redis
 	$(MAKE) migrate
 	$(MAKE) seed
 	$(COMPOSE) up -d --build api worker
 	$(call wait_for,$(API_HEALTH),60,api)
 
-## down: stop the stack, remove its volumes and empty the email outbox
+## down: stop the stack, remove its volumes, empty the email outbox and the dev photo store
 down:
 	$(COMPOSE) down -v --remove-orphans
 	rm -f .outbox/*.json
+	rm -f .media/*.webp .media/.*.tmp
 
 ## migrate: alembic upgrade head against DATABASE_URL
 migrate:
