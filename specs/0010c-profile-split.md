@@ -169,6 +169,14 @@ switch) and `specs/MARKET-PLAN.md` section 7 "Profile (0010c)". `0010f` reads th
 - Re-wording the rest of the profile copy that still uses slash forms (only the strings this spec touches are
   rewritten; the rest is FOLLOWUPS' brand-voice pass).
 
+**Build deviations (spec session, 2026-11-14):** `api/app/matching/score.py` (the smoker and pets terms use
+`IS TRUE` so mypy accepts the nullable columns; scores unchanged, every score test passes as before);
+`api/app/routers/people.py::my_likes` computes `seeker` with `_sees_room_privacy(user, _profile_user_id(db, user))`
+instead of `True` (0010b's hand-over, FOLLOWUPS); `services/search.py::_with_profile` joins only a profile with the
+looking part (review round 1: closes the read-committed window between `has_profile` and the match statement);
+`web/src/features/search/SearchResults.tsx` (prop typed `LookingProfile | undefined`) and `web/src/app/RouteFocus.tsx`
+(a comment).
+
 **New dependencies:** none.
 
 ## Data
@@ -226,6 +234,8 @@ profile artboard + the brand kit); the three parts reuse its section, switch and
   - `rooms.apply.fillRoomSection` (changed text): "למילוי 'עליי' ו'מה מחפשים'"
   - `likes.errors.roomSection` (changed text; `useLikeRoom.ts:23` shows it for both `room_section_required` and `seeker_profile_required`): "כדי לסמן לייק לחדר צריך למלא בפרופיל את 'עליי' ואת 'מה מחפשים'."
   - `rooms.apply.roomSectionRequired` (changed text, it named the old section): "החדר מיועד ל{{who}} בלבד. כדי להגיש מועמדות צריך למלא בפרופיל את 'עליי' ואת 'מה מחפשים'."
+  - `match.nudge` (changed text, build: it now shows on both sides to any account without the looking part): "רוצה לראות ציון התאמה? ממלאים בפרופיל את 'מה מחפשים' פעם אחת."
+  - `profile.intro` (changed text, review round 1: it framed the page as housing-only and had a slash form): "כמה פרטים, פעם אחת. מ'מה מחפשים' מחושב ציון ההתאמה, ובעלי מודעות שמגישים אליהם מועמדות רואים חלק מהפרטים."
   - `likes.likedMeEmpty` (changed text, it named the old switch): "עוד אין חדרים שאהבו אותך. כדאי להפעיל בפרופיל את 'להציג את הכרטיס שלי בשוק השותפים'."
   - Removed (and from `i18n-check`'s allow-list if listed): `profile.room.title`, `profile.room.hint`,
     `profile.room.switch`, `profile.room.privacy`, `profile.room.peopleVisible`,
