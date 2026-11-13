@@ -656,6 +656,8 @@ _ROLE_READS_ALLOWED = {
         "routers/search.py",
         'return user is not None and (user.role == "seeker" or profile_user_id is not None)',
     ),
+    # `user_out` echoes the caller's own role in `UserOut` (0010j): a response field, not a gate.
+    ("routers/auth.py", "role=user.role,"),
 }
 
 
