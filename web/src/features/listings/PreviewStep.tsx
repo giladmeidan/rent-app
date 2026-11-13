@@ -14,6 +14,8 @@ export type PublishError = 'capReached' | 'areaInactive' | 'invalid' | 'failed';
 type Props = {
   body: ListingInBody;
   today: string;
+  /** The first photo's address (spec 0010e), shown on the card as "my listings" will. */
+  coverUrl: string | null;
   error: PublishError | null;
   onRetry: () => void;
   onBackToDetails: () => void;
@@ -21,14 +23,14 @@ type Props = {
 
 const alertText = 'text-body-sm font-medium text-danger';
 
-/** Step 4: the card exactly as "my listings" will render it, a room's flatmates and questionnaire,
+/** The last step: the card exactly as "my listings" will render it, a room's flatmates and questionnaire,
  * the owner's preferences as the listing page shows them, and the publish errors. The step's
  * heading and hint are the wizard's. */
-export function PreviewStep({ body, today, error, onRetry, onBackToDetails }: Props) {
+export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDetails }: Props) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <ListingCard listing={body} today={today} />
+      <ListingCard listing={body} today={today} coverUrl={coverUrl} />
       {body.listing_type === 'room' && <RoomPreview body={body} />}
       <OwnerPreferences listing={body} />
       {error === 'capReached' && (

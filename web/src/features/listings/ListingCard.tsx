@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -97,6 +97,9 @@ type Props = {
    * the row anatomy at every width with a smaller photo, and room at the price row's end for a
    * close button (the search map's docked card, spec 0009w). */
   layout?: 'stack' | 'row' | 'compact';
+  /** The cover photo's small address (spec 0010e): shown in the photo box, the placeholder only
+   * without one or when it fails to load. */
+  coverUrl?: string | null;
 };
 
 /**
@@ -114,9 +117,18 @@ export function ListingCard({
   seekerBirthYear,
   titleAs = 'h2',
   layout = 'stack',
+  coverUrl = null,
 }: Props) {
   const { t } = useTranslation();
   const isRoom = listing.listing_type === 'room';
+  // A cover that failed to load shows the placeholder; a new address is tried again.
+  const [coverFailed, setCoverFailed] = useState(false);
+  const [triedUrl, setTriedUrl] = useState(coverUrl);
+  if (triedUrl !== coverUrl) {
+    setTriedUrl(coverUrl);
+    setCoverFailed(false);
+  }
+  const cover = coverFailed ? null : coverUrl;
 
   // The caller's own listing first (spec 0010b), then the room chips; every other fact reads in
   // the facts line.
@@ -180,24 +192,36 @@ export function ListingCard({
         {/* The photo box: the brand's 16:10 crop (no aspect token), 176px wide in the row layout
             and 96px in the compact one. */}
         <div
-          className={`relative flex aspect-[16/10] items-center justify-center bg-surface-subtle ${photoClass}`}
+          className={`relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-surface-subtle ${photoClass}`}
         >
-          <svg
-            aria-hidden="true"
-            width="40"
-            height="40"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            className="text-ink-muted"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="9" cy="10" r="1.6" />
-            <path d="M21 16l-5-5-8 8" />
-          </svg>
+          {cover !== null ? (
+            // `alt=""`: the card's title names the listing.
+            <img
+              src={cover}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setCoverFailed(true)}
+              className="absolute inset-0 size-full object-cover"
+            />
+          ) : (
+            <svg
+              aria-hidden="true"
+              width="40"
+              height="40"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              className="text-ink-muted"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <circle cx="9" cy="10" r="1.6" />
+              <path d="M21 16l-5-5-8 8" />
+            </svg>
+          )}
           {isRoom && (
             <Tag size="sm" className="absolute start-2 top-2">
               {t('listings.card.room')}

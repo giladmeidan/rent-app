@@ -98,7 +98,8 @@ export function errorFor(input: HTMLElement): HTMLElement {
   return alerts[0] as HTMLElement;
 }
 
-/** Renders the wizard, chooses `type`, fills the AC4 values and goes to the preferences. */
+/** Renders the wizard, chooses `type`, fills the AC4 values and goes to the preferences, through
+ * the photos step with no photo (spec 0010e). */
 export async function toPreferences(client = testQueryClient(), type: ListingType = 'apartment') {
   const view = renderWizard(client);
   chooseTypeAndContinue(he.listings.type[type]);
@@ -106,5 +107,7 @@ export async function toPreferences(client = testQueryClient(), type: ListingTyp
   fillValidDetails(type);
   fireEvent.click(nextButton());
   expect(progress()).toHaveAttribute('aria-valuenow', '3');
+  fireEvent.click(nextButton());
+  expect(progress()).toHaveAttribute('aria-valuenow', '4');
   return view;
 }

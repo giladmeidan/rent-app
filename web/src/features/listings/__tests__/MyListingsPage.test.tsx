@@ -683,4 +683,89 @@ describe('MyListingsPage', () => {
     );
     expect(screen.queryByText(he.listings.mine.empty)).toBeNull();
   });
+
+  it('ac3_photos_failed_message', async () => {
+    const mine = (state: unknown) => {
+      mockApi({ 'GET /me/listings': [json([listing()])] });
+      return renderRoutes(
+        { pathname: '/me/listings', state },
+        <Routes>
+          <Route path="/me/listings" element={<MyListingsPage />} />
+        </Routes>,
+      );
+    };
+
+    // Published with one photo not uploaded: an alert under the published line.
+    let view = mine({ published: true, photosFailed: 1 });
+    const published = await screen.findByText(he.listings.mine.published);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(he.listings.mine.photosFailed_one);
+    expect(alert).toHaveTextContent('תמונה אחת לא הועלתה. אפשר להוסיף אותה שוב בעריכה.');
+    expect(
+      published.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Saved with two and with three: the plural forms.
+    for (const [count, text] of [
+      [2, he.listings.mine.photosFailed_two],
+      [3, i18n.t('listings.mine.photosFailed', { count: 3 })],
+    ] as const) {
+      view = mine({ saved: true, photosFailed: count });
+      expect(await screen.findByText(he.listings.edit.saved)).toBeVisible();
+      expect(await screen.findByRole('alert')).toHaveTextContent(text);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+    expect(i18n.t('listings.mine.photosFailed', { count: 3 })).toBe(
+      '3 תמונות לא הועלו. אפשר להוסיף אותן שוב בעריכה.',
+    );
+
+    // None failed (or no count at all): the published line alone.
+    for (const state of [
+      { published: true, photosFailed: 0 },
+      { published: true },
+      { photosFailed: 2 },
+    ]) {
+      view = mine(state);
+      await screen.findByRole('article');
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac6_cover', async () => {
+    const photo = {
+      id: '0000000a-0000-0000-0000-00000000000a',
+      small_url: 'https://media.example.test/cover-s.webp',
+      large_url: 'https://media.example.test/cover-l.webp',
+    };
+    const second = {
+      id: '0000000b-0000-0000-0000-00000000000b',
+      small_url: 'https://media.example.test/second-s.webp',
+      large_url: 'https://media.example.test/second-l.webp',
+    };
+    const withPhotos = listing({ street: 'עם תמונות', photos: [photo, second] });
+    const without = listing({ street: 'בלי תמונות' });
+    mockApi({ 'GET /me/listings': [json([withPhotos, without])] });
+    render();
+    const cards = await screen.findAllByRole('article');
+    expect(cards).toHaveLength(2);
+    const [first, other] = cards as [HTMLElement, HTMLElement];
+    expect(first).toHaveTextContent('עם תמונות');
+    // The first photo's small copy is the cover.
+    const images = first.querySelectorAll('img');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toHaveAttribute('src', photo.small_url);
+    expect(images[0]).toHaveAttribute('alt', '');
+    // No photos: the placeholder.
+    expect(other).toHaveTextContent('בלי תמונות');
+    expect(other.querySelector('img')).toBeNull();
+    expect(other.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
 });
