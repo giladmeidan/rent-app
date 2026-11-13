@@ -17,11 +17,12 @@ the objects after the commit (a failed object delete is logged and leaves an unr
 spec Risks). Person photos (`users.photo_key`) are spec 0010j's; it reuses `encode`, `new_key`, the
 store and the rate limit here."""
 
+import asyncio
 import logging
 import secrets
-import threading
 import uuid
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -38,7 +39,7 @@ from app.redis_client import RedisClient
 from app.schemas.photo import PhotoOut
 from app.services.listings import ListingNotFoundError
 from app.services.photo_store import PhotoStore, PhotoStoreUnavailable
-from app.services.rate_limit import count_or_raise
+from app.services.rate_limit import RateLimitedError, count_or_raise
 
 log = logging.getLogger(__name__)
 
@@ -62,8 +63,19 @@ PHOTO_RATE_LIMIT_DAY = 300
 # A backstop: Pillow refuses (`DecompressionBombError`) anything over twice this at open. `encode`
 # checks `MAX_PIXELS` itself on the header, before any decode.
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
-# At most two images are decoded at once per process (memory bound).
-_ENCODE_SLOTS = threading.BoundedSemaphore(2)
+# Uploads decode on these two threads only, never on the shared anyio threadpool: at most two images
+# are decoded at once per process, and only two threads ever hold a decode's malloc arena (with
+# `MALLOC_ARENA_MAX=2` in the image). A waiting upload holds no threadpool thread.
+_ENCODE_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="photo-encode")
+
+# One upload in flight per user (`take_upload_slot`); the TTL frees a slot a crashed request left.
+UPLOAD_SLOT_TTL_S = 60
+UPLOAD_SLOT_RETRY_AFTER_S = 5
+# Deletes the slot only if it still holds this request's token.
+_RELEASE_SLOT = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+return 0
+"""
 
 
 class PhotoTooLargeError(Exception):
@@ -131,6 +143,24 @@ def cover_out(cover_id: uuid.UUID | None, cover_key: str | None) -> PhotoOut | N
     return photo_out(cover_id, cover_key)
 
 
+def upload_slot_key(user_id: uuid.UUID) -> str:
+    return f"rl:photo:user:{user_id}:inflight"
+
+
+def take_upload_slot(r: RedisClient, user_id: uuid.UUID) -> str:
+    """Take the user's one upload slot and return its token; `RateLimitedError` (retry after
+    `UPLOAD_SLOT_RETRY_AFTER_S`) while another upload of theirs is in flight."""
+    token = secrets.token_hex(16)
+    if not r.set(upload_slot_key(user_id), token, nx=True, ex=UPLOAD_SLOT_TTL_S):
+        raise RateLimitedError(retry_after=UPLOAD_SLOT_RETRY_AFTER_S)
+    return token
+
+
+def release_upload_slot(r: RedisClient, user_id: uuid.UUID, token: str) -> None:
+    """Free the user's upload slot if it is still the one `token` took."""
+    r.eval(_RELEASE_SLOT, 1, upload_slot_key(user_id), token)  # type: ignore[no-untyped-call]  # untyped stub
+
+
 def count_photo_upload(r: RedisClient, user_id: uuid.UUID) -> None:
     """Count one upload attempt against the user's hourly and daily photo limits; raises
     `RateLimitedError` (counting nothing) when either is reached."""
@@ -178,19 +208,23 @@ def encode(data: bytes) -> Encoded:
     """Decode `data` (JPEG, MPO, PNG or WebP, by its bytes, never by a header) and re-encode it as
     two WebP copies without metadata. Raises `PhotoTooLargeError` over `MAX_PIXELS` (checked on the
     header, before decoding) and `UnsupportedImageError` for anything else that fails. Pure: no
-    database, no store."""
-    with _ENCODE_SLOTS:
-        try:
-            return _encode(data)
-        except (PhotoTooLargeError, UnsupportedImageError):
-            raise
-        except Image.DecompressionBombError:
-            raise PhotoTooLargeError from None
-        except UnidentifiedImageError:
-            raise UnsupportedImageError from None
-        except Exception as exc:  # corrupt headers or EXIF raise all sorts; never a 500
-            log.warning("photo decode failed: %s", type(exc).__name__)
-            raise UnsupportedImageError from None
+    database, no store. An upload calls it through `encode_upload`."""
+    try:
+        return _encode(data)
+    except (PhotoTooLargeError, UnsupportedImageError):
+        raise
+    except Image.DecompressionBombError:
+        raise PhotoTooLargeError from None
+    except UnidentifiedImageError:
+        raise UnsupportedImageError from None
+    except Exception as exc:  # corrupt headers or EXIF raise all sorts; never a 500
+        log.warning("photo decode failed: %s", type(exc).__name__)
+        raise UnsupportedImageError from None
+
+
+async def encode_upload(data: bytes) -> Encoded:
+    """`encode` on the dedicated two-thread photo pool (never the shared threadpool)."""
+    return await asyncio.get_running_loop().run_in_executor(_ENCODE_POOL, encode, data)
 
 
 def _lock_own_listing(db: Session, owner_id: uuid.UUID, listing_id: uuid.UUID) -> None:
@@ -212,6 +246,19 @@ def _photo_count(db: Session, listing_id: uuid.UUID) -> int:
     ).scalar_one()
 
 
+def check_listing_upload(db: Session, owner: User, listing_id: uuid.UUID) -> None:
+    """Before an upload's body is read (no lock): `ListingNotFoundError` unless the listing is the
+    caller's, `PhotoLimitError` when it is full. `add_listing_photo` checks both again under the
+    lock."""
+    found = db.scalar(
+        select(Listing.id).where(Listing.id == listing_id, Listing.owner_id == owner.id)
+    )
+    if found is None:
+        raise ListingNotFoundError
+    if _photo_count(db, listing_id) >= MAX_LISTING_PHOTOS:
+        raise PhotoLimitError
+
+
 def _discard(store: PhotoStore, names: Sequence[str]) -> None:
     """Delete objects nothing references; a failure is logged (the store logs its own detail)."""
     try:
@@ -221,13 +268,12 @@ def _discard(store: PhotoStore, names: Sequence[str]) -> None:
 
 
 def add_listing_photo(
-    db: Session, store: PhotoStore, owner: User, listing_id: uuid.UUID, data: bytes
+    db: Session, store: PhotoStore, owner: User, listing_id: uuid.UUID, encoded: Encoded
 ) -> ListingPhoto:
-    """Encode `data`, store both copies under a new key and add the photo last on the caller's
-    listing. Raises the `encode` errors (before any database or store work),
-    `PhotoStoreUnavailable`, `ListingNotFoundError` and `PhotoLimitError`; on any failure after the
-    first `put` both objects are deleted again."""
-    encoded = encode(data)
+    """Store both copies of an encoded upload under a new key and add the photo last on the
+    caller's listing. Raises `PhotoStoreUnavailable`, `ListingNotFoundError` and
+    `PhotoLimitError` (re-checked under the listing lock); on any failure both objects are deleted
+    again."""
     key = new_key()
     names = object_names(key)
     try:

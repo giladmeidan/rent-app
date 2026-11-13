@@ -5,11 +5,14 @@ caller's own, whatever its type or status and whatever the caller's role: an unk
 another's are one 404 `not_found`.
 
 Upload: the request body **is** the image (`Content-Type: image/jpeg`, `image/png` or `image/webp`;
-not multipart, and the header is not trusted: Pillow decides the format). Before the body is read,
-the attempt is counted against the user's photo rate limit (a 429 with `Retry-After` costs no
-bandwidth) and the request's transaction is committed, so a slow body, the re-encode and the store
-never hold a pooled connection idle in a transaction. `read_capped` stops reading past 8 MB. The
-re-encode, the store and the database run in the threadpool: the event loop is never blocked.
+not multipart, and the header is not trusted: Pillow decides the format). Before the body is read
+(`prepare_upload`): the attempt is counted against the user's photo rate limit, the listing must be
+the caller's (404) and not full (409), the user's one upload slot is taken (a second upload in
+flight is a 429, `Retry-After: 5`), and the request's transaction is committed, so a slow body,
+the re-encode and the store never hold a pooled connection idle in a transaction. None of these
+refusals reads the body or decodes anything. `read_capped` stops reading past 8 MB. The re-encode
+runs on the two-thread photo pool (`encode_upload`), the store and the database in the
+threadpool: the event loop is never blocked.
 Nothing here logs or echoes the body; a 413 / 415 logs the route and the error code only.
 
 Delete and reorder are not rate-limited. Spec 0010j adds its person upload route to this router the
@@ -17,6 +20,9 @@ same way, counting against the same limit."""
 
 import logging
 import uuid
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from functools import partial
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -112,29 +118,54 @@ async def read_capped(request: Request, cap: int) -> bytes:
     return b"".join(chunks)
 
 
-def count_upload_and_release(db: Session, r: RedisClient, user: User) -> None:
-    """Count one upload attempt (`RateLimitedError` at the limit), then end the transaction the
-    session lookup began, returning its connection to the pool before the body is read.
-    `expire_on_commit=False` keeps `user` loaded. Run in the threadpool (sync Redis and DB)."""
+def prepare_upload(
+    db: Session, r: RedisClient, user: User, check: Callable[[], None] | None = None
+) -> str:
+    """Everything an upload does before its body is read, in the threadpool (sync Redis and DB):
+    count the attempt (`RateLimitedError`), run `check` (the route's ownership and cap check, no
+    lock), take the user's one upload slot (`RateLimitedError`, retry after 5 s) and end the
+    transaction the session lookup began, so no pooled connection waits on the body, the encode or
+    the store (`expire_on_commit=False` keeps `user` loaded). Returns the slot's token; the caller
+    releases it with `release_upload_slot` once the upload ends."""
+    photos_service.count_photo_upload(r, user.id)
+    if check is not None:
+        check()
+    token = photos_service.take_upload_slot(r, user.id)
     try:
-        photos_service.count_photo_upload(r, user.id)
-    finally:
         db.commit()
-
-
-async def _read_upload(request: Request, db: Session, r: RedisClient, user: User) -> bytes:
-    """The rate limit and the capped body read shared by every upload route."""
-    try:
-        await run_in_threadpool(count_upload_and_release, db, r, user)
-    except RateLimitedError as exc:
-        raise HTTPException(
-            status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
-        ) from None
-    try:
-        return await read_capped(request, photos_service.MAX_PHOTO_BYTES)
-    except HTTPException as exc:
-        _log_refused(request, exc.detail)
+    except BaseException:
+        photos_service.release_upload_slot(r, user.id, token)
         raise
+    return token
+
+
+@asynccontextmanager
+async def upload_body(
+    request: Request,
+    db: Session,
+    r: RedisClient,
+    user: User,
+    check: Callable[[], None] | None = None,
+) -> AsyncIterator[bytes]:
+    """The pre-body step (`prepare_upload`) and the capped body read shared by every upload route;
+    the user's upload slot is held for the whole `async with` block and released after it,
+    whatever the outcome. The pre-body errors (`RateLimitedError` and `check`'s) propagate."""
+    token = await run_in_threadpool(prepare_upload, db, r, user, check)
+    try:
+        try:
+            data = await read_capped(request, photos_service.MAX_PHOTO_BYTES)
+        except HTTPException as exc:
+            _log_refused(request, exc.detail)
+            raise
+        yield data
+    finally:
+        await run_in_threadpool(photos_service.release_upload_slot, r, user.id, token)
+
+
+def _rate_limited(exc: RateLimitedError) -> HTTPException:
+    return HTTPException(
+        status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
+    )
 
 
 def _log_refused(request: Request, code: object) -> None:
@@ -163,11 +194,15 @@ async def upload_listing_photo(
     store: StoreDep,
 ) -> PhotoOut:
     """Add one photo (the raw image as the body) last on the caller's listing."""
-    data = await _read_upload(request, db, r, user)
+    check = partial(photos_service.check_listing_upload, db, user, listing_id)
     try:
-        photo = await run_in_threadpool(
-            photos_service.add_listing_photo, db, store, user, listing_id, data
-        )
+        async with upload_body(request, db, r, user, check) as data:
+            encoded = await photos_service.encode_upload(data)
+            photo = await run_in_threadpool(
+                photos_service.add_listing_photo, db, store, user, listing_id, encoded
+            )
+    except RateLimitedError as exc:
+        raise _rate_limited(exc) from None
     except photos_service.PhotoTooLargeError:
         _log_refused(request, "photo_too_large")
         raise _too_large() from None

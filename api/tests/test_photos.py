@@ -329,6 +329,10 @@ def test_ac4_limit_of_ten_under_concurrency(
         real_lock(db, owner_id, listing_id)
 
     monkeypatch.setattr(photos_service, "_lock_own_listing", lock_together)
+    # One user has one upload in flight (`take_upload_slot`); the lock is the line behind it (an
+    # expired slot), so this test turns the slot off to reach the lock with two uploads.
+    monkeypatch.setattr(photos_service, "take_upload_slot", lambda r, user_id: "token")
+    monkeypatch.setattr(photos_service, "release_upload_slot", lambda r, user_id, token: None)
     second = TestClient(owner.app, cookies=dict(owner.cookies))
     results: list[httpx.Response] = []
 
@@ -537,8 +541,15 @@ def test_ac8_store_and_db_failures_leave_nothing(
     photo_store: FilePhotoStore,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The database fails after both puts.
+    # The database fails after both puts: the locked count (the second; the first is the
+    # pre-body check's).
+    real_count = photos_service._photo_count
+    counts: list[uuid.UUID] = []
+
     def broken_count(db: Session, listing_id: uuid.UUID) -> int:
+        counts.append(listing_id)
+        if len(counts) == 1:
+            return real_count(db, listing_id)
         raise OperationalError("SELECT count(*)", {}, Exception("connection lost"))
 
     with monkeypatch.context() as patch:
@@ -546,6 +557,7 @@ def test_ac8_store_and_db_failures_leave_nothing(
         response = _upload(owner, listing, jpeg())
     assert response.status_code == 503
     assert response.json() == {"detail": "database unavailable"}
+    assert len(counts) == 2
     assert _files(photo_store) == set()
     assert _count_rows(db_engine) == 0
 
@@ -696,7 +708,12 @@ def test_ac11_media_mount_file_backend_only(
                 assert served.status_code == 200
                 assert served.headers["content-type"] == "image/webp"
                 assert _image(served.content).format == "WEBP"
-            assert file_client.get("/media/../.env").status_code == 404
+            # A path out of PHOTO_DIR (percent-encoded, so the client does not normalise it away)
+            # never reaches a file beside it.
+            (media.parent / ".env").write_text("SECRET_KEY=fake-not-served")
+            escaped = file_client.get("/media/%2e%2e/.env")
+            assert escaped.status_code == 404
+            assert b"fake-not-served" not in escaped.content
 
         monkeypatch.setenv("PHOTO_BACKEND", "r2")
         for name, value in (
@@ -788,3 +805,168 @@ def test_ac12_r2_store(caplog: pytest.LogCaptureFixture) -> None:
     assert "InternalError" in caplog.text
     for secret in (key, "fake-secret", "fake-key-id"):
         assert secret not in caplog.text
+
+
+# --- review fixes: the encode pool, one upload in flight, refusals before the body ---------------
+
+
+class _CountingStore(FilePhotoStore):
+    def __init__(self, photo_dir: Path) -> None:
+        super().__init__(photo_dir)
+        self.puts = 0
+
+    def put(self, name: str, data: bytes) -> None:
+        self.puts += 1
+        super().put(name, data)
+
+
+def _read_spy(monkeypatch: pytest.MonkeyPatch) -> list[Request]:
+    """Every `read_capped` call the upload routes make."""
+    reads: list[Request] = []
+    real_read = photos_router.read_capped
+
+    async def spy(request: Request, cap: int) -> bytes:
+        reads.append(request)
+        return await real_read(request, cap)
+
+    monkeypatch.setattr(photos_router, "read_capped", spy)
+    return reads
+
+
+def _slot_taken(owner_id: uuid.UUID) -> bool:
+    return bool(get_redis().exists(photos_service.upload_slot_key(owner_id)))
+
+
+def test_nf1_encode_runs_on_the_photo_pool(
+    owner: TestClient,
+    listing: uuid.UUID,
+    photo_store: FilePhotoStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    threads: list[str] = []
+    real_encode = photos_service.encode
+
+    def spy(data: bytes) -> photos_service.Encoded:
+        threads.append(threading.current_thread().name)
+        return real_encode(data)
+
+    monkeypatch.setattr(photos_service, "encode", spy)
+    for _ in range(3):
+        assert _upload(owner, listing, jpeg()).status_code == 201
+
+    assert len(threads) == 3
+    assert all(name.startswith("photo-encode") for name in threads), threads
+
+
+def test_ac9_one_upload_in_flight_per_user(
+    owner: TestClient,
+    owner_id: uuid.UUID,
+    listing: uuid.UUID,
+    db_engine: Engine,
+    photo_store: FilePhotoStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entered, go = threading.Event(), threading.Event()
+    real_encode = photos_service.encode
+
+    def held(data: bytes) -> photos_service.Encoded:
+        entered.set()
+        assert go.wait(20)
+        return real_encode(data)
+
+    monkeypatch.setattr(photos_service, "encode", held)
+    reads = _read_spy(monkeypatch)
+    first: list[httpx.Response] = []
+    thread = threading.Thread(target=lambda: first.append(_upload(owner, listing, jpeg())))
+    thread.start()
+    try:
+        assert entered.wait(20)
+        assert _slot_taken(owner_id)
+        second = TestClient(owner.app, cookies=dict(owner.cookies))
+
+        refused = _upload(second, listing, jpeg())
+
+        assert (refused.status_code, refused.json()) == (429, {"detail": "rate_limited"})
+        assert refused.headers["Retry-After"] == "5"
+        assert len(reads) == 1  # the first upload's only: the second never read its body
+    finally:
+        go.set()
+        thread.join(timeout=30)
+    assert first[0].status_code == 201, first[0].text
+    assert not _slot_taken(owner_id)
+    assert _upload(owner, listing, jpeg()).status_code == 201
+    assert len(_rows(db_engine, listing)) == 2
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")
+def test_ac9_upload_slot_freed_after_failures(
+    client: TestClient,
+    owner: TestClient,
+    owner_id: uuid.UUID,
+    listing: uuid.UUID,
+    db_engine: Engine,
+    photo_store: FilePhotoStore,
+) -> None:
+    failures: list[tuple[Any, bytes, int]] = [
+        (listing, b"", 415),
+        (listing, _save(Image.new("1", (10_000, 5_000)), "PNG"), 413),
+        (uuid.uuid4(), jpeg(), 404),
+    ]
+    for listing_id, data, status in failures:
+        assert _upload(owner, listing_id, data).status_code == status
+        assert not _slot_taken(owner_id), status
+
+    _app(client).dependency_overrides[get_photo_store] = _provide(
+        _FailingPut(photo_store.photo_dir, fail_on=1)
+    )
+    assert _upload(owner, listing, jpeg()).status_code == 503
+    assert not _slot_taken(owner_id)
+
+    _app(client).dependency_overrides[get_photo_store] = _provide(photo_store)
+    assert _upload(owner, listing, jpeg()).status_code == 201
+    assert not _slot_taken(owner_id)
+    assert len(_rows(db_engine, listing)) == 1
+
+
+def test_ac5_refused_uploads_never_read_decode_or_store(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    owner_id: uuid.UUID,
+    listing: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _CountingStore(tmp_path / "counted")
+    _app(client).dependency_overrides[get_photo_store] = _provide(store)
+    reads = _read_spy(monkeypatch)
+    encodes: list[bytes] = []
+    real_encode = photos_service.encode
+
+    def spy(data: bytes) -> photos_service.Encoded:
+        encodes.append(data)
+        return real_encode(data)
+
+    monkeypatch.setattr(photos_service, "encode", spy)
+    full = make_listing(db_engine, owner_id, gush_dan)
+    for position in range(10):
+        make_photo(db_engine, full, position=position)
+    o2 = signup(client, outbox, "o2@example.com", "owner")
+
+    try:
+        for caller, listing_id, expected in (
+            (o2, listing, (404, NOT_FOUND)),
+            (owner, uuid.uuid4(), (404, NOT_FOUND)),
+            (owner, full, (409, {"detail": "photo_limit"})),
+        ):
+            response = _upload(caller, listing_id, jpeg())
+            assert (response.status_code, response.json()) == expected
+        assert (reads, encodes, store.puts) == ([], [], 0)
+        assert _count_rows(db_engine) == 10
+
+        assert _upload(owner, listing, jpeg()).status_code == 201  # the spies do see a real one
+        assert (len(reads), len(encodes), store.puts) == (1, 1, 2)
+    finally:
+        _app(client).dependency_overrides.pop(get_photo_store, None)
