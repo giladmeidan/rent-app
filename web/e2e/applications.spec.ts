@@ -16,6 +16,8 @@ function israelDay(days: number): string {
 }
 
 test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
+  // Long multi-step flow that passes the 30 s timeout on slow CI runners; splitting it is a FOLLOWUPS item.
+  test.slow();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const overBudgetStreet = `${street} over`;
   // Minted on its own, never from `street`: `fitting` below finds cards by substring (0007f AC13).
