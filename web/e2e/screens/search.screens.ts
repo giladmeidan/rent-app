@@ -6,7 +6,9 @@ import { WEB_ORIGIN } from './origin';
 
 // The visual check of spec 0009i (`make screens`): /search in seven states at 390px and 1440px.
 // Every API call is mocked, so the data is deterministic and nothing signs up. The four listings
-// copy the artboards (Search.dc.html / SearchDesktop.dc.html).
+// copy the artboards (Search.dc.html / SearchDesktop.dc.html). Spec 0009v adds the map's tiers,
+// marks, seen chip, a bubble and the same-place list (into screens/0009v/); on the map the four
+// listings' points are spread north to south, so their pins stay apart at the first (fitted) view.
 
 const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 
@@ -60,10 +62,26 @@ function listing(n: number, overrides: Record<string, unknown>) {
   };
 }
 
+/** Where the listings sit: their true points (the list states), or spread on the map (0009v), plus
+ * a tight pair or two at one point. */
+type MapFixtures = 'true' | 'spread' | 'bubble' | 'samePlace';
+
+/** The four listings' map points, each ~0.04 deg of latitude (~80 px at the fitted view) apart. */
+const SPREAD = {
+  1: { lng: 34.811, lat: 32.0707 },
+  2: { lng: 34.79, lat: 32.03 },
+  3: { lng: 34.8247, lat: 32.11 },
+  4: { lng: 34.8, lat: 31.99 },
+} as const;
+
 /** The artboards' four listings. A visitor gets no match and no flatmate ages (room privacy). */
-function listings(seeker: boolean) {
+function listings(seeker: boolean, map: MapFixtures = 'true') {
   const match = (m: Match) => (seeker ? m : null);
-  return [
+  // On the map the true points of 1 and 3 (and of 2 and 4) are ~6 px apart at the fitted view and
+  // fold into bubbles; spread, each pin stands alone (0009v AC11).
+  const at = (n: 1 | 2 | 3 | 4, lng: number, lat: number) =>
+    map === 'true' ? { lng, lat } : SPREAD[n];
+  const items = [
     listing(1, {
       street: 'כצנלסון',
       city: 'גבעתיים',
@@ -76,8 +94,7 @@ function listings(seeker: boolean) {
       elevator: true,
       parking_spots: 1,
       furnished: 'partial',
-      lat: 32.0707,
-      lng: 34.811,
+      ...at(1, 34.811, 32.0707),
       match: match({ score: 87, agrees: ['budget', 'area'], differs: null }),
     }),
     listing(2, {
@@ -95,8 +112,7 @@ function listings(seeker: boolean) {
       gender_preference: 'women',
       flatmates_count: 2,
       flatmate_ages: seeker ? [27, 30] : [],
-      lat: 32.0565,
-      lng: 34.7695,
+      ...at(2, 34.7695, 32.0565),
       match: match({ score: 82, agrees: ['budget', 'household'], differs: null }),
     }),
     listing(3, {
@@ -109,8 +125,7 @@ function listings(seeker: boolean) {
       price_ils: 6500,
       available_from: '2026-12-15',
       elevator: true,
-      lat: 32.0824,
-      lng: 34.8147,
+      ...at(3, 34.8147, 32.0824),
       match: match({ score: 64, agrees: ['budget'], differs: 'pets' }),
     }),
     listing(4, {
@@ -124,11 +139,34 @@ function listings(seeker: boolean) {
       available_from: '2027-03-01',
       parking_spots: 1,
       furnished: 'partial',
-      lat: 32.0505,
-      lng: 34.7568,
+      ...at(4, 34.7568, 32.0505),
       match: match({ score: 58, agrees: ['area'], differs: 'move_in' }),
     }),
   ];
+  // Two more listings: a tight pair (a bubble that zooms in) or two at one point (a bubble that
+  // lists them).
+  if (map === 'bubble' || map === 'samePlace') {
+    const second = map === 'bubble' ? { lng: 34.9205, lat: 32.0305 } : { lng: 34.92, lat: 32.03 };
+    items.push(
+      listing(5, {
+        street: 'ז׳בוטינסקי',
+        city: 'רמת גן',
+        price_ils: 5800,
+        lng: 34.92,
+        lat: 32.03,
+        match: match({ score: 71, agrees: ['budget'], differs: null }),
+      }),
+      listing(6, {
+        street: 'ז׳בוטינסקי',
+        city: 'רמת גן',
+        rooms: 4,
+        price_ils: 6900,
+        ...second,
+        match: match({ score: 52, agrees: ['area'], differs: 'pets' }),
+      }),
+    );
+  }
+  return items;
 }
 
 const seekerUser = {
@@ -161,7 +199,10 @@ const seekerProfile = {
 type Search = 'items' | 'empty' | 'never' | 'error';
 
 /** Routes the API: everything unknown is a 404, `GET /listings` answers as `search` says. */
-async function mockApi(page: Page, { seeker, search }: { seeker: boolean; search: Search }) {
+async function mockApi(
+  page: Page,
+  { seeker, search, map = 'true' }: { seeker: boolean; search: Search; map?: MapFixtures },
+) {
   await routeTiles(page);
   await page.route(`${API}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -182,8 +223,38 @@ async function mockApi(page: Page, { seeker, search }: { seeker: boolean; search
     if (url.pathname === '/me/profile') {
       return seeker ? json(route, seekerProfile) : json(route, { detail: 'unauthenticated' }, 401);
     }
+    // The seeker liked listing 2 (a room) and applied to listing 3 (0009v AC11).
+    if (url.pathname === '/me/likes') {
+      if (!seeker) return json(route, { detail: 'unauthenticated' }, 401);
+      const liked = listings(true, map)[1];
+      return json(route, {
+        liked_me: [],
+        mine: [{ listing: liked, liked_at: '2026-11-10T10:00:00Z' }],
+      });
+    }
+    if (url.pathname === '/me/applications') {
+      if (!seeker) return json(route, { detail: 'unauthenticated' }, 401);
+      return json(route, [
+        {
+          id: '00000000-0000-0000-0000-0000000000b1',
+          status: 'submitted',
+          source: 'apply',
+          message: 'fake message for the screens',
+          created_at: '2026-11-10T10:00:00Z',
+          updated_at: '2026-11-10T10:00:00Z',
+          listing: {
+            id: '00000000-0000-0000-0000-000000000003',
+            listing_type: 'apartment',
+            city: 'רמת גן',
+            street: 'ביאליק',
+            rooms: 3,
+            price_ils: 6500,
+          },
+        },
+      ]);
+    }
     if (url.pathname === '/listings') {
-      const items = listings(seeker);
+      const items = listings(seeker, map);
       if (search === 'never') return new Promise<void>(() => undefined);
       if (search === 'error') return json(route, { detail: 'boom' }, 500);
       if (search === 'empty') return json(route, { items: [], total: 0, sort: 'newest' });
@@ -254,11 +325,63 @@ test('error', async ({ page }, info) => {
 });
 
 test('map', async ({ page }, info) => {
-  await mockApi(page, { seeker: false, search: 'items' });
+  await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
   await page.goto('/search?view=map');
   const pin = page.getByRole('button', { name: /כצנלסון/ });
   await pin.waitFor();
   await pin.click();
   await page.getByRole('article').waitFor();
   await shot(page, info.project.name, 'map');
+});
+
+async function shot0009v(page: Page, project: string, state: string) {
+  await page.screenshot({ path: `screens/0009v/${state}-${project}.png`, fullPage: true });
+}
+
+/** The map has loaded and its answer landed. */
+async function mapReady(page: Page) {
+  const region = page.getByRole('region', { name: he.search.map.label });
+  await region.waitFor();
+  await page.waitForFunction(
+    (label) =>
+      document
+        .querySelector(`[role="region"][aria-label="${label}"]`)
+        ?.getAttribute('aria-busy') === 'false',
+    he.search.map.label,
+  );
+}
+
+test('map-tiers', async ({ page }, info) => {
+  // A seeker: tiers high (87, 82), good (64) and partial (58); listing 2 liked, 3 applied, 1 seen.
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'rent-app:seen',
+      JSON.stringify(['00000000-0000-0000-0000-000000000001']),
+    );
+  });
+  await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
+  await page.goto('/search?view=map');
+  await mapReady(page);
+  await page.locator('[data-pin-id] svg[data-mark="liked"]').waitFor();
+  await page.locator('[data-pin-id] svg[data-mark="applied"]').waitFor();
+  await shot0009v(page, info.project.name, 'map-tiers');
+});
+
+test('map-bubble', async ({ page }, info) => {
+  // Two listings ~50 m apart fold into a bubble of 2 (it zooms in when pressed).
+  await mockApi(page, { seeker: true, search: 'items', map: 'bubble' });
+  await page.goto('/search?view=map');
+  await mapReady(page);
+  await page.getByRole('button', { name: he.search.map.bubble_two }).waitFor();
+  await shot0009v(page, info.project.name, 'map-bubble');
+});
+
+test('map-same-place', async ({ page }, info) => {
+  // Two listings at one point: their bubble lists both cards under the map.
+  await mockApi(page, { seeker: true, search: 'items', map: 'samePlace' });
+  await page.goto('/search?view=map');
+  await mapReady(page);
+  await page.getByRole('button', { name: he.search.map.bubbleSamePlace_two }).click();
+  await page.getByRole('heading', { name: he.search.map.samePlace_two }).waitFor();
+  await shot0009v(page, info.project.name, 'map-same-place');
 });
