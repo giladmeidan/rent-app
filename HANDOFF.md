@@ -26,14 +26,22 @@ Current focus:
 (last: 0009s, #62, merge 36ce546). No PRs open, no build sessions running, no spec worktrees left.
 **Main's CI e2e is red**: `applications.spec.ts::ac9_fill_profile_apply_withdraw` hits its 30 s timeout on most
 `main` runs since 0009j merged (see Known Issues). Fix that before the next slice.
-No Slice 10 specs exist yet. Alembic head on `main` still `0012`. Spec status on `main` is the source of truth;
+**Next slice is "שוק השותפים" (the roommates market), now Slice 10** (Gilad, 2026-11-13): trust, admin and launch
+moved to Slices 11, 12, 13, so older text saying "Slice 10" means trust. Planning is finished and every product
+question is answered; **no `0010*` spec is written yet and nothing is built**. The plan lives in
+`specs/MARKET-PLAN.md`. Alembic head on `main` still `0012`. Spec status on `main` is the source of truth;
 `git log` beats this file.
 
 Last updated:
-2026-11-13 (orchestrator `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf`, after #62 merged)
+2026-11-13 (market planning session, after Gilad answered all 23 questions)
 
 ## Current Work
-- Nothing in flight. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
+- **Market planning done, specs not started.** `specs/MARKET-PLAN.md` (new) holds Gilad's decisions, the five-step
+  build order, code findings per step from five read-only explorers, and section 6 with all 23 answers.
+  `specs/PRODUCT.md` has a new "שוק השותפים" row and the renumbered slice order. **Both files, and this handoff,
+  are uncommitted edits in `../rent-app-orch`** (detached on origin/main); commit and push them as a docs commit
+  (`HEAD:main`) before writing specs. Gilad starts the spec writing himself in a new chat.
+- No build sessions running. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
   collisions"), ran 0009j/o/p/r/s/u (PRs #57–#62) and merged them; their worktrees and branches are removed.
   The older orchestrator `local_2b79d58f…` merged 0009e/g/k/m (#53–#56) and is retired.
 - **Open decision: the ac9 e2e timeout.** Options: `test.slow()` on ac9 (triples its timeout), or split ac9 into
@@ -93,8 +101,26 @@ Last updated:
 ## Next Steps
 1. **Fix main's red e2e**: get Gilad's pick (`test.slow()` on `applications.spec.ts::ac9` vs splitting it), then
    one small e2e-only PR from a build session; merge on green api/web/e2e and confirm the next `main` run is green.
-2. Send Gilad a Slice 9 digest (21/21 merged; the FOLLOWUPS each spec added).
-3. Plan Slice 10 (listing renewal is promised there, PRODUCT.md "Listings"); spec, verify, lock, prepare worktrees.
+2. **Write the Slice 10 market specs** (when Gilad says so in a new chat). Instructions:
+   a. Read `specs/MARKET-PLAN.md` in full, then the "שוק השותפים" row in `specs/PRODUCT.md`. Section 6 of the plan
+      is all decisions; **(rec)** items in section 3 are engineering advice for the spec author, not Gilad's.
+   b. Commit the three uncommitted docs files first (see Current Work).
+   c. Write about seven specs with `/spec`, ids `0010a`…, in the plan's order: (1) the move — two tabs, market
+      search and post flow, apartments-only main search, no schema change; (2) role-free market incl. the profile
+      split; (3) photos as two specs, storage + upload API (new deps `python-multipart`, `Pillow`, `boto3`;
+      `security` reviewer) then web gallery + person photo; (4) flat profile + optional room facts; (5) two specs,
+      chat without an application (existing conversations keep id = application id) then person likes + browse
+      with a rate limit. Full-stack specs, split only where listed (Gilad: fewer specs per slice).
+   d. `depends_on`: 2 and 3 on 1 (they can build in parallel); 4 and 5 on 2. At most 3 builds at a time.
+   e. Spot-check every `path:line` taken from the plan against the code; the explorers' numbers were not verified.
+   f. Confirm with Gilad who counts as a "seeker" for a room's flatmate ages and answers now that the market has
+      no roles (plan decision 13; the recorded reading is a seeker account or a market user who filled the
+      "what I am looking for" part).
+   g. When locking the specs, rewrite the PRODUCT.md rows the market contradicts: "Rooms", "People & likes",
+      "Listing edit", "Search". No new artboards: screen design goes in each spec.
+   h. One verifier round per spec, then a digest to Gilad; builds are pre-started only in a turn Gilad wrote.
+3. Send Gilad a Slice 9 digest (21/21 merged; the FOLLOWUPS each spec added). Listing renewal moves with trust to
+   Slice 11.
 4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
 5. **Supervise CI e2e** on every merge; on a runner failure `gh variable set E2E_IN_CI --body off` and tell Gilad.
 6. FOLLOWUPS from Slice 9: map pin clustering (0009t), map desktop list pairing (0009i), range tags "3–4" render
@@ -133,7 +159,8 @@ Last updated:
 
 ## Important Files
 - `CLAUDE.md` — process, Speed rules 1–10, hard rules. Read first.
-- `specs/PRODUCT.md` — standing decisions; Slice 8 rows "People & likes" and "Flatmates".
+- `specs/MARKET-PLAN.md` — the Slice 10 market plan: decisions, build order, code findings, 23 answers. Not a spec.
+- `specs/PRODUCT.md` — standing decisions; Slice 8 rows "People & likes" and "Flatmates"; row "שוק השותפים".
 - `specs/FOLLOWUPS.md` — open deferred minors and pending decisions (append-only; conflicts keep both sides).
 - `specs/0008a-people-likes-api.md` … `specs/0008f-group-chat-web.md` — Slice 8 (done), each with its build digest
   and the orchestrator's amendments.
@@ -172,6 +199,12 @@ Last updated:
   redirect, so it never reaches a server, log, `Referer` or history; a declined applicant cannot join (409
   `declined`, Gilad); an applicant with an open application withdraws first (409 `already_applied`); flatmates
   chat only (shortlist/decline stay with the lister).
+- Market (Slice 10, Gilad 2026-11-13): two top-level tabs, דירות and שוק השותפים; rooms leave the main search; no
+  owner/seeker roles inside the market; people browse people, a mutual like opens a direct chat; photos (rooms,
+  people, apartments) on Cloudflare R2 with unguessable addresses; no apartment/room switch on edit; flatmate
+  ages and answers stay seekers-only; the profile splits into a personal part and a "looking for" part; a
+  flatmate is shown on a room's page only by their own choice; report button waits for Slice 11. The `listings`
+  table stays shared (orchestrator's stance, not challenged). Full list: `specs/MARKET-PLAN.md` sections 1 and 6.
 - Merging: Gilad merges PRs or delegates a slice (Slices 7 and 8 were delegated). The orchestrator merges with
   `gh pr merge N --merge --match-head-commit <full sha>` only after `api` + `web` + `e2e` are green in CI on that
   head and the PR merges cleanly, and holds merges while GitHub Actions is down (Gilad, 2026-11-11). Slice 9 + 9b
@@ -242,6 +275,9 @@ shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.en
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-13 — Market planning session: Gilad pushed trust back and made "שוק השותפים" Slice 10. Brainstormed the
+  scope, ran five read-only explorers over the code, checked R2's free tier and upload limits, wrote
+  `specs/MARKET-PLAN.md` and the PRODUCT.md row; Gilad answered all 23 questions. No specs, no code, no commit.
 - 2026-11-12/13 — Orchestrator session `local_386fe896…` ("Specs without collisions"): checked the remaining six
   specs for file collisions, ran them 3 at a time (0009j, then 0009p, 0009u, then 0009o, 0009r, 0009s), merged
   PRs #57–#62 and cleaned up. Gilad: e2e only in GitHub CI from now on. 0009j's ac9 CI failure turned out to be
