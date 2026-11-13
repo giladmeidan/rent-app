@@ -17,8 +17,9 @@ the objects after the commit (a failed object delete is logged and leaves an unr
 spec Risks).
 
 Person photos (spec 0010j): one per account, `users.photo_key`, through the same pipeline, store and
-rate limit. Only the small address is ever exposed (`person_photo_url`), and only in responses that
-already show that person to the caller (MARKET-PLAN Q16)."""
+rate limit. Only the small address is ever in a response (`person_photo_url`), and only in responses
+that already show that person to the caller (MARKET-PLAN Q16). The `-l` copy is stored too and is
+reachable by anyone holding the `-s` address, the same audience (decided Gilad 2026-11-13)."""
 
 import asyncio
 import logging
