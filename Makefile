@@ -120,8 +120,9 @@ i18n-check: web/node_modules/.modules.yaml
 ## 90 s each for the api /health and the web, then runs the suite in E2E_SHARDS shards, clearing the
 ## stack's Redis rate-limit keys (`rl:*`) before each so the OTP limit of 10 per IP per 15 min is not
 ## hit (dev / CI compose stack only). Every shard runs; the target fails if any shard failed.
-# shortcut: 3 shards (E2E_SHARDS) fit ~25 sign-ups per 15 min; add a shard or an env override when the suite outgrows it
-E2E_SHARDS ?= 3
+# shortcut: 4 shards (E2E_SHARDS) fit ~33 sign-ups per 15 min (3 stopped fitting at 28 tests, PR #67:
+# Playwright moved inbox.spec.ts into shard 1, its 11th code); add a shard or an env override when the suite outgrows it
+E2E_SHARDS ?= 4
 e2e: web/node_modules/.modules.yaml
 	$(PNPM) exec playwright install --with-deps chromium
 	$(call wait_for,$(API_HEALTH),90,api)

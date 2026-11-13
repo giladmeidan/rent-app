@@ -27,6 +27,7 @@ import { owner } from '../../listings/__tests__/fixtures';
 import { formatIls, formatRooms } from '../../listings/format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import type { ListingPublic } from '../api';
+import { PLACES } from '../places';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
 
@@ -1048,5 +1049,179 @@ describe('SearchMap', () => {
     });
     expect(pins().map((p) => p.seen)).toEqual([true, false]);
     expect(pins()[0]?.label).toBe(`${pinLabel(opened)}${he.search.map.pinSeen}`);
+  });
+
+  it('ac4_place_search', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 12 };
+    const place = (id: string) => {
+      const found = PLACES.find((p) => p.id === id);
+      if (found === undefined) throw new Error(`no place ${id}`);
+      return found;
+    };
+    const florentin = place('florentin');
+    const ramatAviv = place('ramat-aviv');
+    const ramatAvivGimel = place('ramat-aviv-gimel');
+    const placeStatus = () => document.querySelector('p[role="status"]');
+
+    // Opened without a position: 0009w's first-open fit waits for the first answer.
+    const first = deferred();
+    mockApi({ [SEARCH]: [first.promise, () => json(page([located()]))] });
+    render('/search?view=map');
+    moveTo(BOX, VIEW);
+    const box = screen.getByLabelText(he.search.map.placeLabel);
+    expect(box).toHaveAttribute('type', 'search');
+    // The names are offered as the input's list.
+    const options = [
+      ...document.querySelectorAll(`#${CSS.escape(box.getAttribute('list') ?? '')} option`),
+    ];
+    expect(options.map((o) => o.getAttribute('value'))).toContain(he.places.florentin);
+
+    // A change to an exact name that starts no other name jumps without Enter.
+    fireEvent.change(box, { target: { value: he.places.florentin } });
+    expect(cameras()).toEqual([{ seq: 1, center: florentin.center, zoom: 15 }]);
+    // The jump cancelled the first-open fit: the first answer sends no fit camera.
+    first.resolve(json(page([located({ lat: 32.05, lng: 34.78 }), located()])));
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(2);
+    });
+    await settle();
+    expect(cameras()).toHaveLength(1);
+
+    // "רמת אביב" starts "רמת אביב ג׳": no jump until Enter.
+    fireEvent.change(box, { target: { value: he.places['ramat-aviv'] } });
+    expect(cameras()).toHaveLength(1);
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(cameras()[1]).toEqual({ seq: 2, center: ramatAviv.center, zoom: 15 });
+    // The longer name is unambiguous: it jumps on the change.
+    fireEvent.change(box, { target: { value: he.places['ramat-aviv-gimel'] } });
+    expect(cameras()[2]).toEqual({ seq: 3, center: ramatAvivGimel.center, zoom: 15 });
+    // A city goes to its own zoom.
+    fireEvent.change(box, { target: { value: ` ${he.places['tel-aviv-yafo']}` } });
+    expect(cameras()[3]).toEqual({ seq: 4, center: place('tel-aviv-yafo').center, zoom: 13 });
+
+    // Enter on a name not in the list: the status line says so, and no camera is sent.
+    expect(placeStatus()).toHaveTextContent('');
+    fireEvent.change(box, { target: { value: 'רחוב שאינו ברשימה' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await vi.waitFor(() => {
+      expect(placeStatus()).toHaveTextContent(he.search.map.placeNotFound);
+    });
+    expect(cameras()).toHaveLength(4);
+    // Enter on an empty box does nothing.
+    fireEvent.change(box, { target: { value: '  ' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(cameras()).toHaveLength(4);
+    // The status line is not a second results region.
+    expect(placeStatus()).not.toHaveAttribute('aria-live');
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+  });
+
+  it('test_place_search_ascii_geresh_matches', () => {
+    const place = (id: string) => {
+      const found = PLACES.find((p) => p.id === id);
+      if (found === undefined) throw new Error(`no place ${id}`);
+      return found;
+    };
+    const first = deferred();
+    mockApi({ [SEARCH]: [first.promise] });
+    render('/search?view=map');
+    moveTo(BOX, { center: [34.8, 32.08], zoom: 12 });
+    const box = screen.getByLabelText(he.search.map.placeLabel);
+    const ascii = (name: string) => name.replace(/\u05F3/g, "'").replace(/\u05F4/g, '"');
+    // Enter on an ASCII-typed name that is in the list.
+    fireEvent.change(box, { target: { value: ascii(he.places['ramat-aviv-gimel']) } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(cameras().at(-1)).toMatchObject({ center: place('ramat-aviv-gimel').center });
+    expect(document.querySelector('p[role="status"]')).toHaveTextContent('');
+    // An exact name that starts no other name jumps on the change, without Enter.
+    const before = cameras().length;
+    fireEvent.change(box, { target: { value: ascii(he.places.ajami) } });
+    expect(cameras()).toHaveLength(before + 1);
+    expect(cameras().at(-1)).toMatchObject({ center: place('ajami').center });
+  });
+
+  it('ac5_empty_view_actions', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
+    const WIDE: [number, number, number, number] = [34.7, 31.9, 35.0, 32.2];
+    const nothing = () => json({ items: [], total: 0 });
+    const showAll = () => screen.queryByRole('button', { name: he.search.map.showAll });
+
+    // An empty box that does not hold the launch area: "show the whole area" fits it.
+    let api = mockApi({ [SEARCH]: [nothing, () => json(page([located()]))] });
+    let view = render('/search?view=map&c=32.08,34.8&z=14');
+    moveTo(BOX, VIEW);
+    expect(await screen.findByText(he.search.map.empty)).toBeVisible();
+    const button = showAll();
+    expect(button).not.toBeNull();
+    // No filters: no "clear" beside it.
+    expect(
+      within(liveRegion()?.parentElement as HTMLElement).queryByRole('button', {
+        name: he.search.clear,
+      }),
+    ).toBeNull();
+    button?.focus();
+    fireEvent.click(button as HTMLElement);
+    expect(cameras()).toEqual([{ seq: 1, bounds: GUSH_DAN_BOUNDS }]);
+    // The wider box answers with results: the button is gone and focus is on the count line.
+    moveTo(WIDE, { center: [34.85, 32.05], zoom: 10 });
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    });
+    expect(showAll()).toBeNull();
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(liveRegion());
+    });
+    // No extra request: one per box.
+    expect(api.calls(SEARCH)).toHaveLength(2);
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // An empty box that already holds the launch area: no "show the whole area".
+    mockApi({ [SEARCH]: [nothing] });
+    view = render('/search?view=map&c=32.05,34.85&z=10');
+    moveTo(WIDE, { center: [34.85, 32.05], zoom: 10 });
+    expect(await screen.findByText(he.search.map.empty)).toBeVisible();
+    expect(showAll()).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // With a filter set, "clear" shows beside it and clears the filters; `c` and `z` stay.
+    api = mockApi({ [SEARCH]: [nothing, () => json(page([located()]))] });
+    render('/search?view=map&pets=true&c=32.08,34.8&z=14');
+    moveTo(BOX, VIEW);
+    expect(await screen.findByText(he.search.map.empty)).toBeVisible();
+    expect(showAll()).not.toBeNull();
+    const clear = within(liveRegion()?.parentElement as HTMLElement).getByRole('button', {
+      name: he.search.clear,
+    });
+    fireEvent.click(clear);
+    expect(params().get('pets')).toBeNull();
+    expect(params().get('view')).toBe('map');
+    expect(params().get('c')).toBe('32.08,34.8');
+    expect(params().get('z')).toBe('14');
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(liveRegion());
+    });
+    expect(cameras()).toEqual([]);
+  });
+  it('test_show_all_error_keeps_focus', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
+    const WIDE: [number, number, number, number] = [34.7, 31.9, 35.0, 32.2];
+    mockApi({
+      [SEARCH]: [() => json({ items: [], total: 0 }), json({ detail: 'boom' }, 500)],
+    });
+    render('/search?view=map&c=32.08,34.8&z=14');
+    moveTo(BOX, VIEW);
+    expect(await screen.findByText(he.search.map.empty)).toBeVisible();
+    const button = screen.getByRole('button', { name: he.search.map.showAll });
+    button.focus();
+    fireEvent.click(button);
+    moveTo(WIDE, { center: [34.85, 32.05], zoom: 10 });
+    const retry = await screen.findByRole('button', { name: he.common.retry });
+    await settle();
+    expect(document.activeElement).not.toBe(liveRegion());
+    expect(retry).toBeVisible();
   });
 });

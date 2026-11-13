@@ -22,6 +22,7 @@ import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { application } from '../../applications/__tests__/fixtures';
 import { CONVERSATIONS_KEY } from '../../chat/useConversations';
 import { listingDetail } from '../../search/__tests__/fixtures';
+import { parseMapPosition } from '../../search/mapPosition';
 import { ListingPage } from '../ListingPage';
 import { readSeen } from '../seen';
 
@@ -225,13 +226,14 @@ describe('ListingPage', () => {
     expect(facts()[he.listings.fields.furnished]).toBe('\u05de\u05e8\u05d5\u05d4\u05d8');
   });
 
-  it('ac6_listing_page_approximate_map', async () => {
-    const located = listingDetail({ lat: 32.08, lng: 34.8 });
+  it('ac6_honest_circle_and_map_link', async () => {
+    const located = listingDetail({ listing_type: 'apartment', lat: 32.08, lng: 34.8 });
     const address = i18n.t('listing.address', { street: located.street, city: located.city });
     const section = () =>
       screen.getByRole('heading', { level: 2, name: he.listing.location }).closest('section');
+    const mapLink = () => screen.queryByRole('link', { name: he.listing.showOnMap });
 
-    // A point: the approximate map inside "location", above the text that stays.
+    // A point: the static map inside "location", one step out, with the ~300 m area.
     mockApi({
       'GET /me': [json({ detail: 'unauthenticated' }, 401)],
       [`GET /listings/${located.id}`]: [json(located)],
@@ -243,25 +245,50 @@ describe('ListingPage', () => {
     expect(location).toContainElement(region);
     expect(lastProps()).toMatchObject({
       center: [34.8, 32.08],
-      zoom: 14,
+      zoom: 13,
       interactive: false,
-      approximate: true,
+      approximateRadiusM: 300,
     });
+    expect(lastProps()).not.toHaveProperty('approximate');
     expect(lastProps().pins).toBeUndefined();
     expect(within(region).queryAllByRole('button')).toHaveLength(0);
     expect(within(location as HTMLElement).getByText(address)).toBeVisible();
     expect(within(location as HTMLElement).getByText(he.listing.locationHint)).toBeVisible();
 
-    // The map cannot be shown: it is removed, the text stays.
-    failMap();
-    expect(screen.queryByRole('region', { name: he.listing.mapLabel })).toBeNull();
-    expect(screen.getByText(address)).toBeVisible();
-    expect(screen.getByText(he.listing.locationHint)).toBeVisible();
+    // The link to the search map: this kind, the full map, centred on the point, this card open.
+    const link = mapLink();
+    expect(link).not.toBeNull();
+    expect(location).toContainElement(link);
+    const href = new URL(link?.getAttribute('href') ?? '', 'http://localhost');
+    expect(href.pathname).toBe('/search');
+    expect(href.searchParams.get('listing_type')).toBe('apartment');
+    expect(href.searchParams.get('view')).toBe('map');
+    expect(href.searchParams.get('z')).toBe('15');
+    expect(href.searchParams.get('pin')).toBe(located.id);
+    expect(parseMapPosition(href.searchParams).center).toEqual([34.8, 32.08]);
+    fireEvent.click(link as HTMLElement);
+    expect(currentPath()).toBe(`${href.pathname}${href.search}`);
     view.unmount();
     vi.unstubAllGlobals();
     resetFakeMap();
 
-    // No point: the section as before, no map.
+    // The map cannot be shown: it is removed; the text and the link stay.
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${located.id}`]: [json(located)],
+    });
+    view = render(located.id);
+    await screen.findByRole('region', { name: he.listing.mapLabel });
+    failMap();
+    expect(screen.queryByRole('region', { name: he.listing.mapLabel })).toBeNull();
+    expect(screen.getByText(address)).toBeVisible();
+    expect(screen.getByText(he.listing.locationHint)).toBeVisible();
+    expect(mapLink()).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+    resetFakeMap();
+
+    // No point: the section as before, no map and no link.
     const unlocated = listingDetail({ lat: null, lng: null });
     mockApi({
       'GET /me': [json({ detail: 'unauthenticated' }, 401)],
@@ -271,6 +298,7 @@ describe('ListingPage', () => {
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('region', { name: he.listing.mapLabel })).toBeNull();
     expect(lastProps).toThrow();
+    expect(mapLink()).toBeNull();
     const plain = section();
     expect(plain?.children).toHaveLength(3);
     expect(

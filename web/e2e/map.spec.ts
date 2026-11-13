@@ -417,6 +417,30 @@ test('ac7_card_keeps_the_pin_clear', async ({ page, request }) => {
   expect(intersects(await boxOf(attribution), await boxOf(docked))).toBe(false);
 });
 
+// Spec 0009y AC7: "show on the search map" opens the full map at this listing, its card in the map
+// and its pin pressed (newest first, so this fresh listing is among the box's results; the pressed
+// pin is kept out of bubbles). The link carries no price filter. Its price sits above 0009v's
+// 7001-7899 (every sub-range taken), so it never joins a map test's one-price view (ac8 expects a
+// bubble of exactly 2).
+test('ac7_listing_page_link', async ({ page, request }) => {
+  const {
+    streets: [street = ''],
+    ids: [id = ''],
+  } = await postAtOnePrice(page, request, 1, [8301, 8399]);
+  await asVisitor(page);
+  const { region, pin, dockedCard } = mapOf(page, street);
+
+  await page.goto(`/listings/${id}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('link', { name: he.listing.showOnMap }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/search');
+  expect(query(page).get('view')).toBe('map');
+  expect(query(page).get('listing_type')).toBe('apartment');
+  expect(query(page).get('pin')).toBe(id);
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await expect(dockedCard).toHaveCount(1, { timeout: 15_000 });
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('map_survives_one_failed_tile', async ({ page }) => {
   await routeTiles(page, 1);
   await page.goto('/search?view=map');
@@ -434,18 +458,20 @@ test('map_max_zoom_never_422_on_390px', async ({ page }) => {
     if (r.url().includes('/listings?')) statuses.push(r.status());
   });
 
-  await page.goto('/search?view=map');
+  // Opened at a position, so 0009w's first-open fit never runs: a fit racing the clicks made a step
+  // wait for a search that never came (CI, f986008 and #67).
+  await page.goto('/search?view=map&c=32.08,34.8&z=13', { waitUntil: 'domcontentloaded' });
   const region = page.getByRole('region', { name: he.search.map.label });
   await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
 
-  // Zoom in to the limit, one step per answered search (each step's `moveend` is a new box); the
-  // button is disabled at `MAP_MAX_ZOOM`.
+  // Zoom in to the limit, one step per settled view (each step's `moveend` writes `z` and asks for
+  // a new box); the button is disabled at `MAP_MAX_ZOOM`.
   const zoomIn = region.getByRole('button', { name: he.map.zoomIn });
   for (let i = 0; i < 20 && (await zoomIn.isEnabled()); i += 1) {
-    await Promise.all([
-      page.waitForResponse((r) => r.url().includes('/listings?')),
-      zoomIn.click(),
-    ]);
+    const zoomBefore = query(page).get('z');
+    await zoomIn.click();
+    await expect.poll(() => query(page).get('z')).not.toBe(zoomBefore);
+    await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
   }
   await expect(zoomIn).toBeDisabled();
   await expect(region).toHaveAttribute('aria-busy', 'false');

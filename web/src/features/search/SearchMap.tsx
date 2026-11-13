@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type Ref,
+  type RefObject,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
@@ -15,7 +15,13 @@ import { useSearchParams } from 'react-router';
 import { Button } from '../../components/Button';
 import { EmptyState, emptyStateBox } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
-import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM, roundBbox, type Bbox } from '../../components/map/config';
+import {
+  GUSH_DAN_BOUNDS,
+  MAP_MIN_ZOOM,
+  roundBbox,
+  snapToGrid,
+  type Bbox,
+} from '../../components/map/config';
 import { clusterPins } from '../../components/map/cluster';
 import { MapCanvas, type Bubble, type MapCamera, type Pin } from '../../components/map/MapCanvas';
 import { todayInIsrael } from '../listings/format';
@@ -25,7 +31,9 @@ import { MatchChips } from '../match/MatchChips';
 import type { SeekerProfileOut } from '../profile/api';
 import type { ListingPublic } from './api';
 import type { Filters } from './filters';
+import { LocateButton, type LocateMessage } from './LocateButton';
 import { parseMapPosition, writeMapPosition } from './mapPosition';
+import { PlaceSearch } from './PlaceSearch';
 import { bubbleLabel } from './pins';
 import { useListingPins } from './useListingPins';
 import { useMapSearch } from './useMapSearch';
@@ -41,6 +49,13 @@ export const FIT_MAX_ZOOM = 15;
  * pin (else the bubble holding it, else the canvas) once the panel is closed.
  */
 type PendingFocus = { to: 'card'; id: string } | { to: 'list' } | { to: 'marker'; id: string };
+
+/** What the status line says: the answer to a locate press or to Enter in the place box. */
+type StatusKey = LocateMessage | 'placeNotFound';
+
+/** Whether `outer` holds all of `inner`. */
+const contains = (outer: Bbox, inner: Bbox) =>
+  outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
 
 /** The `[west, south, east, north]` extent of the pins. */
 export function extentOf(pins: readonly Pin[]): Bbox {
@@ -70,7 +85,14 @@ type Props = {
   /** Switches to the list view (the fallback when the map cannot be shown). */
   onShowList: () => void;
   /** The count line, focused by the page after a filter change (spec 0009t). */
-  countRef?: Ref<HTMLParagraphElement>;
+  countRef?: RefObject<HTMLParagraphElement>;
+  /** Any filter is set: an empty area offers the filters' "clear" (spec 0009y). */
+  hasFilters?: boolean;
+  /** Clears the filters, keeping the view and the map's position. */
+  onClear?: () => void;
+  /** The full map view: the locate button and the place box (spec 0009y); a smaller map leaves
+   * them off. */
+  fullMap?: boolean;
 };
 
 /**
@@ -81,7 +103,15 @@ type Props = {
  * map's zoom (spec 0009v). The selected listing's card, or the list of a bubble whose members never
  * separate, is docked inside the map.
  */
-export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
+export function SearchMap({
+  filters,
+  profile,
+  onShowList,
+  countRef,
+  hasFilters = false,
+  onClear,
+  fullMap = false,
+}: Props) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   // The selected listing lives in the URL.
@@ -103,6 +133,18 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
   // spec's) sets `fitPending` false, so that fit never follows.
   const [camera, setCamera] = useState<MapCamera>();
   const [fitPending, setFitPending] = useState(initialView === undefined);
+  // The device's position (spec 0009y), the raw fix, for the dot only: in memory until the next
+  // locate or unmount, never written to the URL, a request or storage.
+  const [userPosition, setUserPosition] = useState<[lng: number, lat: number]>();
+  // The answer to the person's own press (locate, place box), under the count line.
+  const [status, setStatus] = useState<StatusKey>();
+  const statusFrame = useRef<number | undefined>(undefined);
+  // The box the shown answer is for (the placeholder's while the next one loads).
+  const [answeredBox, setAnsweredBox] = useState<Bbox>();
+  // "Show the whole area" was pressed: focus goes to the count line once the button is gone.
+  const showAllPressed = useRef(false);
+  const ownCountRef = useRef<HTMLParagraphElement>(null);
+  const countLineRef = countRef ?? ownCountRef;
   // Bumped on every press, so focus moves even when the same pin is pressed again.
   const [focusRequest, setFocusRequest] = useState(0);
   const pendingFocus = useRef<PendingFocus | undefined>(undefined);
@@ -157,6 +199,39 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
       maxZoom: FIT_MAX_ZOOM,
     }));
   }
+
+  if (data !== undefined && !search.isPlaceholderData && answeredBox !== bbox) {
+    setAnsweredBox(bbox);
+  }
+
+  /** A camera this view sends (locate, a place, the whole area): it cancels the first-open fit. */
+  const sendCamera = (
+    move: { bounds: Bbox } | { center: [lng: number, lat: number]; zoom: number },
+  ) => {
+    setFitPending(false);
+    setCamera((previous) => ({ seq: (previous?.seq ?? 0) + 1, ...move }));
+  };
+
+  /** Empties the status line (a map move or a press). */
+  const hushStatus = () => {
+    if (statusFrame.current !== undefined) cancelAnimationFrame(statusFrame.current);
+    statusFrame.current = undefined;
+    setStatus(undefined);
+  };
+  /** Fills the status line one frame after emptying it, so a repeat is announced again. */
+  const sayStatus = (key: StatusKey) => {
+    hushStatus();
+    statusFrame.current = requestAnimationFrame(() => {
+      statusFrame.current = undefined;
+      setStatus(key);
+    });
+  };
+  useEffect(
+    () => () => {
+      if (statusFrame.current !== undefined) cancelAnimationFrame(statusFrame.current);
+    },
+    [],
+  );
 
   /** Writes the selected pin (`undefined` removes it), with no history entry. */
   const writePin = (pin: string | undefined) => {
@@ -295,6 +370,30 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
     </div>
   );
 
+  // The locate button at the map's top inline start (the zoom buttons are at the top inline end),
+  // on the full map only.
+  const mapOverlay = (
+    <>
+      {fullMap && (
+        <LocateButton
+          onPress={() => {
+            // A new press forgets the last fix: the dot shows only the latest answer inside.
+            hushStatus();
+            setUserPosition(undefined);
+          }}
+          onLocated={(position) => {
+            setUserPosition(position);
+            // The map centre, and so the URL's `c` and the box request, is the ~200 m grid point.
+            sendCamera({ center: snapToGrid(position), zoom: 15 });
+          }}
+          onMessage={sayStatus}
+          className="absolute start-3 top-3 z-10"
+        />
+      )}
+      {panel}
+    </>
+  );
+
   // The states sit above the 60vh map (spec 0009t): the empty state is the count line itself (one
   // live region on the page, announced when it fills), and an error comes before the map.
   let count = '';
@@ -314,16 +413,78 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
     }
   }
 
+  // An empty answer for a box that does not hold the whole launch area can widen to it.
+  const showAll = empty && answeredBox !== undefined && !contains(answeredBox, GUSH_DAN_BOUNDS);
+  useEffect(() => {
+    if (showAll || !showAllPressed.current) return;
+    // The wider box failed: the error state's retry keeps focus's place; leave focus alone.
+    if (search.isError) {
+      showAllPressed.current = false;
+      return;
+    }
+    // Still waiting for the wider box's own answer.
+    if (data === undefined || search.isPlaceholderData) return;
+    showAllPressed.current = false;
+    countLineRef.current?.focus();
+  }, [showAll, countLineRef, search.isError, search.isPlaceholderData, data]);
+
+  const statusText: Record<StatusKey, string> = {
+    locateOutside: t('search.map.locateOutside'),
+    locateDenied: t('search.map.locateDenied'),
+    locateFailed: t('search.map.locateFailed'),
+    placeNotFound: t('search.map.placeNotFound'),
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <p
-        ref={countRef}
-        tabIndex={-1}
-        aria-live="polite"
-        className={`focus:outline-none ${empty ? emptyStateBox : 'min-h-6 text-label lg:text-h3'}`}
-      >
-        {count}
-      </p>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <p
+            ref={countLineRef}
+            tabIndex={-1}
+            aria-live="polite"
+            className={`focus:outline-none ${empty ? emptyStateBox : 'min-h-6 text-label lg:text-h3'}`}
+          >
+            {count}
+          </p>
+          {/* The answer to the person's own press (spec 0009y amends 0009t's single live region:
+              the count line stays the one results region). Always mounted, empty until a press. */}
+          <p role="status" className="text-body-sm text-ink [&:not(:empty)]:mt-2">
+            {status !== undefined && statusText[status]}
+          </p>
+          {empty && (showAll || hasFilters) && (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {showAll && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    hushStatus();
+                    showAllPressed.current = true;
+                    sendCamera({ bounds: GUSH_DAN_BOUNDS });
+                  }}
+                >
+                  {t('search.map.showAll')}
+                </Button>
+              )}
+              {hasFilters && onClear !== undefined && (
+                <Button variant="secondary" onClick={onClear}>
+                  {t('search.clear')}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+        {fullMap && (
+          <PlaceSearch
+            onJump={(place) => {
+              hushStatus();
+              sendCamera({ center: place.center, zoom: place.zoom });
+            }}
+            onNotFound={() => sayStatus('placeNotFound')}
+            className="w-full lg:max-w-xs"
+          />
+        )}
+      </div>
       {error}
       {unavailable ? (
         <div data-testid="map-unavailable" className="flex flex-col items-start gap-3">
@@ -342,6 +503,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
               : { center: initialView.center, zoom: initialView.zoom })}
             minZoom={MAP_MIN_ZOOM}
             camera={camera}
+            userPosition={userPosition}
             busy={updating}
             overlay={
               updating && (
@@ -354,7 +516,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
                 </p>
               )
             }
-            panel={panel}
+            panel={mapOverlay}
             pins={clustered.pins}
             bubbles={clustered.bubbles}
             selectedId={selectedId}
@@ -372,6 +534,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
               writePin(undefined);
             }}
             onMoveEnd={(box, view) => {
+              hushStatus();
               setBbox(roundBbox(box));
               if (view === undefined) return;
               if (view.zoom !== zoom) setSamePlace(undefined);

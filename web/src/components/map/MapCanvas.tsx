@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { focusRing } from '../focusRing';
 import { Skeleton } from '../Skeleton';
-import { MAP_MAX_ZOOM, MAP_STYLE_URL, mapLocale, type Bbox } from './config';
+import { MAP_MAX_ZOOM, MAP_STYLE_URL, mapLocale, metersToPixels, type Bbox } from './config';
 import { keepClearPan } from './keepClear';
 
 type MapLibre = typeof import('maplibre-gl');
@@ -78,8 +78,12 @@ type Props = {
    * This component always passes `view`; it is optional for the tests' fake. */
   onMoveEnd?: (bbox: Bbox, view?: MapView) => void;
   interactive?: boolean;
-  /** A ~56 px translucent circle at `center`: the listing's approximate area. */
-  approximate?: boolean;
+  /** A translucent circle at `center` with this radius on the ground, in metres (spec 0009y): the
+   * listing's approximate area. For a static map only: its size is fixed at the initial zoom. */
+  approximateRadiusM?: number | undefined;
+  /** The device's position (spec 0009y): a decorative dot under every pin and bubble. Kept in
+   * memory only; never written anywhere by this component. */
+  userPosition?: [lng: number, lat: number] | undefined;
   /** Results are pending: the region is `aria-busy`. */
   busy?: boolean;
   minZoom?: number;
@@ -180,7 +184,8 @@ export function MapCanvas({
   onBubbleOpen,
   onMoveEnd,
   interactive = true,
-  approximate = false,
+  approximateRadiusM,
+  userPosition,
   busy = false,
   minZoom,
   overlay,
@@ -194,6 +199,8 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ map: MapLibreMap; lib: MapLibre } | null>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
+  // The device's position dot (spec 0009y), when shown.
+  const dotRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -343,6 +350,8 @@ export function MapCanvas({
       cancelled = true;
       for (const entry of markers.values()) entry.marker.remove();
       markers.clear();
+      dotRef.current?.remove();
+      dotRef.current = null;
       map?.remove();
       mapRef.current = null;
     };
@@ -367,6 +376,30 @@ export function MapCanvas({
     }
   }, [ready, camera]);
 
+  // The device's dot: one decorative marker, before the pins (it is drawn first) and under them
+  // (`zIndex` 0, pins and bubbles have at least 1), never pressable.
+  useEffect(() => {
+    const current = mapRef.current;
+    if (!ready || current === null) return;
+    if (userPosition === undefined) {
+      dotRef.current?.remove();
+      dotRef.current = null;
+      return;
+    }
+    if (dotRef.current === null) {
+      const element = document.createElement('div');
+      element.setAttribute('aria-hidden', 'true');
+      element.dataset.userPosition = '';
+      element.className =
+        'pointer-events-none h-4 w-4 rounded-full border-2 border-on-ink bg-accent shadow-pin';
+      element.style.zIndex = '0';
+      dotRef.current = new current.lib.Marker({ element })
+        .setLngLat(userPosition)
+        .addTo(current.map);
+    } else {
+      dotRef.current.setLngLat(userPosition);
+    }
+  }, [ready, userPosition]);
   // Markers, diffed by id: added, moved, restyled or removed, never rebuilt per render. Bubbles are
   // markers too, keyed by their `cluster:` id.
   useEffect(() => {
@@ -492,6 +525,12 @@ export function MapCanvas({
     if (pan !== null) current.map.panBy([0, pan]);
   }, [selectedId, loaded]);
 
+  // The circle's size on the static map: the radius at the centre's latitude and the initial zoom.
+  const approximateDiameter =
+    approximateRadiusM === undefined || center === undefined
+      ? undefined
+      : Math.round(2 * metersToPixels(approximateRadiusM, center[1], zoom ?? 14));
+
   return (
     <div
       ref={regionRef}
@@ -503,10 +542,12 @@ export function MapCanvas({
       {/* Its own stacking context: the markers (z up to the pin count) and the controls stack
           inside it, and the overlay and the panel after it always paint above them. */}
       <div ref={containerRef} className="isolate h-full w-full" />
-      {approximate && loaded && (
+      {approximateDiameter !== undefined && loaded && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 m-auto h-14 w-14 rounded-full border-2 border-accent bg-accent/25"
+          data-testid="map-approximate"
+          style={{ inlineSize: approximateDiameter, blockSize: approximateDiameter }}
+          className="pointer-events-none absolute inset-0 m-auto rounded-full border-2 border-accent bg-accent/25"
         />
       )}
       {loaded && overlay}

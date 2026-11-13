@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -9,6 +9,8 @@ import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
+import { focusRing } from '../../components/focusRing';
+import { APPROXIMATE_RADIUS_M } from '../../components/map/config';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
@@ -18,6 +20,7 @@ import { MutualBanner } from '../likes/MutualBanner';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
 import { RoomFacts } from '../rooms/RoomFacts';
+import { writeMapPosition } from '../search/mapPosition';
 import { ApiError } from './api';
 import { ApplyBar } from './ApplyBar';
 import { cardTitle } from './cardTitle';
@@ -161,9 +164,9 @@ export function ListingPage() {
               <MapCanvas
                 label={t('listing.mapLabel')}
                 center={[l.lng, l.lat]}
-                zoom={14}
+                zoom={13}
                 interactive={false}
-                approximate
+                approximateRadiusM={APPROXIMATE_RADIUS_M}
                 onError={() => setMapFailed(true)}
                 className="h-40 rounded-lg border border-border lg:h-60"
               />
@@ -171,6 +174,19 @@ export function ListingPage() {
             <p className="text-body font-medium">
               {t('listing.address', { street: l.street, city: l.city })}
             </p>
+            {/* The search map at this spot, with this listing's card open (spec 0009y); also when
+                the small map failed. */}
+            {l.lat !== null && l.lng !== null && (
+              <Link
+                to={`/search?${writeMapPosition(
+                  new URLSearchParams({ listing_type: l.listing_type, view: 'map' }),
+                  { center: [l.lng, l.lat], zoom: 15, pin: l.id },
+                ).toString()}`}
+                className={`inline-flex min-h-tap items-center self-start rounded text-body-sm font-medium text-accent-strong underline underline-offset-4 ${focusRing}`}
+              >
+                {t('listing.showOnMap')}
+              </Link>
+            )}
             <p className="text-body-sm text-ink-muted">{t('listing.locationHint')}</p>
           </section>
 
