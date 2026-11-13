@@ -65,7 +65,7 @@ describe('RoomFields', () => {
     expect(screen.queryByLabelText(r.flatmatesCount)).toBeNull();
     expect(screen.queryByRole('region', { name: he.lifestyle.title.flat })).toBeNull();
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
     expect(screen.queryByRole('list', { name: r.title })).toBeNull();
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
@@ -127,14 +127,18 @@ describe('RoomFields', () => {
     fireEvent.change(count(), { target: { value: '2' } });
     back();
     back();
+    back();
     fireEvent.click(screen.getByLabelText(he.listings.type.apartment));
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(screen.queryByRole('region', { name: r.title })).toBeNull();
     back();
     back();
+    back();
     fireEvent.click(screen.getByLabelText(he.listings.type.room));
+    fireEvent.click(nextButton());
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
     expect(gender(g.women)).toBeChecked();
@@ -150,7 +154,7 @@ describe('RoomFields', () => {
     expect(count()).not.toHaveAttribute('aria-invalid', 'true');
 
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(errorFor(count())).toHaveTextContent(he.listings.errors.required);
     const [hintEl, errorEl] = describedBy(count());
     expect(hintEl).toHaveTextContent(r.flatmatesHint);
@@ -193,14 +197,16 @@ describe('RoomFields', () => {
     mockApi({ 'GET /areas': [json([gushDan])] });
     await toPreferences();
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
+    back();
     back();
     back();
     back();
     fireEvent.click(screen.getByLabelText(he.listings.type.room));
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(nextButton());
     expect(errorFor(count())).toHaveTextContent(he.listings.errors.required);
@@ -235,7 +241,7 @@ describe('RoomFields', () => {
       expect(screen.queryByRole('alert')).toBeNull();
       fireEvent.click(nextButton());
 
-      expect(progress(), bad).toHaveAttribute('aria-valuenow', '3');
+      expect(progress(), bad).toHaveAttribute('aria-valuenow', '4');
       expect(errorFor(agesGroup())).toHaveTextContent(rangeError());
       expect(describedBy(agesGroup())[0]).toHaveTextContent(r.agesHint);
       expect(slot(3)).toHaveAttribute('aria-invalid', 'true');
@@ -250,7 +256,7 @@ describe('RoomFields', () => {
       expect(slot(3)).not.toHaveAttribute('aria-invalid', 'true');
       expect(screen.queryByText(rangeError())).toBeNull();
       fireEvent.click(nextButton());
-      expect(progress(), bad).toHaveAttribute('aria-valuenow', '4');
+      expect(progress(), bad).toHaveAttribute('aria-valuenow', '5');
       view.unmount();
       vi.unstubAllGlobals();
     }
@@ -270,7 +276,7 @@ describe('RoomFields', () => {
     expect(slot(1)).not.toHaveAttribute('aria-invalid', 'true');
     expect(slot(3)).toHaveAttribute('aria-invalid', 'true');
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
     expect(document.activeElement).toBe(slot(3));
   });
 
@@ -287,7 +293,7 @@ describe('RoomFields', () => {
     fireEvent.change(slot(2), { target: { value: '27' } });
     answer('cleanliness', '3');
     fireEvent.click(nextButton());
-    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
 
     const list = screen.getByRole('list', { name: r.title });
     const card = screen.getByRole('article');
@@ -368,7 +374,7 @@ describe('RoomFields', () => {
     fireEvent.click(nextButton());
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
-      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
     });
     expect(errorFor(count())).toHaveTextContent(he.listings.errors.invalid);
     expect(document.activeElement).toBe(count());
@@ -387,7 +393,7 @@ describe('RoomFields', () => {
     fireEvent.click(nextButton());
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
-      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
     });
     expect(errorFor(agesGroup())).toHaveTextContent(he.listings.errors.invalid);
     expect(document.activeElement).toBe(slot(1));
@@ -405,7 +411,7 @@ describe('RoomFields', () => {
     fireEvent.click(nextButton());
     fireEvent.click(publishButton());
     await vi.waitFor(() => {
-      expect(progress()).toHaveAttribute('aria-valuenow', '3');
+      expect(progress()).toHaveAttribute('aria-valuenow', '4');
     });
     expect(errorFor(agesGroup())).toHaveTextContent(he.listings.errors.invalid);
     fireEvent.change(count(), { target: { value: '3' } });

@@ -1,6 +1,10 @@
 // The visual check for the listing wizard (spec 0009k, AC11): one screenshot per state at each
-// project's size, in web/screens/0009k/. Every API request is answered here, so it needs only the
-// vite server: no sign-up, no OTP. An unmatched request fails the run.
+// project's size, in web/screens/0009k/; the photos step's states (spec 0010e) in
+// web/screens/0010e/. Every API request is answered here, so it needs only the vite server: no
+// sign-up, no OTP. An unmatched request fails the run.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
@@ -15,7 +19,19 @@ type Setup = {
   mine?: MyListingOut[] | 'pending';
   /** The status of `POST /listings` (201 answers the stored listing). */
   post?: { status: number; body: unknown };
+  /** The statuses of the photo uploads, in order (the last repeats); `'hold'` never answers. */
+  uploads?: (number | 'hold')[];
 };
+
+/** The committed e2e JPEG: every photo the screens pick, and every `/media` image they show. */
+const JPEG = readFileSync(fileURLToPath(new URL('../fixtures/photo.jpg', import.meta.url)));
+
+/** A stored photo's addresses, served by the mock below. */
+const photoOut = (n: number) => ({
+  id: `00000000-0000-0000-0000-0000000000${String(n).padStart(2, '0')}`,
+  small_url: `${API}/media/screen-${String(n)}-s.webp`,
+  large_url: `${API}/media/screen-${String(n)}-l.webp`,
+});
 
 const CORS = {
   'Access-Control-Allow-Origin': WEB_ORIGIN,
@@ -32,7 +48,8 @@ const reply = (route: Route, body: unknown, status = 200) =>
 
 async function mockApi(page: Page, setup: Setup): Promise<string[]> {
   const unmatched: string[] = [];
-  const { mine = [], post = { status: 201, body: listing() } } = setup;
+  const { mine = [], post = { status: 201, body: listing() }, uploads = [201] } = setup;
+  let uploaded = 0;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -43,7 +60,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
         status: 204,
         headers: {
           ...CORS,
-          'Access-Control-Allow-Methods': 'GET, POST, PATCH',
+          'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE',
           'Access-Control-Allow-Headers': 'content-type',
         },
       });
@@ -59,6 +76,17 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     }
     if (key === 'POST /listings') return reply(route, post.body, post.status);
     if (/^PATCH \/listings\/[^/]+$/.test(key)) return reply(route, listing());
+    if (/^POST \/listings\/[^/]+\/photos$/.test(key)) {
+      uploaded += 1;
+      const status = uploads[Math.min(uploaded, uploads.length) - 1] ?? 201;
+      if (status === 'hold') return new Promise<void>(() => {});
+      return status === 201
+        ? reply(route, photoOut(uploaded), 201)
+        : reply(route, { detail: 'photo_storage_unavailable' }, status);
+    }
+    if (method === 'GET' && pathname.startsWith('/media/')) {
+      return route.fulfill({ status: 200, contentType: 'image/jpeg', headers: CORS, body: JPEG });
+    }
     unmatched.push(key);
     return route.fulfill({ status: 500, headers: CORS, body: `unmatched ${key}` });
   });
@@ -102,10 +130,34 @@ async function fillDetails(page: Page, type: 'apartment' | 'room') {
   await page.getByLabel(f.price).fill('7200');
 }
 
-/** Steps 1 and 2 filled in, on step 3. */
-async function toPreferences(page: Page, type: 'apartment' | 'room') {
+/** Steps 1 and 2 filled in, on the photos step (spec 0010e). */
+async function toPhotos(page: Page, type: 'apartment' | 'room') {
   await toDetails(page, type);
   await fillDetails(page, type);
+  await next(page).click();
+  await expect(
+    heading(
+      page,
+      type === 'room' ? he.listings.stepTitle.photosRoom : he.listings.stepTitle.photos,
+    ),
+  ).toBeVisible();
+}
+
+/** `count` copies of the e2e JPEG, picked on the photos step. */
+async function pickPhotos(page: Page, count: number) {
+  await page.locator('input[type="file"]').setInputFiles(
+    Array.from({ length: count }, (_, i) => ({
+      name: `photo-${String(i + 1)}.jpg`,
+      mimeType: 'image/jpeg',
+      buffer: JPEG,
+    })),
+  );
+  await expect(page.locator('li[data-photo] img')).toHaveCount(count);
+}
+
+/** Steps 1 and 2 filled in, through the photos (none chosen), on the preferences. */
+async function toPreferences(page: Page, type: 'apartment' | 'room') {
+  await toPhotos(page, type);
   await next(page).click();
   await expect(
     heading(page, type === 'room' ? he.listings.prefs.titleRoom : he.listings.prefs.title),
@@ -149,6 +201,8 @@ type State = {
   act: (page: Page) => Promise<void>;
   /** A modal is fixed to the viewport: a full-page capture would misplace it and its backdrop. */
   modal?: boolean;
+  /** The folder under web/screens/ (default the wizard's spec, 0009k). */
+  spec?: string;
 };
 
 const EDIT = `/me/listings/${LISTING_ID}/edit`;
@@ -307,6 +361,105 @@ const STATES: State[] = [
       await expect(page.locator('[aria-busy="true"]').first()).toBeVisible();
     },
   },
+  {
+    name: '01-photos-empty',
+    spec: '0010e',
+    setup: {},
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'apartment');
+      await expect(page.getByText(he.listings.photos.empty)).toBeVisible();
+    },
+  },
+  {
+    name: '02-photos-some',
+    spec: '0010e',
+    setup: {},
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'room');
+      await pickPhotos(page, 3);
+      await expect(page.getByText(he.listings.photos.cover, { exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: '03-photos-full',
+    spec: '0010e',
+    setup: {},
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'apartment');
+      await pickPhotos(page, 10);
+      await expect(page.getByRole('button', { name: he.listings.photos.add })).toHaveCount(0);
+      await expect(page.getByText('10 מתוך 10', { exact: true })).toBeFocused();
+    },
+  },
+  {
+    name: '04-photos-rejected',
+    spec: '0010e',
+    setup: {},
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'apartment');
+      await page.locator('input[type="file"]').setInputFiles([
+        { name: 'animation.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') },
+        { name: 'huge.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(9 * 1024 * 1024) },
+        { name: 'photo.jpg', mimeType: 'image/jpeg', buffer: JPEG },
+      ]);
+      await expect(page.getByRole('alert')).toBeVisible();
+    },
+  },
+  {
+    name: '05-preview-cover',
+    spec: '0010e',
+    setup: {},
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'apartment');
+      await pickPhotos(page, 2);
+      await next(page).click();
+      await next(page).click();
+      await expect(heading(page, he.listings.stepTitle.preview)).toBeVisible();
+      await expect(page.getByRole('article').locator('img')).toBeVisible();
+    },
+  },
+  {
+    name: '06-syncing',
+    spec: '0010e',
+    setup: { uploads: ['hold'] },
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'apartment');
+      await pickPhotos(page, 2);
+      await next(page).click();
+      await next(page).click();
+      await page.getByRole('button', { name: he.listings.publish }).click();
+      await expect(
+        page.getByText(
+          he.listings.photos.uploading.replace('{{done}}', '1').replace('{{total}}', '2'),
+        ),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: '07-mine-photos-failed',
+    spec: '0010e',
+    setup: { uploads: [201, 503], mine: [listing({ photos: [photoOut(1)] })] },
+    path: NEW,
+    act: async (page) => {
+      await toPhotos(page, 'apartment');
+      await pickPhotos(page, 2);
+      await next(page).click();
+      await next(page).click();
+      await page.getByRole('button', { name: he.listings.publish }).click();
+      await expect(page).toHaveURL('/me/listings');
+      await expect(page.getByRole('alert')).toHaveText(he.listings.mine.photosFailed_one);
+      const cover = page.getByRole('article').locator('img');
+      await expect
+        .poll(() => cover.evaluate((img: HTMLImageElement) => img.naturalWidth))
+        .toBeGreaterThan(0);
+    },
+  },
 ];
 
 for (const state of STATES) {
@@ -318,7 +471,7 @@ for (const state of STATES) {
     await page.screenshot({
       fullPage: state.modal !== true,
       animations: 'disabled',
-      path: `screens/0009k/${state.name}-${testInfo.project.name}.png`,
+      path: `screens/${state.spec ?? '0009k'}/${state.name}-${testInfo.project.name}.png`,
     });
     expect(unmatched, 'unmatched API requests').toEqual([]);
   });

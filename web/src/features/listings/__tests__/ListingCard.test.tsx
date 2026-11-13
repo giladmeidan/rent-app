@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -365,5 +365,53 @@ describe('ListingCard', () => {
       expect(chips()).not.toContain(he.listings.card.mineApartment);
       view.unmount();
     }
+  });
+
+  it('cover', () => {
+    const listing = publicListing({ listing_type: 'room', flatmates_count: 2 });
+    const cardWith = (coverUrl?: string | null) => (
+      <MemoryRouter>
+        <ListingCard listing={listing} today={TODAY} coverUrl={coverUrl} />
+      </MemoryRouter>
+    );
+    const placeholder = () => screen.getByRole('article').querySelector('svg[aria-hidden="true"]');
+    const image = () => screen.getByRole('article').querySelector('img');
+
+    // A cover: the image fills the 16:10 box, decorative (the title names the listing), under the
+    // room tag; no placeholder.
+    const view = render(cardWith('https://media.example.test/a-s.webp'));
+    const img = image();
+    expect(img).toHaveAttribute('src', 'https://media.example.test/a-s.webp');
+    expect(img).toHaveAttribute('alt', '');
+    expect(img).toHaveAttribute('loading', 'lazy');
+    expect(img).toHaveAttribute('decoding', 'async');
+    expect(img).toHaveClass('absolute', 'inset-0', 'size-full', 'object-cover');
+    const box = img?.parentElement as HTMLElement;
+    expect(box).toHaveClass('aspect-[16/10]', 'overflow-hidden');
+    expect(within(box).getByText(he.listings.card.room)).toBeVisible();
+    expect(img?.compareDocumentPosition(within(box).getByText(he.listings.card.room))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(placeholder()).toBeNull();
+    // `alt=""`: the image is not in the accessibility tree.
+    expect(screen.queryByRole('img')).toBeNull();
+
+    // It fails to load: the placeholder.
+    fireEvent.error(img as HTMLImageElement);
+    expect(image()).toBeNull();
+    expect(placeholder()).not.toBeNull();
+
+    // A new address is tried again.
+    view.rerender(cardWith('https://media.example.test/b-s.webp'));
+    expect(image()).toHaveAttribute('src', 'https://media.example.test/b-s.webp');
+    expect(placeholder()).toBeNull();
+
+    // No cover (null or not given): today's card.
+    for (const coverUrl of [null, undefined]) {
+      view.rerender(cardWith(coverUrl));
+      expect(image()).toBeNull();
+      expect(placeholder()).not.toBeNull();
+    }
+    view.unmount();
   });
 });

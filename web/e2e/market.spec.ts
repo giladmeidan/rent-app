@@ -111,7 +111,7 @@ test('ac14_two_sides', async ({ page }) => {
     page.getByRole('heading', { level: 2, name: he.listings.stepTitle.detailsRoom }),
   ).toBeVisible();
   await expect(
-    page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '3')),
+    page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '4')),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: he.common.back })).toHaveCount(0);
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
@@ -122,6 +122,11 @@ test('ac14_two_sides', async ({ page }) => {
   await page.getByLabel(f.size, { exact: true }).fill('90');
   await page.getByLabel(f.price).fill('3200');
   await page.getByLabel(f.availableFrom).fill(israelDay(30));
+  await next.click();
+  // The photos step (0010e), skipped.
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.listings.stepTitle.photosRoom }),
+  ).toBeVisible();
   await next.click();
   await expect(
     page.getByRole('heading', { level: 2, name: he.listings.prefs.titleRoom }),
@@ -161,7 +166,7 @@ test('ac18_role_free_market', async ({ page, browser }) => {
     ),
   );
 
-  // "שלי" → "חדר חדש": a room through the 3-step wizard.
+  // "שלי" → "חדר חדש": a room through the 4-step wizard.
   await bar.getByRole('link', { name: he.nav.mine, exact: true }).click();
   await expect(page).toHaveURL('/market/mine');
   await page.getByRole('link', { name: he.market.mine.newRoom, exact: true }).click();
@@ -169,7 +174,7 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   const f = he.listings.fields;
   const next = page.getByRole('button', { name: he.listings.next });
   await expect(
-    page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '3')),
+    page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '4')),
   ).toBeVisible();
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
@@ -179,6 +184,11 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   await page.getByLabel(f.size, { exact: true }).fill('90');
   await page.getByLabel(f.price).fill('3200');
   await page.getByLabel(f.availableFrom).fill(israelDay(30));
+  await next.click();
+  // The photos step (0010e), skipped.
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.listings.stepTitle.photosRoom }),
+  ).toBeVisible();
   await next.click();
   await page
     .getByRole('region', { name: he.listings.room.title })

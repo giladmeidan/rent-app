@@ -9,11 +9,19 @@ import { useConfirm } from '../../components/Dialog';
 import { PageHeader } from '../../components/PageHeader';
 import { fetchAreas } from '../areas/api';
 import { ME_KEY } from '../auth/useMe';
-import { ApiError, type ListingOut, type ListingType, type MyListingOut } from './api';
+import {
+  ApiError,
+  type ListingOut,
+  type ListingType,
+  type MyListingOut,
+  type PhotoOut,
+} from './api';
 import { DetailsStep } from './DetailsStep';
 import { todayInIsrael } from './format';
+import { PhotosStep } from './PhotosStep';
 import { PreferencesStep } from './PreferencesStep';
 import { PreviewStep, type PublishError } from './PreviewStep';
+import { syncPhotos, type WizardPhoto } from './syncPhotos';
 import { TypeStep } from './TypeStep';
 import { useCreateListing } from './useCreateListing';
 import { MY_LISTINGS_KEY } from './useMyListings';
@@ -32,7 +40,7 @@ import {
   type ListingForm,
 } from './validate';
 
-type Step = 1 | 2 | 3 | 4;
+type StepName = 'type' | 'details' | 'photos' | 'preferences' | 'preview';
 type Outcome = PublishError | 'unauthenticated' | 'forbidden' | 'notFound';
 
 function outcome(error: Error): Outcome {
@@ -47,7 +55,7 @@ function outcome(error: Error): Outcome {
 
 const fieldNames: readonly string[] = FIELD_ORDER;
 
-/** The fields of step 3 (the rest of `FIELD_ORDER` is step 2's). */
+/** The fields of the preferences step (the rest of `FIELD_ORDER` is the details step's). */
 const PREFERENCE_FIELDS: readonly FieldName[] = [
   'accepted_households',
   'min_contract_months',
@@ -108,11 +116,23 @@ function mineFor(type: ListingType | null): string {
   return type === 'room' ? '/market/mine' : '/me/listings';
 }
 
+const storedPhotos = (photos: PhotoOut[]): WizardPhoto[] =>
+  photos.map((photo) => ({ kind: 'stored', id: photo.id, url: photo.small_url }));
+
+/** Whether the wizard's photos are the stored ones, in the stored order. */
+function samePhotos(photos: WizardPhoto[], stored: PhotoOut[]): boolean {
+  return (
+    photos.length === stored.length &&
+    photos.every((photo, i) => photo.kind === 'stored' && photo.id === stored[i]?.id)
+  );
+}
+
 /**
- * Type → details → preferences → preview → publish (or, with `listing`, → save). Everything
- * entered lives in this component's state only (no storage, no URL), so "back" keeps it and a
- * reload starts over. Edit mode and a preselected type start on details (`firstStep` 2) and never
- * show the type step; the steps shown are numbered from there ("1 of 3").
+ * Type → details → photos → preferences → preview → publish (or, with `listing`, → save).
+ * Everything entered lives in this component's state only (no storage, no URL), so "back" keeps
+ * it and a reload starts over. Edit mode and a preselected type start on details and never show
+ * the type step; the steps shown are numbered from there ("1 of 4"). Chosen photos are uploaded
+ * after the publish or save succeeds (`syncPhotos`).
  */
 export function ListingWizard({ listing, initialType }: Props) {
   const { t } = useTranslation();
@@ -128,16 +148,27 @@ export function ListingWizard({ listing, initialType }: Props) {
   const [base] = useState(() => listing);
   const editing = base !== undefined;
 
-  const [firstStep] = useState<Step>(() => (editing || initialType !== undefined ? 2 : 1));
-  const [step, setStep] = useState<Step>(firstStep);
+  // The steps this wizard shows: the type step only when it is reachable.
+  const [order] = useState<StepName[]>(() =>
+    editing || initialType !== undefined
+      ? ['details', 'photos', 'preferences', 'preview']
+      : ['type', 'details', 'photos', 'preferences', 'preview'],
+  );
+  const [step, setStep] = useState<StepName>(order[0] ?? 'details');
   const [form, setForm] = useState<ListingForm>(() =>
     base === undefined
       ? { ...emptyForm, listing_type: initialType ?? null }
       : formFromListing(base),
   );
-  // What is shown: step `firstStep` is "1", out of the steps from there on.
-  const shown = step - firstStep + 1;
-  const total = 5 - firstStep;
+  const index = order.indexOf(step);
+  // What is shown: the first step is "1", out of the steps this wizard has.
+  const shown = index + 1;
+  const total = order.length;
+  const [photos, setPhotos] = useState<WizardPhoto[]>(() =>
+    base === undefined ? [] : storedPhotos(base.photos),
+  );
+  // Uploading after the save: the 1-based photo uploading, of how many (0 of n while deleting).
+  const [syncing, setSyncing] = useState<{ done: number; total: number } | null>(null);
   // Where a save or a leave goes: the stored type in edit mode, else the chosen one.
   const mine = mineFor(base?.listing_type ?? form.listing_type);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -155,6 +186,8 @@ export function ListingWizard({ listing, initialType }: Props) {
   // Called in both modes (rules of hooks); only mutated when editing.
   const edit = usePatchListing(base?.id ?? '');
   const active = editing ? edit : create;
+  // The save, then the photo uploads: the buttons stay disabled and busy through both.
+  const busy = active.isPending || syncing !== null;
   const today = todayInIsrael();
 
   // One active area is preselected; a selection that is no longer offered is dropped.
@@ -169,17 +202,30 @@ export function ListingWizard({ listing, initialType }: Props) {
   // From `form`, not `current`: `withArea` gives `area_id: ''` while the areas load, which would
   // mark an untouched form as changed.
   const dirty =
-    base !== undefined && Object.keys(changedFields(base, toListingIn(form))).length > 0;
+    base !== undefined &&
+    (Object.keys(changedFields(base, toListingIn(form))).length > 0 ||
+      !samePhotos(photos, base.photos));
 
-  // Reload or tab close while dirty: the browser asks (with its own text).
+  // Reload or tab close while dirty, or while photos upload (either mode): the browser asks (with
+  // its own text).
+  const guardUnload = dirty || syncing !== null;
   useEffect(() => {
-    if (!dirty) return;
+    if (!guardUnload) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  }, [guardUnload]);
+
+  // A sync that ends after the lister left (a header link, browser Back) does not navigate.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const fieldId = (name: FieldName) => `${id}-${name}`;
 
@@ -198,10 +244,25 @@ export function ListingWizard({ listing, initialType }: Props) {
     (element ?? headingRef.current)?.focus();
   }, [step]);
 
+  // Chosen files' object URLs go with the wizard (a removal revokes its own, `PhotosStep`).
+  const photosRef = useRef(photos);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+  useEffect(
+    () => () => {
+      for (const photo of photosRef.current) {
+        if (photo.kind === 'new') URL.revokeObjectURL(photo.url);
+      }
+    },
+    [],
+  );
+
   function update(patch: Partial<ListingForm>) {
     const next = { ...form, ...patch };
     setForm(next);
-    // A new type starts step 3's validation over: the room block has not been "attempted" yet.
+    // A new type starts the preferences' validation over: the room block has not been
+    // "attempted" yet.
     if (patch.listing_type !== undefined && patch.listing_type !== form.listing_type) {
       setPreferencesAttempted(false);
     }
@@ -236,7 +297,7 @@ export function ListingWizard({ listing, initialType }: Props) {
     }
   }
 
-  function goTo(next: Step) {
+  function goTo(next: StepName) {
     create.reset();
     edit.reset();
     setStep(next);
@@ -266,7 +327,7 @@ export function ListingWizard({ listing, initialType }: Props) {
         setServerErrors(found);
         focusAfterStep.current = fieldId(first);
         // Details fields come first in FIELD_ORDER: a 422 naming both kinds lands on details.
-        goTo(PREFERENCE_FIELDS.includes(first) ? 3 : 2);
+        goTo(PREFERENCE_FIELDS.includes(first) ? 'preferences' : 'details');
       }
     }
   }
@@ -276,53 +337,99 @@ export function ListingWizard({ listing, initialType }: Props) {
     if (Object.keys(serverErrors).length > 0) setServerErrors({});
   }
 
+  /** After the listing is saved: the photos, then "my listings" with how many failed. */
+  async function finish(
+    listingId: string,
+    stored: PhotoOut[],
+    state: { published: true } | { saved: true },
+  ) {
+    const added = photos.filter((photo) => photo.kind === 'new').length;
+    setSyncing({ done: 0, total: added });
+    let result: { failed: number; unauthenticated: boolean };
+    try {
+      result = await syncPhotos(listingId, stored, photos, (done, of) => {
+        if (mounted.current) setSyncing({ done, total: of });
+      });
+    } catch {
+      // Not expected (each request's failure is counted inside): every new photo counts as failed.
+      result = { failed: added, unauthenticated: false };
+    } finally {
+      if (mounted.current) setSyncing(null);
+    }
+    // The cover and the gallery changed.
+    void queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY });
+    void queryClient.invalidateQueries({ queryKey: ['listing', listingId] });
+    if (result.unauthenticated) {
+      // The session is gone: the page sends the lister to log in. `publishing` stays set: the
+      // listing exists, so another click must not post it again.
+      queryClient.setQueryData<UserOut | null>(ME_KEY, null);
+      return;
+    }
+    publishing.current = false;
+    if (mounted.current) {
+      void navigate(mine, { state: { ...state, photosFailed: result.failed } });
+    }
+  }
+
   function publish() {
     if (publishing.current) return;
     const settle = {
-      onSettled: () => {
+      onError: (error: Error) => {
         publishing.current = false;
+        onSaveError(error);
       },
-      onError: onSaveError,
     };
     if (base === undefined) {
       publishing.current = true;
       clearServerErrors();
       create.mutate(toListingIn(current), {
         ...settle,
-        onSuccess: () => navigate(mine, { state: { published: true } }),
+        onSuccess: (created) => {
+          void finish(created.id, [], { published: true });
+        },
       });
       return;
     }
     const body = changedFields(base, toListingIn(current));
     if (Object.keys(body).length === 0) {
-      navigate(mine);
+      if (samePhotos(photos, base.photos)) {
+        void navigate(mine);
+        return;
+      }
+      publishing.current = true;
+      void finish(base.id, base.photos, { saved: true });
       return;
     }
     publishing.current = true;
     clearServerErrors();
     edit.mutate(body, {
       ...settle,
-      onSuccess: () => navigate(mine, { state: { saved: true } }),
+      onSuccess: (updated) => {
+        void finish(updated.id, updated.photos, { saved: true });
+      },
     });
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (step === 1) {
-      if (form.listing_type !== null) goTo(2);
-    } else if (step === 2 || step === 3) {
-      const found = step === 2 ? validate(current, today) : validatePreferences(current);
+    if (step === 'type') {
+      if (form.listing_type !== null) goTo('details');
+    } else if (step === 'photos') {
+      // Photos have nothing to validate.
+      goTo('preferences');
+    } else if (step === 'details' || step === 'preferences') {
+      const found = step === 'details' ? validate(current, today) : validatePreferences(current);
       // A preferences error survives a round trip to details (`found` alone decides the step).
       setErrors(
-        step === 2
+        step === 'details'
           ? { ...found, ...(preferencesAttempted ? validatePreferences(current) : {}) }
           : found,
       );
       setAttempted(true);
-      if (step === 3) setPreferencesAttempted(true);
+      if (step === 'preferences') setPreferencesAttempted(true);
       const first = firstInvalid(found);
       if (first === undefined) {
-        goTo(step === 2 ? 3 : 4);
+        goTo(step === 'details' ? 'photos' : 'preview');
         return;
       }
       // The area may have no input (no areas, or a load error): focus the next field that has one.
@@ -343,23 +450,27 @@ export function ListingWizard({ listing, initialType }: Props) {
   if (failure === 'unauthenticated') return <Navigate to="/login" replace />;
   if (failure === 'forbidden') return <Navigate to="/" replace />;
 
-  // The internal steps from `firstStep` on: the type step only when it is reachable.
-  const steps = [
-    t('listings.steps.type'),
-    t('listings.steps.details'),
-    t('listings.steps.preferences'),
-    t('listings.steps.preview'),
-  ].slice(firstStep - 1);
+  const stepNames: Record<StepName, string> = {
+    type: t('listings.steps.type'),
+    details: t('listings.steps.details'),
+    photos: t('listings.steps.photos'),
+    preferences: t('listings.steps.preferences'),
+    preview: t('listings.steps.preview'),
+  };
+  const steps = order.map((name) => stepNames[name]);
 
   const room = form.listing_type === 'room';
   let heading: string;
   let hint: string | null = null;
-  if (step === 1) {
+  if (step === 'type') {
     heading = t('listings.stepTitle.type');
-  } else if (step === 2) {
+  } else if (step === 'details') {
     heading = t(room ? 'listings.stepTitle.detailsRoom' : 'listings.stepTitle.details');
     hint = t('listings.stepHint.details');
-  } else if (step === 3) {
+  } else if (step === 'photos') {
+    heading = t(room ? 'listings.stepTitle.photosRoom' : 'listings.stepTitle.photos');
+    hint = t('listings.photos.hint');
+  } else if (step === 'preferences') {
     heading = t(room ? 'listings.prefs.titleRoom' : 'listings.prefs.title');
     hint = t('listings.prefs.hint');
   } else {
@@ -407,8 +518,12 @@ export function ListingWizard({ listing, initialType }: Props) {
                           ? t('market.mine.back')
                           : t('listings.edit.backToMine'),
                       onClick: (event) => {
-                        // A clean form leaves; a dirty one asks first (the link is followed only
-                        // once the dialog resolves `true`).
+                        // Not while the photos upload. A clean form leaves; a dirty one asks
+                        // first (the link is followed only once the dialog resolves `true`).
+                        if (syncing !== null) {
+                          event.preventDefault();
+                          return;
+                        }
                         if (!dirty) return;
                         event.preventDefault();
                         void confirm({
@@ -484,7 +599,7 @@ export function ListingWizard({ listing, initialType }: Props) {
         <div className="flex flex-col gap-6 lg:col-start-2 lg:row-start-2">
           <div
             onBlur={() => {
-              if (step === 2 && attempted) setErrors(validate(current, today));
+              if (step === 'details' && attempted) setErrors(validate(current, today));
             }}
             className="mx-auto flex w-full max-w-narrow flex-col gap-6 lg:max-w-none"
           >
@@ -500,13 +615,13 @@ export function ListingWizard({ listing, initialType }: Props) {
                 )}
               </p>
             </div>
-            {step === 1 && (
+            {step === 'type' && (
               <TypeStep
                 value={form.listing_type}
                 onChange={(listing_type) => update({ listing_type })}
               />
             )}
-            {step === 2 && (
+            {step === 'details' && (
               <DetailsStep
                 form={current}
                 onChange={update}
@@ -516,7 +631,8 @@ export function ListingWizard({ listing, initialType }: Props) {
                 fieldId={fieldId}
               />
             )}
-            {step === 3 && (
+            {step === 'photos' && <PhotosStep photos={photos} onChange={setPhotos} />}
+            {step === 'preferences' && (
               <PreferencesStep
                 form={current}
                 onChange={update}
@@ -524,9 +640,10 @@ export function ListingWizard({ listing, initialType }: Props) {
                 fieldId={fieldId}
               />
             )}
-            {step === 4 && (
+            {step === 'preview' && (
               <PreviewStep
                 body={toListingIn(current)}
+                coverUrl={photos[0]?.url ?? null}
                 today={today}
                 // A 404 while editing unmounts the wizard (the page shows "not found").
                 error={failure === 'notFound' ? 'failed' : failure}
@@ -534,7 +651,7 @@ export function ListingWizard({ listing, initialType }: Props) {
                 onBackToDetails={() => {
                   // The chosen area was deactivated: offer the current list.
                   void queryClient.invalidateQueries({ queryKey: ['areas'] });
-                  goTo(2);
+                  goTo('details');
                 }}
               />
             )}
@@ -545,12 +662,15 @@ export function ListingWizard({ listing, initialType }: Props) {
             className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-surface px-4 pt-3 pb-[max(theme(spacing.6),env(safe-area-inset-bottom))] md:-mx-6 md:px-6 lg:bottom-4 lg:mx-0 lg:rounded-lg lg:border lg:px-4 lg:pb-3"
           >
             <div className="mx-auto flex w-full max-w-narrow gap-3 lg:max-w-none lg:justify-between">
-              {step > firstStep && (
+              {index > 0 && (
                 <Button
                   variant="secondary"
                   size="lg"
                   type="button"
-                  onClick={() => goTo((step - 1) as Step)}
+                  // Not while the save is pending either: `goTo` resets the mutation, which drops
+                  // its `onSuccess` (the photos would never upload).
+                  disabled={busy}
+                  onClick={() => goTo(order[index - 1] ?? step)}
                   icon={chevron('M9 6l6 6-6 6')}
                   className="basis-2/5 lg:flex-none lg:basis-auto"
                 >
@@ -561,18 +681,31 @@ export function ListingWizard({ listing, initialType }: Props) {
                 variant="primary"
                 size="lg"
                 type="submit"
-                disabled={(step === 1 && form.listing_type === null) || active.isPending}
-                aria-busy={active.isPending}
+                disabled={(step === 'type' && form.listing_type === null) || busy}
+                aria-busy={busy}
                 className="flex-1 lg:ms-auto lg:min-w-48 lg:flex-none"
               >
-                {step < 4
+                {step !== 'preview'
                   ? t('listings.next')
                   : editing
                     ? t('listings.save')
                     : t('listings.publish')}
-                {step < 4 && chevron('M15 6l-6 6 6 6')}
+                {step !== 'preview' && chevron('M15 6l-6 6 6 6')}
               </Button>
             </div>
+            {/* Always mounted, so the progress is announced as it changes. */}
+            <p
+              role="status"
+              className={
+                syncing !== null && syncing.done > 0
+                  ? 'mx-auto mt-2 w-full max-w-narrow text-body-sm text-ink-muted lg:max-w-none'
+                  : 'sr-only'
+              }
+            >
+              {syncing !== null && syncing.done > 0
+                ? t('listings.photos.uploading', { done: syncing.done, total: syncing.total })
+                : ''}
+            </p>
           </div>
         </div>
       </form>
