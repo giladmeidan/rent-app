@@ -32,7 +32,10 @@ Rules:
   (`listing_flatmates.shown`, default off) and changes it from `/me/flats` (`set_shown`); a member's
   re-join keeps the stored choice. `shown_people` reads the people a seeker sees there: the lister
   when `poster = 'lives_here'`, then the shown flatmates, each hidden from a viewer whose gender
-  contradicts that person's flatmates preference (decision 7). The router decides who may ask."""
+  contradicts that person's flatmates preference (decision 7). On a room for women (or men) only,
+  nobody is shown to a viewer who is not a woman (a man), whatever their looking part: a viewer
+  with no gender (no profile row, or no personal part) sees nobody either (fail closed). The router
+  decides who may ask."""
 
 import secrets
 import uuid
@@ -364,10 +367,26 @@ def _fits_viewer(person: type[SeekerProfile], viewer_id: uuid.UUID) -> ColumnEle
     )
 
 
+def _fits_room(listing: Listing, viewer_id: uuid.UUID) -> ColumnElement[bool]:
+    """The room's own gender preference gates its people (decision 7): on a `women` (`men`) room
+    only a viewer whose profile says `woman` (`man`) sees anyone. It does not hang on the looking
+    part, so a viewer without one (whose `flatmate_gender` reads `any`, and whose `room_fit` is
+    unknown) is held to it too."""
+    if listing.gender_preference == "any":
+        return true()
+    needed = "woman" if listing.gender_preference == "women" else "man"
+    viewer = aliased(SeekerProfile, name="room_viewer")
+    gender = select(viewer.gender).where(viewer.user_id == viewer_id).scalar_subquery()
+    # Fail closed: a viewer with no gender (no profile row: the subquery is NULL; or no personal
+    # part) sees nobody. To let them through: `func.coalesce(gender, needed) == needed`.
+    return gender == needed
+
+
 def shown_people(db: Session, listing: Listing, viewer_id: uuid.UUID) -> Sequence[Row[Any]]:
     """The people the seeker `viewer_id` sees on the room `listing`'s page (spec 0010f): the lister
     when `listing.poster == 'lives_here'` (`lister` true, first), then every flatmate who chose to
-    be shown, by `joined_at`; each filtered by `_fits_viewer`. Rows of `display_name`, `photo_key`,
+    be shown, by `joined_at`; nobody when the viewer's gender does not fit the room's own preference
+    (`_fits_room`), else each filtered by `_fits_viewer`. Rows of `display_name`, `photo_key`,
     `gender`, `birth_year`, `about_me`, `lifestyle` (NULL without a profile row or a personal
     part), `lister` and `joined_at`: never a user id, never a looking field. One statement (a
     `UNION ALL`; the lister's branch only when they live there). The caller checks that the viewer
@@ -390,6 +409,7 @@ def shown_people(db: Session, listing: Listing, viewer_id: uuid.UUID) -> Sequenc
         .where(
             ListingFlatmate.listing_id == listing.id,
             ListingFlatmate.shown.is_(True),
+            _fits_room(listing, viewer_id),
             _fits_viewer(flatmate_profile, viewer_id),
         )
     )
@@ -409,7 +429,11 @@ def shown_people(db: Session, listing: Listing, viewer_id: uuid.UUID) -> Sequenc
         )
         .select_from(User)
         .outerjoin(lister_profile, lister_profile.user_id == User.id)
-        .where(User.id == listing.owner_id, _fits_viewer(lister_profile, viewer_id))
+        .where(
+            User.id == listing.owner_id,
+            _fits_room(listing, viewer_id),
+            _fits_viewer(lister_profile, viewer_id),
+        )
     )
     people = union_all(lister, flatmates).subquery("people")
     return db.execute(select(people).order_by(people.c.lister.desc(), people.c.joined_at)).all()

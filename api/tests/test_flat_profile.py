@@ -363,7 +363,41 @@ def test_ac3b_people_follow_the_gender_rule(
     assert _names(woman, flat.room) == ["Noa", "Fay"]
 
 
-# --- AC4 ---------------------------------------------------------------------------------------
+def test_ac3c_room_gender_gates_people_without_looking_part(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID, flat: Flat
+) -> None:
+    # A women-only room whose lister (lives here) and shown flatmate are both women.
+    _execute(
+        db_engine,
+        "UPDATE seeker_profiles SET gender = 'woman' WHERE user_id = :id",
+        id=flat.owner_id,
+    )
+    _ok(flat.owner.patch(f"/listings/{flat.room}", json={"gender_preference": "women"}))
+
+    man = signup(client, outbox, "man@example.com", "seeker", display_name="Avi")
+    make_profile(db_engine, _user_id(man), gush_dan, gender="man", **NO_LOOKING)
+    no_profile = signup(client, outbox, "nop@example.com", "seeker", display_name="Kim")
+    owner_seeker = signup(client, outbox, "os@example.com", "owner", display_name="Ori")
+    make_profile(db_engine, _user_id(owner_seeker), gush_dan, gender=None)
+    woman = signup(client, outbox, "woman@example.com", "seeker", display_name="Dana")
+    make_profile(db_engine, _user_id(woman), gush_dan, gender="woman", **NO_LOOKING)
+
+    for name, caller in (
+        ("a man without the looking part", man),
+        ("a seeker with no profile row", no_profile),
+        ("an owner-role seeker with no gender", owner_seeker),
+    ):
+        page = _detail(caller, flat.room)
+        assert page["people"] == [], name
+        assert page["poster"] == "lives_here", name  # the room itself stays visible
+    assert _people(woman, flat.room) == [{**flat.lister_out, "gender": "woman"}, flat.f1_out]
+
+    # And the same on a men-only room: the woman now sees nobody.
+    _ok(flat.owner.patch(f"/listings/{flat.room}", json={"gender_preference": "men"}))
+    assert _people(woman, flat.room) == []
+
+
+# --- AC4---------------------------------------------------------------------------------------
 
 
 def test_ac4_people_edge_cases_and_statement_count(
@@ -465,7 +499,26 @@ def test_ac5_join_shown_and_toggle(
     assert _shown(db_engine, flat.room, flat.f1_id) is False
     anonymous = client.patch(path, json={"shown": True})
     assert anonymous.status_code == 401
-    for bad in ({}, {"shown": True, "extra": 1}, {"shown": "maybe"}):
+    for bad in (
+        {},
+        {"shown": True, "extra": 1},
+        {"shown": "maybe"},
+        {"shown": "yes"},
+        {"shown": "true"},
+        {"shown": 1},
+        {"shown": 0},
+    ):
         response = flat.f1.patch(path, json=bad)
         assert response.status_code == 422, (bad, response.text)
     assert _shown(db_engine, flat.room, flat.f1_id) is False
+
+    # The join's consent is a JSON boolean too: nothing is coerced, and nobody joins.
+    for shown in ("yes", "true", 1, 0):
+        response = _join(seeker, {"token": token, "shown": shown})
+        assert response.status_code == 422, (shown, response.text)
+    assert (
+        _execute_all(
+            db_engine, "SELECT 1 FROM listing_flatmates WHERE user_id = :u", u=_user_id(seeker)
+        )
+        == []
+    )

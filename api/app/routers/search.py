@@ -19,9 +19,9 @@ listing that is not public is a 404 `not_found`, the same body as an unknown id.
 account on a room it does not own also gets the listing page's `like` (spec 0008a), the likes
 between them and the room. A seeker on a room that fits them (`room_fit` not false) also gets the
 listing page's `people` (spec 0010f, `services/flatmates.py::shown_people`): the lister when they
-live there and the flatmates who chose to be shown; everyone else gets `[]`."""
+live there and the flatmates who chose to be shown (on a gendered room, only to a viewer of the
+room's gender); everyone else gets `[]`."""
 
-import datetime as dt
 import uuid
 from typing import Annotated, Any
 
@@ -137,12 +137,11 @@ def get_listing(
     seeker = profiles_service.sees_room_privacy(user, profile_user_id)
     people: list[FlatPersonOut] = []
     if user is not None and seeker and listing.listing_type == "room" and room_fit is not False:
-        year = dt.datetime.now(dt.UTC).year
         people = [
             FlatPersonOut(
                 display_name=row.display_name,
                 photo_url=photos_service.person_photo_url(row.photo_key),
-                age=None if row.birth_year is None else year - row.birth_year,
+                age=people_service.age(row.birth_year),
                 gender=row.gender,
                 about_me=row.about_me,
                 lifestyle=row.lifestyle or {},

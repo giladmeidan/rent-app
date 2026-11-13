@@ -180,9 +180,13 @@ describe('MyFlatsPage', () => {
     reset(view);
 
     // A failure: back to the stored value, `common.error` on the card.
-    ({ api, view } = renderPage([() => json([A])], {
-      [patchA]: [() => json({ detail: 'boom' }, 500)],
-    }));
+    const retry = deferred();
+    ({ api, view } = renderPage(
+      [() => json([A]), () => json([A]), () => json([{ ...A, shown: true }])],
+      {
+        [patchA]: [() => json({ detail: 'boom' }, 500), retry.promise],
+      },
+    ));
     const again = await screen.findByRole('switch', { name: he.flatmates.join.show });
     fireEvent.click(again);
     const alert = await screen.findByRole('alert');
@@ -191,6 +195,32 @@ describe('MyFlatsPage', () => {
     expect(again).not.toBeChecked();
     expect(again).toBeEnabled();
     expect(api.calls(patchA)).toHaveLength(1);
+    // A second toggle clears the failure at once, and its success leaves no error behind.
+    fireEvent.click(again);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(again).toBeChecked();
+    retry.resolve(empty());
+    await waitFor(() => {
+      expect(again).toBeEnabled();
+    });
+    expect(again).toBeChecked();
+    expect(api.calls(patchA)).toHaveLength(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+    reset(view);
+
+    // A failed leave's line goes too when the switch is toggled next.
+    ({ api, view } = renderPage([() => json([A])], {
+      [leaveRoute(A)]: [() => json({ detail: 'x' }, 500)],
+      [patchA]: [() => empty()],
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: he.flatmates.mine.leave }));
+    await answerLeave(he.flatmates.mine.leave);
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    fireEvent.click(screen.getByRole('switch', { name: he.flatmates.join.show }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await waitFor(() => {
+      expect(api.calls(patchA)).toHaveLength(1);
+    });
     reset(view);
   });
 

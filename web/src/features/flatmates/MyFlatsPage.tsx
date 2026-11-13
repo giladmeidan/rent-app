@@ -78,6 +78,10 @@ function FlatRow({
   function onShow(next: boolean) {
     if (saving !== null) return;
     setSaving(next);
+    // A new toggle clears the card's last failure line: the toggle's (not pending: `saving` guards
+    // that) and a failed leave's (an errored mutation is settled, so resetting it drops nothing).
+    show.reset();
+    if (leave.isError) leave.reset();
     show.mutate(next, { onSettled: () => setSaving(null) });
   }
 
