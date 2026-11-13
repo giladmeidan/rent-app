@@ -1628,3 +1628,179 @@ def test_ac11_flatmates_upgrade_downgrade(migration_db_url: str) -> None:
             assert conn.execute(text("SELECT count(*) FROM listing_flatmates")).scalar_one() == 0
     finally:
         engine.dispose()
+
+
+def test_ac14_photos_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0010d: 0013 adds `listing_photos` and `users.photo_key`; the existing listing and user
+    # survive both ways.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0012")
+    engine = create_engine(migration_db_url)
+    key = "A" * 42 + "_"  # the token alphabet, 43 characters
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            owner = conn.execute(
+                text(
+                    "INSERT INTO users (email, display_name, role)"
+                    " VALUES ('owner@example.com', 'owner', 'owner') RETURNING id"
+                )
+            ).scalar_one()
+            listing_id = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at)"
+                    " VALUES (:owner, :area, 'apartment', 'city', 'street', 3, 1, 80, 4500,"
+                    " current_date, false, 'none', false, now() + interval '90 days')"
+                    " RETURNING id"
+                ),
+                {"owner": owner, "area": area_id},
+            ).scalar_one()
+        tables_0012 = _table_names(migration_db_url)
+        assert "listing_photos" not in tables_0012
+
+        def survivors(conn: Any) -> tuple[Any, ...]:
+            return tuple(
+                conn.execute(
+                    text(
+                        "SELECT l.id, u.id, u.email FROM listings l"
+                        " JOIN users u ON u.id = l.owner_id"
+                    )
+                ).one()
+            )
+
+        with engine.connect() as conn:
+            before = survivors(conn)
+
+        def photo_constraints(conn: Any) -> set[tuple[str, str, str, bool, bool]]:
+            return {
+                tuple(row)
+                for row in conn.execute(
+                    text(
+                        "SELECT conrelid::regclass::text, conname, contype, condeferrable,"
+                        " condeferred FROM pg_constraint"
+                        " WHERE conrelid = 'listing_photos'::regclass"
+                        " OR conname IN ('uq_users_photo_key', 'ck_users_photo_key')"
+                    )
+                ).tuples()
+            }
+
+        command.upgrade(cfg, "0013")
+        assert _table_names(migration_db_url) == tables_0012 | {"listing_photos"}
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert _columns(conn, "users")["photo_key"] is True
+            assert conn.execute(text("SELECT photo_key FROM users")).scalar() is None
+            assert _columns(conn, "listing_photos") == {
+                "id": False,
+                "listing_id": False,
+                "key": False,
+                "position": False,
+                "width": False,
+                "height": False,
+                "created_at": False,
+            }
+            assert photo_constraints(conn) == {
+                ("listing_photos", "listing_photos_pkey", "p", False, False),
+                ("listing_photos", "listing_photos_listing_id_fkey", "f", False, False),
+                ("listing_photos", "uq_listing_photos_key", "u", False, False),
+                ("listing_photos", "uq_listing_photos_listing_position", "u", True, True),
+                ("listing_photos", "ck_listing_photos_key", "c", False, False),
+                ("listing_photos", "ck_listing_photos_position", "c", False, False),
+                ("listing_photos", "ck_listing_photos_size", "c", False, False),
+                ("users", "uq_users_photo_key", "u", False, False),
+                ("users", "ck_users_photo_key", "c", False, False),
+            }
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT confdeltype FROM pg_constraint"
+                        " WHERE conname = 'listing_photos_listing_id_fkey'"
+                    )
+                ).scalar_one()
+                == "c"
+            )
+
+        insert = (
+            "INSERT INTO listing_photos (listing_id, key, position, width, height)"
+            " VALUES (:listing, :key, :position, :width, 1067)"
+        )
+
+        def refused(constraint: str, sql: str, **params: Any) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(sql), params)
+
+        with engine.begin() as conn:
+            conn.execute(
+                text(insert), {"listing": listing_id, "key": key, "position": 0, "width": 1600}
+            )
+            conn.execute(text("UPDATE users SET photo_key = :key"), {"key": key})
+            # Deferred: a swap passes through a duplicate position inside the transaction.
+            conn.execute(
+                text(insert),
+                {"listing": listing_id, "key": "B" * 43, "position": 1, "width": 1600},
+            )
+            conn.execute(text("UPDATE listing_photos SET position = 1 - position"))
+        for bad_key in ("A" * 41 + "/" + "A", "A" * 42, "A" * 44, "A" * 42 + "."):
+            refused(
+                "ck_listing_photos_key",
+                insert,
+                listing=listing_id,
+                key=bad_key,
+                position=2,
+                width=1600,
+            )
+            refused("ck_users_photo_key", "UPDATE users SET photo_key = :key", key=bad_key)
+        refused(
+            "uq_listing_photos_key", insert, listing=listing_id, key=key, position=2, width=1600
+        )
+        refused(
+            "ck_listing_photos_position",
+            insert,
+            listing=listing_id,
+            key="C" * 43,
+            position=10,
+            width=1600,
+        )
+        refused(
+            "ck_listing_photos_size", insert, listing=listing_id, key="C" * 43, position=2, width=0
+        )
+        refused(
+            "uq_listing_photos_listing_position",
+            insert,
+            listing=listing_id,
+            key="C" * 43,
+            position=0,
+            width=1600,
+        )
+
+        command.downgrade(cfg, "0012")
+        assert _table_names(migration_db_url) == tables_0012
+        with engine.connect() as conn:
+            assert "photo_key" not in _columns(conn, "users")
+            assert survivors(conn) == before
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint"
+                        " WHERE conname IN ('uq_users_photo_key', 'ck_users_photo_key')"
+                    )
+                ).scalar_one()
+                == 0
+            )
+
+        command.upgrade(cfg, "head")
+        assert "listing_photos" in _table_names(migration_db_url)
+        with engine.connect() as conn:
+            assert survivors(conn) == before
+            assert conn.execute(text("SELECT count(*) FROM listing_photos")).scalar_one() == 0
+            assert conn.execute(text("SELECT photo_key FROM users")).scalar() is None
+    finally:
+        engine.dispose()

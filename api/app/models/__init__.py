@@ -12,6 +12,7 @@ from app.models.area import Area  # noqa: E402
 from app.models.conversation import Conversation, Message  # noqa: E402
 from app.models.flatmate import ConversationRead, ListingFlatmate  # noqa: E402
 from app.models.listing import Listing  # noqa: E402
+from app.models.photo import ListingPhoto  # noqa: E402
 from app.models.room_pair import RoomPair  # noqa: E402
 from app.models.seeker_profile import SeekerProfile  # noqa: E402
 from app.models.session import Session  # noqa: E402
@@ -25,6 +26,7 @@ __all__ = [
     "ConversationRead",
     "Listing",
     "ListingFlatmate",
+    "ListingPhoto",
     "Message",
     "RoomPair",
     "SeekerProfile",
