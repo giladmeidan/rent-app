@@ -42,16 +42,15 @@ jobs:
       WEB_PORT: "5299"
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: web/package.json
+      # Node first: pnpm's installer needs `node`, which the Mac runner's PATH lacks (the Mac's is nvm's).
       # The Mac keeps its pnpm store, uv cache and Playwright browsers between runs, and its own uv
-      # (same pinned version) is on the runner's PATH; GitHub-hosted runners restore them from Actions caches.
+      # (same pinned version) is on the runner's PATH; GitHub-hosted runners set up uv and the browsers.
       - uses: actions/setup-node@v4
         with:
           node-version-file: web/.nvmrc
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
-          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
       - uses: astral-sh/setup-uv@v6
         if: runner.environment == 'github-hosted'
         with:
