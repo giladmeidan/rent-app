@@ -68,9 +68,18 @@ function FlatRow({
     });
   }
 
-  // While the change is saved the switch shows the new value, disabled; after a failure it shows
-  // the stored one again (0010f).
-  const shown = show.isPending ? show.variables : flat.shown;
+  // While the change is saved (until "my flats" has refetched) the switch shows the new value,
+  // disabled; after a failure it shows the stored one again (0010f). Local state, set in the same
+  // tick as the click: the mutation's own pending state arrives a render later, and the switch
+  // would flash back meanwhile.
+  const [saving, setSaving] = useState<boolean | null>(null);
+  const shown = saving ?? flat.shown;
+
+  function onShow(next: boolean) {
+    if (saving !== null) return;
+    setSaving(next);
+    show.mutate(next, { onSettled: () => setSaving(null) });
+  }
 
   return (
     <Card
@@ -104,8 +113,8 @@ function FlatRow({
         <Switch
           label={t('flatmates.join.show')}
           checked={shown}
-          onChange={(next) => show.mutate(next)}
-          disabled={show.isPending}
+          onChange={onShow}
+          disabled={saving !== null}
         />
       </div>
       {(leave.isError || show.isError) && (

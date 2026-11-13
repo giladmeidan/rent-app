@@ -160,6 +160,9 @@ describe('MyFlatsPage', () => {
     expect(within(second).getByRole('switch', { name: he.flatmates.join.show })).toBeChecked();
 
     fireEvent.click(switchA);
+    // At once, with no flash back to the stored value.
+    expect(switchA).toBeChecked();
+    expect(switchA).toBeDisabled();
     await waitFor(() => {
       expect(api.calls(patchA)).toHaveLength(1);
     });
