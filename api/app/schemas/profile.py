@@ -1,16 +1,19 @@
-"""API schemas for the seeker's housing profile and the owner's listing preferences (spec 0006a).
+"""API schemas for a person's profile and the owner's listing preferences (spec 0006a).
 Never the ORM model.
 
-Every bound of the `seeker_profiles` CHECKs (migrations 0007 and 0009) is repeated here, so a bad
-value is a 422 with a list `detail`, never a database `IntegrityError` (a 500). `SeekerProfileOut`
-lists its fields explicitly (NF2): adding a column never adds it to a response.
+Every bound of the `seeker_profiles` CHECKs (migrations 0007, 0009, 0011 and 0015) is repeated
+here, so a bad value is a 422 with a list `detail`, never a database `IntegrityError` (a 500).
+`SeekerProfileOut` lists its fields explicitly (NF2): adding a column never adds it to a response.
 
 Spec 0007a adds the types rooms share (`SeekerGender`, `GenderPreference`, `Lifestyle`, the age
-bounds) and the profile's room section: `gender` (None = not looking for a room), an optional
-`birth_year`, `flatmate_gender` and `lifestyle`. Personal data: no message names a sent value.
-
-Spec 0008a adds `people_visible` (opt in to room listers' people browse) and `about_me` (plain text,
-1-300 characters) to the room section: neither without a `gender`."""
+bounds). Spec 0010c splits the profile in two independent parts, either alone or both:
+- **the personal part**: `gender` (None = no personal part), an optional `birth_year`, `lifestyle`
+  and `about_me` (plain text, 1-300 characters, 0008a); none of them without a `gender`;
+- **the looking part**: the 7 housing fields (`budget_max_ils`, `move_in_date`, `area_ids`,
+  `household`, `has_pets`, `smoker`, `contract_months`), sent together or all None, plus
+  `move_in_flexible`, `parking_needed` and `flatmate_gender` (which also needs `gender`).
+`people_visible` (0008a: opt in to people browse) needs both parts. Personal data: no message
+names a sent value."""
 
 import datetime as dt
 import uuid
@@ -147,34 +150,62 @@ AboutMe = Annotated[
 
 
 class SeekerProfileIn(BaseModel):
-    """The whole profile (`PUT` replaces it). Every field without a default is a deliberate answer
-    the seeker must give. Every `area_ids` entry must also be an active area (the service)."""
+    """The whole profile (`PUT` replaces it): the personal part, the looking part or both (spec
+    0010c); omitting a part clears it. Every `area_ids` entry must also be an active area (the
+    service)."""
 
     model_config = ConfigDict(extra="ignore")
 
-    budget_max_ils: BudgetMaxIls
-    move_in_date: MoveInDate
+    # The looking part: all 7 or none (`_parts`), so a None here never reaches the database alone.
+    budget_max_ils: BudgetMaxIls | None = None
+    move_in_date: MoveInDate | None = None
     move_in_flexible: bool = False  # flexible by about two weeks either way
-    area_ids: AreaIds
-    household: Household
-    has_pets: bool
-    smoker: bool
-    contract_months: ContractMonths  # the length the seeker wants
+    area_ids: AreaIds | None = None
+    household: Household | None = None
+    has_pets: bool | None = None
+    smoker: bool | None = None
+    contract_months: ContractMonths | None = None  # the length the seeker wants
     parking_needed: ParkingNeeded = 0
-    # The room section (spec 0007a), all optional: omitting it clears it (PUT replaces). Factories,
-    # not plain defaults: a JSON-schema `default` makes the generated web type require the key,
-    # and the profile page sends none of the four until 0007d.
-    gender: SeekerGender | None = None  # None = not looking for a room
+    # The personal part (spec 0007a's room section), all optional: omitting it clears it (PUT
+    # replaces). Factories, not plain defaults: a JSON-schema `default` makes the generated web
+    # type require the key.
+    gender: SeekerGender | None = None  # None = no personal part
     birth_year: BirthYear | None = None
     flatmate_gender: GenderPreference = Field(default_factory=lambda: "any")
     lifestyle: Lifestyle = Field(default_factory=dict)
-    # People browse (spec 0008a), also the room section. A factory for the same reason as above.
+    # People browse (spec 0008a): needs both parts. A factory for the same reason as above.
     people_visible: bool = Field(default_factory=lambda: False)
     about_me: AboutMe | None = None
 
     @model_validator(mode="after")
-    def _room_section_needs_gender(self) -> Self:
-        """As `ck_seeker_profiles_room_section`: no room field without a `gender`."""
+    def _parts(self) -> Self:
+        """The two parts' rules, as `ck_seeker_profiles_looking`, `_looking_defaults`,
+        `_room_section` and `_parts`, in this order (no message names a sent value)."""
+        looking = (
+            self.budget_max_ils,
+            self.move_in_date,
+            self.area_ids,
+            self.household,
+            self.has_pets,
+            self.smoker,
+            self.contract_months,
+        )
+        has_looking = all(value is not None for value in looking)
+        if not has_looking and any(value is not None for value in looking):
+            raise ValueError(
+                "budget_max_ils, move_in_date, area_ids, household, has_pets, smoker and"
+                " contract_months are sent together (the looking part)"
+            )
+        if not has_looking and (
+            self.move_in_flexible
+            or self.parking_needed != 0
+            or self.flatmate_gender != "any"
+            or self.people_visible
+        ):
+            raise ValueError(
+                "move_in_flexible, parking_needed, flatmate_gender and people_visible need the"
+                " looking part"
+            )
         if self.gender is None and (
             self.birth_year is not None
             or self.flatmate_gender != "any"
@@ -184,24 +215,28 @@ class SeekerProfileIn(BaseModel):
         ):
             raise ValueError(
                 "birth_year, flatmate_gender, lifestyle, people_visible and about_me need gender"
-                " (the room section)"
+                " (the personal part)"
             )
+        if self.gender is None and not has_looking:
+            raise ValueError("fill the personal part, the looking part or both")
         return self
 
 
 class SeekerProfileOut(BaseModel):
-    """The caller's own profile; `area_ids` in the order sent."""
+    """The caller's own profile; `area_ids` in the order sent. A `null` `budget_max_ils` means the
+    looking part is empty (then all 7 looking fields are `null`); a `null` `gender` means the
+    personal part is (spec 0010c)."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    budget_max_ils: int
-    move_in_date: dt.date
+    budget_max_ils: int | None
+    move_in_date: dt.date | None
     move_in_flexible: bool
-    area_ids: list[uuid.UUID]
-    household: Household
-    has_pets: bool
-    smoker: bool
-    contract_months: ContractMonths
+    area_ids: list[uuid.UUID] | None
+    household: Household | None
+    has_pets: bool | None
+    smoker: bool | None
+    contract_months: ContractMonths | None
     parking_needed: int
     gender: SeekerGender | None
     birth_year: int | None

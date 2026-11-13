@@ -1438,3 +1438,78 @@ def test_ac5_room_fields_follow_profile_edits_and_clearing(
         keys, _ = _keys_and_numbers(body)
         assert "gender" not in keys
         assert "woman" not in json.dumps(body)
+
+
+# --- 0010c: an applicant who drops the looking part ---------------------------------------------
+
+
+def test_ac7_personal_only_applicant(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    room = _l0(
+        db_engine,
+        _user_id(owner),
+        gush_dan,
+        listing_type="room",
+        flatmates_count=2,
+        smoking_allowed=False,
+        pets_allowed=False,
+        accepted_households=["single"],
+        min_contract_months=36,
+    )
+    # Two applicants with the looking part who match worse than S's leftover columns would score
+    # (3), applied before S: only the looking-part sort key puts S after them.
+    north = _area(db_engine, "north", active=True)
+    poor: dict[str, Any] = {
+        "smoker": True,
+        "has_pets": True,
+        "parking_needed": 2,
+        "area_ids": [str(north)],
+        "move_in_date": _utc_day(300).isoformat(),
+    }
+    a = _apply(
+        _named_room_seeker(
+            client, outbox, "a@example.com", gush_dan, "A1", budget_max_ils=500, **poor
+        ),
+        room,
+    )
+    b = _apply(
+        _named_room_seeker(
+            client, outbox, "b@example.com", gush_dan, "B1", budget_max_ils=600, **poor
+        ),
+        room,
+    )
+    _created_ago(db_engine, a, 120)
+    _created_ago(db_engine, b, 60)
+    s_seeker = _w(client, outbox, gush_dan)
+    s = _apply(s_seeker, room)
+    before = _ok(_applicants(owner, room))
+    assert _by_id(before)[s]["match"] is not None
+
+    # S drops the looking part and keeps the personal part.
+    _ok(
+        s_seeker.put(
+            "/me/profile",
+            json={
+                "gender": "woman",
+                "birth_year": _this_year() - 27,
+                "lifestyle": {"cleanliness": 3, "night": 1},
+            },
+        )
+    )
+
+    body = _ok(_applicants(owner, room, sort="match"))
+    assert [item["id"] for item in body] == [b, a, s]
+    item = _by_id(body)[s]
+    assert (item["match"], item["profile"]) == (None, None)
+    assert item["room"] == {
+        "gender": "woman",
+        "age": 27,
+        "lifestyle": {"cleanliness": 3, "night": 1},
+    }
+    assert all(other["match"] is not None for other in body if other["id"] != s)
+    assert [x["id"] for x in _ok(_applicants(owner, room, sort="newest"))] == [s, b, a]

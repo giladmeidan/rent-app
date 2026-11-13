@@ -19,6 +19,7 @@ from app.redis_client import get_redis
 from app.services import applications as applications_service
 from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import (
+    NO_LOOKING,
     Outbox,
     make_application,
     make_listing,
@@ -664,6 +665,31 @@ def test_ac5_apply_requires_profile(
     assert applied.status_code == 201, applied.text
     assert _count(db_engine) == 1
     assert _hourly(seeker_id) == 1
+
+
+def test_ac4_personal_only_cannot_apply(
+    client: TestClient,
+    outbox: Outbox,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """Spec 0010c AC4: a personal-only profile counts as no profile at the apply gate."""
+    listing_l = make_listing(db_engine, owner_id, gush_dan)
+    personal = signup(client, outbox, "s@example.com", "seeker")
+    seeker_id = _user_id(personal)
+    make_profile(db_engine, seeker_id, gush_dan, gender="woman", **NO_LOOKING)
+
+    refused = _apply(personal, listing_l)
+
+    assert refused.status_code == 409
+    assert refused.json() == {"detail": "seeker_profile_required"}
+    assert _count(db_engine) == 0
+    assert not get_redis().exists(f"rl:apply:user:{seeker_id}")
+
+    saved = personal.put("/me/profile", json={**_profile_body(gush_dan), "gender": "woman"})
+    assert saved.status_code == 200, saved.text
+    assert _apply(personal, listing_l).status_code == 201
 
 
 def test_ac6_existing_application_needs_no_profile(

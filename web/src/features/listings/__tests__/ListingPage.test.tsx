@@ -1066,7 +1066,7 @@ describe('ListingPage', () => {
             expect(await screen.findByText(he.likes.errors.roomSection)).toBeVisible();
             expect(screen.getByRole('link', { name: he.likes.toProfile })).toHaveAttribute(
               'href',
-              `/me/profile?section=room&next=${encodeURIComponent(`/listings/${id}`)}`,
+              `/me/profile?section=about&section=looking&next=${encodeURIComponent(`/listings/${id}`)}`,
             );
           },
         })),

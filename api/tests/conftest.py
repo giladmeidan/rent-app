@@ -256,6 +256,20 @@ _LISTING_COLUMNS = frozenset(Listing.__table__.columns.keys())
 _APPLICATION_COLUMNS = frozenset(Application.__table__.columns.keys())
 _PROFILE_COLUMNS = frozenset(SeekerProfile.__table__.columns.keys())
 
+# `make_profile(..., gender=..., **NO_LOOKING)` writes a personal-only row (spec 0010c): the 7
+# looking columns NULL, and `parking_needed` back to its default (`make_profile` sets 1, which
+# `ck_seeker_profiles_looking_defaults` refuses without the looking part).
+NO_LOOKING: dict[str, Any] = {
+    "budget_max_ils": None,
+    "move_in_date": None,
+    "area_ids": None,
+    "household": None,
+    "has_pets": None,
+    "smoker": None,
+    "contract_months": None,
+    "parking_needed": 0,
+}
+
 
 def make_profile(engine: Engine, user_id: uuid.UUID, area_id: uuid.UUID, **overrides: Any) -> None:
     """Insert a housing profile for `user_id` directly (spec 0006a), bypassing the API's checks.

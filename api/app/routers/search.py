@@ -3,20 +3,20 @@ page's view counter and applicant count (spec 0004a) are in `services/applicatio
 
 Both are **public** (`optional_user`): without a cookie no session query runs; an unknown or expired
 cookie is a visitor, never a 401. A cookie adds the caller's match score (spec 0006b): any account
-with a profile (spec 0010b: whatever its role) gets `match` on every listing but its own (and search
-defaults to `sort=match`), everyone else `match: null`. For an account whose profile has a room
-section, a cookie also removes the rooms that do not fit them from search, the map and `total`
-(never their own room, spec 0010b), and sets the listing page's `room_fit` (spec 0007b). That is
-why every 200 says `Vary: Cookie` and a 200 to a request carrying the session cookie is
-`Cache-Control: private` (0006b): the body may differ per caller. The cookie also decides whether a
-room's flatmates' ages and questionnaire answers are shown: only a signed-in seeker gets them, and
-a seeker is a role seeker **or** any account with a profile (`_sees_room_privacy`, decision 13,
-Gilad 2026-11-13); everyone else gets `[]` and `{}` (`ListingPublic.from_listing`). Every listing
-says `is_mine`, whether the caller owns it (spec 0010b; false for a visitor). Search returns one
-type: `listing_type` omitted means `apartment` (spec 0010a), the market asks for `room`; the
-listing page serves both. A listing that is not public is a 404 `not_found`, the same body as an
-unknown id. Any signed-in account on a room it does not own also gets the listing page's `like`
-(spec 0008a), the likes between them and the room."""
+with a profile with the looking part (spec 0010b: whatever its role) gets `match` on every listing
+but its own (and search defaults to `sort=match`), everyone else `match: null`. For an account whose
+looking part is filled and that has a room section, a cookie also removes the rooms that do not fit
+them from search, the map and `total` (never their own room, spec 0010b), and sets the listing
+page's `room_fit` (spec 0007b). That is why every 200 says `Vary: Cookie` and a 200 to a request
+carrying the session cookie is `Cache-Control: private` (0006b): the body may differ per caller. The
+cookie also decides whether a room's flatmates' ages and questionnaire answers are shown: only a
+signed-in seeker gets them, and a seeker is a role seeker **or** any account with a profile with the
+looking part (`_sees_room_privacy`, decision 13, Gilad 2026-11-13); everyone else gets `[]` and `{}`
+(`ListingPublic.from_listing`). Every listing says `is_mine`, whether the caller owns it (spec
+0010b; false for a visitor). Search returns one type: `listing_type` omitted means `apartment` (spec
+0010a), the market asks for `room`; the listing page serves both. A listing that is not public is a
+404 `not_found`, the same body as an unknown id. Any signed-in account on a room it does not own
+also gets the listing page's `like` (spec 0008a), the likes between them and the room."""
 
 import uuid
 from typing import Annotated, Any
@@ -47,8 +47,8 @@ _DB_DOWN: dict[int | str, dict[str, Any]] = {
 
 
 def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
-    """The caller's id when they have a housing profile, whatever their role (spec 0010b; one PK
-    lookup), else None (a visitor runs no statement)."""
+    """The caller's id when they have a profile with the looking part, whatever their role (spec
+    0010b; one PK lookup), else None (a visitor runs no statement)."""
     if user is None:
         return None
     return user.id if profiles_service.has_profile(db, user.id) else None
@@ -56,8 +56,8 @@ def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
 
 def _sees_room_privacy(user: User | None, profile_user_id: uuid.UUID | None) -> bool:
     """Whether the caller gets a room's flatmate ages and answers (decision 13, Gilad 2026-11-13):
-    signed in with the seeker role, or with a profile (`profile_user_id`, already read). No
-    statement."""
+    signed in with the seeker role, or with a profile with the looking part (`profile_user_id`,
+    already read). No statement."""
     return user is not None and (user.role == "seeker" or profile_user_id is not None)
 
 

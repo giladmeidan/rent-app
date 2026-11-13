@@ -7,6 +7,7 @@ import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { useMe } from '../auth/useMe';
 import type { ListingPublic } from '../listings/api';
+import { hasLooking } from '../profile/api';
 import { useProfile } from '../profile/useProfile';
 import { bucket } from './bucket';
 import { AgreeIcon, DifferIcon } from './icons';
@@ -56,7 +57,7 @@ export function MatchCard({ match, listing }: Props) {
         </div>
       </Loading>
     );
-  } else if (profile.data !== undefined && profile.data !== null) {
+  } else if (hasLooking(profile.data)) {
     const p = profile.data;
     lines = (
       <ul className="flex flex-col gap-2">

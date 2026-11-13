@@ -6,6 +6,7 @@ import { API, likePerson, postListing, signUp } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 const ROOM = he.profile.room;
+const ABOUT = he.profile.about;
 
 /** `YYYY-MM-DD`, `days` from today in Israel (the profile form's calendar). */
 function israelDay(days: number): string {
@@ -100,13 +101,14 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();
-  await page.getByRole('switch', { name: ROOM.switch }).check();
+  // "עליי" (0010c): gender and about me; the card switch shows once both parts are on.
+  await page.getByRole('switch', { name: ABOUT.switch }).check();
   await page
     .getByRole('group', { name: ROOM.fields.gender, exact: true })
     .getByText(ROOM.gender.woman, { exact: true })
     .click();
-  await page.getByRole('switch', { name: ROOM.peopleVisible }).check();
   await page.getByLabel(ROOM.aboutMe).fill('שלום, אני סטודנטית');
+  await page.getByRole('switch', { name: he.profile.people.visible }).check();
   await page.getByRole('button', { name: he.profile.save }).click();
   await expect(page.getByText(he.profile.saved)).toBeVisible();
 

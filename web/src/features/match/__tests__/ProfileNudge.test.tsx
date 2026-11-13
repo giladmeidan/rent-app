@@ -6,7 +6,7 @@ import he from '../../../locales/he.json';
 import { json, mockApi, noa, renderRoutes } from '../../auth/__tests__/harness';
 import { ListingPage } from '../../listings/ListingPage';
 import { owner } from '../../listings/__tests__/fixtures';
-import { profile } from '../../profile/__tests__/fixtures';
+import { personalOnlyProfile, profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import { ProfileNudge } from '../ProfileNudge';
 
@@ -83,5 +83,16 @@ describe('ProfileNudge', () => {
     await vi.waitFor(() => {
       expect(api.calls(PROFILE)).toHaveLength(1);
     });
+  });
+
+  it('0010c a profile with only "עליי" is nudged to "מה מחפשים"', async () => {
+    const api = mockApi({ 'GET /me': [json(noa)], [PROFILE]: [json(personalOnlyProfile())] });
+    renderRoutes('/market?rooms=2', routes);
+    await settle(api, true);
+    expect(screen.getByText(he.match.nudge)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.match.fillProfile })).toHaveAttribute(
+      'href',
+      `/me/profile?section=looking&next=${encodeURIComponent('/market?rooms=2')}`,
+    );
   });
 });

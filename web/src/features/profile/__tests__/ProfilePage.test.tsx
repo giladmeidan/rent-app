@@ -22,7 +22,7 @@ import { LIFESTYLE_KEYS } from '../../lifestyle/keys';
 import { ProfilePage } from '../ProfilePage';
 import { PROFILE_KEY } from '../useProfile';
 import { birthYearRange } from '../validate';
-import { inDays, profile } from './fixtures';
+import { inDays, personalOnlyProfile, profile } from './fixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -109,10 +109,18 @@ const AC2_BODY = {
   smoker: false,
   contract_months: 24,
   parking_needed: 1,
-  // Room section off: the people fields go as `false` / `null` (0008c).
+  // The personal part off (0010c): its fields go empty, so the server clears them; the people
+  // switch and the flatmates preference need both parts.
   people_visible: false,
   about_me: null,
+  gender: null,
+  birth_year: null,
+  lifestyle: {},
+  flatmate_gender: 'any',
 };
+/** `AC2_BODY` with the personal part on: an empty birth year is left out, as before 0010c. */
+const AC2_WITH_PERSONAL: Partial<typeof AC2_BODY> = { ...AC2_BODY };
+delete AC2_WITH_PERSONAL.birth_year;
 
 /** "התאריך שנבחר: …", a date input's read-back (0009f). */
 const readbackText = new RegExp(`^${he.common.dateChosen.replace('{{date}}', '')}`);
@@ -284,6 +292,10 @@ describe('ProfilePage', () => {
         parking_needed: 1,
         people_visible: false,
         about_me: null,
+        gender: null,
+        birth_year: null,
+        lifestyle: {},
+        flatmate_gender: 'any',
       },
     ]);
   });
@@ -539,9 +551,10 @@ describe('ProfilePage', () => {
       cleanup();
     }
   });
-  // The room section (0007d).
+  // The personal part ("עליי"; 0007d's room section, 0010c).
   const room = he.profile.room;
-  const roomSwitch = () => toggle(room.switch);
+  const about = he.profile.about;
+  const roomSwitch = () => toggle(about.switch);
   const birthYear = () => screen.getByLabelText<HTMLInputElement>(room.fields.birthYear);
   const questionnaire = () => screen.getByRole('region', { name: he.lifestyle.title.seeker });
   const answer = (key: (typeof LIFESTYLE_KEYS)[number], n: '1' | '2' | '3') =>
@@ -554,9 +567,10 @@ describe('ProfilePage', () => {
         .map((r) => `${key}=${r.value}`),
     );
 
-  /** Nothing of the revealed room content is in the DOM. */
+  /** Nothing of the revealed personal content is in the DOM. */
   function expectRoomClosed() {
-    expect(screen.queryByText(room.privacy)).toBeNull();
+    expect(screen.queryByText(about.privacy)).toBeNull();
+    expect(screen.queryByLabelText(room.aboutMe)).toBeNull();
     expect(screen.queryByRole('group', { name: room.fields.gender })).toBeNull();
     expect(screen.queryByLabelText(room.fields.birthYear)).toBeNull();
     expect(screen.queryByRole('group', { name: room.fields.flatmates })).toBeNull();
@@ -576,18 +590,25 @@ describe('ProfilePage', () => {
   it('ac4_room_switch_reveals_and_off_omits', async () => {
     const api = renderPage();
     await fillValid();
-    expect(screen.getByRole('heading', { level: 2, name: room.title })).toBeVisible();
-    expect(screen.getByText(room.hint)).toBeVisible();
-    expect(screen.getByRole('region', { name: room.title })).toContainElement(roomSwitch());
+    expect(screen.getByRole('heading', { level: 2, name: about.title })).toBeVisible();
+    expect(screen.getByText(about.hint)).toBeVisible();
+    expect(screen.getByRole('region', { name: about.title })).toContainElement(roomSwitch());
     expect(roomSwitch()).not.toBeChecked();
     expectRoomClosed();
+    // The flatmates preference sits in "מה מחפשים" and waits for "עליי".
+    expect(screen.getByText(he.profile.looking.flatmatesNeedsAbout)).toBeVisible();
 
     fireEvent.click(roomSwitch());
     expect(roomSwitch()).toBeChecked();
-    const privacy = screen.getByText(room.privacy);
+    expect(screen.queryByText(he.profile.looking.flatmatesNeedsAbout)).toBeNull();
+    const privacy = screen.getByText(about.privacy);
     const gender = group(room.fields.gender);
     const flatmates = group(room.fields.flatmates);
-    expectInOrder([roomSwitch(), privacy, gender, birthYear(), flatmates, questionnaire()]);
+    const aboutMe = screen.getByLabelText(room.aboutMe);
+    expectInOrder([roomSwitch(), gender, birthYear(), aboutMe, questionnaire(), privacy]);
+    expect(screen.getByRole('region', { name: he.profile.sections.search })).toContainElement(
+      flatmates,
+    );
     expect(
       within(gender)
         .getAllByRole('radio')
@@ -612,7 +633,7 @@ describe('ProfilePage', () => {
     expect(checkedAnswers()).toEqual([]);
     expect(screen.queryByRole('alert')).toBeNull();
 
-    // Something typed, then off again: the save sends the housing profile only.
+    // Something typed, then off again: the save sends the personal part empty.
     fireEvent.click(radio(room.fields.gender, room.gender.woman));
     fireEvent.click(answer('night', '1'));
     fireEvent.click(roomSwitch());
@@ -651,7 +672,7 @@ describe('ProfilePage', () => {
     await expectSaved();
     expect(api.calls(PUT).map((c) => c.body)).toStrictEqual([
       {
-        ...AC2_BODY,
+        ...AC2_WITH_PERSONAL,
         gender: 'woman',
         flatmate_gender: 'men',
         lifestyle: { cleanliness: 3, kosher: 1 },
@@ -693,13 +714,13 @@ describe('ProfilePage', () => {
     expect(sent.map((b) => b.birth_year)).toEqual([min, max, undefined]);
     expect(sent[2]).not.toHaveProperty('birth_year');
     expect(sent[2]).toStrictEqual({
-      ...AC2_BODY,
+      ...AC2_WITH_PERSONAL,
       gender: 'woman',
       flatmate_gender: 'any',
       lifestyle: {},
     });
 
-    // Room off: a junk year is neither checked nor sent.
+    // The personal part off: a junk year is neither checked nor sent (it goes as `null`).
     set(birthYear(), 'abcd');
     fireEvent.click(roomSwitch());
     save();
@@ -742,7 +763,7 @@ describe('ProfilePage', () => {
     expect(radio(room.fields.flatmates, he.rooms.genderPreference.women)).toBeChecked();
     expect(checkedAnswers()).toEqual(['cleanliness=2', 'night=3', 'shabbat=2']);
 
-    // Off and save: the four keys are left out, so the server clears the section.
+    // Off and save: the personal part goes empty, so the server clears it.
     fireEvent.click(roomSwitch());
     save();
     await expectSaved();
@@ -765,7 +786,7 @@ describe('ProfilePage', () => {
     expect(api.calls(PUT)).toHaveLength(0);
   });
 
-  it('ac8_section_room_entry_point', async () => {
+  it('ac8_section_about_entry_point', async () => {
     function Listing() {
       return <output data-testid="navigation">{useNavigationType()}</output>;
     }
@@ -777,18 +798,18 @@ describe('ProfilePage', () => {
         <Route path="/listings/:id" element={<Listing />} />
       </Routes>
     );
-    const heading = () => screen.getByRole('heading', { level: 2, name: room.title });
+    const heading = () => screen.getByRole('heading', { level: 2, name: about.title });
 
-    // The gate's link: the switch on for a profile with no gender, the room heading focused, and
+    // The gate's link: the switch on for a profile with no gender, the "עליי" heading focused, and
     // back to the listing (replace) after the save.
     let api = renderPage(
       { [PROFILE]: [json(profile())] },
-      '/me/profile?section=room&next=%2Flistings%2Fabc',
+      '/me/profile?section=about&next=%2Flistings%2Fabc',
       { tree },
     );
     await form();
     expect(roomSwitch()).toBeChecked();
-    expect(screen.getByText(room.privacy)).toBeVisible();
+    expect(screen.getByText(about.privacy)).toBeVisible();
     await vi.waitFor(() => {
       expect(heading()).toHaveFocus();
     });
@@ -804,8 +825,8 @@ describe('ProfilePage', () => {
 
     // No `next`, or an unsafe one: the page stays after saving.
     for (const path of [
-      '/me/profile?section=room',
-      '/me/profile?section=room&next=%2F%2Fevil.example',
+      '/me/profile?section=about',
+      '/me/profile?section=about&next=%2F%2Fevil.example',
     ]) {
       api = renderPage({ [PROFILE]: [json(profile())] }, path);
       await form();
@@ -821,8 +842,9 @@ describe('ProfilePage', () => {
       cleanup();
     }
 
-    // Without `section=room` (or with another value): the switch follows the profile, no focus.
-    for (const path of ['/me/profile', '/me/profile?section=other']) {
+    // Without `section=about` (or with another value, or the retired `room`): the switch follows
+    // the profile, no focus.
+    for (const path of ['/me/profile', '/me/profile?section=other', '/me/profile?section=room']) {
       renderPage({ [PROFILE]: [json(profile())] }, path);
       await form();
       expect(roomSwitch()).not.toBeChecked();
@@ -835,20 +857,21 @@ describe('ProfilePage', () => {
 
   it('ac1_people_fields', async () => {
     const roomSection = he.profile.room;
+    const people = he.profile.people;
     const stored = profile({ gender: 'woman' });
-    const switchOn = () => toggle(roomSection.peopleVisible);
+    const switchOn = () => toggle(people.visible);
     const aboutMe = () => screen.getByLabelText<HTMLTextAreaElement>(roomSection.aboutMe);
 
     // Opt in and write two lines: both are sent, the newline kept.
     let api = renderPage({ [PROFILE]: [json(stored)] });
     await form();
     expect(switchOn()).not.toBeChecked();
-    expect(screen.getByText(roomSection.peopleVisibleHint)).toBeVisible();
+    expect(screen.getByText(people.visibleHint)).toBeVisible();
     expect(aboutMe()).toHaveValue('');
     expect(aboutMe()).toHaveAttribute('maxlength', '300');
     expect(aboutMe()).toHaveAttribute('rows', '4');
     expect(aboutMe().tagName).toBe('TEXTAREA');
-    expect(switchOn()).toHaveAccessibleDescription(roomSection.peopleVisibleHint);
+    expect(switchOn()).toHaveAccessibleDescription(people.visibleHint);
     expect(aboutMe()).toHaveAccessibleDescription(
       i18n.t('listings.fields.charsLeft', { count: 300 }),
     );
@@ -871,16 +894,17 @@ describe('ProfilePage', () => {
     expect(api.calls(PUT)[1]?.body).toMatchObject({ about_me: 'שורה ראשונה\nשורה שנייה' });
     cleanup();
 
-    // The room section off: the fields are gone and the body says false / null.
+    // The personal part off: the fields are gone and the body says false / null.
     api = renderPage({
       [PROFILE]: [json(profile({ gender: 'woman', people_visible: true, about_me: 'היי' }))],
     });
     await form();
     expect(switchOn()).toBeChecked();
     expect(aboutMe()).toHaveValue('היי');
-    fireEvent.click(toggle(he.profile.room.switch));
+    fireEvent.click(toggle(he.profile.about.switch));
     expect(screen.queryByLabelText(roomSection.aboutMe)).toBeNull();
-    expect(screen.queryByRole('switch', { name: roomSection.peopleVisible })).toBeNull();
+    expect(screen.queryByRole('switch', { name: people.visible })).toBeNull();
+    expect(screen.getByText(people.needsBoth)).toBeVisible();
     save();
     await expectSaved();
     expect(api.calls(PUT)[0]?.body).toMatchObject({ people_visible: false, about_me: null });
@@ -934,48 +958,41 @@ describe('ProfilePage', () => {
     it('ac1_sections_index_and_field_order', async () => {
       renderPage({ [PROFILE]: [json(profile({ gender: 'woman' }))] });
       await form();
-      expect(screen.getByRole('switch', { name: he.profile.room.switch })).toBeChecked();
+      expect(screen.getByRole('switch', { name: he.profile.about.switch })).toBeChecked();
 
-      // Headings, by role: the index links repeat their text.
+      // Headings, by role: the index links repeat their text. Three parts (0010c).
       const h2s = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
       expect(h2s).toEqual([
+        he.profile.about.title,
         he.profile.sections.search,
-        he.profile.sections.household,
-        he.profile.room.title,
+        he.profile.people.title,
       ]);
       expect(
-        screen.getByRole('heading', { level: 3, name: he.profile.room.peopleTitle }),
+        screen.getByRole('heading', { level: 3, name: he.profile.sections.household }),
       ).toBeVisible();
 
       // The privacy line and the intro are in the head, outside the form.
       expect(screen.getByText(he.profile.privacy).closest('form')).toBeNull();
       expect(screen.getByText(he.profile.intro).closest('form')).toBeNull();
 
-      // The index: five links, each target exists.
+      // The index: the three parts and the questionnaire under "עליי", each target exists.
       const nav = screen.getByRole('navigation', { name: navName });
       const hrefs = () =>
         within(nav)
           .getAllByRole('link')
           .map((a) => a.getAttribute('href'));
       expect(hrefs()).toEqual([
-        '#profile-search',
-        '#profile-household',
-        '#profile-room',
+        '#profile-about',
         '#profile-lifestyle',
+        '#profile-looking',
         '#profile-people',
       ]);
       for (const href of hrefs()) expect(document.querySelector(String(href))).not.toBeNull();
 
       expect(names()).toEqual([
-        'budget_max_ils',
-        'move_in_date',
-        'area_ids',
-        'household',
-        'contract_months',
-        'parking_needed',
         'gender',
         'birth_year',
-        'flatmate_gender',
+        'about_me',
         'lifestyle-cleanliness',
         'lifestyle-guests',
         'lifestyle-night',
@@ -983,17 +1000,21 @@ describe('ProfilePage', () => {
         'lifestyle-kosher',
         'lifestyle-shabbat',
         'lifestyle-work_from_home',
-        'about_me',
+        'budget_max_ils',
+        'move_in_date',
+        'area_ids',
+        'household',
+        'contract_months',
+        'parking_needed',
+        'flatmate_gender',
       ]);
 
-      // Switched off: the first three links, and the two targets are gone.
-      fireEvent.click(screen.getByRole('switch', { name: he.profile.room.switch }));
-      expect(hrefs()).toEqual(['#profile-search', '#profile-household', '#profile-room']);
+      // "עליי" off: the questionnaire's link and target are gone; the card switch waits for both.
+      fireEvent.click(screen.getByRole('switch', { name: he.profile.about.switch }));
+      expect(hrefs()).toEqual(['#profile-about', '#profile-looking', '#profile-people']);
       expect(document.querySelector('#profile-lifestyle')).toBeNull();
-      expect(document.querySelector('#profile-people')).toBeNull();
-      expect(
-        screen.queryByRole('heading', { level: 3, name: he.profile.room.peopleTitle }),
-      ).toBeNull();
+      expect(screen.queryByRole('switch', { name: he.profile.people.visible })).toBeNull();
+      expect(screen.getByText(he.profile.people.needsBoth)).toBeVisible();
     });
 
     it('ac2_save_bar', async () => {
@@ -1093,6 +1114,140 @@ describe('ProfilePage', () => {
       expect(marks(sharon)).toHaveLength(0);
       fireEvent.click(areaBox(gushDan));
       expect(marks(gushDan)).toHaveLength(0);
+    });
+  });
+
+  // Spec 0010c: "עליי" and "מה מחפשים", either alone or both; the card switch needs both.
+  describe('ac11 two parts', () => {
+    const aboutSwitch = () => toggle(he.profile.about.switch);
+    const lookingSwitch = () => toggle(he.profile.looking.switch);
+    const cardSwitch = () => screen.queryByRole('switch', { name: he.profile.people.visible });
+    const needsBoth = () => screen.queryByText(he.profile.people.needsBoth);
+
+    it('ac11 a 404 profile opens with "מה מחפשים" on and "עליי" off', async () => {
+      renderPage();
+      await form();
+      expect(lookingSwitch()).toBeChecked();
+      expect(aboutSwitch()).not.toBeChecked();
+      expect(lookingSwitch()).toHaveAccessibleDescription(he.profile.looking.hint);
+      expect(budget()).toBeVisible();
+      expect(screen.queryByRole('group', { name: he.profile.room.fields.gender })).toBeNull();
+      expect(cardSwitch()).toBeNull();
+      expect(needsBoth()).toBeVisible();
+    });
+
+    it('ac11 a stored personal-only profile opens with "עליי" on and "מה מחפשים" off', async () => {
+      const api = renderPage({ [PROFILE]: [json(personalOnlyProfile())] });
+      await form();
+      expect(aboutSwitch()).toBeChecked();
+      expect(lookingSwitch()).not.toBeChecked();
+      expect(radio(he.profile.room.fields.gender, he.profile.room.gender.woman)).toBeChecked();
+      expect(screen.getByLabelText(he.profile.room.aboutMe)).toHaveValue('Quiet and tidy');
+      expect(screen.queryByLabelText(he.profile.fields.budget)).toBeNull();
+      expect(screen.queryByRole('group', { name: he.profile.fields.areas })).toBeNull();
+      expect(cardSwitch()).toBeNull();
+      expect(needsBoth()).toBeVisible();
+
+      // Saving keeps the looking part empty, with its defaults.
+      save();
+      await expectSaved();
+      expect(api.calls(PUT)[0]?.body).toStrictEqual({
+        budget_max_ils: null,
+        move_in_date: null,
+        move_in_flexible: false,
+        area_ids: null,
+        household: null,
+        has_pets: null,
+        smoker: null,
+        contract_months: null,
+        parking_needed: 0,
+        gender: 'woman',
+        birth_year: 1996,
+        lifestyle: { night: 2 },
+        about_me: 'Quiet and tidy',
+        flatmate_gender: 'any',
+        people_visible: false,
+      });
+    });
+
+    it('ac11 the card switch only with both parts on, else the needs-both line', async () => {
+      renderPage({ [PROFILE]: [json(profile({ gender: 'woman', people_visible: true }))] });
+      await form();
+      expect(cardSwitch()).toBeChecked();
+      expect(needsBoth()).toBeNull();
+      fireEvent.click(lookingSwitch());
+      expect(cardSwitch()).toBeNull();
+      expect(needsBoth()).toBeVisible();
+      fireEvent.click(lookingSwitch());
+      expect(cardSwitch()).toBeChecked();
+      fireEvent.click(aboutSwitch());
+      expect(cardSwitch()).toBeNull();
+      expect(needsBoth()).toBeVisible();
+    });
+
+    it('ac11 looking off and on again restores what was typed; off and save clears it', async () => {
+      const api = renderPage({ [PROFILE]: [json(profile({ gender: 'woman' }))] });
+      await form();
+      set(budget(), '9000');
+      fireEvent.click(lookingSwitch());
+      expect(screen.queryByLabelText(he.profile.fields.budget)).toBeNull();
+      fireEvent.click(lookingSwitch());
+      expect(budget()).toHaveValue(9000);
+      fireEvent.click(lookingSwitch());
+      save();
+      await expectSaved();
+      expect(api.calls(PUT)[0]?.body).toMatchObject({
+        budget_max_ils: null,
+        area_ids: null,
+        parking_needed: 0,
+        gender: 'woman',
+      });
+    });
+
+    it('ac11 ?section=about&section=looking switches both on and focuses "עליי"', async () => {
+      // No profile yet (the gate's case): both switch on, the first listed part focused.
+      renderPage({}, '/me/profile?section=about&section=looking&next=%2Flistings%2Fabc');
+      await form();
+      expect(aboutSwitch()).toBeChecked();
+      expect(lookingSwitch()).toBeChecked();
+      const heading = screen.getByRole('heading', { level: 2, name: he.profile.about.title });
+      await vi.waitFor(() => {
+        expect(heading).toHaveFocus();
+      });
+      cleanup();
+
+      // `section=looking` alone opens "מה מחפשים" on a personal-only profile and lands on it.
+      renderPage(
+        { [PROFILE]: [json(personalOnlyProfile())] },
+        '/me/profile?section=looking&next=%2Flistings%2Fabc',
+      );
+      await form();
+      expect(lookingSwitch()).toBeChecked();
+      expect(aboutSwitch()).toBeChecked();
+      const looking = screen.getByRole('heading', { level: 2, name: he.profile.sections.search });
+      await vi.waitFor(() => {
+        expect(looking).toHaveFocus();
+      });
+    });
+
+    it('ac11 both off and save: the one-part alert, no request', async () => {
+      const api = renderPage();
+      await form();
+      fireEvent.click(lookingSwitch());
+      expect(aboutSwitch()).not.toBeChecked();
+      save();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(he.profile.errors.onePart);
+      const bar = document.querySelector<HTMLElement>('[data-sticky-footer]');
+      expect(bar).toContainElement(alert);
+      expect(api.calls(PUT)).toHaveLength(0);
+
+      // Switching a part on drops the alert; saving then checks that part.
+      fireEvent.click(aboutSwitch());
+      expect(screen.queryByText(he.profile.errors.onePart)).toBeNull();
+      save();
+      expectError(radio(he.profile.room.fields.gender, he.profile.room.gender.woman), required);
+      expect(api.calls(PUT)).toHaveLength(0);
     });
   });
 });

@@ -144,17 +144,17 @@ describe('Layout', () => {
     expect(scrollTo).not.toHaveBeenCalled();
     expect(document.activeElement).not.toBe(main());
 
-    // PUSH to the profile's room section with the profile cached: the page's own focus wins.
+    // PUSH to the profile's personal part with the profile cached: the page's own focus wins.
     await act(async () => {
-      await router.navigate('/me/profile?section=room');
+      await router.navigate('/me/profile?section=about');
     });
-    const roomHeading = await screen.findByRole('heading', {
+    const aboutHeading = await screen.findByRole('heading', {
       level: 2,
-      name: he.profile.room.title,
+      name: he.profile.about.title,
     });
     expect(scrollTo).toHaveBeenCalledWith(0, 0);
     await waitFor(() => {
-      expect(document.activeElement).toBe(roomHeading);
+      expect(document.activeElement).toBe(aboutHeading);
     });
 
     // PUSH to a cached chat thread: the top first, then the page's scroll to the latest message.

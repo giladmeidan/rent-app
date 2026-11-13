@@ -13,7 +13,7 @@ import {
   validate,
   type ProfileForm,
 } from '../validate';
-import { profile } from './fixtures';
+import { personalOnlyProfile, profile } from './fixtures';
 
 const TODAY = '2026-11-11';
 const areas = [gushDan, { ...gushDan, id: 'other', slug: 'sharon', name_he: 'שרון' }];
@@ -98,9 +98,9 @@ describe('validate', () => {
     expect(birthYearRange(new Date('2026-12-31T22:30:00Z'))).toEqual({ min: 1928, max: 2008 });
     expect(birthYearRange(new Date('2026-06-15T12:00:00Z'))).toEqual({ min: 1927, max: 2008 });
 
-    // The rules apply only while the room switch is on; the range is today's.
+    // The rules apply only while the personal switch is on; the range is today's.
     const { min, max } = birthYearRange();
-    const room: ProfileForm = { ...valid, room: true, gender: 'woman' };
+    const room: ProfileForm = { ...valid, personal: true, gender: 'woman' };
     const rangeError = { birth_year: { key: 'listings.errors.range', min, max } };
     expect(validate(room, areas, TODAY)).toEqual({});
     for (const birth_year of ['', ' ', String(min), String(max), ` ${String(max)} `]) {
@@ -118,7 +118,7 @@ describe('validate', () => {
     }
     expect(validate({ ...room, gender: null }, areas, TODAY)).toEqual({ gender: required });
     expect(
-      validate({ ...valid, room: false, gender: null, birth_year: 'abcd' }, areas, TODAY),
+      validate({ ...valid, personal: false, gender: null, birth_year: 'abcd' }, areas, TODAY),
     ).toEqual({});
     // Both room errors come after the housing fields, gender first.
     const both = validate({ ...room, gender: null, birth_year: 'abcd' }, areas, TODAY);
@@ -128,11 +128,15 @@ describe('validate', () => {
     );
     expect(firstInvalid(both)).toBe('gender');
 
-    // The body: off omits the four keys; on sends them, birth year trimmed, as a number, or not at all.
-    const off = toProfileIn({ ...room, room: false, birth_year: '1990' }, areas);
-    for (const key of ['gender', 'birth_year', 'flatmate_gender', 'lifestyle']) {
-      expect(off).not.toHaveProperty(key);
-    }
+    // The body: off sends the four empty (0010c: PUT clears them); on sends them, birth year
+    // trimmed, as a number, or not at all.
+    const off = toProfileIn({ ...room, personal: false, birth_year: '1990' }, areas);
+    expect(off).toMatchObject({
+      gender: null,
+      birth_year: null,
+      flatmate_gender: 'any',
+      lifestyle: {},
+    });
     expect(toProfileIn({ ...room, birth_year: ` ${String(max)} ` }, areas)).toMatchObject({
       gender: 'woman',
       birth_year: max,
@@ -150,7 +154,7 @@ describe('validate', () => {
   });
 
   it('ac1_about_me', () => {
-    const room: ProfileForm = { ...valid, room: true, gender: 'woman' };
+    const room: ProfileForm = { ...valid, personal: true, gender: 'woman' };
     const tooLong = { about_me: { key: 'profile.errors.aboutMeTooLong' } };
     expect(validate({ ...room, about_me: 'א'.repeat(300) }, areas, TODAY)).toEqual({});
     expect(validate({ ...room, about_me: 'א'.repeat(301) }, areas, TODAY)).toEqual(tooLong);
@@ -159,7 +163,7 @@ describe('validate', () => {
     expect(validate({ ...room, about_me: `${'א'.repeat(299)}\nא` }, areas, TODAY)).toEqual(tooLong);
     expect(validate({ ...room, about_me: '!!!' }, areas, TODAY)).toEqual({ about_me: required });
     expect(validate({ ...room, about_me: '   \n ' }, areas, TODAY)).toEqual({});
-    // Checked only while the room switch is on; after birth_year.
+    // Checked only while the personal switch is on; after birth_year.
     expect(validate({ ...valid, about_me: '!!!' }, areas, TODAY)).toEqual({});
     const both = validate({ ...room, birth_year: 'abcd', about_me: '!!!' }, areas, TODAY);
     expect(Object.keys(both)).toEqual(['birth_year', 'about_me']);
@@ -181,5 +185,127 @@ describe('validate', () => {
     expect(serverFieldErrors([{ loc: ['body', 'about_me'] }])).toEqual({
       about_me: { key: 'listings.errors.invalid' },
     });
+  });
+});
+
+describe('ac10 the two parts', () => {
+  const looking = {
+    budget_max_ils: null,
+    move_in_date: null,
+    area_ids: null,
+    household: null,
+    has_pets: null,
+    smoker: null,
+    contract_months: null,
+  };
+
+  it('ac10 looking off: its fields raise nothing and go as null, with the looking defaults', () => {
+    const form: ProfileForm = {
+      ...valid,
+      looking: false,
+      personal: true,
+      gender: 'woman',
+      // What was typed stays in the form; none of it is checked or sent.
+      budget_max_ils: '12',
+      move_in_date: '',
+      area_ids: new Set(),
+      household: null,
+      contract_months: null,
+      move_in_flexible: true,
+      parking_needed: 2,
+      flatmate_gender: 'women',
+      people_visible: true,
+    };
+    expect(validate(form, areas, TODAY)).toEqual({});
+    expect(toProfileIn(form, areas)).toEqual({
+      ...looking,
+      move_in_flexible: false,
+      parking_needed: 0,
+      gender: 'woman',
+      lifestyle: {},
+      about_me: null,
+      flatmate_gender: 'any',
+      people_visible: false,
+    });
+  });
+
+  it('ac10 personal off: gender, birth year and about me go as null, the answers empty', () => {
+    const form: ProfileForm = {
+      ...valid,
+      personal: false,
+      gender: 'man',
+      birth_year: 'abcd',
+      about_me: '!!!',
+      lifestyle: { night: 3 },
+      flatmate_gender: 'men',
+      people_visible: true,
+    };
+    expect(validate(form, areas, TODAY)).toEqual({});
+    expect(toProfileIn(form, areas)).toMatchObject({
+      budget_max_ils: 7500,
+      gender: null,
+      birth_year: null,
+      about_me: null,
+      lifestyle: {},
+      flatmate_gender: 'any',
+      people_visible: false,
+    });
+  });
+
+  it('ac10 both off: only the "fill one part" error', () => {
+    const errors = validate({ ...emptyProfileForm, looking: false, personal: false }, areas, TODAY);
+    expect(errors).toEqual({ form: { key: 'profile.errors.onePart' } });
+    expect(firstInvalid(errors)).toBe('form');
+  });
+
+  it('ac10 both on: every field is sent as today', () => {
+    const form: ProfileForm = {
+      ...valid,
+      personal: true,
+      gender: 'woman',
+      birth_year: '1996',
+      about_me: 'שלום',
+      lifestyle: { night: 2 },
+      flatmate_gender: 'women',
+      people_visible: true,
+    };
+    expect(validate(form, areas, TODAY)).toEqual({});
+    expect(toProfileIn(form, areas)).toEqual({
+      budget_max_ils: 7500,
+      move_in_date: addDays(TODAY, 30),
+      move_in_flexible: true,
+      area_ids: [gushDan.id],
+      household: 'couple',
+      has_pets: true,
+      smoker: false,
+      contract_months: 24,
+      parking_needed: 1,
+      gender: 'woman',
+      birth_year: 1996,
+      flatmate_gender: 'women',
+      lifestyle: { night: 2 },
+      people_visible: true,
+      about_me: 'שלום',
+    });
+  });
+
+  it('ac10 the form from a stored profile: each switch from its part, no String(null)', () => {
+    const personal = formFromProfile(personalOnlyProfile());
+    expect(personal).toMatchObject({
+      looking: false,
+      personal: true,
+      gender: 'woman',
+      birth_year: '1996',
+      budget_max_ils: '',
+      move_in_date: '',
+      household: null,
+      contract_months: null,
+      has_pets: false,
+      smoker: false,
+      parking_needed: 0,
+    });
+    expect(personal.area_ids.size).toBe(0);
+    expect(formFromProfile(profile())).toMatchObject({ looking: true, personal: false });
+    expect(emptyProfileForm).toMatchObject({ looking: true, personal: false });
   });
 });

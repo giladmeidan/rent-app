@@ -92,11 +92,11 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
         },
         409: {
             "model": ErrorOut,
-            "description": "already_applied; seeker_profile_required: the seeker has no housing "
-            "profile (0006a); seeker_gender_required: the room is for women or men only and the "
-            "seeker's profile has no room section (0007b); room_gender_mismatch: the room's "
-            "gender preference does not fit the seeker (0007b). Only already_applied costs "
-            "rate-limit budget",
+            "description": "already_applied; seeker_profile_required: the seeker's profile has no "
+            "looking part (0006a, 0010c); seeker_gender_required: the room is for women or men "
+            "only and the seeker's profile has no personal part (0007b); room_gender_mismatch: "
+            "the room's gender preference does not fit the seeker (0007b). Only already_applied "
+            "costs rate-limit budget",
         },
         429: {"model": ErrorOut, "description": "rate_limited; see Retry-After"},
     },
@@ -165,10 +165,11 @@ def withdraw(
 
 def _applicant_out(row: Row[Any]) -> ApplicantOut:
     """One `services.applications._applicants` row as the owner sees it. `match` and `profile`
-    only when the applicant has a profile (`household` is NOT NULL in `seeker_profiles`): without
-    one the match columns are meaningless (spec 0006c). `room` only when the service's room CASE
-    returned a `room_gender` (a room application whose seeker has a room section now, spec 0007c),
-    independent of `profile`; the birth year becomes an age (the `BirthYear` validator's year)."""
+    only when the applicant's profile has the looking part (`household` is NOT NULL exactly then,
+    spec 0010c; no row reads NULL too): without it the match columns are meaningless (spec 0006c).
+    `room` only when the service's room CASE returned a `room_gender` (a room application whose
+    seeker has a personal part now, spec 0007c), independent of `profile`; the birth year becomes
+    an age (the `BirthYear` validator's year)."""
     application: Application = row.Application
     has_profile = row.household is not None
     room = None

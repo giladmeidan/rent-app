@@ -2058,3 +2058,133 @@ def test_ac9_direct_chat_upgrade_downgrade(migration_db_url: str) -> None:
             assert _conversation_keys(conn) == keys
     finally:
         engine.dispose()
+
+
+_LOOKING_COLUMNS = (
+    "budget_max_ils",
+    "move_in_date",
+    "area_ids",
+    "household",
+    "has_pets",
+    "smoker",
+    "contract_months",
+)
+_PROFILE_SPLIT_CHECKS = (
+    "ck_seeker_profiles_looking",
+    "ck_seeker_profiles_looking_defaults",
+    "ck_seeker_profiles_parts",
+)
+
+
+def test_ac9_profile_split_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0010c: 0015 makes the 7 looking columns nullable (all or none), keeps the looking
+    # defaults without them and refuses an empty row. Downgrade deletes personal-only rows.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0014")
+    engine = create_engine(migration_db_url)
+    insert_profile = (
+        "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date, area_ids, household,"
+        " has_pets, smoker, contract_months, parking_needed, gender)"
+        " VALUES (:user, :budget, :move_in, CAST(:areas AS uuid[]), :household, :pets, :smoker,"
+        " :contract, :parking, :gender)"
+    )
+    try:
+        with engine.begin() as conn:
+            area_id = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                name: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, 'seeker') RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name},
+                ).scalar_one()
+                for name in ("full", "personal", "bad")
+            }
+        full = {
+            "user": users["full"],
+            "budget": 7500,
+            "move_in": "2030-01-01",
+            "areas": [area_id],
+            "household": "couple",
+            "pets": False,
+            "smoker": False,
+            "contract": 24,
+            "parking": 1,
+            "gender": "woman",
+        }
+        with engine.begin() as conn:
+            conn.execute(text(insert_profile), full)
+            assert _columns(conn, "seeker_profiles")["budget_max_ils"] is False
+            for name in _PROFILE_SPLIT_CHECKS:
+                assert _check_definition(conn, name) is None
+
+        command.upgrade(cfg, "0015")
+        with engine.connect() as conn:
+            assert conn.execute(
+                text("SELECT budget_max_ils, gender FROM seeker_profiles WHERE user_id = :id"),
+                {"id": users["full"]},
+            ).one() == (7500, "woman")
+            columns = _columns(conn, "seeker_profiles")
+            assert all(columns[name] is True for name in _LOOKING_COLUMNS)
+            for name in _PROFILE_SPLIT_CHECKS:
+                assert _check_definition(conn, name) is not None
+
+        no_looking = {
+            **full,
+            **dict.fromkeys(
+                ("budget", "move_in", "areas", "household", "pets", "smoker", "contract")
+            ),
+            "parking": 0,
+        }
+
+        def refused(constraint: str, **params: Any) -> None:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(insert_profile), params)
+
+        refused(
+            "ck_seeker_profiles_looking\\b",
+            **{
+                **full,
+                "user": users["bad"],
+                "budget": None,
+                "move_in": None,
+                "areas": None,
+                "parking": 0,
+            },
+        )
+        refused(
+            "ck_seeker_profiles_looking_defaults",
+            **{**no_looking, "user": users["bad"], "parking": 1},
+        )
+        refused("ck_seeker_profiles_parts", **{**no_looking, "user": users["bad"], "gender": None})
+        with engine.begin() as conn:
+            conn.execute(text(insert_profile), {**no_looking, "user": users["personal"]})
+            assert conn.execute(text("SELECT count(*) FROM seeker_profiles")).scalar_one() == 2
+
+        command.downgrade(cfg, "0014")
+        with engine.connect() as conn:
+            assert set(conn.execute(text("SELECT user_id FROM seeker_profiles")).scalars()) == {
+                users["full"]
+            }
+            assert conn.execute(
+                text("SELECT budget_max_ils, gender FROM seeker_profiles WHERE user_id = :id"),
+                {"id": users["full"]},
+            ).one() == (7500, "woman")
+            columns = _columns(conn, "seeker_profiles")
+            assert all(columns[name] is False for name in _LOOKING_COLUMNS)
+            for name in _PROFILE_SPLIT_CHECKS:
+                assert _check_definition(conn, name) is None
+
+        command.upgrade(cfg, "0015")
+        with engine.begin() as conn:
+            conn.execute(text(insert_profile), {**no_looking, "user": users["personal"]})
+            assert conn.execute(text("SELECT count(*) FROM seeker_profiles")).scalar_one() == 2
+    finally:
+        engine.dispose()

@@ -12,6 +12,7 @@ import { Tag } from '../../components/Tag';
 import { Textarea } from '../../components/Textarea';
 import { useMe } from '../auth/useMe';
 import { ApiError, type ListingDetail } from '../listings/api';
+import { hasLooking } from '../profile/api';
 import { useProfile } from '../profile/useProfile';
 import { RoomGate } from '../rooms/RoomGate';
 import { hasStatus, type MyApplicationOut } from './api';
@@ -447,12 +448,12 @@ export function ApplySection({
   } else if (
     listing.listing_type === 'room' &&
     listing.gender_preference !== 'any' &&
-    (profile.data === null || profile.data.gender === null)
+    (profile.data?.gender ?? null) === null
   ) {
-    // Before `ProfileGate`: the room section's page also creates the housing profile.
+    // Before `ProfileGate`: its link opens both parts of the profile (0010c).
     branch = 'roomGate';
     controls = <RoomGate listing={listing} />;
-  } else if (profile.data === null) {
+  } else if (!hasLooking(profile.data)) {
     branch = 'profileGate';
     controls = <ProfileGate listingId={listing.id} />;
   } else {

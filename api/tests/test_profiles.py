@@ -459,3 +459,214 @@ def test_ac13_people_fields(seeker: TestClient, gush_dan: uuid.UUID, db_engine: 
     assert seeker.get("/me/profile").json() == response.json()
     explicit = _put(seeker, {**_p(gush_dan), "people_visible": False, "about_me": None})
     assert explicit.status_code == 200, explicit.text  # off and empty need no room section
+
+
+# --- 0010c: the personal part and the looking part ----------------------------------------------
+
+# The looking part of a profile without one (spec 0010c): the 7 NULL, the defaults restored.
+LOOKING_OFF: dict[str, Any] = {
+    "budget_max_ils": None,
+    "move_in_date": None,
+    "move_in_flexible": False,
+    "area_ids": None,
+    "household": None,
+    "has_pets": None,
+    "smoker": None,
+    "contract_months": None,
+    "parking_needed": 0,
+    "flatmate_gender": "any",
+    "people_visible": False,
+}
+_LOOKING_KEYS = (
+    "budget_max_ils",
+    "move_in_date",
+    "area_ids",
+    "household",
+    "has_pets",
+    "smoker",
+    "contract_months",
+)
+
+
+def _personal() -> dict[str, Any]:
+    """The personal part alone: gender, birth year, about me, answers."""
+    return {
+        "gender": "man",
+        "birth_year": _year() - 30,
+        "about_me": "Quiet and tidy",
+        "lifestyle": {"night": 2, "guests": 1},
+    }
+
+
+def _row(engine: Engine) -> dict[str, Any]:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT budget_max_ils, move_in_date, move_in_flexible, area_ids, household,"
+                " has_pets, smoker, contract_months, parking_needed, gender, birth_year,"
+                " flatmate_gender, lifestyle, people_visible, about_me FROM seeker_profiles"
+            )
+        ).one()
+    return dict(row._mapping)
+
+
+def test_ac1_either_part_alone(client: TestClient, outbox: Outbox, gush_dan: uuid.UUID) -> None:
+    personal = signup(client, outbox, "p@example.com", "seeker")
+    assert personal.get("/me/profile").status_code == 404
+    response = _put(personal, _personal())
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert set(saved) == PROFILE_KEYS
+    assert {k: v for k, v in saved.items() if k != "updated_at"} == {**LOOKING_OFF, **_personal()}
+    assert personal.get("/me/profile").json() == saved
+
+    # Today's body: the whole looking part, no gender.
+    looking = signup(client, outbox, "l@example.com", "seeker")
+    body = _p(gush_dan)
+    response = _put(looking, body)
+    assert response.status_code == 200, response.text
+    assert {k: v for k, v in response.json().items() if k != "updated_at"} == {
+        **ROOM_OFF,
+        **PEOPLE_OFF,
+        **body,
+    }
+
+
+# (case id, the body from `P` (`p`) and the area id (`a`), a sent value the response must not echo)
+_PART_CASES: list[tuple[str, Any, Any]] = [
+    *(
+        (f"six_of_seven_without_{key}", lambda p, a, key=key: {**_without(p, key), **_WOMAN}, None)
+        for key in _LOOKING_KEYS
+    ),
+    (
+        "looking_null_budget",
+        lambda p, a: {**p, **_WOMAN, "budget_max_ils": None},
+        None,
+    ),
+    ("parking_without_looking", lambda p, a: {**_WOMAN, "parking_needed": 1}, None),
+    ("flexible_without_looking", lambda p, a: {**_WOMAN, "move_in_flexible": True}, None),
+    ("people_visible_looking_only", lambda p, a: {**p, "people_visible": True}, None),
+    ("people_visible_personal_only", lambda p, a: {**_personal(), "people_visible": True}, None),
+    ("about_me_without_gender", lambda p, a: {**p, "about_me": "Secret words"}, "Secret words"),
+    ("flatmate_gender_without_gender", lambda p, a: {**p, "flatmate_gender": "women"}, None),
+    (
+        "flatmate_gender_without_looking",
+        lambda p, a: {"gender": "woman", "flatmate_gender": "women"},
+        None,
+    ),
+    ("empty_body", lambda p, a: {}, None),
+    ("only_defaults", lambda p, a: {"move_in_flexible": False, "parking_needed": 0}, None),
+]
+
+
+@pytest.mark.parametrize(
+    ("make_body", "not_echoed"),
+    [(m, e) for _, m, e in _PART_CASES],
+    ids=[i for i, _, _ in _PART_CASES],
+)
+def test_ac2_part_rules(
+    seeker: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    make_body: Any,
+    not_echoed: Any,
+) -> None:
+    response = _put(seeker, make_body(_p(gush_dan), gush_dan))
+
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert isinstance(detail, list)
+    assert "input" not in response.text
+    if not_echoed is not None:
+        assert str(not_echoed) not in response.text
+    assert _profile_count(db_engine) == 0
+
+
+def test_ac2_part_rules_messages(seeker: TestClient, gush_dan: uuid.UUID) -> None:
+    """Each rule names its part, in `_parts`' order."""
+
+    def message(body: dict[str, Any]) -> str:
+        response = _put(seeker, body)
+        assert response.status_code == 422, response.text
+        [entry] = response.json()["detail"]
+        msg: str = entry["msg"]
+        return msg
+
+    assert "sent together (the looking part)" in message(
+        {**_without(_p(gush_dan), "smoker"), **_WOMAN}
+    )
+    assert "need the looking part" in message({"gender": "woman", "flatmate_gender": "women"})
+    assert "need gender (the personal part)" in message({**_p(gush_dan), "about_me": "Hi"})
+    assert "the personal part, the looking part or both" in message({})
+
+
+def test_ac3_put_replaces_each_part(
+    seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    full = {
+        **_p(gush_dan, move_in_flexible=True, parking_needed=2),
+        **_s(),
+        "people_visible": True,
+        "about_me": "Hello there",
+    }
+    response = _put(seeker, full)
+    assert response.status_code == 200, response.text
+
+    # Drop the looking part: it clears, its defaults return, the card switch turns off.
+    personal = {k: full[k] for k in ("gender", "birth_year", "lifestyle", "about_me")}
+    response = _put(seeker, personal)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert {k: v for k, v in saved.items() if k != "updated_at"} == {**LOOKING_OFF, **personal}
+    assert _row(db_engine) == {**LOOKING_OFF, **personal}
+    assert seeker.get("/me/profile").json() == saved
+
+    # Only the looking part: the personal part clears.
+    looking = _p(gush_dan)
+    response = _put(seeker, looking)
+    assert response.status_code == 200, response.text
+    assert {k: v for k, v in response.json().items() if k != "updated_at"} == {
+        **ROOM_OFF,
+        **PEOPLE_OFF,
+        **looking,
+    }
+    row = _row(db_engine)
+    assert (row["gender"], row["birth_year"], row["lifestyle"], row["about_me"]) == (
+        None,
+        None,
+        {},
+        None,
+    )
+    assert row["budget_max_ils"] == 7500
+    assert _profile_count(db_engine) == 1
+
+    # `unknown_area` is checked only when `area_ids` is sent: with the only area inactive, the
+    # personal part alone saves and the looking part is refused.
+    with db_engine.begin() as conn:
+        conn.execute(text("UPDATE areas SET is_active = false WHERE id = :id"), {"id": gush_dan})
+    assert _put(seeker, looking).json() == {"detail": "unknown_area"}
+    response = _put(seeker, personal)
+    assert response.status_code == 200, response.text
+    assert response.json()["budget_max_ils"] is None
+
+
+def test_ac8_any_account(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    client.cookies.clear()
+    for anonymous in (client.get("/me/profile"), _put(client, _personal())):
+        assert anonymous.status_code == 401
+        assert anonymous.json() == {"detail": "unauthenticated"}
+    assert _profile_count(db_engine) == 0
+
+    owner = signup(client, outbox, "o@example.com", "owner")
+    assert owner.get("/me/profile").json() == NOT_FOUND
+    saved = _put(owner, _personal())
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["gender"] == "man"
+    assert saved.json()["budget_max_ils"] is None
+    assert owner.get("/me/profile").json() == saved.json()
+    both = _put(owner, {**_p(gush_dan), **_personal(), "people_visible": True})
+    assert both.status_code == 200, both.text
+    assert both.json()["people_visible"] is True
+    assert _profile_count(db_engine) == 1

@@ -9,7 +9,7 @@ import { useLocation, useNavigationType } from 'react-router';
  * on purpose: the page shown is not the one loaded.
  *
  * A layout effect runs before the new page's passive effects, so a page that focuses or scrolls
- * something itself on mount (the profile's `?section=room` heading, a chat thread's latest message)
+ * something itself on mount (the profile's `?section=about` heading, a chat thread's latest message)
  * still wins.
  */
 export function RouteFocus() {

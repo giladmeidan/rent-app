@@ -11,6 +11,7 @@ import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
 import type { ListingType } from '../listings/api';
 import { ProfileNudge } from '../match/ProfileNudge';
+import { hasLooking } from '../profile/api';
 import { useProfile } from '../profile/useProfile';
 import { ActiveFilterTags } from './ActiveFilterTags';
 import { FiltersForm, type FormFilters } from './FiltersForm';
@@ -59,10 +60,12 @@ function SearchView({ type }: Props) {
   const active = countActive(filters);
   // The map view sends its own query; the list's key never holds `view`.
   const search = useSearch(filtersWithoutView, view !== 'map');
-  // A visitor never requests the profile; any signed-in account may have one (spec 0010b). It
-  // words the match chips and decides the sort select until the API has answered.
+  // A visitor never requests the profile; any signed-in account may have one (spec 0010b). Its
+  // looking part (0010c) words the match chips and decides the sort select until the API has
+  // answered; without it, as without a profile.
   const me = useMe();
-  const profile = useProfile(me.data != null).data ?? undefined;
+  const stored = useProfile(me.data != null).data;
+  const profile = hasLooking(stored) ? stored : undefined;
   const hasProfile = profile !== undefined;
   // The API picks the order from the cookie on the search itself, so its answer decides; before
   // it, the URL's sort, where `match` without a profile is `newest`, as the API will answer.

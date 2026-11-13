@@ -15,8 +15,9 @@ import { ListingCard } from '../listings/ListingCard';
 import { todayInIsrael } from '../listings/format';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
+import { hasLooking, type LookingProfile } from '../profile/api';
+import { profileHref } from '../profile/links';
 import { useProfile } from '../profile/useProfile';
-import type { SeekerProfileOut } from '../profile/api';
 import type { LikedRoomOut, LikeStateOut } from './api';
 import { LikeRoomButton } from './LikeRoomButton';
 import { MutualBanner } from './MutualBanner';
@@ -35,8 +36,9 @@ function RoomList({
 }: {
   items: LikedRoomOut[];
   like: LikeStateOut;
-  /** The seeker's profile, which words the match chips (`undefined`: none, or not loaded). */
-  profile: SeekerProfileOut | undefined;
+  /** The seeker's profile, which words the match chips (`undefined`: none, no looking part, or not
+   * loaded). */
+  profile: LookingProfile | undefined;
   empty: ReactNode;
   onMutual: (applicationId: string) => void;
   /** A card left its place for (or from) "mine": an unlike, or a like that is not mutual. */
@@ -86,7 +88,8 @@ export function MyLikesPage() {
   const { t } = useTranslation();
   usePageTitle(t('likes.title'));
   const likes = useMyLikes();
-  const profile = useProfile().data ?? undefined;
+  const stored = useProfile().data;
+  const profile = hasLooking(stored) ? stored : undefined;
   // Kept here, not in the lists: the card that made the match leaves them on the refetch.
   const [mutualId, setMutualId] = useState<string | null>(null);
   // Why a card left after a failed like or unlike (spec 0009g): page state, so it outlives the
@@ -152,7 +155,7 @@ export function MyLikesPage() {
                 pose="sleep"
                 message={t('likes.likedMeEmpty')}
                 action={
-                  <Button variant="ghost" to="/me/profile?section=room">
+                  <Button variant="ghost" to={profileHref('/me/likes', 'about', 'looking')}>
                     {t('likes.toProfile')}
                   </Button>
                 }

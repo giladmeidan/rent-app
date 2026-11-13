@@ -138,8 +138,18 @@ def _order(sort: SearchSort, score: Label[Any] | None) -> tuple[Any, ...]:
 
 def _with_profile(query: Select[Any], profile_user_id: uuid.UUID) -> Select[Any]:
     """`query` joined to the seeker's one profile row (by its primary key). Joined once: the match
-    columns and the room fit both read this row."""
-    return query.join(SeekerProfile, SeekerProfile.user_id == profile_user_id)
+    columns and the room fit both read this row. The join keeps only a row whose looking part is
+    filled (`budget_max_ils` is not null): the looking-part check (`has_profile` / the apply and
+    like gates) runs in an earlier statement, so under READ COMMITTED a PUT that clears the looking
+    part in between would otherwise feed a NULL budget into the match; with the filter in the join
+    each match statement is safe on its own (a race gives no row)."""
+    return query.join(
+        SeekerProfile,
+        and_(
+            SeekerProfile.user_id == profile_user_id,
+            SeekerProfile.budget_max_ils.is_not(None),
+        ),
+    )
 
 
 def _with_match(query: Select[Any]) -> tuple[Select[Any], Label[Any]]:
@@ -233,7 +243,8 @@ def liked_rooms(
     0010d; `None`, `None` without photos), newest like first. Only rooms (a room
     switched to an apartment keeps its pairs; `room_fit` is NULL for it), whose fit is not false,
     that are not the seeker's own and have no non-withdrawn application from them (the
-    application took over). Never names the owner. One statement."""
+    application took over). Empty while the seeker's profile has no looking part (spec 0010c: no
+    budget, no score). Never names the owner. One statement."""
     # Imported here: `services/people.py` imports this module.
     from app.services.people import open_application
 
@@ -243,6 +254,8 @@ def liked_rooms(
         .where(
             Listing.listing_type == "room",
             Listing.owner_id != seeker_id,
+            # The looking part (spec 0010c): without it the score is NULL.
+            SeekerProfile.budget_max_ils.is_not(None),
             room_fit(Listing, SeekerProfile).is_not(False),
             or_(RoomPair.lister_liked_at.is_not(None), RoomPair.seeker_liked_at.is_not(None)),
             ~open_application(Listing.id, seeker_id),

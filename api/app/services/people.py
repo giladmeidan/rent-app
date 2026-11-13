@@ -6,13 +6,13 @@ rooms. When the second side likes, the pair becomes a **shortlisted application*
 This module is the only writer of `room_pairs` and the only place a like turns into an
 application. Its terms, each stated once here:
 
-- A **candidate** of room listing `L` is a `seeker_profiles` row `P` with a room section
-  (`gender` set) that `room_fit(L, P)` is true for, that is not `L`'s owner nor a flatmate of `L`
-  (`flatmate_of`, spec 0008d: a lister's like never makes their own flatmate mutual), that opted in
-  (`people_visible`) **or** liked `L`, and that has no non-withdrawn application to `L`
-  (`open_application`): declined, submitted and shortlisted applicants live in the inbox, and a
-  decline is final. There is no area filter: another area only lowers the `area` criterion.
-- A **pending seeker like** of `L` (`pending_seeker_like`) is a pair of `L` with
+- A **candidate** of room listing `L` is a `seeker_profiles` row `P` with the looking part filled
+  and a room section (`gender` set) that `room_fit(L, P)` is true for, that is not `L`'s owner nor a
+  flatmate of `L` (`flatmate_of`, spec 0008d: a lister's like never makes their own flatmate
+  mutual), that opted in (`people_visible`) **or** liked `L`, and that has no non-withdrawn
+  application to `L` (`open_application`): declined, submitted and shortlisted applicants live in
+  the inbox, and a decline is final. There is no area filter: another area only lowers the `area`
+criterion. - A **pending seeker like** of `L` (`pending_seeker_like`) is a pair of `L` with
   `seeker_liked_at` set and no non-withdrawn application, while `L` is a room. `liked_me_count`
   (`services/listings.py`) counts these.
 
@@ -135,10 +135,12 @@ def consume_likes(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> N
 
 def _fits() -> tuple[ColumnElement[bool], ...]:
     """The candidate's conditions on the statement's `SeekerProfile` and `Listing`, without
-    opt-in and without the application clause: a room section, a true room fit, not the owner,
-    not a flatmate (0008d)."""
+    opt-in and without the application clause: a personal part, the looking part (spec 0010c: the
+    card needs areas and move-in, the score the budget), a true room fit, not the owner, not a
+    flatmate (0008d)."""
     return (
         SeekerProfile.gender.is_not(None),
+        SeekerProfile.budget_max_ils.is_not(None),
         room_fit(Listing, SeekerProfile).is_(True),
         SeekerProfile.user_id != Listing.owner_id,
         ~flatmate_of(Listing.id, SeekerProfile.user_id),
@@ -154,8 +156,9 @@ def _shown() -> ColumnElement[bool]:
 def pending_seeker_like() -> ColumnElement[bool]:
     """A pair (`RoomPair`) of the statement's `Listing` that its seeker liked and that has no
     non-withdrawn application, while the listing is a room. Correlates on `Listing`."""
-    # shortcut: fit and opt-in are not re-checked (a liker who changed gender or dropped the room
-    # section since still counts); people browse re-checks them. Accepted in spec 0008a, Risks.
+    # shortcut: fit and opt-in are not re-checked, nor the looking part (a liker who changed
+    # gender or dropped either part since still counts); people browse re-checks them. Accepted
+    # in spec 0008a, Risks.
     return and_(
         RoomPair.listing_id == Listing.id,
         Listing.listing_type == "room",
@@ -443,23 +446,25 @@ def like_room(
     db: Session, r: RedisClient, seeker: User, listing_id: uuid.UUID
 ) -> tuple[Application | None, Listing]:
     """The seeker likes public room `listing_id`. Returns the application when this like made the
-    pair mutual (else None), and the listing. In order: the profile (`ProfileRequiredError`, or
-    `RoomSectionRequiredError` without a room section; the same SELECT reads whether the seeker
-    is a flatmate there, 0008d), the listing (`search.get_public_listing_with_match`:
-    `ListingNotFoundError` for one not public, the caller's own, one they are a flatmate of, or an
-    apartment; `RoomGenderMismatchError` when it does not fit), none of them
-    counted; the limiter (`RateLimitedError`); one INSERT ... ON CONFLICT DO UPDATE that takes the
-    pair's lock (the live price is frozen only if the pair is new; a second like keeps the first
-    `seeker_liked_at`); the post-lock check (`ListingNotFoundError` for a flatmate join that
-    committed while the listing SELECT's `FOR KEY SHARE` waited, `AlreadyAppliedError`; the like
-    rolled back); then mutual when the lister had liked. Commits."""
+    pair mutual (else None), and the listing. In order: the profile (`ProfileRequiredError` without
+    the looking part, spec 0010c, then `RoomSectionRequiredError` without the personal part; the
+    same SELECT reads whether the seeker is a flatmate there, 0008d), the listing
+    (`search.get_public_listing_with_match`: `ListingNotFoundError` for one not public, the caller's
+    own, one they are a flatmate of, or an apartment; `RoomGenderMismatchError` when it does not
+    fit), none of them counted; the limiter (`RateLimitedError`); one INSERT ... ON CONFLICT DO
+    UPDATE that takes the pair's lock (the live price is frozen only if the pair is new; a second
+    like keeps the first `seeker_liked_at`); the post-lock check (`ListingNotFoundError` for a
+    flatmate join that committed while the listing SELECT's `FOR KEY SHARE` waited,
+    `AlreadyAppliedError`; the like rolled back); then mutual when the lister had liked. Commits."""
     try:
         profile = db.execute(
             select(
-                SeekerProfile.gender, flatmate_of(listing_id, seeker.id).label("flatmate")
+                SeekerProfile.budget_max_ils,
+                SeekerProfile.gender,
+                flatmate_of(listing_id, seeker.id).label("flatmate"),
             ).where(SeekerProfile.user_id == seeker.id)
         ).first()
-        if profile is None:
+        if profile is None or profile.budget_max_ils is None:
             raise ProfileRequiredError
         if profile.gender is None:
             raise RoomSectionRequiredError

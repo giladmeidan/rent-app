@@ -178,8 +178,13 @@ def match_columns(
                 _ONE, cast(listing.parking_spots, Numeric) / profile.parking_needed, type_=Numeric
             ),
         ),
-        "smoking": case((and_(profile.smoker, not_(listing.smoking_allowed)), _ZERO), else_=_ONE),
-        "pets": case((and_(profile.has_pets, not_(listing.pets_allowed)), _ZERO), else_=_ONE),
+        # `IS TRUE` (spec 0010c: the columns are nullable); every caller gates on the looking part.
+        "smoking": case(
+            (and_(profile.smoker.is_(True), not_(listing.smoking_allowed)), _ZERO), else_=_ONE
+        ),
+        "pets": case(
+            (and_(profile.has_pets.is_(True), not_(listing.pets_allowed)), _ZERO), else_=_ONE
+        ),
         "lifestyle": _lifestyle(listing, profile, room_type),
     }
     fails: dict[Criterion, ColumnElement[bool]] = {

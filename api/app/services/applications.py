@@ -188,9 +188,10 @@ def apply(
 ) -> tuple[Application, Listing]:
     """Apply `seeker` (any account, spec 0010b) to a public listing with `message` (already
     validated by `ApplicationIn`). Raises, in this order, `SeekerOnlyError` (a public apartment
-    and the caller's role is not seeker; nothing counted), `ProfileRequiredError` (nothing
-    counted), `RoomGenderMismatchError` / `SeekerGenderRequiredError` (the room gate, nothing
-    counted), `RateLimitedError`, `ListingNotFoundError` (unknown, not public or the caller's own)
+    and the caller's role is not seeker; nothing counted), `ProfileRequiredError` (no profile, or
+    a personal-only one without the looking part, spec 0010c; nothing counted),
+    `RoomGenderMismatchError` / `SeekerGenderRequiredError` (the room gate, nothing counted),
+    `RateLimitedError`, `ListingNotFoundError` (unknown, not public or the caller's own)
     or `AlreadyAppliedError`. One SELECT for the role and profile checks (with whether the seeker
     is a flatmate of the listing, 0008d, and the type of the listing if it is public, 0010b), one
     for the listing (with the match and room fit, taking `FOR KEY SHARE` on it, so a concurrent
@@ -201,7 +202,10 @@ def apply(
 
     gate = db.execute(
         select(
-            exists().where(SeekerProfile.user_id == seeker.id).label("has_profile"),
+            # The looking part (spec 0010c): a personal-only profile counts as none.
+            exists()
+            .where(SeekerProfile.user_id == seeker.id, SeekerProfile.budget_max_ils.is_not(None))
+            .label("has_profile"),
             flatmate_of(listing_id, seeker.id).label("flatmate"),
             # Public listings only (0010b): a paused, expired or inactive-area id reads NULL, like
             # an unknown one, and falls through to the counted 404 below.
@@ -360,10 +364,10 @@ _ROOM_COLUMNS = (
 
 def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
     """The non-withdrawn applications of `listing_id`, each with the applicant's display name, the
-    seven owner-facing profile columns (NULL without a profile row), the three room columns
-    (rooms (0007c): `room_gender`, `room_birth_year`, `room_lifestyle`, NULL unless the seeker
-    applied to a room and has a room section now) and the match columns; and the statement's
-    `m_score` column. Unordered.
+    seven owner-facing profile columns (NULL without the looking part, spec 0010c), the three
+    room columns (rooms (0007c): `room_gender`, `room_birth_year`, `room_lifestyle`, NULL unless
+    the seeker applied to a room and has a personal part now) and the match columns; and the
+    statement's `m_score` column. Unordered.
 
     It has **no ownership condition** of its own: both callers establish ownership first (the
     ownership SELECT in `list_applicants`, the UPDATE's WHERE in `set_applicant_status`)."""
@@ -401,9 +405,9 @@ def list_applicants(
     db: Session, owner: User, listing_id: uuid.UUID, sort: ApplicantSort = "match"
 ) -> Sequence[Row[Any]]:
     """The non-withdrawn applications of one of `owner`'s listings (any listing state), each row as
-    `_applicants` selects it. `sort="match"`: applicants with a profile first, then score, then
-    newest `created_at`, then `id` (no-profile rows tie on whatever `m_score` they get and fall
-    through to `created_at`); `"newest"`: newest `created_at` first, then `id`. Raises
+    `_applicants` selects it. `sort="match"`: applicants with the looking part first (spec 0010c),
+    then score, then newest `created_at`, then `id` (rows without it tie on whatever `m_score` they
+    get and fall through to `created_at`); `"newest"`: newest `created_at` first, then `id`. Raises
     `ListingNotFoundError` (unknown id or another owner's listing). Two statements: the ownership
     check, then the list, which reads only `display_name` and `photo_key` from `users` (NF2)."""
     own = db.scalar(
@@ -414,7 +418,8 @@ def list_applicants(
     query, score = _applicants(listing_id)
     newest = (Application.created_at.desc(), Application.id)
     if sort == "match":
-        order: tuple[Any, ...] = (SeekerProfile.user_id.is_(None), score.desc(), *newest)
+        # No looking part (no row, or a personal-only one, spec 0010c) sorts last.
+        order: tuple[Any, ...] = (SeekerProfile.budget_max_ils.is_(None), score.desc(), *newest)
     else:
         order = newest
     return db.execute(query.order_by(*order)).all()
