@@ -13,6 +13,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { ApplicantsPage } from '../../applicants/ApplicantsPage';
 import { RequireOwner } from '../../auth/RequireOwner';
+import { RequireUser } from '../../auth/RequireUser';
 import { FlatmatesPage } from '../../flatmates/FlatmatesPage';
 import { PeoplePage } from '../../people/PeoplePage';
 import { EditListingPage } from '../EditListingPage';
@@ -40,13 +41,17 @@ const TITLES = {
   [FLATMATES]: he.flatmates.title,
 };
 
+// As `app/routes.tsx` (spec 0010b): only the owner's apartments page is `RequireOwner`; every room
+// page is for any account (`RequireUser`).
 const routes = (
   <Routes>
     <Route path="/" element={<p>home</p>} />
     <Route path="/login" element={<p>login</p>} />
     <Route element={<RequireOwner />}>
-      <Route path="/listings/new" element={<NewListingPage />} />
       <Route path="/me/listings" element={<MyListingsPage />} />
+    </Route>
+    <Route element={<RequireUser />}>
+      <Route path="/listings/new" element={<NewListingPage />} />
       <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
       <Route path="/me/listings/:id/applicants" element={<ApplicantsPage />} />
       <Route path="/me/listings/:id/people" element={<PeoplePage />} />
@@ -74,15 +79,33 @@ describe('RequireOwner', () => {
       vi.unstubAllGlobals();
     }
 
-    // Logged out → /login?next=<the page>; a seeker → /.
-    for (const [me, target] of [
+    // A seeker sees every room page (spec 0010b: `RequireUser`), the room wizard on `/listings/new`.
+    for (const path of PATHS.filter((p) => p !== '/me/listings')) {
+      mockApi({
+        'GET /me': [json(seeker)],
+        'GET /areas': [json([gushDan])],
+        'GET /me/listings': [json([A])],
+        [`GET /listings/${A.id}/applications`]: [json([])],
+        [`GET /listings/${A.id}/people`]: [json({ items: [], total: 0 })],
+        [`GET /listings/${A.id}/flatmates`]: [json([])],
+      });
+      const view = renderRoutes(path, routes);
+      expect(await screen.findByRole('heading', { level: 1, name: TITLES[path] })).toBeVisible();
+      expect(currentPath()).toBe(path);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // Logged out → /login?next=<the page>, on every page; a seeker on the apartments page → /.
+    for (const [me, target, paths] of [
       [
         json({ detail: 'unauthenticated' }, 401),
         (path: string) => `/login?next=${encodeURIComponent(path)}`,
+        PATHS,
       ],
-      [json(seeker), () => '/'],
+      [json(seeker), () => '/', ['/me/listings'] as const],
     ] as const) {
-      for (const path of PATHS) {
+      for (const path of paths) {
         mockApi({
           'GET /me': [me.clone()],
           'GET /areas': [json([gushDan])],

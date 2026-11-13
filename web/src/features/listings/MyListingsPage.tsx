@@ -161,7 +161,8 @@ function ListingRow({
 type Props = {
   /** The side's type (spec 0010a): `/me/listings` shows apartments, the market's "שלי" rooms. */
   type?: ListingType;
-  /** Inside a page that owns the `<h1>`, the container and the tab's title (`MarketMinePage`). */
+  /** A tab panel inside a page that owns the `<h1>`, the container and the tab's title
+   * (`MarketMinePage`); the tab labels it, so it has no heading of its own. */
   panel?: boolean;
 };
 
@@ -173,7 +174,7 @@ export function MyListingsPage({ type = 'apartment', panel = false }: Props) {
   if (panel) {
     return (
       <div className="flex flex-col gap-4">
-        <MyListings type={type} level={2} />
+        <MyListings type={type} panel />
       </div>
     );
   }
@@ -186,12 +187,12 @@ function MyListingsRoute({ type }: { type: ListingType }) {
   usePageTitle(t('listings.mine.title'));
   return (
     <PageContainer as="section" width="wide" className="flex flex-col gap-4">
-      <MyListings type={type} level={1} />
+      <MyListings type={type} panel={false} />
     </PageContainer>
   );
 }
 
-function MyListings({ type, level }: { type: ListingType; level: 1 | 2 }) {
+function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   const { t } = useTranslation();
   const listings = useMyListings();
   const room = type === 'room';
@@ -272,20 +273,29 @@ function MyListings({ type, level }: { type: ListingType; level: 1 | 2 }) {
   // Both types: the cap is shared.
   const live = listings.data?.filter((l) => listingState(l, now) === 'live').length;
 
+  const count =
+    live === undefined ? undefined : t('listings.mine.count', { live, cap: LISTING_CAP });
+  const newButton = (
+    <Button variant="primary" to={newPath}>
+      {room ? t('market.mine.newRoom') : t('listings.mine.new')}
+    </Button>
+  );
+
   return (
     <>
-      <PageHeader
-        level={level}
-        title={room ? t('market.mine.tabs.listings') : t('listings.mine.title')}
-        subtitle={
-          live === undefined ? undefined : t('listings.mine.count', { live, cap: LISTING_CAP })
-        }
-        actions={
-          <Button variant="primary" to={newPath}>
-            {room ? t('market.mine.newRoom') : t('listings.mine.new')}
-          </Button>
-        }
-      />
+      {panel ? (
+        // In "שלי"'s tab panel the tab names it (spec 0010b): the count and the action, no heading.
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          {count !== undefined && <p className="text-body-sm text-ink-muted">{count}</p>}
+          {newButton}
+        </div>
+      ) : (
+        <PageHeader
+          title={room ? t('market.mine.tabs.listings') : t('listings.mine.title')}
+          subtitle={count}
+          actions={newButton}
+        />
+      )}
       {/* Visually hidden while empty (out of the flow, so no gap), never unmounted. */}
       <p
         role="status"

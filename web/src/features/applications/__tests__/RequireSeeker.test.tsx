@@ -19,6 +19,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// The one seeker-only page (spec 0010b: apartment applications; likes and the profile are for any
+// account, `routes.test.tsx::ac10_market_routes_for_any_account`).
 const PATH = '/me/applications';
 const routes = (
   <Routes>

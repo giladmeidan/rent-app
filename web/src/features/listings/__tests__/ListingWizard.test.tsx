@@ -18,7 +18,7 @@ import { ListingWizard } from '../ListingWizard';
 import { MarketMinePage } from '../../market/MarketMinePage';
 import { NewListingPage } from '../NewListingPage';
 import { MY_LISTINGS_KEY } from '../useMyListings';
-import { gushDan, listing, owner, withoutCounts } from './fixtures';
+import { gushDan, listing, owner, seeker, withoutCounts } from './fixtures';
 import {
   areasLoaded,
   chooseApartmentAndContinue,
@@ -26,6 +26,7 @@ import {
   errorFor,
   fillValidDetails,
   IN_30_DAYS,
+  meClient,
   nextButton,
   progress,
   renderWizard,
@@ -226,6 +227,7 @@ describe('ListingWizard', () => {
         <Route path="/listings/new" element={<NewListingPage />} />
         <Route path="/me/listings" element={<StatePrinter />} />
       </Routes>,
+      meClient(),
     );
     chooseApartmentAndContinue();
     await areasLoaded();
@@ -774,7 +776,7 @@ describe('ListingWizard', () => {
       'GET /me/listings': [json([{ ...room, applicant_count: 0 }])],
       'GET /me/conversations': [json([])],
     });
-    let view = renderRoutes('/listings/new?type=room', newRoutes);
+    let view = renderRoutes('/listings/new?type=room', newRoutes, meClient());
     expect(h2(l.stepTitle.detailsRoom)).toBeVisible();
     expectStep(1, 3);
     expect(screen.queryByText(l.steps.type)).toBeNull();
@@ -804,7 +806,7 @@ describe('ListingWizard', () => {
       'GET /areas': [json([gushDan])],
       'POST /listings': [json(withoutCounts(listing()), 201)],
     });
-    view = renderRoutes('/listings/new?type=apartment', newRoutes);
+    view = renderRoutes('/listings/new?type=apartment', newRoutes, meClient());
     expect(h2(l.stepTitle.details)).toBeVisible();
     expectStep(1, 3);
     expect(backButton()).toBeNull();
@@ -822,11 +824,46 @@ describe('ListingWizard', () => {
     // Anything else, or no param: the type step, "1 of 4".
     for (const path of ['/listings/new?type=house', '/listings/new']) {
       mockApi({ 'GET /areas': [json([gushDan])] });
-      view = renderRoutes(path, newRoutes);
+      view = renderRoutes(path, newRoutes, meClient());
       expect(h2(l.stepTitle.type)).toBeVisible();
       expectStep(1, 4);
       expect(screen.getByRole('radio', { name: l.type.room })).not.toBeChecked();
       expect(screen.getByRole('radio', { name: l.type.apartment })).not.toBeChecked();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac10_non_owner_room_only', async () => {
+    // Spec 0010b: only an owner posts an apartment. A seeker gets the room flow whatever `?type=`
+    // says: no type step, the room details first, "1 of 3", published as a room to "שלי".
+    const room = withoutCounts(listing({ listing_type: 'room', flatmates_count: 2 }));
+    const newRoutes = (
+      <Routes>
+        <Route path="/listings/new" element={<NewListingPage />} />
+        <Route path="/me/listings" element={<StatePrinter />} />
+        <Route path="/market/mine" element={<p>mine</p>} />
+      </Routes>
+    );
+    for (const path of ['/listings/new?type=apartment', '/listings/new', '/listings/new?type=x']) {
+      const api = mockApi({
+        'GET /areas': [json([gushDan])],
+        'POST /listings': [json(room, 201)],
+      });
+      const view = renderRoutes(path, newRoutes, meClient(seeker));
+      expect(h2(l.stepTitle.detailsRoom)).toBeVisible();
+      expectStep(1, 3);
+      expect(screen.queryByText(l.steps.type)).toBeNull();
+      expect(screen.queryByRole('radio', { name: l.type.apartment })).toBeNull();
+      await areasLoaded();
+      fillValidDetails('room');
+      fireEvent.click(nextButton());
+      fireEvent.change(screen.getByLabelText(l.room.flatmatesCount), { target: { value: '2' } });
+      fireEvent.click(nextButton());
+      fireEvent.click(publishButton());
+      expect(await screen.findByText('mine')).toBeVisible();
+      expect(currentPath()).toBe('/market/mine');
+      expect(api.calls('POST /listings')[0]?.body).toMatchObject({ listing_type: 'room' });
       view.unmount();
       vi.unstubAllGlobals();
     }

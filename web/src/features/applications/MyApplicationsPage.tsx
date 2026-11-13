@@ -185,17 +185,18 @@ type Props = {
   /** The side's type (spec 0010a): `/me/applications` shows apartment applications, the market's
    * "שלי" room applications. */
   type?: ListingType;
-  /** Inside a page that owns the `<h1>`, the container and the tab's title (`MarketMinePage`). */
+  /** A tab panel inside a page that owns the `<h1>`, the container and the tab's title
+   * (`MarketMinePage`); the tab labels it, so it has no heading of its own. */
   panel?: boolean;
 };
 
-/** `/me/applications`, seekers only (`RequireSeeker`): each application of one type with its
- * status. */
+/** `/me/applications`, seekers only (`RequireSeeker`), and "שלי"'s room applications for any
+ * account (spec 0010b): each application of one type with its status. */
 export function MyApplicationsPage({ type = 'apartment', panel = false }: Props) {
   if (panel) {
     return (
       <div className="flex flex-col gap-4">
-        <MyApplications type={type} level={2} />
+        <MyApplications type={type} panel />
       </div>
     );
   }
@@ -208,12 +209,12 @@ function MyApplicationsRoute({ type }: { type: ListingType }) {
   usePageTitle(t('applications.mine.title'));
   return (
     <PageContainer as="section" width="default" className="flex flex-col gap-4">
-      <MyApplications type={type} level={1} />
+      <MyApplications type={type} panel={false} />
     </PageContainer>
   );
 }
 
-function MyApplications({ type, level }: { type: ListingType; level: 1 | 2 }) {
+function MyApplications({ type, panel }: { type: ListingType; panel: boolean }) {
   const { t } = useTranslation();
   const applications = useMyApplications();
   const room = type === 'room';
@@ -258,10 +259,12 @@ function MyApplications({ type, level }: { type: ListingType; level: 1 | 2 }) {
 
   return (
     <>
-      <PageHeader
-        level={level}
-        title={room ? t('market.mine.tabs.applications') : t('applications.mine.title')}
-      />
+      {/* In "שלי"'s tab panel the tab names it (spec 0010b): no heading of its own. */}
+      {!panel && (
+        <PageHeader
+          title={room ? t('market.mine.tabs.applications') : t('applications.mine.title')}
+        />
+      )}
       {body}
     </>
   );

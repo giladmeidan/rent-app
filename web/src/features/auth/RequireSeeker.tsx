@@ -7,8 +7,9 @@ import { Skeleton } from '../../components/Skeleton';
 import { loginWithNext } from './next';
 import { useMe } from './useMe';
 
-/** Route guard for seeker-only pages: logged out → /login?next=<this page> (path and query, never
- * the hash), an owner → /, a seeker → the page. */
+/** Route guard for the one seeker-only page, `/me/applications` (apartment applications; spec
+ * 0010b: apartments keep the roles, likes and the profile are `RequireUser`): logged out →
+ * /login?next=<this page> (path and query, never the hash), an owner → /, a seeker → the page. */
 export function RequireSeeker() {
   const me = useMe();
   const location = useLocation();

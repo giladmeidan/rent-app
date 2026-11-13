@@ -404,7 +404,15 @@ describe('Layout', () => {
         'GET /me/applications': [() => json([])],
         'GET /listings': [() => json(page([]))],
       });
-    // MARKET-PLAN section 7 "Bottom bar per side", roles still applying (spec 0010a).
+    // MARKET-PLAN section 7 "Bottom bar per side": the apartments bar by role (spec 0010a), the
+    // market's the same for every account (spec 0010b).
+    const MARKET = [
+      [he.nav.market, '/market'],
+      [he.header.likes, '/me/likes'],
+      [he.nav.mine, '/market/mine'],
+      [he.header.chat, '/chat'],
+      [he.nav.profile, '/me/profile'],
+    ];
     const BARS = {
       owner: {
         apartments: [
@@ -412,11 +420,7 @@ describe('Layout', () => {
           [he.header.chat, '/chat'],
           [he.nav.search, '/search'],
         ],
-        market: [
-          [he.nav.mine, '/market/mine'],
-          [he.header.chat, '/chat'],
-          [he.nav.market, '/market'],
-        ],
+        market: MARKET,
       },
       seeker: {
         apartments: [
@@ -425,15 +429,9 @@ describe('Layout', () => {
           [he.header.chat, '/chat'],
           [he.nav.profile, '/me/profile'],
         ],
-        market: [
-          [he.nav.market, '/market'],
-          [he.header.likes, '/me/likes'],
-          [he.nav.mine, '/market/mine'],
-          [he.header.chat, '/chat'],
-          [he.nav.profile, '/me/profile'],
-        ],
+        market: MARKET,
       },
-    } as const;
+    };
 
     for (const [name, me] of [
       ['owner', owner],
@@ -469,5 +467,72 @@ describe('Layout', () => {
     expect(within(nav).getByRole('link', { name: he.nav.market })).not.toHaveAttribute(
       'aria-current',
     );
+  });
+
+  it('ac11_market_bar_every_account', async () => {
+    const tabsOf = async () => {
+      const nav = await within(screen.getByRole('banner')).findByRole('navigation', {
+        name: he.nav.label,
+      });
+      return within(nav)
+        .getAllByRole('link')
+        .map((a) => [a.textContent, a.getAttribute('href')]);
+    };
+    // Spec 0010b: no roles in the market, one bar for an owner and a seeker.
+    const market = [
+      [he.nav.market, '/market'],
+      [he.header.likes, '/me/likes'],
+      [he.nav.mine, '/market/mine'],
+      [he.header.chat, '/chat'],
+      [he.nav.profile, '/me/profile'],
+    ];
+    for (const me of [owner, seeker]) {
+      mockApi({
+        'GET /me': [() => json(me)],
+        'GET /me/conversations': [() => json([])],
+        'GET /me/likes': [() => json({ liked_me: [], mine: [] })],
+        'GET /me/profile': [() => json({ detail: 'seeker_profile_not_found' }, 404)],
+        'GET /listings': [() => json(page([]))],
+      });
+      const view = renderRoutes('/market', <AppRoutes />);
+      expect(await tabsOf(), me.role).toEqual(market);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+    // The apartments bar keeps the owner's tabs.
+    mockApi({
+      'GET /me': [() => json(owner)],
+      'GET /me/conversations': [() => json([])],
+      'GET /me/profile': [() => json({ detail: 'seeker_profile_not_found' }, 404)],
+      'GET /listings': [() => json(page([]))],
+    });
+    let view = renderRoutes('/search', <AppRoutes />);
+    expect(await tabsOf()).toEqual([
+      [he.header.myListings, '/me/listings'],
+      [he.header.chat, '/chat'],
+      [he.nav.search, '/search'],
+    ]);
+    view.unmount();
+    vi.unstubAllGlobals();
+    window.localStorage.removeItem('homie.side');
+
+    // Anonymous: "כניסה" returns to the market from the market side, plain elsewhere.
+    for (const [path, href] of [
+      ['/market', '/login?next=%2Fmarket'],
+      ['/search', '/login'],
+    ] as const) {
+      mockApi({ 'GET /me': [unauthenticated], 'GET /listings': [() => json(page([]))] });
+      view = renderRoutes(path, <AppRoutes />);
+      const nav = await within(screen.getByRole('banner')).findByRole('navigation', {
+        name: he.nav.label,
+      });
+      expect(within(nav).getByRole('link', { name: he.header.login })).toHaveAttribute(
+        'href',
+        href,
+      );
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+    window.localStorage.removeItem('homie.side');
   });
 });

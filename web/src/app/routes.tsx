@@ -61,20 +61,23 @@ export function AppRoutes() {
         <Route path="listings/:id" element={<ListingPage />} />
         {/* Public (0008e A1): the page takes the token out of the hash before its own login check. */}
         <Route path="flatmates/join" element={<JoinFlatPage />} />
+        {/* Apartments keep the roles (spec 0010b): the owner's apartments, the seeker's apartment
+            applications. Everything else is for any account. */}
         <Route element={<RequireOwner />}>
-          <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings" element={<MyListingsPage />} />
+        </Route>
+        <Route element={<RequireSeeker />}>
+          <Route path="me/applications" element={<MyApplicationsPage />} />
+        </Route>
+        <Route element={<RequireUser />}>
+          {/* The wizard offers a non-owner the room flow only (`NewListingPage`). */}
+          <Route path="listings/new" element={<NewListingPage />} />
           <Route path="me/listings/:id/edit" element={<EditListingPage />} />
           <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
           <Route path="me/listings/:id/people" element={<PeoplePage />} />
           <Route path="me/listings/:id/flatmates" element={<FlatmatesPage />} />
-        </Route>
-        <Route element={<RequireSeeker />}>
-          <Route path="me/applications" element={<MyApplicationsPage />} />
           <Route path="me/likes" element={<MyLikesPage />} />
           <Route path="me/profile" element={<ProfilePage />} />
-        </Route>
-        <Route element={<RequireUser />}>
           {/* One layout for both: on a desktop the list stays beside the thread (spec 0009s). */}
           <Route path="chat" element={<ChatLayout />}>
             <Route index element={<ChatListPage />} />

@@ -264,7 +264,7 @@ describe('JoinFlatPage', () => {
 
     // The join's final answers.
     for (const [reply, name, href] of [
-      [err(409, 'already_applied'), toApplications, '/market/mine'],
+      [err(409, 'already_applied'), toApplications, '/market/mine?tab=applications'],
       [err(409, 'declined'), toSearch, '/market'],
       [err(409, 'flatmates_full'), toSearch, '/market'],
       [err(404, 'not_found'), toSearch, '/market'],
@@ -302,7 +302,11 @@ describe('JoinFlatPage', () => {
       [{ [PREVIEW]: [json(P)], [JOIN]: [err(409, 'flatmates_full')] }, '/market'],
       [{ [PREVIEW]: [err(404, 'not_found')] }, '/market'],
       [{ [PREVIEW]: [err(409, 'own_listing')] }, '/market/mine'],
-      [{ [PREVIEW]: [json(P)], [JOIN]: [err(409, 'already_applied')] }, '/market/mine'],
+      // Spec 0010b: straight to the room applications' panel.
+      [
+        { [PREVIEW]: [json(P)], [JOIN]: [err(409, 'already_applied')] },
+        '/market/mine?tab=applications',
+      ],
     ];
     for (const [replies, href] of cases) {
       const { view } = renderJoin(replies);
@@ -311,7 +315,7 @@ describe('JoinFlatPage', () => {
       const links = screen
         .getAllByRole('link')
         .map((link) => link.getAttribute('href'))
-        .filter((h) => h === '/market' || h === '/market/mine' || h === '/search');
+        .filter((h) => h === '/search' || (h?.startsWith('/market') ?? false));
       expect(links).toEqual([href]);
       if (href === '/market') {
         expect(screen.getByRole('link', { name: he.flatmates.join.toSearch })).toHaveAttribute(

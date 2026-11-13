@@ -37,6 +37,7 @@ export function publicListing(overrides: Partial<ListingPublic> = {}): ListingPu
     lat: null,
     lng: null,
     match: null,
+    is_mine: false,
     ...overrides,
   };
 }

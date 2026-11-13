@@ -59,6 +59,7 @@ function detail(overrides: Record<string, unknown>) {
     lat: 32.0707,
     lng: 34.811,
     match: null,
+    is_mine: false,
     applicant_count: 3,
     room_fit: null,
     like: null,

@@ -60,9 +60,12 @@ const profileIcon = (
 /**
  * The header's inline end: who is logged in, or the login link. Never blocks the shell.
  * - Anonymous: one named `<nav>` with "כניסה" (the side switch, spec 0010a, leads to the search).
- * - Signed in: one named `<nav data-bottom-nav>` with the tabs of the current side and role (a
- *   bottom tab bar below `lg`, the top bar's text tabs from `lg`; MARKET-PLAN section 7), then the
- *   greeting and logout outside it. Chat is on both sides.
+ *   On the market side it returns to `/market` (spec 0010b), so a new email that signs up through
+ *   login is not asked owner or seeker (`OtpForm`).
+ * - Signed in: one named `<nav data-bottom-nav>` with the tabs of the current side (a bottom tab
+ *   bar below `lg`, the top bar's text tabs from `lg`; MARKET-PLAN section 7), then the greeting
+ *   and logout outside it. The market has no roles (spec 0010b): every account gets the same five
+ *   tabs there; the apartments tabs follow the role. Chat is on both sides.
  */
 export function AuthMenu() {
   const { t } = useTranslation();
@@ -87,7 +90,10 @@ export function AuthMenu() {
   if (user === undefined || user === null) {
     return (
       <nav aria-label={t('nav.label')} className="ms-auto flex items-center gap-1">
-        <Link to="/login" className={headerLink}>
+        <Link
+          to={side === 'market' ? `/login?next=${encodeURIComponent('/market')}` : '/login'}
+          className={headerLink}
+        >
           {t('header.login')}
         </Link>
       </nav>
@@ -102,13 +108,7 @@ export function AuthMenu() {
   const profile = <NavTab to="/me/profile" icon={profileIcon} label={t('nav.profile')} />;
   let tabs;
   if (side === 'market') {
-    tabs = owner ? (
-      <>
-        {mine}
-        <ChatNavLink />
-        {market}
-      </>
-    ) : (
+    tabs = (
       <>
         {market}
         <LikesNavLink />

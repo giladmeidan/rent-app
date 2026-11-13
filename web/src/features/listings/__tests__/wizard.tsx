@@ -4,12 +4,15 @@ import { Route, Routes } from 'react-router';
 import { expect, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
+import type { UserOut } from '../../../api/client';
 import { renderRoutes, testQueryClient } from '../../auth/__tests__/harness';
+import { ME_KEY } from '../../auth/useMe';
 import type { ListingType } from '../api';
 import { EditListingPage } from '../EditListingPage';
 import { addDays, todayInIsrael } from '../format';
 import { MyListingsPage } from '../MyListingsPage';
 import { NewListingPage } from '../NewListingPage';
+import { owner } from './fixtures';
 
 export const routes = (
   <Routes>
@@ -21,7 +24,16 @@ export const routes = (
   </Routes>
 );
 
+/** A query client that already holds `me` (an owner unless given), as `RequireUser` leaves it in
+ * the app: the wizard's type choice is the owner's (spec 0010b). */
+export function meClient(me: UserOut = owner, client = testQueryClient()) {
+  client.setQueryData(ME_KEY, me);
+  return client;
+}
+
+/** Renders `/listings/new`; a client without `me` gets the owner (`meClient`). */
 export function renderWizard(client = testQueryClient()) {
+  if (client.getQueryData(ME_KEY) === undefined) meClient(owner, client);
   return renderRoutes('/listings/new', routes, client);
 }
 
