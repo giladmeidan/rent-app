@@ -1,7 +1,7 @@
 ---
 id: 0010d
 title: A lister uploads up to 10 photos to a listing, removes and reorders them; every listing response carries the photo addresses (cards the cover), which are random and never contain a user or listing id
-status: in-progress
+status: done
 depends_on: []   # migration 0013, down 0012 (MARKET-PLAN §7). Builds in parallel with 0010a. 0010g's migration 0014 chains on this one; 0010j (person photo API) builds on it
 reviewers: [code, qa, security]   # security: uploads (decoder input, size, decompression bombs, EXIF/GPS), public object addresses (Q16), ownership on every write, R2 secrets; qa: the 10-photo cap under concurrency, cleanup of stored objects, every read surface
 estimate: 1 coder run   # coder Opus/high (uploads, migration; Speed rule 6)
