@@ -1087,4 +1087,67 @@ describe('ApplySection', () => {
     fireEvent.click(toggle);
     expect(screen.getByRole('textbox', { name: he.applications.form.label })).toHaveValue('');
   });
+
+  it('ac13_own_listing_and_room_for_anyone', async () => {
+    // Spec 0010b. The caller's own listing (`is_mine`): the owner's wording, the own-listing note
+    // and a manage link to "שלי" (a room) or "my listings" (an apartment); no form, and neither
+    // the list nor the profile is requested.
+    const room = { listing_type: 'room', flatmates_count: 2, gender_preference: 'any' } as const;
+    for (const [me, overrides, href] of [
+      [seeker, room, '/market/mine'],
+      [owner, room, '/market/mine'],
+      [owner, {}, '/me/listings'],
+    ] as const) {
+      const api = mockApi({
+        'GET /me': [json(me)],
+        [LISTING]: [
+          json(listingDetail({ id: 'A', applicant_count: 2, is_mine: true, ...overrides })),
+        ],
+        [MINE]: [json([])],
+        [PROFILE]: [json(profile())],
+      });
+      renderListing();
+      const s = await settled(he.applications.headingOwner);
+      expect(s.getByText(i18n.t('applications.countOwner', { count: 2 }))).toBeVisible();
+      expect(s.getByText(he.applications.own)).toBeVisible();
+      expect(s.getByRole('link', { name: he.applications.manage })).toHaveAttribute('href', href);
+      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByText(he.applications.loginPrompt)).toBeNull();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(api.calls(MINE)).toHaveLength(0);
+      expect(api.calls(PROFILE)).toHaveLength(0);
+      cleanup();
+    }
+
+    // An owner on someone else's room: the applicant's wording and the apply form.
+    let api = mockApi({
+      'GET /me': [json(owner)],
+      [LISTING]: [json(listingDetail({ id: 'A', applicant_count: 2, ...room }))],
+      [MINE]: [json([])],
+      [PROFILE]: [json(profile())],
+    });
+    renderListing();
+    let s = await settled();
+    expect(s.getByText(countText(2))).toBeVisible();
+    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(s.queryByText(he.applications.own)).toBeNull();
+    expect(api.calls(MINE)).toHaveLength(1);
+    expect(api.calls(PROFILE)).toHaveLength(1);
+    cleanup();
+
+    // An owner on someone else's apartment: today's `none` (the owner's wording, nothing below).
+    api = mockApi({ 'GET /me': [json(owner)], [LISTING]: [listingReply(2)] });
+    renderListing();
+    s = await settled(he.applications.headingOwner);
+    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByText(he.applications.own)).toBeNull();
+    expect(api.calls(MINE)).toHaveLength(0);
+    cleanup();
+
+    // A seeker on an apartment: the form.
+    renderSeeker([json([])]);
+    s = await settled();
+    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    cleanup();
+  });
 });

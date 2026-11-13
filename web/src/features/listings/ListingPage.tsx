@@ -60,8 +60,8 @@ export function ListingPage() {
   // The phone's apply bar watches the action column and moves focus to the apply section's <h2>.
   const actionsRef = useRef<HTMLDivElement>(null);
   const applyHeadingRef = useRef<HTMLHeadingElement>(null);
-  // The banner is a seeker's: a logout (or another account) never inherits it.
-  const isSeeker = useMe().data?.role === 'seeker';
+  // The banner is a signed-in account's (any role, spec 0010b): a logout never inherits it.
+  const signedIn = useMe().data != null;
   const error = listing.error;
   // 404: not live or unknown; 422: a malformed id. Neither has anything to retry.
   const notFound = error instanceof ApiError && (error.status === 404 || error.status === 422);
@@ -215,7 +215,7 @@ export function ListingPage() {
           // taller than the screen.
           className="flex flex-col gap-5 lg:sticky lg:top-6 lg:-m-1 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:p-1"
         >
-          {mutualId !== null && isSeeker ? (
+          {mutualId !== null && signedIn ? (
             <MutualBanner applicationId={mutualId} />
           ) : (
             l.like !== null &&

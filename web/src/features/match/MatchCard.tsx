@@ -35,7 +35,8 @@ export function MatchCard({ match, listing }: Props) {
   const { t } = useTranslation();
   const headingId = useId();
   const me = useMe();
-  const profile = useProfile(me.data?.role === 'seeker');
+  // Any signed-in account may have a profile (spec 0010b).
+  const profile = useProfile(me.data != null);
   const level = bucket(match.score);
   const label = {
     high: t('match.bucket.high'),

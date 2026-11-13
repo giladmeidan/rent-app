@@ -730,20 +730,35 @@ describe('SearchPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // A visitor and an owner: no nudge, and the profile is never requested.
-    for (const me of [unauthenticated(), json(owner)]) {
-      api = mockApi({ [ME]: [me], [PROFILE]: [noProfile()], [SEARCH]: [json(page([]))] });
-      view = render('/search');
-      await screen.findByText(he.search.empty);
-      await vi.waitFor(() => {
-        expect(api.calls(ME)).toHaveLength(1);
-      });
-      await settle();
-      expect(screen.queryByText(he.match.nudge)).toBeNull();
-      expect(api.calls(PROFILE)).toHaveLength(0);
-      view.unmount();
-      vi.unstubAllGlobals();
-    }
+    // A visitor: no nudge, and the profile is never requested.
+    api = mockApi({
+      [ME]: [unauthenticated()],
+      [PROFILE]: [noProfile()],
+      [SEARCH]: [json(page([]))],
+    });
+    view = render('/search');
+    await screen.findByText(he.search.empty);
+    await vi.waitFor(() => {
+      expect(api.calls(ME)).toHaveLength(1);
+    });
+    await settle();
+    expect(screen.queryByText(he.match.nudge)).toBeNull();
+    expect(api.calls(PROFILE)).toHaveLength(0);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An owner on the apartments search (spec 0010b, inverted): the profile is requested (any
+    // account may have one), but the apartments' nudge stays a seeker's.
+    api = mockApi({ [ME]: [json(owner)], [PROFILE]: [noProfile()], [SEARCH]: [json(page([]))] });
+    view = render('/search');
+    await screen.findByText(he.search.empty);
+    await vi.waitFor(() => {
+      expect(api.calls(PROFILE)).toHaveLength(1);
+    });
+    await settle();
+    expect(screen.queryByText(he.match.nudge)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
   });
 
   it('ac5_similar_age_chip', async () => {
@@ -813,24 +828,35 @@ describe('SearchPage', () => {
       vi.unstubAllGlobals();
     }
 
-    // A visitor and an owner: no chip, and no profile request.
-    for (const me of [unauthenticated(), json(owner)]) {
-      api = mockApi({
-        [ME]: [me],
-        [PROFILE]: [json(profile({ birth_year: year - 28 }))],
-        [SEARCH]: [json(page([room, flat]))],
-      });
-      view = render('/market');
-      await screen.findByText(i18n.t('search.count', { count: 2 }));
-      await vi.waitFor(() => {
-        expect(api.calls(ME)).toHaveLength(1);
-      });
-      await settle();
-      expect(screen.queryByText(he.rooms.card.similarAge)).toBeNull();
-      expect(api.calls(PROFILE)).toHaveLength(0);
-      view.unmount();
-      vi.unstubAllGlobals();
-    }
+    // A visitor: no chip, and no profile request.
+    api = mockApi({
+      [ME]: [unauthenticated()],
+      [PROFILE]: [json(profile({ birth_year: year - 28 }))],
+      [SEARCH]: [json(page([room, flat]))],
+    });
+    view = render('/market');
+    await screen.findByText(i18n.t('search.count', { count: 2 }));
+    await vi.waitFor(() => {
+      expect(api.calls(ME)).toHaveLength(1);
+    });
+    await settle();
+    expect(screen.queryByText(he.rooms.card.similarAge)).toBeNull();
+    expect(api.calls(PROFILE)).toHaveLength(0);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An owner with a profile (spec 0010b, inverted): the profile is requested and the chip shows,
+    // as for a seeker.
+    api = mockApi({
+      [ME]: [json(owner)],
+      [PROFILE]: [json(profile({ birth_year: year - 28 }))],
+      [SEARCH]: [json(page([room, flat]))],
+    });
+    view = render('/market');
+    expect(await screen.findByText(he.rooms.card.similarAge)).toBeVisible();
+    expect(api.calls(PROFILE)).toHaveLength(1);
+    view.unmount();
+    vi.unstubAllGlobals();
   });
 
   it('ac6_room_with_match_chips', async () => {

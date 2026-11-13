@@ -632,9 +632,10 @@ describe('ListingPage', () => {
       ['me', 'listings'],
       [{ ...hidden, flatmate_ages: [27, 30], lifestyle: { cleanliness: 3, kosher: 1 } }],
     );
+    // `is_mine` (spec 0010b): the API says it is theirs.
     mockApi({
       'GET /me': [json({ ...noa, role: 'owner' })],
-      [`GET /listings/${hidden.id}`]: [json(hidden)],
+      [`GET /listings/${hidden.id}`]: [json({ ...hidden, is_mine: true })],
     });
     view = render(hidden.id, client);
     await screen.findByRole('heading', { level: 1 });
@@ -880,11 +881,13 @@ describe('ListingPage', () => {
       view.unmount();
       vi.unstubAllGlobals();
 
-      // No bar for: a submitted application, a misfit room, an owner, a pending list. Each waits
-      // for what the section settles on, so a bar would have been offered by then.
+      // No bar for: a submitted application, a misfit room, an owner on an apartment, the caller's
+      // own room (spec 0010b), a pending list. Each waits for what the section settles on, so a
+      // bar would have been offered by then.
       const submitted = listingDetail();
       const misfit = room({ room_fit: false });
       const mine = listingDetail();
+      const ownRoom = room({ is_mine: true });
       const waiting = listingDetail();
       const pending = deferred();
       const seeker = (id: string, extra: Parameters<typeof mockApi>[0]) => ({
@@ -898,6 +901,7 @@ describe('ListingPage', () => {
         [submitted.id]: submitted,
         [misfit.id]: misfit,
         [mine.id]: mine,
+        [ownRoom.id]: ownRoom,
         [waiting.id]: waiting,
       };
       const cases: [string, Parameters<typeof mockApi>[0], () => Promise<unknown>][] = [
@@ -916,6 +920,7 @@ describe('ListingPage', () => {
           { ...seeker(mine.id, {}), 'GET /me': [json(owner)] },
           () => screen.findByRole('region', { name: he.applications.headingOwner }),
         ],
+        [ownRoom.id, seeker(ownRoom.id, {}), () => screen.findByText(he.applications.own)],
         [
           waiting.id,
           seeker(waiting.id, { 'GET /me/applications': [pending.promise] }),

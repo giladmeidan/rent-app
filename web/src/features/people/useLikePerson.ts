@@ -10,8 +10,8 @@ import { likePerson, peopleKey, unlikePerson } from './api';
 
 /** Shared by the like and the unlike: server-confirmed, then the page and "my listings" (its
  * `liked_me_count`) refetch. An error refetches too (the person may be gone or have applied). 401
- * forgets the person and 403 re-checks `/me`, so `RequireOwner` leaves the page, with no alert
- * (as `useSetApplicantStatus`). */
+ * forgets the person, so `RequireUser` leaves the page, with no alert; a 403 (none since spec
+ * 0010b: any account browses its own room) re-checks `/me` (as `useSetApplicantStatus`). */
 function useRefresh(listingId: string) {
   const queryClient = useQueryClient();
   return {

@@ -80,7 +80,8 @@ function RoomList({
   );
 }
 
-/** `/me/likes`, seekers only (`RequireSeeker`): the rooms that liked the seeker and the ones they liked. */
+/** `/me/likes`, any account (`RequireUser`, spec 0010b): the rooms that liked the caller and the ones
+ * they liked. */
 export function MyLikesPage() {
   const { t } = useTranslation();
   usePageTitle(t('likes.title'));

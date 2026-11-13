@@ -14,7 +14,6 @@ import { Loading } from '../../components/Loading';
 import { Mascot } from '../../components/Mascot';
 import { Skeleton } from '../../components/Skeleton';
 import { Tag } from '../../components/Tag';
-import { useMe } from '../auth/useMe';
 import { useMyFlats } from '../flatmates/api';
 import { cardTitle } from '../listings/cardTitle';
 import type { ConversationOut } from './api';
@@ -143,7 +142,6 @@ export function ConversationsPane({ headingId, headingLevel, activeId }: Convers
   const { t } = useTranslation();
   // Beside a thread the thread names the tab (its effect runs after this one).
   usePageTitle(headingLevel === 1 ? t('chat.list.title') : undefined);
-  const me = useMe();
   const conversations = useConversations();
   const flats = useMyFlats();
   const location = useLocation();
@@ -178,8 +176,9 @@ export function ConversationsPane({ headingId, headingLevel, activeId }: Convers
       </Loading>
     );
   } else if (conversations.data.length === 0) {
-    // A flatmate somewhere (owner or seeker) gets the flat's line, once the flats are in.
-    let empty = me.data?.role === 'owner' ? t('chat.list.emptyOwner') : t('chat.list.emptySeeker');
+    // One line for everyone (spec 0010b: any account lists rooms and applies to them); a flatmate
+    // somewhere gets the flat's line, once the flats are in.
+    let empty = t('chat.list.empty');
     if (flats.data !== undefined && flats.data.length > 0) empty = t('chat.list.emptyFlatmate');
     // One mascot per screen: the joined line's, while it shows.
     body = <EmptyState message={empty} pose={joined ? undefined : 'sleep'} />;

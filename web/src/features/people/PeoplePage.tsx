@@ -26,7 +26,7 @@ const focusRing =
 const bannerBase = 'rounded-lg px-4 py-3 text-start text-body font-semibold focus:outline-none';
 
 /**
- * `/me/listings/:id/people`, owners only (`RequireOwner`): the people who want a room, for one of
+ * `/me/listings/:id/people`, any account (`RequireUser`, spec 0010b): the people who want a room, for one of
  * the caller's own rooms found in `GET /me/listings` (an id not in it, or an apartment, is "not
  * found" and its people are never requested). The last mutual like is page state, so its banner
  * survives the refetch that drops the card.

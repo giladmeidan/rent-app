@@ -13,7 +13,8 @@ import { formatIls } from './format';
 import { furnishedLabel } from './furnished';
 
 /** The facts a card shows: a created listing, or the wizard's body before it is published (which
- * has no room fields until 0007e, so they are optional). */
+ * has no room fields until 0007e, so they are optional). `is_mine` (spec 0010b) comes with a public
+ * listing (search, map, likes); "my listings" cards have none. */
 export type CardFacts = Pick<
   ListingOut,
   | 'listing_type'
@@ -30,7 +31,9 @@ export type CardFacts = Pick<
   | 'furnished'
   | 'pets_allowed'
 > &
-  Partial<Pick<ListingOut, 'gender_preference' | 'flatmates_count' | 'flatmate_ages'>>;
+  Partial<Pick<ListingOut, 'gender_preference' | 'flatmates_count' | 'flatmate_ages'>> & {
+    is_mine?: boolean;
+  };
 
 type Chip = { text: string; tone: TagTone };
 
@@ -115,8 +118,15 @@ export function ListingCard({
   const { t } = useTranslation();
   const isRoom = listing.listing_type === 'room';
 
-  // Only the room chips; every other fact reads in the facts line.
+  // The caller's own listing first (spec 0010b), then the room chips; every other fact reads in
+  // the facts line.
   const chips: Chip[] = [];
+  if (listing.is_mine === true) {
+    chips.push({
+      text: isRoom ? t('listings.card.mineRoom') : t('listings.card.mineApartment'),
+      tone: 'neutral',
+    });
+  }
   if (isRoom) {
     if (flatmatesNearAge(seekerBirthYear, listing.flatmate_ages ?? [])) {
       chips.push({ text: t('rooms.card.similarAge'), tone: 'accent' });

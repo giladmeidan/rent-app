@@ -50,8 +50,8 @@ type Announcement = { text: string; movedOut: boolean };
 const NO_ANNOUNCEMENT: Announcement = { text: '', movedOut: false };
 
 /**
- * `/me/listings/:id/applicants`, owners only (`RequireOwner`): the applicants of one own listing,
- * found in `GET /me/listings` (an id not in it — another owner's, unknown, malformed — is "not
+ * `/me/listings/:id/applicants`, any account (`RequireUser`, spec 0010b): the applicants of one own
+ * listing, found in `GET /me/listings` (an id not in it — another account's, unknown, malformed — is "not
  * found" and its applicants are never requested). Totals and filters are counted from the loaded
  * list, so they always agree with the cards.
  */
