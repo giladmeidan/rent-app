@@ -86,6 +86,7 @@ function applicant(overrides: Partial<ApplicantOut>): ApplicantOut {
     source: 'apply',
     message: 'שלום, אנחנו זוג שקט, לא מעשנים ועם חוזה ארוך.',
     applicant_name: `מועמד ${String(counter)}`,
+    photo_url: null,
     created_at: '2026-11-10T10:00:00Z',
     updated_at: '2026-11-10T10:00:00Z',
     match: null,

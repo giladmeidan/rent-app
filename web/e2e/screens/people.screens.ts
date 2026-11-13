@@ -80,6 +80,7 @@ const ABOUT_300 =
 const person = (id: number, overrides: Partial<PersonOut>): PersonOut => ({
   id: `00000000-0000-0000-0000-${String(id).padStart(12, 'c')}`,
   display_name: `מחפשת ${String(id)}`,
+  photo_url: null,
   gender: 'woman',
   age: 27,
   area_ids: [AREA_A, AREA_B],

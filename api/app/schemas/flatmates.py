@@ -1,7 +1,8 @@
 """API schemas for flatmates (spec 0008d). Never the ORM models.
 
 Every response lists its fields explicitly (NF2): no user id and no email. A flatmate is known by
-`display_name` only; `FlatmateOut.id` is the membership row's id. The invite token appears in
+`display_name` (and, from 0010j, their photo's address) only; `FlatmateOut.id` is the membership
+row's id. The invite token appears in
 exactly one response, `InviteOut` from the create/rotate POST, and is never stored (only its sha256
 hex) nor readable again. It is sent back only in a POST body (`InviteTokenIn`), never in a URL."""
 
@@ -48,6 +49,7 @@ class FlatmateOut(BaseModel):
 
     id: uuid.UUID
     display_name: str
+    photo_url: str | None  # their person photo's small address (spec 0010j)
     joined_at: dt.datetime
 
 

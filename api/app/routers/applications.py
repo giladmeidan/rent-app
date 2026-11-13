@@ -47,6 +47,7 @@ from app.services import applications as applications_service
 from app.services import chat as chat_service
 from app.services import chat_events
 from app.services.listings import ListingNotFoundError
+from app.services.photos import person_photo_url
 from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["applications"])
@@ -185,6 +186,7 @@ def _applicant_out(row: Row[Any]) -> ApplicantOut:
         source=application.source,
         message=application.message,
         applicant_name=row.display_name,
+        photo_url=person_photo_url(row.photo_key),
         created_at=application.created_at,
         updated_at=application.updated_at,
         match=explain_row(row) if has_profile else None,

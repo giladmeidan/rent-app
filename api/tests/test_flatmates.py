@@ -170,7 +170,9 @@ def _reads(engine: Engine, user_id: uuid.UUID) -> int:
 
 def _members(owner: str, flatmates: list[str], seeker: str, me: str) -> list[dict[str, Any]]:
     roles = [(owner, "owner")] + [(name, "flatmate") for name in flatmates] + [(seeker, "seeker")]
-    return [{"name": name, "role": role, "is_me": name == me} for name, role in roles]
+    return [
+        {"name": name, "photo_url": None, "role": role, "is_me": name == me} for name, role in roles
+    ]
 
 
 class Published:
@@ -403,7 +405,7 @@ def test_ac2_preview_and_join(
     (listed,) = _flatmates(owner, room)
     assert listed["display_name"] == "Fay"
     assert dt.datetime.fromisoformat(listed["joined_at"]) == joined_at
-    assert set(listed) == {"id", "display_name", "joined_at"}
+    assert set(listed) == {"id", "display_name", "photo_url", "joined_at"}  # photo_url: 0010j
     assert str(mate_id) not in owner.get(f"/listings/{room}/flatmates").text
     assert _my_listing(owner, room)["flatmate_count"] == 1
 

@@ -358,7 +358,14 @@ def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
     )
     score = next(column for column in columns if column.name == "m_score")
     query = (
-        select(Application, User.display_name, *_PROFILE_COLUMNS, *_ROOM_COLUMNS, *columns)
+        select(
+            Application,
+            User.display_name,
+            User.photo_key,
+            *_PROFILE_COLUMNS,
+            *_ROOM_COLUMNS,
+            *columns,
+        )
         .join(User, User.id == Application.seeker_id)
         .join(Listing, Listing.id == Application.listing_id)
         .outerjoin(SeekerProfile, SeekerProfile.user_id == Application.seeker_id)
@@ -375,7 +382,7 @@ def list_applicants(
     newest `created_at`, then `id` (no-profile rows tie on whatever `m_score` they get and fall
     through to `created_at`); `"newest"`: newest `created_at` first, then `id`. Raises
     `ListingNotFoundError` (unknown id or another owner's listing). Two statements: the ownership
-    check, then the list, which reads only `display_name` from `users` (NF2)."""
+    check, then the list, which reads only `display_name` and `photo_key` from `users` (NF2)."""
     own = db.scalar(
         select(Listing.id).where(Listing.id == listing_id, Listing.owner_id == owner.id)
     )

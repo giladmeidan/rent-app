@@ -197,10 +197,11 @@ def join(db: Session, r: RedisClient, me: User, token: str) -> uuid.UUID:
 
 def list_flatmates(db: Session, owner: User, listing_id: uuid.UUID) -> Sequence[Row[Any]]:
     """The flatmates of one of `owner`'s listings (any type, any status), oldest join first: rows of
-    the membership `id`, `display_name` and `joined_at`. Raises `ListingNotFoundError` (unknown,
-    another owner's). One statement: the listing, outer-joined to its memberships."""
+    the membership `id`, `display_name`, `photo_key` and `joined_at`. Raises
+    `ListingNotFoundError` (unknown, another owner's). One statement: the listing, outer-joined to
+    its memberships."""
     rows = db.execute(
-        select(ListingFlatmate.id, User.display_name, ListingFlatmate.joined_at)
+        select(ListingFlatmate.id, User.display_name, User.photo_key, ListingFlatmate.joined_at)
         .select_from(Listing)
         .outerjoin(ListingFlatmate, ListingFlatmate.listing_id == Listing.id)
         .outerjoin(User, User.id == ListingFlatmate.user_id)

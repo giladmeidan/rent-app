@@ -48,6 +48,7 @@ ALREADY_APPLIED = {"detail": "already_applied"}
 PERSON_KEYS = {
     "id",
     "display_name",
+    "photo_url",  # 0010j
     "gender",
     "age",
     "area_ids",

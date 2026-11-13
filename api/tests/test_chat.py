@@ -28,6 +28,7 @@ CONVERSATION_KEYS = {
     "id",
     "listing",
     "other_name",
+    "other_photo_url",  # 0010j
     "my_role",  # 0008d
     "member_count",  # 0008d
     "can_send",
@@ -40,6 +41,7 @@ THREAD_KEYS = {
     "id",
     "listing",
     "other_name",
+    "other_photo_url",  # 0010j
     "my_role",  # 0008d
     "members",  # 0008d
     "visible_from",  # 0008d
@@ -53,6 +55,7 @@ APPLICANT_KEYS = {
     "status",
     "message",
     "applicant_name",
+    "photo_url",  # 0010j
     "created_at",
     "updated_at",
     "match",
@@ -468,8 +471,8 @@ def test_ac5_thread_reads_and_marks_read(
     assert body["other_name"] == "Noa"
     assert body["my_role"] == "seeker"
     assert body["members"] == [
-        {"name": "Noa", "role": "owner", "is_me": False},
-        {"name": "Dana", "role": "seeker", "is_me": True},
+        {"name": "Noa", "photo_url": None, "role": "owner", "is_me": False},
+        {"name": "Dana", "photo_url": None, "role": "seeker", "is_me": True},
     ]
     assert body["visible_from"] is None
     assert body["can_send"] is True
@@ -503,8 +506,8 @@ def test_ac5_thread_reads_and_marks_read(
     assert owner_thread.json()["other_name"] == "Dana"
     assert owner_thread.json()["my_role"] == "owner"
     assert owner_thread.json()["members"] == [
-        {"name": "Noa", "role": "owner", "is_me": True},
-        {"name": "Dana", "role": "seeker", "is_me": False},
+        {"name": "Noa", "photo_url": None, "role": "owner", "is_me": True},
+        {"name": "Dana", "photo_url": None, "role": "seeker", "is_me": False},
     ]
     assert [m["mine"] for m in owner_thread.json()["messages"]] == [False, True, False]
     assert _item(owner, chat)["unread_count"] == 0

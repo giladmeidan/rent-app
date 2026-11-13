@@ -4,7 +4,8 @@ Every response shape lists its fields explicitly (NF2): no user id and no email 
 conversation's members (the owner, the seeker and, on a room application, the room's flatmates,
 spec 0008d) are known only by their `display_name`, and only to the members: `other_name` is the
 seeker's name for the owner and for a flatmate and the owner's for the seeker; `members` lists
-every member with their role and `is_me`; who sent a message is `mine` and `sender_name`. The
+every member with their role and `is_me`; who sent a message is `mine` and `sender_name`. From
+0010j `other_photo_url` and `members[].photo_url` carry the same people's photo addresses. The
 caller's own role is `my_role`. A conversation's `id` is its application's id (PRODUCT.md "Chat",
 Q4). Bodies are plain text: stored and returned as validated, never processed as HTML."""
 
@@ -50,6 +51,7 @@ class MemberOut(BaseModel):
     """One member of a conversation. `is_me` marks the caller (two members may share a name)."""
 
     name: str
+    photo_url: str | None  # their person photo's small address (spec 0010j)
     role: MemberRole
     is_me: bool
 
@@ -79,6 +81,7 @@ class ConversationOut(BaseModel):
     id: uuid.UUID  # the application's id
     listing: ApplicationListingOut
     other_name: str  # the seeker's name for the owner and a flatmate, the owner's for the seeker
+    other_photo_url: str | None  # that person's photo's small address (spec 0010j)
     my_role: MemberRole
     member_count: int  # 2, plus the room's flatmates on a room application
     can_send: bool  # the application is `shortlisted`
@@ -97,6 +100,7 @@ class ThreadOut(BaseModel):
     id: uuid.UUID
     listing: ApplicationListingOut
     other_name: str
+    other_photo_url: str | None  # as `ConversationOut.other_photo_url`
     my_role: MemberRole
     members: list[MemberOut]
     visible_from: dt.datetime | None

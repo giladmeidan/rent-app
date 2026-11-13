@@ -1,4 +1,5 @@
-"""Person photo API (spec 0010j): AC1-AC3.
+"""Person photo API (spec 0010j): AC1-AC4 (AC5 is the unchanged statement-count tests in
+`test_chat.py`, `test_inbox.py`, `test_flatmates.py` and `test_people.py`).
 
 Uploads go to 0010d's `photo_store` fixture (a `FilePhotoStore` in `tmp_path`) through the same
 pipeline as a listing photo; only the small address is ever exposed (`photo_url`)."""
@@ -19,8 +20,9 @@ from app.config import get_settings
 from app.redis_client import get_redis
 from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore, get_photo_store
-from tests.conftest import Outbox, jpeg, make_listing, signup
+from tests.conftest import Outbox, jpeg, make_application, make_flatmate, make_listing, signup
 from tests.test_matching import _user_id
+from tests.test_people import _like_room, _room, _seeker
 from tests.test_photos import (
     KEY,
     _app,
@@ -294,3 +296,87 @@ def test_ac3_shared_rate_limit(
     assert _stored_key(db_engine, owner_id) is None
     assert not _pair(person_key) & _files(photo_store)
     assert int(get_redis().get(hour_key) or 0) == 60
+
+
+# --- AC4 ---------------------------------------------------------------------------------------
+
+
+def _assert_no_person_key(body: str, keys: dict[str, str], surface: str) -> None:
+    for who, key in keys.items():
+        assert key not in body, (surface, who)
+
+
+def test_ac4_photo_only_where_person_is_shown(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    photo_store: FilePhotoStore,
+) -> None:
+    owner = signup(client, outbox, "o@example.com", "owner", display_name="Noa")
+    owner_id = _user_id(owner)
+    seeker = _seeker(client, outbox, db_engine, gush_dan, "s@example.com", "Dana")
+    seeker_id = _user_id(seeker)
+    mate = signup(client, outbox, "f@example.com", "seeker", display_name="Fay")
+    mate_id = _user_id(mate)
+    keys = {
+        name: _key_of(_set(caller)["photo_url"])
+        for name, caller in (("O", owner), ("S", seeker), ("F", mate))
+    }
+    url = {name: _url(key) for name, key in keys.items()}
+
+    room = uuid.UUID(_room(db_engine, owner_id, gush_dan))
+    other_room = uuid.UUID(_room(db_engine, owner_id, gush_dan))
+    make_flatmate(db_engine, room, mate_id)
+    application = make_application(db_engine, room, seeker_id)
+
+    # O's applicants list and the status PATCH response.
+    (applicant,) = _ok(owner.get(f"/listings/{room}/applications"))
+    assert (applicant["applicant_name"], applicant["photo_url"]) == ("Dana", url["S"])
+    patched = _ok(
+        owner.patch(f"/listings/{room}/applications/{application}", json={"status": "shortlisted"})
+    )
+    assert patched["photo_url"] == url["S"]
+
+    # O's people page: S opted in, on O's other room.
+    _ok(_like_room(seeker, other_room))
+    page = _ok(owner.get(f"/listings/{other_room}/people"))
+    (card,) = [item for item in page["items"] if item["display_name"] == "Dana"]
+    assert card["photo_url"] == url["S"]
+
+    # The chat: O, S and F each see the other party and every member with their photo.
+    members = [
+        {"name": "Noa", "photo_url": url["O"], "role": "owner"},
+        {"name": "Fay", "photo_url": url["F"], "role": "flatmate"},
+        {"name": "Dana", "photo_url": url["S"], "role": "seeker"},
+    ]
+    for caller, me, other in ((owner, "Noa", "S"), (seeker, "Dana", "O"), (mate, "Fay", "S")):
+        (item,) = _ok(caller.get("/me/conversations"))
+        assert (item["id"], item["other_photo_url"]) == (str(application), url[other]), me
+        thread = _ok(caller.get(f"/conversations/{application}"))
+        assert thread["other_photo_url"] == url[other], me
+        assert thread["members"] == [{**m, "is_me": m["name"] == me} for m in members], me
+
+    # O's flatmates list.
+    (flatmate,) = _ok(owner.get(f"/listings/{room}/flatmates"))
+    assert (flatmate["display_name"], flatmate["photo_url"]) == ("Fay", url["F"])
+
+    # No person address anywhere else, including the surfaces that name the owner.
+    invite = _ok(owner.post(f"/listings/{room}/flatmate-invite"), 201)["token"]
+    forbidden: list[tuple[str, httpx.Response]] = [
+        ("S /me/applications", seeker.get("/me/applications")),
+        ("S /me/flats", seeker.get("/me/flats")),
+        ("F /me/flats", mate.get("/me/flats")),
+        ("public listing", client.get(f"/listings/{room}")),
+        ("search", client.get("/listings")),
+        ("S /me/likes", seeker.get("/me/likes")),
+        ("invite preview", seeker.post("/flatmate-invites/preview", json={"token": invite})),
+        ("O /me/listings", owner.get("/me/listings")),
+    ]
+    for surface, response in forbidden:
+        assert response.status_code == 200, (surface, response.text)
+        _assert_no_person_key(response.text, keys, surface)
+    assert _ok(mate.get("/me/flats"))[0]["owner_name"] == "Noa"  # the owner is shown, unpictured
+    assert _ok(seeker.get("/me/likes"))["mine"]  # the liked room is listed
+    search_ids = {item["id"] for item in _ok(client.get("/listings"))["items"]}
+    assert {str(room), str(other_room)} <= search_ids

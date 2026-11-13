@@ -8,6 +8,7 @@ export function flatmate(overrides: Partial<FlatmateOut> = {}): FlatmateOut {
   return {
     id: `00000000-0000-0000-0000-${String(n).padStart(12, 'f')}`,
     display_name: `Flatmate ${String(n)}`,
+    photo_url: null,
     joined_at: '2026-11-01T08:00:00Z',
     ...overrides,
   };

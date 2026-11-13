@@ -156,9 +156,9 @@ describe('ChatLayout', () => {
   it('ac3_two_panes_switch_without_remount', async () => {
     stubDesktop();
     const members: ThreadOut['members'] = [
-      { name: 'רוני', role: 'owner', is_me: false },
-      { name: 'דנה', role: 'flatmate', is_me: true },
-      { name: 'נועה', role: 'seeker', is_me: false },
+      { name: 'רוני', photo_url: null, role: 'owner', is_me: false },
+      { name: 'דנה', photo_url: null, role: 'flatmate', is_me: true },
+      { name: 'נועה', photo_url: null, role: 'seeker', is_me: false },
     ];
     const X = pair('נועה', { members, my_role: 'flatmate' });
     const Y = pair('יעל');
@@ -385,9 +385,9 @@ describe('ChatLayout', () => {
 
   it('ac7_bodies_render_as_text', async () => {
     const members: ThreadOut['members'] = [
-      { name: XSS, role: 'owner', is_me: false },
-      { name: 'דנה', role: 'flatmate', is_me: true },
-      { name: 'נועה', role: 'seeker', is_me: false },
+      { name: XSS, photo_url: null, role: 'owner', is_me: false },
+      { name: 'דנה', photo_url: null, role: 'flatmate', is_me: true },
+      { name: 'נועה', photo_url: null, role: 'seeker', is_me: false },
     ];
     const c = conversation({
       other_name: XSS,
