@@ -102,6 +102,51 @@ Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/
     infra/            docker-compose.yml, Dockerfiles
     .github/workflows/ci.yml
 
+## Knowledge graph (graphify) (Gilad, 2026-11-13)
+The code of `main` is mapped as a graph in the main checkout: `rent-app/graphify-out/graph.json`
+(gitignored; api, web, infra and CI code, plus the headings and links of `specs/`, `research/`
+and `HANDOFF.md`; design artboards are not in it). It is the first place to look, before grep or
+reading files.
+
+- **Where it lives.** Only the main checkout has it. `.claude/settings.json` sets `GRAPHIFY_OUT` to
+  it, so every `graphify` command below finds it from the main checkout and from any worktree, with
+  no flags. It shows `main`, not your branch: for lines your branch changed, read the file.
+- **Before a task, ask the graph.** Before the first grep or file read on a codebase question:
+  `graphify query "<question>"` (raise `--budget` if it says TRUNCATED), `graphify explain "<symbol>"`
+  for one function or module, `graphify path "<A>" "<B>"` for how two pieces connect. Then read only
+  the files and lines it points to. Grep is for exact strings the graph cannot hold (an i18n key,
+  an error code, a config value). A session also reads `graphify-out/reflections/LESSONS.md` once,
+  if it exists: the places earlier queries found useful, and the dead ends.
+- **Reminders.** `.claude/settings.json` has graphify hooks on Grep, Read, Glob and Bash. When an agent
+  searches or reads code, the hook adds a short note naming the graph and what it already has for
+  that target. The note is advisory; it never blocks a tool call.
+- **Before changing shared code, check the blast radius.** `graphify affected "<symbol>"` lists what
+  depends on a function, schema or component; every hit is a caller or test the change must reach.
+  Because the graph is `main`, it is exactly the "before" picture of a PR. The spec-verifier writes
+  it into the spec, the coder works from it, and `reviewer-code` checks the diff against it (their
+  agent files say how).
+- **Subagents too.** Whoever spawns an agent that reads code (spec-verifier, coder, reviewers, Explore)
+  puts the "ask the graph" and "blast radius" bullets into its prompt.
+- **Record what the graph was worth.** After a query that led to the answer, or nowhere, or to a wrong
+  answer: `graphify save-result --question "<q>" --answer "<one line>" --nodes <labels it cited>
+  --outcome useful|dead_end|corrected` (`--correction "<right answer>"` with `corrected`). One line,
+  only for queries that mattered. The git hooks fold these into `LESSONS.md` on every rebuild.
+- **Keeping it current.** Git hooks in the main checkout (`post-commit`, `post-merge`, `post-checkout`,
+  `post-rewrite`) rebuild it after each commit, `git pull` or branch switch. They skip worktrees on
+  purpose. So after a PR merges, the orchestrator runs `git pull` in the main checkout and the graph
+  follows. To rebuild by hand: `graphify update .` in the main checkout (no LLM, about 20 s).
+  After a refactor that deletes code it refuses to shrink: add `--force`. Never run `graphify update`
+  or `graphify label` inside a worktree: with `GRAPHIFY_OUT` set, it would overwrite `main`'s graph
+  with the branch.
+- **Community names, once per slice.** Rebuilds rename changed communities after their busiest node
+  ("typing", "react"). After a slice's last merge, the orchestrator runs, in the main checkout,
+  `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label . --backend=claude-cli` (Haiku via the `claude`
+  CLI, a few cents). If that fails on sign-in, it names them itself: write
+  `graphify-out/.graphify_labels.json` (`{"<id>": "<2-5 word name>"}`), then
+  `graphify cluster-only . --no-label`.
+- **Full report.** `graphify-out/GRAPH_REPORT.md` (hubs, communities, import cycles) is for
+  architecture reviews only; `graphify-out/graph.html` is the picture for Gilad.
+
 ## Code conventions
 - Python 3.12, FastAPI, SQLAlchemy 2.0 style, Pydantic v2. ORM models in `models/`, API schemas in `schemas/`, never shared.
 - Business logic in `services/`; routers are thin. Matching math only in `matching/`.

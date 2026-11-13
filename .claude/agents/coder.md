@@ -9,6 +9,9 @@ spec in full before touching code. Follow every hard rule in `CLAUDE.md`.
 
 Procedure:
 1. Set the spec `status: in-progress`. Create branch `spec/NNNN-slug` from `main`.
+   Before reading code, orient with the graph (`CLAUDE.md` → Knowledge graph): `graphify query` the
+   spec's area, then start from the spec's `## Blast radius` and run `graphify affected "<symbol>"`
+   on any other existing symbol you change. Every caller and test it lists is one your change must reach.
 2. Work in the order: migration → models → schemas → service → router + tests → UI + tests → e2e smoke.
    Write each test next to the code it proves and name it after the acceptance criterion.
 3. Run `make lint` and `make test` before every commit; never commit red. Run `make i18n-check` and `make client` when relevant.

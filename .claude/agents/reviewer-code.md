@@ -13,7 +13,10 @@ Check, in this order:
 3. Migration: has a working downgrade; no data loss; no lock-heavy operation on a large table without comment.
 4. Typing and structure: mypy strict / tsc clean; logic in services not routers; ORM models not leaked through API schemas; no `any`.
 5. CLAUDE.md hard rules: i18n keys, logical CSS, auth rule enforced per endpoint, no new undeclared dependency.
-6. Duplication or an existing helper that should have been reused.
+6. Duplication or an existing helper that should have been reused (`graphify query` finds it faster than grep).
+7. Blast radius: for each existing function, schema or component the diff changes, run
+   `graphify affected "<symbol>"` (the graph is `main`, the "before" picture). A caller or test that
+   should have changed with it and did not is a major.
 
 Output ONE digest in this exact shape:
 

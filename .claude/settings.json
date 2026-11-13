@@ -1,0 +1,23 @@
+{
+  "env": {
+    "GRAPHIFY_OUT": "/Users/giladmeidan/rent_app/rent-app/graphify-out"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [{ "type": "command", "command": "/Users/giladmeidan/.local/bin/graphify hook-guard search", "timeout": 10 }]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [{ "type": "command", "command": "/Users/giladmeidan/.local/bin/graphify hook-guard read", "timeout": 10 }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [{ "type": "command", "command": "/Users/giladmeidan/.local/bin/graphify hook-guard compact", "timeout": 10 }]
+      }
+    ]
+  }
+}
