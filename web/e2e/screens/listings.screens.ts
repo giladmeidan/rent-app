@@ -1,13 +1,14 @@
 // The visual check for the listing wizard (spec 0009k, AC11): one screenshot per state at each
 // project's size, in web/screens/0009k/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { MyListingOut } from '../../src/features/listings/api';
 import { API } from '../helpers';
 import { AREA, EXPIRED, LISTING_ID, OWNER, UNKNOWN_ID, listing } from './fixtures-listings';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 type Setup = {
   /** What `GET /me/listings` answers; `'pending'` never answers. */

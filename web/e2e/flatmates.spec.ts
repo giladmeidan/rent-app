@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
@@ -11,6 +11,7 @@ import {
   signUp,
   uniqueEmail,
 } from './helpers';
+import { test } from './fixtures';
 
 const withCount = (text: string, count: number) => text.replace('{{count}}', String(count));
 

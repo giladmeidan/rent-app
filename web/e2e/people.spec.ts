@@ -1,8 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { likeRoom, postListing, putProfile, signUp } from './helpers';
+import { test } from './fixtures';
 
 const withName = (text: string, name: string) => text.replace('{{name}}', name);
 

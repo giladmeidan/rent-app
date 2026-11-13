@@ -1,7 +1,7 @@
 // The visual check for the flatmates screens (spec 0009qb, AC7): one screenshot per state at each
 // project's size, in web/screens/0009qb/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { FlatmateOut, MyFlatOut } from '../../src/features/flatmates/api';
@@ -18,6 +18,7 @@ import {
   room,
 } from './fixtures-flatmates';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 type Mode = 'pending' | 'error' | 'ok';
 /** An answer to a POST: held (never answers), or a status and a body. */

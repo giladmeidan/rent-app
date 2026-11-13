@@ -2,12 +2,13 @@
 // 1440px, plus the phone's apartment scrolled halfway with the apply bar showing. Every API
 // request is answered here, so it needs only the vite server: no sign-up, no OTP. The apartment
 // copies Listing.dc.html. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import { API, routeTiles } from '../helpers';
 import { PROFILE, SEEKER } from './fixtures-seeker';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 const CORS = {
   'Access-Control-Allow-Origin': WEB_ORIGIN,

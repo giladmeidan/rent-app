@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { routeTiles } from './helpers';
+import { test } from './fixtures';
 
 // No sign-up and no data (spec 0009c): every page here is public and renders the same on an empty
 // or a shared database. The signed-in pages are checked inside the existing flows (Scope 7).
@@ -15,11 +16,15 @@ async function settled(page: Page) {
 }
 
 test('ac5_public_pages_pass_axe', async ({ page }) => {
-  // The list view.
+  // The list view, below 1280 px: no side map, which mounts after idle and has its own axe run
+  // (map.spec.ts ac6, spec 0009x).
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 1024, height: 800 });
   await page.goto('/search');
   await expect(page.getByRole('heading', { level: 1, name: he.search.title })).toBeVisible();
   await settled(page);
   await expectNoAxeViolations(page, '/search');
+  if (viewport !== null) await page.setViewportSize(viewport);
 
   // The map view, its tiles answered locally, once the map has loaded.
   await routeTiles(page);

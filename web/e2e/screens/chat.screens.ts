@@ -1,7 +1,7 @@
 // The visual check for the chat screens (spec 0009s, AC12): one screenshot per state at each
 // project's size, in web/screens/0009s/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { ConversationOut, ThreadOut } from '../../src/features/chat/api';
@@ -21,6 +21,7 @@ import {
   oneToOne,
 } from './fixtures-chat';
 import { WEB_ORIGIN } from './origin';
+import { test } from '../fixtures';
 
 /** `pending`: held, never answers (a loading state); `error`: a 500. */
 type Answer = 'pending' | 'error' | { status: number; body: unknown };
