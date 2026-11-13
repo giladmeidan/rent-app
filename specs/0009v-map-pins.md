@@ -1,7 +1,7 @@
 ---
 id: 0009v
 title: On the search map a seeker sees their best matches on top and coloured by fit, the rooms they liked, the listings they applied to and the ones they already opened, and pins that would overlap fold into count bubbles that zoom in when pressed
-status: verified
+status: in-progress
 depends_on: []   # web only, on main at 04c8356 (0009t's map landmark, pill and focus rules are merged)
 reviewers: [code, qa, ux]   # ux: chip tiers, marks, bubbles, copy; qa: the cluster maths, the joins, the a11y check without its exemption. No security: listing ids in this browser's own storage, no new endpoint. No perf: at most 50 pins, O(n × bubbles) in the browser, no query change
 estimate: 1 coder run   # upper end, ~3.5–4 h (verifier). Coder Opus/medium. If a split is ever needed: clusters (Scope 1–3, 7, 9) vs tiers, marks and seen (Scope 4–6)

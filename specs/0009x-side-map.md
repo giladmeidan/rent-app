@@ -1,7 +1,7 @@
 ---
 id: 0009x
 title: On a desktop 1280 px or wider, the search list has a map beside it that shows the listed results, highlights the pin of the card under the pointer or focus, scrolls to a card when its pin is pressed, and opens the full map at the same place
-status: verified
+status: in-progress
 depends_on: [0009v, 0009w]   # 0009v: useListingPins, clusterPins, bubbles; 0009w: MapCanvas `camera` (applied once ready), writeMapPosition / parseMapPosition
 reviewers: [code, qa, ux, perf]   # perf: the ~1 MB map chunk and OSM tiles now load on every wide-desktop list view (0003d's rule changes), plus a seeker's likes/applications requests; ux: three-column layout, hover sync, keyboard path; qa: the mirror rules, lazy mount, the e2e suite at 1280. No security: public data, no new endpoint
 estimate: 1 coder run   # coder Opus/medium

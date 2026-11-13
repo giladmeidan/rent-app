@@ -1,7 +1,7 @@
 ---
 id: 0009w
 title: Pressing a pin opens a compact card inside the map without moving the page, the map opens fitted to the results, and its position and selected pin live in the URL so Back, reload and a shared link reopen the same view
-status: verified
+status: in-progress
 depends_on: [0009v]   # same files (MapCanvas, fakeMapCanvas, SearchMap); uses 0009v's optional onMoveEnd `view` (centre + zoom), data-pin-id, bubbles and the same-place list
 reviewers: [code, qa, ux]   # ux: the docked card at 390 and 1440, close and Escape, the attribution kept clear; qa: URL parsing of user input, the SearchPage traps, focus timing, Back/reload. No security: map position is public, parsed and clamped like the filters. No perf: no query change (one extra fit-driven box request on a first open)
 estimate: 1 coder run   # upper end (verifier). Coder Opus/high: URL state shared with the filters form, focus timing under react-router's transitions (Speed rule 6, "when in doubt, the stronger one")
