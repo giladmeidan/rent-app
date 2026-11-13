@@ -52,7 +52,8 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
     flatmate_ages: [27, 30],
     lifestyle: { cleanliness: 3 },
   });
-  await page.goto('/me/listings');
+  // A room's card lives in the market's "שלי" (spec 0010a).
+  await page.goto('/market/mine');
   const card = page.getByRole('article').filter({ hasText: street });
   await card.getByRole('link', { name: withCount(he.listings.mine.flatmates, 0) }).click();
   await expect(page).toHaveURL(`/me/listings/${roomId}/flatmates`);

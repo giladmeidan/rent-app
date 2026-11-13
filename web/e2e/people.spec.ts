@@ -37,9 +37,9 @@ test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
   });
   await likeRoom(seekerPage, roomId);
 
-  // "My listings": the room's people link carries the badge.
+  // The market's "שלי" (a room's "my listings", spec 0010a): the people link carries the badge.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/me/listings');
+  await page.goto('/market/mine');
   const card = page.getByRole('article').filter({ hasText: street });
   const link = card.getByRole('link', { name: new RegExp(he.listings.mine.people) });
   await expect(link.getByText(he.listings.mine.peopleLiked_one)).toBeVisible();

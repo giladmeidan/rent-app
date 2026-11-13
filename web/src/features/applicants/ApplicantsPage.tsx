@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
+import { useSide } from '../../app/side';
 import { usePageTitle } from '../../app/usePageTitle';
 import { Button } from '../../components/Button';
 import { useConfirm } from '../../components/Dialog';
@@ -59,6 +60,7 @@ export function ApplicantsPage() {
   const { id = '' } = useParams();
   const listings = useMyListings();
   const listing = listings.data?.find((l) => l.id === id);
+  const side = useSide();
   const applicants = useApplicants(id, listing !== undefined);
   const queryClient = useQueryClient();
   // A 404 on the applicants: the listing is gone (deleted, or no longer this owner's). Nothing
@@ -159,7 +161,12 @@ export function ApplicantsPage() {
     }
   }
 
-  const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+  // By the listing's type (spec 0010a): a room's "my" page is the market's. Before the list
+  // loads, the last side.
+  const roomBack = listing === undefined ? side === 'market' : listing.listing_type === 'room';
+  const back = roomBack
+    ? { to: '/market/mine', label: t('market.mine.back') }
+    : { to: '/me/listings', label: t('listings.edit.backToMine') };
 
   // A cached list is used while it refetches, and kept if that refetch fails (every action
   // invalidates "my listings"). Loading and a failed list keep the page's <h1>: its text needs no

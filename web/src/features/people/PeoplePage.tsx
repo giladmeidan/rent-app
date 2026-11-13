@@ -56,7 +56,8 @@ export function PeoplePage() {
     alertRef.current?.focus();
     alertRef.current?.scrollIntoView({ block: 'center' });
   }, [alert]);
-  const back = { to: '/me/listings', label: t('listings.edit.backToMine') };
+  // People are a room's: back to the market's "שלי" (spec 0010a).
+  const back = { to: '/market/mine', label: t('market.mine.back') };
   const items = useMemo(() => (people.data ? flattenPages(people.data) : []), [people.data]);
 
   const areaName = useMemo(

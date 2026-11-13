@@ -1,3 +1,5 @@
+import type { ListingType } from '../listings/api';
+
 // The search's filter state lives in the URL only. The URL is user input: `parseFilters` keeps a
 // value only when `0003a`'s `GET /listings` would accept it, so no URL can produce a 422, and an
 // unset filter is absent (an empty value such as `pets=` is a 422 there, not "no filter").
@@ -14,10 +16,6 @@ export const ROOMS_MAX = 10;
 export const FEATURES = ['pets', 'furnished', 'elevator', 'parking'] as const;
 export type Feature = (typeof FEATURES)[number];
 
-/** `0007b`'s `listing_type` filter: a whole apartment or a room in a shared flat. */
-export const LISTING_TYPES = ['apartment', 'room'] as const;
-export type ListingTypeFilter = (typeof LISTING_TYPES)[number];
-
 export type Filters = {
   price_min?: number | undefined;
   price_max?: number | undefined;
@@ -25,8 +23,9 @@ export type Filters = {
   rooms_max?: number | undefined;
   /** `YYYY-MM-DD`. */
   available_by?: string | undefined;
-  /** Set only when exactly one type is wanted; both (the default) = absent (spec 0007f). */
-  listing_type?: ListingTypeFilter | undefined;
+  /** The page's side (spec 0010a): set only by `SearchPage` from its `type`, never a URL key and
+   * never counted as a filter. */
+  listing_type?: ListingType | undefined;
   /** Only ever `true`: an unchecked feature is no filter, not `false`. */
   pets?: true | undefined;
   furnished?: true | undefined;
@@ -44,7 +43,6 @@ const KEYS = [
   'rooms_min',
   'rooms_max',
   'available_by',
-  'listing_type',
   ...FEATURES,
   'sort',
   'view',
@@ -73,10 +71,6 @@ export function isCalendarDay(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function isListingType(value: string | null): value is ListingTypeFilter {
-  return (LISTING_TYPES as readonly (string | null)[]).includes(value);
-}
-
 function isSort(value: string | null): value is Sort {
   return (SORTS as readonly (string | null)[]).includes(value);
 }
@@ -99,9 +93,6 @@ export function parseFilters(params: URLSearchParams): Filters {
 
   const availableBy = params.get('available_by');
   if (availableBy !== null && isCalendarDay(availableBy)) filters.available_by = availableBy;
-
-  const listingType = params.get('listing_type');
-  if (isListingType(listingType)) filters.listing_type = listingType;
 
   for (const feature of FEATURES) {
     if (params.get(feature) === 'true') filters[feature] = true;
@@ -127,8 +118,8 @@ export function toSearchParams(filters: Filters): URLSearchParams {
   return params;
 }
 
-/** How many filters are set (`sort` and `view` are not filters; each price and rooms bound counts,
- * and one listing type counts as one). */
+/** How many filters are set (`sort` and `view` are not filters, nor is the page's `listing_type`;
+ * each price and rooms bound counts). */
 export function countActive(filters: Filters): number {
   return KEYS.filter((key) => key !== 'sort' && key !== 'view' && filters[key] !== undefined)
     .length;

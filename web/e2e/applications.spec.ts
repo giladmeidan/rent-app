@@ -263,7 +263,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     await page.reload();
     await expect(section.getByText(he.rooms.apply.misfit, { exact: true })).toBeVisible();
     await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
-    await page.goto('/search?listing_type=room');
+    await page.goto('/market');
     await expect(page.getByText(he.common.loading)).toHaveCount(0);
     await expect(page.locator('p[aria-live="polite"]')).not.toBeEmpty();
     await expect(page.getByRole('article').filter({ hasText: roomStreet })).toHaveCount(0);

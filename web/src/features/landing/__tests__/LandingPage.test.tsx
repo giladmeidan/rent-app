@@ -122,4 +122,23 @@ describe('LandingPage', () => {
     }
     expect(document.querySelector('footer')).toBeNull();
   });
+
+  it('ac13_market_entry_point', async () => {
+    await visitLanding();
+    const main = within(screen.getByRole('main'));
+    const owner = main.getByRole('link', { name: he.landing.cta.owner });
+    const seeker = main.getByRole('link', { name: he.landing.cta.seeker });
+    // The one entry point to the market (spec 0010a), a ghost link under the two CTAs.
+    const market = main.getByRole('link', { name: he.landing.cta.market });
+    expect(market).toHaveAttribute('href', '/market');
+    expect(market).toHaveClass('w-full', 'lg:w-auto');
+    expect(market).not.toHaveClass('bg-ink');
+    for (const cta of [owner, seeker]) {
+      expect(cta.compareDocumentPosition(market) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    // The CTAs are unchanged.
+    expect(owner).toHaveAttribute('href', '/signup?role=owner&next=%2Flistings%2Fnew');
+    expect(seeker).toHaveAttribute('href', '/search');
+    expect(main.getAllByRole('link', { name: /שוק השותפים/ })).toEqual([market]);
+  });
 });

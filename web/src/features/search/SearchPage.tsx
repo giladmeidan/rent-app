@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { Navigate, useSearchParams } from 'react-router';
 
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { useIsDesktop } from '../../components/useMediaQuery';
 import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
+import type { ListingType } from '../listings/api';
 import { ProfileNudge } from '../match/ProfileNudge';
 import { useProfile } from '../profile/useProfile';
 import { ActiveFilterTags } from './ActiveFilterTags';
@@ -21,17 +22,40 @@ import { SortSelect } from './SortSelect';
 import { useSearch } from './useSearch';
 import { ViewToggle, type View } from './ViewToggle';
 
+type Props = {
+  /** The side's one listing type (spec 0010a): `/search` is apartments, `/market` rooms. */
+  type: ListingType;
+};
+
 /**
- * `/search`: the URL is the only filter state (plus `view=map`, and the map's position `c`, `z`,
- * `pin`, which are not filters: spec 0009w); the panel's open state and the map's box are
- * component state.
+ * `/search` (apartments) and `/market` (rooms). An old `/search?listing_type=room…` link lands on
+ * `/market` with its other params (replacing the entry); any other `listing_type` is ignored.
  */
-export function SearchPage() {
+export function SearchPage({ type }: Props) {
+  const [searchParams] = useSearchParams();
+  if (type === 'apartment' && searchParams.get('listing_type') === 'room') {
+    const rest = new URLSearchParams(searchParams);
+    rest.delete('listing_type');
+    const query = rest.toString();
+    return <Navigate replace to={query === '' ? '/market' : `/market?${query}`} />;
+  }
+  return <SearchView type={type} />;
+}
+
+/**
+ * The URL is the only filter state (plus `view=map`, and the map's position `c`, `z`, `pin`, which
+ * are not filters: spec 0009w); the panel's open state and the map's box are component state. The
+ * type is the page's, never the URL's: it is part of every query key, so the two sides never share
+ * a cached result.
+ */
+function SearchView({ type }: Props) {
   const { t } = useTranslation();
-  usePageTitle(t('search.title'));
+  const title = type === 'room' ? t('market.title') : t('search.title');
+  usePageTitle(title);
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseFilters(searchParams);
-  const { view, ...filtersWithoutView } = filters;
+  const { view, ...urlFilters } = filters;
+  const filtersWithoutView = { ...urlFilters, listing_type: type };
   const active = countActive(filters);
   // The map view sends its own query; the list's key never holds `view`.
   const search = useSearch(filtersWithoutView, view !== 'map');
@@ -131,7 +155,7 @@ export function SearchPage() {
 
   return (
     <PageContainer as="section" width="wide" className="flex flex-col gap-4">
-      <PageHeader title={t('search.title')} actions={isDesktop ? undefined : toggle} />
+      <PageHeader title={title} actions={isDesktop ? undefined : toggle} />
 
       {/* The side panel: the artboard's 280px (18rem). */}
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
@@ -148,6 +172,7 @@ export function SearchPage() {
             onApply={apply}
             onClear={clear}
             titleId={titleId}
+            type={type}
           />
         </Card>
 
