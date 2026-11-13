@@ -22,24 +22,27 @@ worktree) in a turn Gilad wrote, and sends each its "go" later with `SendMessage
 Overall: IN_PROGRESS
 
 Current focus:
-**Slice 9 + 9b** — 21 specs `0009a`–`0009u` (no `0009n`). Merged 15/21: 0009a, b, c, d, e, f, g, h, i, k, l, m, qa, qb, t.
-In flight from this orchestrator: none.
-**Gilad (2026-11-12): this orchestrator started no builds after 0009k.** Gilad runs the remaining specs from a
-separate chat, which handles its own builds and merges — check `main` and `gh pr list` for what it has done.
-Not started (worktrees prepared, `in-progress` locks): 0009j, 0009o, 0009p, 0009r, 0009s, 0009u.
-Alembic head on `main` still `0012`. Spec status on `main` is the source of truth; `git log` beats this file.
+**Slice 9 + 9b is complete**: all 21 specs `0009a`–`0009u` (no `0009n`) are merged and `status: done` on `main`
+(last: 0009s, #62, merge 36ce546). No PRs open, no build sessions running, no spec worktrees left.
+**Main's CI e2e is red**: `applications.spec.ts::ac9_fill_profile_apply_withdraw` hits its 30 s timeout on most
+`main` runs since 0009j merged (see Known Issues). Fix that before the next slice.
+No Slice 10 specs exist yet. Alembic head on `main` still `0012`. Spec status on `main` is the source of truth;
+`git log` beats this file.
 
 Last updated:
-2026-11-12 (orchestrator `local_2b79d58f…`, after #56 merged at fb6ba96)
+2026-11-13 (orchestrator `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf`, after #62 merged)
 
 ## Current Work
-- Orchestrator session `local_2b79d58f-319e-4151-9049-06dfc8b883e9` finished its batch: 0009e (#53), 0009g (#54),
-  0009k (#55), 0009m (#56) merged; all their worktrees and branches removed. Nothing of its own is in flight.
-- Not started, deps all merged: 0009j (← 0009i), 0009o, 0009p and 0009u (← 0009l), 0009r, 0009s. **0009s should
-  start only after 0009g merges** (it builds on 0009g's chat drafts; same `ChatThreadPage` / `Composer`).
-- Remaining worktrees `../rent-app-<id>` are on branches cut from 1601481 with their own `.env` ports; the session
-  must `git fetch && git merge origin/main` first and **rebuild the web container** (0009a added
-  `@fontsource-variable/*`).
+- Nothing in flight. The last orchestrator, `local_386fe896-61ea-40ed-a5cd-591bbe83cfaf` ("Specs without
+  collisions"), ran 0009j/o/p/r/s/u (PRs #57–#62) and merged them; their worktrees and branches are removed.
+  The older orchestrator `local_2b79d58f…` merged 0009e/g/k/m (#53–#56) and is retired.
+- **Open decision: the ac9 e2e timeout.** Options: `test.slow()` on ac9 (triples its timeout), or split ac9 into
+  smaller tests. Either is a small e2e-only PR built by a session, not the orchestrator.
+- Starting a build (for the next slice): prepare the worktree + `.env`, then `start_session` with `cwd` = worktree,
+  `use_worktree: false`, `user_asked`, only in a turn Gilad wrote. Brief template = the 0009j–0009u briefs in the
+  orchestrator transcript `local_386fe896…` (each says: merge `origin/main` first, rebuild the web container, the
+  route and models, **no local e2e**, siblings and shared files, one push with `ready-to-merge`, report to the
+  session that started it, `make down` last).
 - **GitGuardian incident 40007526**: a fake invite token in `web/e2e/screens/fixtures-flatmates.ts` (0009qb, now on
   main) re-flags in any merge commit that brings main in. Gilad: PRs whose *only* finding is that incident may merge
   on green api/web/e2e. Clean fix: mark it false positive in the GitGuardian dashboard (asked Gilad). Force-push is
@@ -50,8 +53,8 @@ Last updated:
   `../rent-app-orch` (detached on origin/main) set `status: done`, push `HEAD:main` → after the session's
   `make down`, `git worktree remove --force ../rent-app-<id>`, delete local + remote branch. A FOLLOWUPS-only conflict
   the orchestrator union-merges on the spec branch itself (done for 0009t and 0009e).
-- Main checkout `../rent-app` (at 4f00e1f, stale) still holds someone's uncommitted demo-seed work and its `rent-app`
-  stack restarted with Docker after the reboot (web 5180). Leave it to its owner.
+- Main checkout `../rent-app` (at 287c8d5, behind `main`) still holds someone's uncommitted demo-seed work
+  (`Makefile`, `api/scripts/seed_demo.py`) and runs the shared `rent-app` stack. Leave it to its owner.
 
 ## Completed
 - [x] Agent kit, spec 0000 split into 0000a/0000b, design artboards `design/screens-v1/`.
@@ -79,26 +82,29 @@ Last updated:
   0009i search — #48 (f2a2882); 0009t a11y focus + map, Gilad's (c) pins-only target-size exemption — #49 (f92b9ac);
   0009qa seeker lists — #50 (25c639a, adds an age chip on liked rooms, FOLLOWUPS 183); 0009a landing + header/nav +
   self-hosted fonts — #51 (5869fdc); 0009qb flatmates — #52 (f0ebfd3, merged with GitGuardian red on Gilad's OK). Infra: per-worktree `WEB_PORT` — PR #41 (948c6d5).
+- [x] Slice 9 rest (orchestrator-merged, all CI api/web/e2e green on the PR head): 0009e PWA — #53; 0009g state
+  polish — #54; 0009k listing wizard — #55; 0009m login/signup — #56; 0009p people — #57; 0009j listing page — #58
+  (its layout e2e step lives in `search.spec.ts::ac9`); 0009u desktop inbox — #59; 0009r profile — #60; 0009o my
+  listings — #61; 0009s chat — #62 (full route, 0 blockers / 0 majors, 11 minors → 8 FOLLOWUPS lines).
 - [x] CI e2e re-enabled (2026-11-12): `main`'s full suite green in CI (run 43227959268); #45 and #46 merged with CI e2e green.
 - [x] Gilad's decisions are in `specs/PRODUCT.md` (rows "Listings", "Search", "Applications", "Chat", "Matching",
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. Remaining Slice 9 specs: 0009j, 0009o, 0009p, 0009r, 0009s, 0009u (`in-progress` locks, worktrees ready).
-   Gilad is running them from another chat; before acting, check `gh pr list` and spec statuses on `main` so two
-   orchestrators never build or merge the same spec.
-2. 0009s builds on 0009g's chat drafts (0009g is merged, so it is unblocked). 0009o shares listing files with 0009k
-   (merged): merge main first.
-3. Every remaining worktree must merge `origin/main` and rebuild the web container (0009a's font packages).
+1. **Fix main's red e2e**: get Gilad's pick (`test.slow()` on `applications.spec.ts::ac9` vs splitting it), then
+   one small e2e-only PR from a build session; merge on green api/web/e2e and confirm the next `main` run is green.
+2. Send Gilad a Slice 9 digest (21/21 merged; the FOLLOWUPS each spec added).
+3. Plan Slice 10 (listing renewal is promised there, PRODUCT.md "Listings"); spec, verify, lock, prepare worktrees.
 4. Ask Gilad to mark GitGuardian incident 40007526 as a false positive.
 5. **Supervise CI e2e** on every merge; on a runner failure `gh variable set E2E_IN_CI --body off` and tell Gilad.
 6. FOLLOWUPS from Slice 9: map pin clustering (0009t), map desktop list pairing (0009i), range tags "3–4" render
    4–3 under RTL bidi — a native reader's call (0009i), brand-voice sweep of slash forms (0009b), tabs row has no
-   scroll cue at 390 (0009l).
+   scroll cue at 390 (0009l), plus the minors 0009j/k/m/o/p/r/s/u logged (0009s: 8 lines).
 7. Gilad's open Slice 8 decisions (FOLLOWUPS "pending decision"): person-card score inference, people-browse rate
    limit; re-apply after decline (own later spec).
-8. Housekeeping: archive finished build sessions (0009b/c/d/f/h/i/l/t/a/qa/qb, infra-webport); remove the planning
-   worktrees `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`.
+8. Housekeeping: archive the finished Slice 9 build sessions; remove the planning worktrees
+   `../rent-app-0008-spec`, `../rent-app-0009-spec`; decide on `qa-live-2026-11-10/`; update `CLAUDE.md` Speed rule 7
+   to "no local e2e" (it still says local `make e2e` is optional).
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → JSON 503, a 422 handler
@@ -131,7 +137,9 @@ Last updated:
 - `specs/FOLLOWUPS.md` — open deferred minors and pending decisions (append-only; conflicts keep both sides).
 - `specs/0008a-people-likes-api.md` … `specs/0008f-group-chat-web.md` — Slice 8 (done), each with its build digest
   and the orchestrator's amendments.
-- `Makefile` `e2e` target — the 3-shard run with the rate-limit flush.
+- `specs/0009*.md` + `specs/0009-brand-amendment.md` — Slice 9 (done), each with its digest.
+- `web/e2e/applications.spec.ts` — `ac9_fill_profile_apply_withdraw`, the test that times out on `main`.
+- `Makefile` `e2e` target — the 3-shard run with the rate-limit flush (CI runs it; not locally).
 - `design/README.md` + `design/screens-v1/*.dc.html` — artboards (reference a missing `support.js`).
 
 ## Important Decisions
@@ -165,11 +173,13 @@ Last updated:
   `declined`, Gilad); an applicant with an open application withdraws first (409 `already_applied`); flatmates
   chat only (shortlist/decline stay with the lister).
 - Merging: Gilad merges PRs or delegates a slice (Slices 7 and 8 were delegated). The orchestrator merges with
-  `gh pr merge N --merge --match-head-commit <full sha>` only after `api` + `web` are green on that head and local
-  e2e is green (any spec touching web runtime code, API specs included), and holds merges while GitHub Actions is
-  down (Gilad, 2026-11-11).
-- CI e2e is back on (Gilad 2026-11-12, "keep it under supervision"): merges need `api` + `web` + `e2e` green in CI;
-  local `make e2e` optional. Fallback: `gh variable set E2E_IN_CI --body off`.
+  `gh pr merge N --merge --match-head-commit <full sha>` only after `api` + `web` + `e2e` are green in CI on that
+  head and the PR merges cleanly, and holds merges while GitHub Actions is down (Gilad, 2026-11-11). Slice 9 + 9b
+  merging was delegated too.
+- e2e runs **only in GitHub CI** (Gilad 2026-11-12 evening: "lets not make e2e locally only on git hub ci"):
+  merges need `api` + `web` + `e2e` green in CI on the PR head; no local `make e2e` / Playwright e2e (Gilad allowed
+  one-off local trace runs only by explicit OK). Lint, unit tests, i18n-check, build-web and `make screens` stay
+  local. Fallback if runners break: `gh variable set E2E_IN_CI --body off` and ask Gilad.
 - Brand (Slice 9, Gilad): product name homie / `הומי`; `design/brand/` beats `design/screens-v1/` for colour, type,
   shape, voice; Fredoka + Rubik self-hosted; no slash forms in copy (plural/infinitive/noun). See
   `specs/0009-brand-amendment.md` and PRODUCT.md "Slice 9 copy + UX".
@@ -194,15 +204,20 @@ Last updated:
 
 ## Known Issues
 - People browse has no rate limit, and the person-card score lets an owner infer hidden seeker fields by editing
-  the room (pending Gilad, Next Steps 1).
+  the room (pending Gilad, Next Steps 7).
 - Join, leave and remove publish no chat event; open threads refresh their members on window focus only.
 - A resumed listing whose `expires_at` has passed returns `status: "active"` (the web shows it as expired).
 - An owner can accumulate unlimited paused listings; no total-rows cap yet.
 - `/areas` blocks on a *hung* Postgres via pooled connections; `/` has no `<h1>`.
 - Design artboards reference a missing `design/screens-v1/support.js`.
 - GitHub branch protection unavailable on this plan.
-- Local parallel `make e2e` flakes under heavy load (0009h saw 5 failures at load ~30 with four stacks up); CI e2e is
-  the gate now, local e2e is optional.
+- **Main CI e2e red**: `applications.spec.ts::ac9_fill_profile_apply_withdraw` (one long multi-step test) takes
+  ~16 s on a good run but exceeds its 30 s timeout on slow runners: it failed on the `main` runs after #58, #60
+  and #61 (a `putProfile` → `GET /areas` or a `toBeVisible` still waiting at 30 s), passed after #59, and flaked
+  on PRs #56, #58, #59. Most likely runner speed and a too-tight timeout, not a product bug; unconfirmed (CI keeps
+  no trace artifact).
+- The Mac's load reaches 25–50 with three build stacks plus coders up; local e2e under that load flakes (another
+  reason it is CI-only).
 - GitGuardian incident 40007526 (fake fixture token) flags every PR that merges main until marked false positive.
 - The Mac rebooted under load on 2026-11-12 (~17:26); Docker Desktop does not auto-start — `open -a Docker`.
 
@@ -227,6 +242,10 @@ shared `rent-app` stack in the main checkout runs on 5434/6380/8000 with no `.en
 Login locally: the code is in the newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-12/13 — Orchestrator session `local_386fe896…` ("Specs without collisions"): checked the remaining six
+  specs for file collisions, ran them 3 at a time (0009j, then 0009p, 0009u, then 0009o, 0009r, 0009s), merged
+  PRs #57–#62 and cleaned up. Gilad: e2e only in GitHub CI from now on. 0009j's ac9 CI failure turned out to be
+  runner speed (0009u failed the same test); 0009j moved its step to `search.spec.ts`. Left main's ac9 timeout open.
 - 2026-11-12 (evening) — Orchestrator session `local_2b79d58f…`: took over from `local_f7f3bc91…`; merged 0009l,
   0009t, 0009i, 0009qa, 0009a, 0009qb, 0009e, 0009g, 0009k, 0009m (PRs #47–#56; #56 after one e2e flake rerun,
   an `/areas` GET timeout in `applications.spec`). Gilad: 0009qb merged with a GitGuardian
