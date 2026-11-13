@@ -21,16 +21,23 @@ import { isPastExpiry, listingState, StatusBadge } from './StatusBadge';
 import { useMyListings } from './useMyListings';
 import { usePatchListing } from './usePatchListing';
 
-/** Set by the edit wizard's save (`navigate(…, { state: { saved: true } })`). */
+/** Set by the edit wizard's save (`navigate(…, { state: { saved: true, photosFailed } })`). */
 function isSaved(state: unknown): boolean {
   return typeof state === 'object' && state !== null && 'saved' in state && state.saved === true;
 }
 
-/** Set by the wizard's publish (`navigate(…, { state: { published: true } })`). */
+/** Set by the wizard's publish (`navigate(…, { state: { published: true, photosFailed } })`). */
 function isPublished(state: unknown): boolean {
   return (
     typeof state === 'object' && state !== null && 'published' in state && state.published === true
   );
+}
+
+/** How many photos the wizard's publish or save could not upload (spec 0010e); 0 when none. */
+function photosFailed(state: unknown): number {
+  if (typeof state !== 'object' || state === null || !('photosFailed' in state)) return 0;
+  const failed = state.photosFailed;
+  return typeof failed === 'number' && Number.isInteger(failed) && failed > 0 ? failed : 0;
 }
 
 function ListingRow({
@@ -62,6 +69,7 @@ function ListingRow({
         today={today}
         badge={<StatusBadge state={state} />}
         titleId={titleId}
+        coverUrl={listing.photos[0]?.small_url}
       >
         <div className="flex flex-col gap-3 pt-1">
           <p className="text-caption text-ink-muted">
@@ -204,8 +212,10 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   // frame later, so it is announced; a pause or resume clears it.
   const [savedOnArrival] = useState(() => isSaved(location.state));
   const [publishedOnArrival] = useState(() => isPublished(location.state));
+  const [failedOnArrival] = useState(() => photosFailed(location.state));
   const [saved, setSaved] = useState(false);
   const [published, setPublished] = useState(false);
+  const [failed, setFailed] = useState(0);
 
   useEffect(() => {
     if (isSaved(location.state) || isPublished(location.state)) {
@@ -218,9 +228,10 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
     const frame = requestAnimationFrame(() => {
       if (savedOnArrival) setSaved(true);
       if (publishedOnArrival) setPublished(true);
+      setFailed(failedOnArrival);
     });
     return () => cancelAnimationFrame(frame);
-  }, [savedOnArrival, publishedOnArrival]);
+  }, [savedOnArrival, publishedOnArrival, failedOnArrival]);
 
   const now = new Date();
   const today = todayInIsrael(now);
@@ -313,6 +324,10 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
           </Card>
         )}
       </div>
+      {/* Under the published or saved line: the photos that did not upload. Mounted like them. */}
+      <p role="alert" className={failed > 0 ? 'text-body-sm font-semibold text-danger' : 'sr-only'}>
+        {failed > 0 ? t('listings.mine.photosFailed', { count: failed }) : ''}
+      </p>
       {body}
     </>
   );
