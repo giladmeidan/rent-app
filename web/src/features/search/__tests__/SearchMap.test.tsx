@@ -1116,6 +1116,30 @@ describe('SearchMap', () => {
     expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
   });
 
+  it('test_place_search_ascii_geresh_matches', () => {
+    const place = (id: string) => {
+      const found = PLACES.find((p) => p.id === id);
+      if (found === undefined) throw new Error(`no place ${id}`);
+      return found;
+    };
+    const first = deferred();
+    mockApi({ [SEARCH]: [first.promise] });
+    render('/search?view=map');
+    moveTo(BOX, { center: [34.8, 32.08], zoom: 12 });
+    const box = screen.getByLabelText(he.search.map.placeLabel);
+    const ascii = (name: string) => name.replace(/\u05F3/g, "'").replace(/\u05F4/g, '"');
+    // Enter on an ASCII-typed name that is in the list.
+    fireEvent.change(box, { target: { value: ascii(he.places['ramat-aviv-gimel']) } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(cameras().at(-1)).toMatchObject({ center: place('ramat-aviv-gimel').center });
+    expect(document.querySelector('p[role="status"]')).toHaveTextContent('');
+    // An exact name that starts no other name jumps on the change, without Enter.
+    const before = cameras().length;
+    fireEvent.change(box, { target: { value: ascii(he.places.ajami) } });
+    expect(cameras()).toHaveLength(before + 1);
+    expect(cameras().at(-1)).toMatchObject({ center: place('ajami').center });
+  });
+
   it('ac5_empty_view_actions', async () => {
     const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
     const WIDE: [number, number, number, number] = [34.7, 31.9, 35.0, 32.2];
@@ -1181,5 +1205,23 @@ describe('SearchMap', () => {
       expect(document.activeElement).toBe(liveRegion());
     });
     expect(cameras()).toEqual([]);
+  });
+  it('test_show_all_error_keeps_focus', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
+    const WIDE: [number, number, number, number] = [34.7, 31.9, 35.0, 32.2];
+    mockApi({
+      [SEARCH]: [() => json({ items: [], total: 0 }), json({ detail: 'boom' }, 500)],
+    });
+    render('/search?view=map&c=32.08,34.8&z=14');
+    moveTo(BOX, VIEW);
+    expect(await screen.findByText(he.search.map.empty)).toBeVisible();
+    const button = screen.getByRole('button', { name: he.search.map.showAll });
+    button.focus();
+    fireEvent.click(button);
+    moveTo(WIDE, { center: [34.85, 32.05], zoom: 10 });
+    const retry = await screen.findByRole('button', { name: he.common.retry });
+    await settle();
+    expect(document.activeElement).not.toBe(liveRegion());
+    expect(retry).toBeVisible();
   });
 });
