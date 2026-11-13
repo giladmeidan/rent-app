@@ -115,6 +115,10 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
     }).toPass();
     await flatmatePage.setViewportSize({ width: 1280, height: 720 });
   });
+  // Spec 0010f: F chooses to be shown on the room's page (off by default) before joining.
+  const show = flatmatePage.getByRole('switch', { name: he.flatmates.join.show });
+  await expect(show).not.toBeChecked();
+  await show.check();
   await flatmatePage.getByRole('button', { name: he.flatmates.join.cta }).click();
   await expect(flatmatePage).toHaveURL('/chat');
   await expect(flatmatePage.getByText(he.flatmates.join.done)).toBeVisible();
@@ -147,6 +151,15 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
       expect(members.box.y).toBeGreaterThan(card.box.y + card.box.height);
     }).toPass();
     await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
+  await test.step('0010f a seeker sees the shown flatmate on the room page', async () => {
+    // O's page, given the looking part: a seeker by decision 13 (no extra sign-up in this shard).
+    await putProfile(page);
+    await page.goto(`/listings/${roomId}`);
+    const people = page.getByRole('region', { name: he.rooms.people.title });
+    await expect(people.getByRole('heading', { name: he.rooms.people.title })).toBeVisible();
+    await expect(people.getByRole('listitem').filter({ hasText: FLATMATE })).toBeVisible();
   });
 
   // After F's first load the page URL never held the token, and no request URL or Referer did.

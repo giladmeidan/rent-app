@@ -1,7 +1,7 @@
 // The visual check for the flatmates screens (spec 0009qb, AC7): one screenshot per state at each
 // project's size, in web/screens/0009qb/. Every API request is answered here, so it needs only the
 // vite server: no sign-up, no OTP. An unmatched request fails the run.
-import { expect, type Page, type Route } from '@playwright/test';
+import { expect, type Locator, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { FlatmateOut, MyFlatOut } from '../../src/features/flatmates/api';
@@ -33,6 +33,8 @@ type Setup = {
   join?: Answer;
   flats?: Mode;
   flatList?: MyFlatOut[];
+  /** `PATCH /me/flats/{id}` (spec 0010f): 204, a 500, or held. */
+  show?: Mode;
 };
 
 const CORS = {
@@ -64,6 +66,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     preview = ok(PREVIEW),
     join = ok({ listing_id: PREVIEW.listing.id }),
     flats = 'ok',
+    show = 'ok',
     flatList = [],
   } = setup;
   await page.route(`${API}/**`, async (route) => {
@@ -106,6 +109,10 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
       return flats === 'error' ? reply(route, { detail: 'boom' }, 500) : reply(route, flatList);
     }
     if (/^DELETE \/me\/flats\/[^/]+$/.test(key)) return noContent(route);
+    if (/^PATCH \/me\/flats\/[^/]+$/.test(key)) {
+      if (show === 'pending') return new Promise<void>(() => {});
+      return show === 'error' ? reply(route, { detail: 'boom' }, 500) : noContent(route);
+    }
     unmatched.push(key);
     return route.fulfill({ status: 500, headers: CORS, body: `unmatched ${key}` });
   });
@@ -133,6 +140,9 @@ const removeIn = (page: Page, name: string) =>
     .filter({ hasText: name })
     .getByRole('button', { name: he.flatmates.list.remove });
 const joinCta = (page: Page) => page.getByRole('button', { name: he.flatmates.join.cta });
+/** "להציג אותי בעמוד החדר" (spec 0010f), on the join page or one "my flats" card. */
+const showSwitch = (scope: Page | Locator) =>
+  scope.getByRole('switch', { name: he.flatmates.join.show });
 
 /** The join page after a click on "join" that the API refuses with `text`. */
 const joinRefused = (text: string) => async (page: Page) => {
@@ -232,6 +242,16 @@ const STATES: State[] = [
     path: JOIN,
     act: async (page) => {
       await expect(joinCta(page)).toBeVisible();
+      await expect(showSwitch(page)).not.toBeChecked();
+    },
+  },
+  {
+    name: '08b-join-preview-shown',
+    setup: { user: 'seeker' },
+    path: JOIN,
+    act: async (page) => {
+      await showSwitch(page).check();
+      await expect(showSwitch(page)).toBeChecked();
     },
   },
   {
@@ -334,6 +354,29 @@ const STATES: State[] = [
       await expect(page.getByRole('dialog')).toBeVisible();
     },
     modal: true,
+  },
+  {
+    name: '21-flats-show-saving',
+    setup: { user: 'seeker', flatList: TWO_FLATS, show: 'pending' },
+    path: FLATS,
+    act: async (page) => {
+      const second = showSwitch(page.getByRole('listitem').nth(1));
+      await second.click();
+      await expect(second).toBeChecked();
+      await expect(second).toBeDisabled();
+    },
+  },
+  {
+    name: '22-flats-show-error',
+    setup: { user: 'seeker', flatList: TWO_FLATS, show: 'error' },
+    path: FLATS,
+    act: async (page) => {
+      const second = page.getByRole('listitem').nth(1);
+      // `click`, not `check`: the failure reverts the switch, which `check` would retry.
+      await showSwitch(second).click();
+      await expect(second.getByRole('alert')).toHaveText(he.common.error);
+      await expect(showSwitch(second)).not.toBeChecked();
+    },
   },
 ];
 
