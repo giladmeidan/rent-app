@@ -587,7 +587,7 @@ describe('SearchMap', () => {
     });
     expect(pins()).toEqual([]);
     const label = i18n.t('search.map.bubble', { count: 3 });
-    expect(label).toBe('3 מודעות קרובות, לחיצה מגדילה את המפה');
+    expect(label).toBe('3 מודעות קרובות, לחיצה מקרבת את המפה');
     expect(bubbles()[0]).toMatchObject({ count: 3, label, separates: true });
     const bubble = screen.getByRole('button', { name: label });
     expect(bubble).toHaveTextContent('3');
@@ -626,7 +626,7 @@ describe('SearchMap', () => {
       name: i18n.t('search.map.samePlace', { count: 3 }),
     });
     expect(heading.tagName).toBe('H2');
-    expect(heading).toHaveTextContent('3 מודעות בנקודה הזאת');
+    expect(heading).toHaveTextContent('3 מודעות בנקודה הזו');
     const section = screen.getByRole('region', { name: heading.textContent ?? '' });
     const cards = within(section).getAllByRole('article');
     expect(cards).toHaveLength(3);
@@ -650,8 +650,17 @@ describe('SearchMap', () => {
     expect(listHeading()).toBeNull();
     expect(screen.getAllByRole('article')).toHaveLength(1);
 
-    // Opened again; the members leaving the results remove the list.
+    // Opened again; a zoom in and back out removes it for good.
     fireEvent.click(screen.getByRole('button', { name: samePlace }));
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+    moveTo(BOX, { ...VIEW, zoom: 9 });
+    expect(listHeading()).toBeNull();
+    moveTo(BOX, VIEW);
+    expect(listHeading()).toBeNull();
+    expect(screen.queryByRole('article')).toBeNull();
+
+    // Opened again; the members leaving the results remove the list.
+    fireEvent.click(await screen.findByRole('button', { name: samePlace }));
     expect(screen.getAllByRole('article')).toHaveLength(3);
     moveTo(OTHER_BOX, VIEW);
     next.resolve(json(page([away])));

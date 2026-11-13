@@ -1,6 +1,8 @@
 import type { TFunction } from 'i18next';
 
 import type { Bubble, Pin } from '../../components/map/MapCanvas';
+import type { MyApplicationOut } from '../applications/api';
+import { isWithdrawable } from '../applications/format';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { bucket } from '../match/bucket';
@@ -58,6 +60,12 @@ export function toPins(items: readonly ListingPublic[], { t, seen, liked, applie
       z: z.get(item.id) ?? 1,
     };
   });
+}
+
+/** The listings with an open application (submitted or shortlisted): they get the `applied` mark;
+ * a declined or withdrawn one gets none. */
+export function openApplicationIds(applications: readonly MyApplicationOut[]): Set<string> {
+  return new Set(applications.filter((a) => isWithdrawable(a.status)).map((a) => a.listing.id));
 }
 
 /** A bubble's spoken name: it zooms in when its members separate, else it lists them. */

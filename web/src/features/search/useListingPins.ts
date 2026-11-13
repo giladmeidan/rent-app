@@ -7,7 +7,7 @@ import { useMe } from '../auth/useMe';
 import { useMyLikes } from '../likes/useMyLikes';
 import { readSeen } from '../listings/seen';
 import type { ListingPublic } from './api';
-import { toPins } from './pins';
+import { openApplicationIds, toPins } from './pins';
 
 const NONE: ReadonlySet<string> = new Set();
 
@@ -30,14 +30,7 @@ export function useListingPins(items: readonly ListingPublic[]): Pin[] {
     [mine],
   );
   const applied = useMemo(
-    () =>
-      mineApplications === undefined
-        ? NONE
-        : new Set(
-            mineApplications
-              .filter((a) => a.status === 'submitted' || a.status === 'shortlisted')
-              .map((a) => a.listing.id),
-          ),
+    () => (mineApplications === undefined ? NONE : openApplicationIds(mineApplications)),
     [mineApplications],
   );
 

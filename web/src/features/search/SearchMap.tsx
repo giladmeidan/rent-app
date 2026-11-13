@@ -44,7 +44,7 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
   const [zoom, setZoom] = useState<number>();
   const [selectedId, setSelectedId] = useState<string>();
   // A pressed bubble whose members never separate: their ids, listed under the map.
-  const [samePlace, setSamePlace] = useState<{ ids: string[]; zoom: number | undefined }>();
+  const [samePlace, setSamePlace] = useState<string[]>();
   const [unavailable, setUnavailable] = useState(false);
   // Bumped on every pin press, so focus moves to the card even when the same pin is pressed again.
   const [focusRequest, setFocusRequest] = useState(0);
@@ -63,9 +63,9 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
   // The listed members still in the results; none left removes the list. A zoom (another bubble
   // pressed, or the map zoomed) regroups the map and removes it too.
   const listed =
-    samePlace === undefined || samePlace.zoom !== zoom
+    samePlace === undefined
       ? []
-      : samePlace.ids.flatMap((id) => items.filter((item) => item.id === id));
+      : samePlace.flatMap((id) => items.filter((item) => item.id === id));
 
   // Regrouped on a zoom, a data or a selection change only, never per pan frame (`moveend` is the
   // only zoom source).
@@ -166,12 +166,15 @@ export function SearchMap({ filters, profile, onShowList, countRef }: Props) {
           onBubbleOpen={(ids) => {
             // No pin stays pressed without its card.
             setSelectedId(undefined);
-            setSamePlace({ ids, zoom });
+            setSamePlace(ids);
             setFocusRequest((n) => n + 1);
           }}
           onMoveEnd={(box, view) => {
             setBbox(roundBbox(box));
-            if (view !== undefined) setZoom(view.zoom);
+            if (view !== undefined) {
+              if (view.zoom !== zoom) setSamePlace(undefined);
+              setZoom(view.zoom);
+            }
           }}
           onError={() => setUnavailable(true)}
           // The map keeps today's height at every width (no token fits a viewport-relative height).

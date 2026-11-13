@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
+import { application } from '../../applications/__tests__/fixtures';
 import { cardTitle } from '../../listings/cardTitle';
 import { formatIls } from '../../listings/format';
 import type { ListingPublic } from '../api';
-import { bubbleLabel, toPins } from '../pins';
+import { bubbleLabel, openApplicationIds, toPins } from '../pins';
 import { publicListing } from './fixtures';
 
 const t = i18n.t;
@@ -87,14 +88,23 @@ describe('toPins', () => {
     const X = located({ listing_type: 'room' });
     const Q = located();
     const liked = new Set([R.id, X.id]);
-    // D (declined) and W (withdrawn) are not in `applied`: `useListingPins` keeps only open ones.
-    const applied = new Set([A.id, S.id, X.id]);
+    // The seeker's applications: only submitted and shortlisted ones are open.
+    const on = (l: ListingPublic) => ({ ...application().listing, id: l.id });
+    const applied = openApplicationIds([
+      application({ status: 'submitted', listing: on(A) }),
+      application({ status: 'shortlisted', listing: on(S) }),
+      application({ status: 'declined', listing: on(D) }),
+      application({ status: 'withdrawn', listing: on(W) }),
+      application({ status: 'submitted', listing: on(X) }),
+    ]);
+    expect(applied).toEqual(new Set([A.id, S.id, X.id]));
     const seen = new Set([A.id, Q.id]);
     const pins = toPins([R, A, S, D, W, X, Q], { t, seen, liked, applied });
     const get = (l: ListingPublic) => pins.find((p) => p.id === l.id);
 
     expect(get(R)?.mark).toBe('liked');
     expect(get(A)?.mark).toBe('applied');
+    // Shortlisted counts as applied; declined and withdrawn get no mark.
     expect(get(S)?.mark).toBe('applied');
     // Liked and applied: applied wins.
     expect(get(X)?.mark).toBe('applied');
@@ -118,7 +128,7 @@ describe('toPins', () => {
 
   it('bubble_label_says_zoom_or_list', () => {
     expect(bubbleLabel(t, { count: 3, separates: true })).toBe(
-      '3 מודעות קרובות, לחיצה מגדילה את המפה',
+      '3 מודעות קרובות, לחיצה מקרבת את המפה',
     );
     expect(bubbleLabel(t, { count: 2, separates: true })).toBe(he.search.map.bubble_two);
     expect(bubbleLabel(t, { count: 3, separates: false })).toBe(
