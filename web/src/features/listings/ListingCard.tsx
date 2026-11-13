@@ -86,8 +86,10 @@ type Props = {
    * the card is not a section of its own. Default `h2`. */
   titleAs?: 'h2' | 'h3' | 'p';
   /** `stack` (default): the vertical card. `row`: the stacked card below `lg`, and from `lg` up the
-   * row card of SearchDesktop.dc.html (photo at the inline start); chosen by CSS only. */
-  layout?: 'stack' | 'row';
+   * row card of SearchDesktop.dc.html (photo at the inline start); chosen by CSS only. `compact`:
+   * the row anatomy at every width with a smaller photo, and room at the price row's end for a
+   * close button (the search map's docked card, spec 0009w). */
+  layout?: 'stack' | 'row' | 'compact';
 };
 
 /**
@@ -141,6 +143,16 @@ export function ListingCard({
   const title = cardTitle(t, listing);
 
   const row = layout === 'row';
+  const compact = layout === 'compact';
+  const outerClass = compact
+    ? 'flex flex-row gap-3 p-3'
+    : row
+      ? 'flex flex-col lg:flex-row lg:gap-4 lg:p-3'
+      : 'flex flex-col';
+  const photoClass = compact
+    ? 'w-24 shrink-0 self-start rounded-md'
+    : `rounded-t-lg ${row ? 'lg:w-44 lg:shrink-0 lg:self-start lg:rounded-md' : ''}`;
+  const bodyClass = compact ? 'p-0' : row ? 'p-3 lg:p-0' : 'p-3';
 
   return (
     <Card
@@ -150,10 +162,11 @@ export function ListingCard({
       data-layout={layout}
       className="overflow-hidden"
     >
-      <div className={row ? 'flex flex-col lg:flex-row lg:gap-4 lg:p-3' : 'flex flex-col'}>
-        {/* The photo box: the brand's 16:10 crop (no aspect token), 176px wide in the row layout. */}
+      <div className={outerClass}>
+        {/* The photo box: the brand's 16:10 crop (no aspect token), 176px wide in the row layout
+            and 96px in the compact one. */}
         <div
-          className={`relative flex aspect-[16/10] items-center justify-center rounded-t-lg bg-surface-subtle ${row ? 'lg:w-44 lg:shrink-0 lg:self-start lg:rounded-md' : ''}`}
+          className={`relative flex aspect-[16/10] items-center justify-center bg-surface-subtle ${photoClass}`}
         >
           <svg
             aria-hidden="true"
@@ -177,8 +190,9 @@ export function ListingCard({
             </Tag>
           )}
         </div>
-        <div className={`flex min-w-0 flex-1 flex-col gap-2 p-3 ${row ? 'lg:p-0' : ''}`}>
-          <div className="flex items-center justify-between gap-3">
+        <div className={`flex min-w-0 flex-1 flex-col gap-2 ${bodyClass}`}>
+          {/* Compact: the badge clears the close button its container puts at the top end. */}
+          <div className={`flex items-center justify-between gap-3 ${compact ? 'pe-12' : ''}`}>
             <p className="text-h3 font-bold tracking-tight">
               <span>
                 {formatIls(listing.price_ils)} {t('listings.units.ils')}
@@ -225,7 +239,7 @@ export function ListingCard({
           )}
           {children !== undefined &&
             children !== null &&
-            (row ? <div className="mt-auto">{children}</div> : children)}
+            (row || compact ? <div className="mt-auto">{children}</div> : children)}
         </div>
       </div>
     </Card>
