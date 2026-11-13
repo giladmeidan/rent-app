@@ -88,7 +88,7 @@ const render = (path: string) =>
     path,
     <>
       <Routes>
-        <Route path="/search" element={<SearchPage />} />
+        <Route path="/search" element={<SearchPage type="apartment" />} />
       </Routes>
       <Back />
     </>,

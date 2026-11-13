@@ -19,6 +19,7 @@ import { MyLikesPage } from '../features/likes/MyLikesPage';
 import { EditListingPage } from '../features/listings/EditListingPage';
 import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
+import { MarketMinePage } from '../features/market/MarketMinePage';
 import { NewListingPage } from '../features/listings/NewListingPage';
 import { PeoplePage } from '../features/people/PeoplePage';
 import { ProfilePage } from '../features/profile/ProfilePage';
@@ -53,7 +54,9 @@ export function AppRoutes() {
         <Route index element={<HomeRoute />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="signup" element={<SignupPage />} />
-        <Route path="search" element={<SearchPage />} />
+        {/* One search per side (spec 0010a); the keys keep the two pages' state apart. */}
+        <Route path="search" element={<SearchPage key="apartment" type="apartment" />} />
+        <Route path="market" element={<SearchPage key="room" type="room" />} />
         {/* Public; the static `listings/new` below outranks `:id`. */}
         <Route path="listings/:id" element={<ListingPage />} />
         {/* Public (0008e A1): the page takes the token out of the hash before its own login check. */}
@@ -78,6 +81,7 @@ export function AppRoutes() {
             <Route path=":id" element={<ChatThreadPage />} />
           </Route>
           <Route path="me/flats" element={<MyFlatsPage />} />
+          <Route path="market/mine" element={<MarketMinePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

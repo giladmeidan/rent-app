@@ -434,7 +434,8 @@ test('ac7_listing_page_link', async ({ page, request }) => {
   await page.getByRole('link', { name: he.listing.showOnMap }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/search');
   expect(query(page).get('view')).toBe('map');
-  expect(query(page).get('listing_type')).toBe('apartment');
+  // The side is the path (spec 0010a): no type in the URL.
+  expect(query(page).get('listing_type')).toBeNull();
   expect(query(page).get('pin')).toBe(id);
   await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
   await expect(dockedCard).toHaveCount(1, { timeout: 15_000 });

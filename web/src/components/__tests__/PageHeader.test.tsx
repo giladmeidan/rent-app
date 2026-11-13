@@ -136,4 +136,23 @@ describe('PageHeader', () => {
     expect(span).toHaveAttribute('dir', 'auto');
     expect(span).toHaveTextContent('Maya Levi');
   });
+
+  it('level_2_for_a_panel', () => {
+    // Spec 0010a: a panel inside a page that owns the <h1> (the market's "שלי").
+    render(
+      <MemoryRouter>
+        <PageHeader
+          level={2}
+          title={he.market.mine.tabs.listings}
+          actions={<button type="button">{he.market.mine.newRoom}</button>}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    const h2 = screen.getByRole('heading', { level: 2, name: he.market.mine.tabs.listings });
+    expect(h2.tagName).toBe('H2');
+    expect(h2).toHaveClass('font-display', 'text-h2');
+    expect(h2).not.toHaveClass('lg:text-h1');
+    expect(screen.getByRole('button', { name: he.market.mine.newRoom })).toBeVisible();
+  });
 });

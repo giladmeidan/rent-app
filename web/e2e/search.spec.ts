@@ -129,13 +129,18 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   await expect(title).toContainText(street);
   await expect(page.getByText(he.listing.locationHint)).toBeVisible();
 
-  await test.step('ac12 the visitor finds the room, filters by type and opens it', async () => {
+  await test.step('ac12 the visitor finds the room in the market and opens it', async () => {
     // A visitor gets no flatmate ages and no lifestyle answers (PRODUCT.md "Rooms", room privacy).
     const twoFlatmates = he.rooms.flatmates_two;
     const roomCard = page.getByRole('article').filter({ hasText: roomStreet });
+    // Spec 0010a: the apartments' search has no rooms; the market (no type filter) has them.
     await page.goto('/search');
     await expect(card).toHaveCount(1);
+    await expect(roomCard).toHaveCount(0);
+    await page.goto('/market');
+    await expect(page.getByRole('heading', { level: 1, name: he.market.title })).toBeVisible();
     await expect(roomCard).toHaveCount(1);
+    await expect(card).toHaveCount(0);
     await expect(roomCard.getByText(he.listings.card.room, { exact: true })).toBeVisible();
     await expect(roomCard.getByText(twoFlatmates, { exact: true })).toBeVisible();
     await expect(
@@ -145,19 +150,6 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
       ),
     ).toBeVisible();
     await expect(roomCard).not.toContainText('27, 30');
-
-    // Rooms only: the apartment goes, the room stays.
-    await page.getByRole('button', { name: he.search.filters, exact: true }).click();
-    await page
-      .getByRole('group', { name: he.search.type.legend, exact: true })
-      .getByRole('checkbox', { name: he.search.type.apartment })
-      .uncheck();
-    await page.getByRole('button', { name: he.search.apply }).click();
-    await expect(page).toHaveURL('/search?listing_type=room');
-    await expect(page.getByText(he.common.loading)).toHaveCount(0);
-    await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
-    await expect(roomCard).toHaveCount(1);
-    await expect(card).toHaveCount(0);
 
     // The room's page: its facts, and nothing private.
     await roomCard.getByRole('link').click();

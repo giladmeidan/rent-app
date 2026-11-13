@@ -6,7 +6,7 @@ import { DateReadback, withReadback } from '../../components/DateReadback';
 import { Field } from '../../components/Field';
 import { Select } from '../../components/Select';
 import { TextInput } from '../../components/TextInput';
-import { focusRing } from '../../components/focusRing';
+import type { ListingType } from '../listings/api';
 import { formatRooms } from '../listings/format';
 import {
   FEATURES,
@@ -18,7 +18,8 @@ import {
   type Filters,
 } from './filters';
 
-type FormKey = Exclude<keyof Filters, 'sort' | 'view'>;
+// `listing_type` is the page's side (spec 0010a), never a form field.
+type FormKey = Exclude<keyof Filters, 'sort' | 'view' | 'listing_type'>;
 /** Every filter the form owns, present (as `undefined` when unset) so it overrides the URL's. */
 export type FormFilters = { [K in FormKey]: Filters[K] };
 
@@ -29,6 +30,8 @@ type Props = {
   onClear: () => void;
   /** The id of the panel's `<h2>`, so the page can name the panel's region after it. */
   titleId?: string;
+  /** The page's side (spec 0010a): words the date hint for apartments or rooms. */
+  type?: ListingType;
 };
 
 type Values = {
@@ -37,9 +40,6 @@ type Values = {
   rooms_min: string;
   rooms_max: string;
   available_by: string;
-  /** The "סוג" boxes; at least one stays on (both on = no `listing_type`). */
-  apartment: boolean;
-  room: boolean;
 } & Record<Feature, boolean>;
 
 type ErrorField = 'price_min' | 'price_max' | 'rooms_max';
@@ -64,8 +64,6 @@ function initialValues(filters: Filters): Values {
     rooms_min: toText(filters.rooms_min),
     rooms_max: toText(filters.rooms_max),
     available_by: filters.available_by ?? '',
-    apartment: filters.listing_type !== 'room',
-    room: filters.listing_type !== 'apartment',
     pets: filters.pets === true,
     furnished: filters.furnished === true,
     elevator: filters.elevator === true,
@@ -111,10 +109,6 @@ function toFilters(values: Values): FormFilters {
   for (const key of ['rooms_min', 'rooms_max', 'available_by'] as const) {
     if (values[key] !== '') params.set(key, values[key]);
   }
-  // Exactly one box on is a filter; both on is none (the form never lets both go off).
-  if (values.apartment !== values.room) {
-    params.set('listing_type', values.apartment ? 'apartment' : 'room');
-  }
   for (const feature of FEATURES) {
     if (values[feature]) params.set(feature, 'true');
   }
@@ -125,7 +119,6 @@ function toFilters(values: Values): FormFilters {
     rooms_min: parsed.rooms_min,
     rooms_max: parsed.rooms_max,
     available_by: parsed.available_by,
-    listing_type: parsed.listing_type,
     pets: parsed.pets,
     furnished: parsed.furnished,
     elevator: parsed.elevator,
@@ -136,7 +129,7 @@ function toFilters(values: Values): FormFilters {
 const legend = 'mb-2 text-label';
 
 /** The filters panel of SearchDesktop.dc.html, in a single column. Validates on submit only. */
-export function FiltersForm({ filters, onApply, onClear, titleId }: Props) {
+export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartment' }: Props) {
   const { t } = useTranslation();
   const formId = useId();
   const [values, setValues] = useState<Values>(() => initialValues(filters));
@@ -211,24 +204,6 @@ export function FiltersForm({ filters, onApply, onClear, titleId }: Props) {
     </Field>
   );
 
-  // The only box still on cannot be turned off; the hint says why.
-  const oneType = values.apartment !== values.room;
-  const typeHintId = `${fieldId('room')}-type-hint`;
-  const typeBox = (name: 'apartment' | 'room', text: string) => (
-    <label className="flex min-h-tap cursor-pointer items-center gap-2.5 text-body-sm has-[:disabled]:cursor-default">
-      <input
-        id={fieldId(name)}
-        type="checkbox"
-        checked={values[name]}
-        disabled={oneType && values[name]}
-        aria-describedby={oneType ? typeHintId : undefined}
-        onChange={(e) => set({ [name]: e.target.checked })}
-        className={`h-5 w-5 shrink-0 accent-accent ${focusRing}`}
-      />
-      {text}
-    </label>
-  );
-
   const featureLabels: Record<Feature, string> = {
     pets: t('search.feature.pets'),
     furnished: t('search.feature.furnished'),
@@ -246,19 +221,6 @@ export function FiltersForm({ filters, onApply, onClear, titleId }: Props) {
       </h2>
 
       <fieldset className="min-w-0">
-        <legend className={legend}>{t('search.type.legend')}</legend>
-        <div className="flex flex-col">
-          {typeBox('apartment', t('search.type.apartment'))}
-          {typeBox('room', t('search.type.room'))}
-        </div>
-        {oneType && (
-          <p id={typeHintId} className="text-caption text-ink-muted">
-            {t('search.type.hint')}
-          </p>
-        )}
-      </fieldset>
-
-      <fieldset className="min-w-0">
         <legend className={legend}>{t('search.price')}</legend>
         <div className="flex gap-2">
           {priceInput('price_min', t('search.from'))}
@@ -274,7 +236,11 @@ export function FiltersForm({ filters, onApply, onClear, titleId }: Props) {
         </div>
       </fieldset>
 
-      <Field id={dateId} label={t('search.availableBy')} hint={t('search.availableByHint')}>
+      <Field
+        id={dateId}
+        label={t('search.availableBy')}
+        hint={type === 'room' ? t('market.availableByHint') : t('search.availableByHint')}
+      >
         <TextInput
           type="date"
           value={values.available_by}

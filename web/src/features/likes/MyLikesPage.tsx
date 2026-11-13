@@ -207,7 +207,7 @@ export function MyLikesPage() {
           <>
             <span>{t('likes.errors.alreadyApplied')}</span>
             <Link
-              to="/me/applications"
+              to="/market/mine"
               className={`inline-flex min-h-[44px] items-center rounded underline underline-offset-4 ${focusRing}`}
             >
               {t('applications.viewMine')}

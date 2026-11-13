@@ -11,9 +11,9 @@ type Props = {
 };
 
 /**
- * The active filters as static tags, one per set group (a price range, a rooms range, the date, one
- * listing type, each feature). Nothing when no filter is set. They are not buttons: removing a
- * filter is the panel's job.
+ * The active filters as static tags, one per set group (a price range, a rooms range, the date, each
+ * feature). Nothing when no filter is set. They are not buttons: removing a filter is the panel's
+ * job.
  */
 export function ActiveFilterTags({ filters, className }: Props) {
   const { t } = useTranslation();
@@ -49,9 +49,6 @@ export function ActiveFilterTags({ filters, className }: Props) {
   if (filters.available_by !== undefined) {
     tags.push(t('search.tags.availableBy', { date: formatDate(filters.available_by) }));
   }
-
-  if (filters.listing_type === 'apartment') tags.push(t('search.type.apartment'));
-  if (filters.listing_type === 'room') tags.push(t('search.type.room'));
 
   const featureLabels: Record<Feature, string> = {
     pets: t('search.feature.pets'),

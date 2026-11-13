@@ -13,7 +13,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
-import { ApiError, type MyListingOut } from './api';
+import { ApiError, type ListingType, type MyListingOut } from './api';
 import { LISTING_CAP } from './constants';
 import { formatDate, todayInIsrael } from './format';
 import { ListingCard } from './ListingCard';
@@ -158,10 +158,44 @@ function ListingRow({
   );
 }
 
-export function MyListingsPage() {
+type Props = {
+  /** The side's type (spec 0010a): `/me/listings` shows apartments, the market's "שלי" rooms. */
+  type?: ListingType;
+  /** Inside a page that owns the `<h1>`, the container and the tab's title (`MarketMinePage`). */
+  panel?: boolean;
+};
+
+/**
+ * The owner's listings of one type. The count line counts the live listings of **both** types:
+ * the cap is shared (MARKET-PLAN Q5).
+ */
+export function MyListingsPage({ type = 'apartment', panel = false }: Props) {
+  if (panel) {
+    return (
+      <div className="flex flex-col gap-4">
+        <MyListings type={type} level={2} />
+      </div>
+    );
+  }
+  return <MyListingsRoute type={type} />;
+}
+
+/** The page on its own route: its container and the tab's title. */
+function MyListingsRoute({ type }: { type: ListingType }) {
   const { t } = useTranslation();
   usePageTitle(t('listings.mine.title'));
+  return (
+    <PageContainer as="section" width="wide" className="flex flex-col gap-4">
+      <MyListings type={type} level={1} />
+    </PageContainer>
+  );
+}
+
+function MyListings({ type, level }: { type: ListingType; level: 1 | 2 }) {
+  const { t } = useTranslation();
   const listings = useMyListings();
+  const room = type === 'room';
+  const newPath = `/listings/new?type=${type}`;
   const location = useLocation();
   const navigate = useNavigate();
   // "Saved" is read once from the history entry, which is then cleared, so a reload or Back does
@@ -189,6 +223,7 @@ export function MyListingsPage() {
 
   const now = new Date();
   const today = todayInIsrael(now);
+  const shownListings = (listings.data ?? []).filter((l) => l.listing_type === type);
 
   let body;
   if (listings.isPending) {
@@ -205,15 +240,15 @@ export function MyListingsPage() {
     );
   } else if (listings.isError && listings.data === undefined) {
     body = <ErrorState onRetry={() => listings.refetch()} />;
-  } else if (listings.data === undefined || listings.data.length === 0) {
+  } else if (shownListings.length === 0) {
     body = (
       <EmptyState
-        message={t('listings.mine.empty')}
+        message={room ? t('market.mine.empty') : t('listings.mine.empty')}
         // One turtle per screen: the publish line already has the celebrating one.
         pose={published ? undefined : 'sleep'}
         action={
-          <Button variant="secondary" to="/listings/new">
-            {t('listings.mine.emptyAction')}
+          <Button variant="secondary" to={newPath}>
+            {room ? t('market.mine.emptyAction') : t('listings.mine.emptyAction')}
           </Button>
         }
       />
@@ -221,7 +256,7 @@ export function MyListingsPage() {
   } else {
     body = (
       <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {listings.data.map((listing) => (
+        {shownListings.map((listing) => (
           <ListingRow
             key={listing.id}
             listing={listing}
@@ -234,18 +269,20 @@ export function MyListingsPage() {
     );
   }
 
+  // Both types: the cap is shared.
   const live = listings.data?.filter((l) => listingState(l, now) === 'live').length;
 
   return (
-    <PageContainer as="section" width="wide" className="flex flex-col gap-4">
+    <>
       <PageHeader
-        title={t('listings.mine.title')}
+        level={level}
+        title={room ? t('market.mine.tabs.listings') : t('listings.mine.title')}
         subtitle={
           live === undefined ? undefined : t('listings.mine.count', { live, cap: LISTING_CAP })
         }
         actions={
-          <Button variant="primary" to="/listings/new">
-            {t('listings.mine.new')}
+          <Button variant="primary" to={newPath}>
+            {room ? t('market.mine.newRoom') : t('listings.mine.new')}
           </Button>
         }
       />
@@ -267,6 +304,6 @@ export function MyListingsPage() {
         )}
       </div>
       {body}
-    </PageContainer>
+    </>
   );
 }

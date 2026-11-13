@@ -1,4 +1,4 @@
-"""Public search and listing page API (spec 0003a): AC1-AC9."""
+"""Public search and listing page API (spec 0003a): AC1-AC9; spec 0010a AC1 (the type default)."""
 
 import datetime as dt
 import uuid
@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 
 from scripts.seed import GUSH_DAN_WKT
-from tests.conftest import Outbox, make_listing, make_owner, signup
+from tests.conftest import Outbox, make_listing, make_owner, make_profile, set_location, signup
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -127,13 +127,51 @@ def test_ac1_only_live_listings_in_active_areas(client: TestClient, world: World
 
     assert anonymous.status_code == 200
     body = anonymous.json()
-    assert _ids(body) == [world.d, world.a]  # newest first; rooms are public (spec 0007b)
-    assert body["total"] == 2
+    assert _ids(body) == [world.a]  # apartments only by default (spec 0010a)
+    assert body["total"] == 1
+    rooms = _search(client, "listing_type=room")
+    assert _ids(rooms) == [world.d]  # rooms are public (spec 0007b), asked for explicitly
+    assert rooms["total"] == 1
 
     for caller in (world.seeker, world.owner_b):
         response = caller.get("/listings")
         assert response.status_code == 200
         assert response.json() == body
+        assert _search(caller, "listing_type=room") == rooms
+
+
+MAP_BOX = "west=34.75&south=32.00&east=34.85&north=32.10"
+
+
+def test_ac1_listing_type_defaults_to_apartment(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    """Spec 0010a AC1: `listing_type` omitted means `apartment`, in the list and on the map, for
+    a visitor and for a seeker with a room section; each type is asked for explicitly."""
+    owner = make_owner(db_engine, "owner@example.com")
+    apartment = make_listing(db_engine, owner, gush_dan)
+    room = make_listing(db_engine, owner, gush_dan, listing_type="room", flatmates_count=2)
+    for listing_id in (apartment, room):
+        set_location(db_engine, listing_id, 34.80, 32.05)
+    seeker = signup(client, outbox, "seeker@example.com", "seeker")
+    seeker_id = uuid.UUID(seeker.get("/me").json()["id"])
+    make_profile(db_engine, seeker_id, gush_dan, gender="woman", flatmate_gender="any")
+
+    for name, caller in (("visitor", client), ("seeker with a room section", seeker)):
+        for box in ("", MAP_BOX):
+            default = _search(caller, box)
+            assert _ids(default) == [str(apartment)], (name, box)
+            assert default["total"] == 1, (name, box)
+            for listing_type, expected in (("room", room), ("apartment", apartment)):
+                query = (
+                    f"listing_type={listing_type}&{box}" if box else f"listing_type={listing_type}"
+                )
+                body = _search(caller, query)
+                assert _ids(body) == [str(expected)], (name, query)
+                assert body["total"] == 1, (name, query)
+    for bad in ("listing_type=", "listing_type=house"):
+        response = client.get(f"/listings?{bad}")
+        assert response.status_code == 422, bad
 
 
 def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: World) -> None:
