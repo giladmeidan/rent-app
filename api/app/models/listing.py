@@ -1,7 +1,7 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
 Every CHECK, FK, unique constraint and index here matches migrations 0003, 0004, 0005, 0007, 0009,
-0010 and 0012 exactly (autogenerate must see no diff). A listing is **live** while `status =
+0010, 0012 and 0016 exactly (autogenerate must see no diff). A listing is **live** while `status =
 'active' AND expires_at > now()`.
 
 Room fields (spec 0007a): `gender_preference` (who the room is for), `flatmates_count` (people
@@ -9,6 +9,10 @@ already living there), `flatmate_ages` (optional: none, some or all of them) and
 flat's questionnaire answers, key -> 1-3). An apartment always holds the defaults
 (`ck_listings_room_fields`); a room migrated before 0009 is a "legacy room" (NULL count) until its
 next edit.
+
+Flat facts (spec 0010f): `room_size_sqm` (the room itself, at most the flat's `size_sqm`),
+`private_bathroom`, `balcony`, `bills_included` and `poster` (who is posting), all optional and
+room-only (NULL on an apartment, `ck_listings_room_fields`); public on every listing response.
 
 Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
 `approximate_point`), never the geocoder's raw point; the worker fills it while `geocode_status` is
@@ -105,9 +109,21 @@ class Listing(Base):
         ),
         # Known keys, values 1-3 only (migration 0010).
         CheckConstraint(LIFESTYLE_CHECK, name="ck_listings_lifestyle"),
+        # The flat facts (spec 0010f), optional.
+        CheckConstraint(
+            "room_size_sqm IS NULL OR (room_size_sqm BETWEEN 4 AND 100"
+            " AND room_size_sqm <= size_sqm)",
+            name="ck_listings_room_size_sqm",
+        ),
+        CheckConstraint(
+            "poster IS NULL OR poster IN ('lives_here', 'leaving', 'landlord')",
+            name="ck_listings_poster",
+        ),
         CheckConstraint(
             "listing_type = 'room' OR (gender_preference = 'any' AND flatmates_count IS NULL"
-            " AND flatmate_ages = '{}' AND lifestyle = '{}'::jsonb)",
+            " AND flatmate_ages = '{}' AND lifestyle = '{}'::jsonb AND room_size_sqm IS NULL"
+            " AND private_bathroom IS NULL AND balcony IS NULL AND bills_included IS NULL"
+            " AND poster IS NULL)",
             name="ck_listings_room_fields",
         ),
         # NULLs never collide: many listings have no live invite link (spec 0008d).
@@ -174,6 +190,13 @@ class Listing(Base):
     lifestyle: Mapped[dict[str, int]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'")
     )
+    # Flat facts (spec 0010f); NULL = not said, always NULL on an apartment.
+    room_size_sqm: Mapped[int | None] = mapped_column(SmallInteger)
+    private_bathroom: Mapped[bool | None] = mapped_column(Boolean)
+    balcony: Mapped[bool | None] = mapped_column(Boolean)
+    bills_included: Mapped[bool | None] = mapped_column(Boolean)
+    # `lives_here` puts the lister on the room's page as a person, to seekers only (decision 13).
+    poster: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
