@@ -14,6 +14,15 @@ type Props = {
   className?: string;
 };
 
+/** A Hebrew keyboard types ASCII quotes for geresh and gershayim: compare with the real marks. */
+const GERESH = String.fromCodePoint(0x5f3);
+const GERSHAYIM = String.fromCodePoint(0x5f4);
+const normalise = (text: string) =>
+  text
+    .replace(/['\u2019]/g, GERESH)
+    .replace(/["\u201D]/g, GERSHAYIM)
+    .trim();
+
 /**
  * The place box over the full map (spec 0009y): a search input with a native list of the cities
  * and neighbourhoods in `PLACES`. It jumps on Enter with a name from the list, or as soon as the
@@ -28,9 +37,9 @@ export function PlaceSearch({ onJump, onNotFound, className }: Props) {
     () => PLACES.map((place) => ({ place, name: t(`places.${place.id}`) })),
     [t],
   );
-  const find = (text: string) => named.find(({ name }) => name === text.trim());
+  const find = (text: string) => named.find(({ name }) => name === normalise(text));
   const isPrefix = (name: string) =>
-    named.some((other) => other.name !== name && other.name.startsWith(name));
+    named.some((other) => other.name !== name && normalise(other.name).startsWith(normalise(name)));
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter' || value.trim() === '') return;
