@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { API, postListing, putProfile, signUp } from './helpers';
-import { test } from './fixtures';
+import { newTileContext, test } from './fixtures';
 
 const MESSAGE = 'Hi, we are a quiet couple';
 const SEEKER_NAME = '\u05de\u05d9\u05db\u05dc';
@@ -27,7 +27,7 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const id = await postListing(page, street);
 
   // A seeker with another name, in a second context, applies through the API.
-  const seekerContext = await browser.newContext();
+  const seekerContext = await newTileContext(browser);
   const seekerPage = await seekerContext.newPage();
   await signUp(seekerPage, 'seeker', { name: SEEKER_NAME });
   await putProfile(seekerPage); // applying needs a housing profile (0006a)

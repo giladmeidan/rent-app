@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { likeRoom, postListing, putProfile, signUp } from './helpers';
-import { test } from './fixtures';
+import { newTileContext, test } from './fixtures';
 
 const withName = (text: string, name: string) => text.replace('{{name}}', name);
 
@@ -25,7 +25,7 @@ test('ac10_owner_likes_back_and_chats', async ({ page, browser }) => {
   });
 
   // A seeker opts in to people browse with a room section, and likes the room through the API.
-  const seekerContext = await browser.newContext();
+  const seekerContext = await newTileContext(browser);
   const seekerPage = await seekerContext.newPage();
   await signUp(seekerPage, 'seeker', { name: SEEKER_NAME });
   await putProfile(seekerPage, {
