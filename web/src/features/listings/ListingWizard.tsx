@@ -1,15 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useNavigate, type LinkProps } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 
 import type { UserOut } from '../../api/client';
 import { Button } from '../../components/Button';
 import { useConfirm } from '../../components/Dialog';
-import { BackLink, PageHeader } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { fetchAreas } from '../areas/api';
 import { ME_KEY } from '../auth/useMe';
-import { ApiError, type ListingOut, type MyListingOut } from './api';
+import { ApiError, type ListingOut, type ListingType, type MyListingOut } from './api';
 import { DetailsStep } from './DetailsStep';
 import { todayInIsrael } from './format';
 import { PreferencesStep } from './PreferencesStep';
@@ -95,24 +95,26 @@ function CheckIcon() {
   );
 }
 
-/** The link back to "my listings", kept for the importers outside the wizard (the inbox's
- * `ApplicantsPage`); a thin wrapper over the kit's `BackLink`. */
-export function BackToMine({ onClick }: { onClick?: LinkProps['onClick'] }) {
-  const { t } = useTranslation();
-  return <BackLink to="/me/listings" label={t('listings.edit.backToMine')} onClick={onClick} />;
-}
-
 type Props = {
   /** Edit mode: the stored listing. The form starts from it and a save sends only what changed. */
   listing?: ListingOut;
+  /** New listing only (`/listings/new?type=`, spec 0010a): the type is chosen, the type step is
+   * skipped. */
+  initialType?: ListingType;
 };
+
+/** Where a listing of `type` lives (spec 0010a): a room in the market's "שלי". */
+function mineFor(type: ListingType | null): string {
+  return type === 'room' ? '/market/mine' : '/me/listings';
+}
 
 /**
  * Type → details → preferences → preview → publish (or, with `listing`, → save). Everything
  * entered lives in this component's state only (no storage, no URL), so "back" keeps it and a
- * reload starts over.
+ * reload starts over. Edit mode and a preselected type start on details (`firstStep` 2) and never
+ * show the type step; the steps shown are numbered from there ("1 of 3").
  */
-export function ListingWizard({ listing }: Props) {
+export function ListingWizard({ listing, initialType }: Props) {
   const { t } = useTranslation();
   const id = useId();
   const navigate = useNavigate();
@@ -126,10 +128,18 @@ export function ListingWizard({ listing }: Props) {
   const [base] = useState(() => listing);
   const editing = base !== undefined;
 
-  const [step, setStep] = useState<Step>(editing ? 2 : 1);
+  const [firstStep] = useState<Step>(() => (editing || initialType !== undefined ? 2 : 1));
+  const [step, setStep] = useState<Step>(firstStep);
   const [form, setForm] = useState<ListingForm>(() =>
-    base === undefined ? emptyForm : formFromListing(base),
+    base === undefined
+      ? { ...emptyForm, listing_type: initialType ?? null }
+      : formFromListing(base),
   );
+  // What is shown: step `firstStep` is "1", out of the steps from there on.
+  const shown = step - firstStep + 1;
+  const total = 5 - firstStep;
+  // Where a save or a leave goes: the stored type in edit mode, else the chosen one.
+  const mine = mineFor(base?.listing_type ?? form.listing_type);
   const [errors, setErrors] = useState<FieldErrors>({});
   // A 422 that names fields. Kept apart from `errors`, which re-validation rebuilds on every blur:
   // a server error stays until its own field changes or the next save.
@@ -279,20 +289,20 @@ export function ListingWizard({ listing }: Props) {
       clearServerErrors();
       create.mutate(toListingIn(current), {
         ...settle,
-        onSuccess: () => navigate('/me/listings', { state: { published: true } }),
+        onSuccess: () => navigate(mine, { state: { published: true } }),
       });
       return;
     }
     const body = changedFields(base, toListingIn(current));
     if (Object.keys(body).length === 0) {
-      navigate('/me/listings');
+      navigate(mine);
       return;
     }
     publishing.current = true;
     clearServerErrors();
     edit.mutate(body, {
       ...settle,
-      onSuccess: () => navigate('/me/listings', { state: { saved: true } }),
+      onSuccess: () => navigate(mine, { state: { saved: true } }),
     });
   }
 
@@ -333,12 +343,13 @@ export function ListingWizard({ listing }: Props) {
   if (failure === 'unauthenticated') return <Navigate to="/login" replace />;
   if (failure === 'forbidden') return <Navigate to="/" replace />;
 
+  // The internal steps from `firstStep` on: the type step only when it is reachable.
   const steps = [
     t('listings.steps.type'),
     t('listings.steps.details'),
     t('listings.steps.preferences'),
     t('listings.steps.preview'),
-  ];
+  ].slice(firstStep - 1);
 
   const room = form.listing_type === 'room';
   let heading: string;
@@ -390,8 +401,11 @@ export function ListingWizard({ listing }: Props) {
               back={
                 editing
                   ? {
-                      to: '/me/listings',
-                      label: t('listings.edit.backToMine'),
+                      to: mine,
+                      label:
+                        mine === '/market/mine'
+                          ? t('market.mine.back')
+                          : t('listings.edit.backToMine'),
                       onClick: (event) => {
                         // A clean form leaves; a dirty one asks first (the link is followed only
                         // once the dialog resolves `true`).
@@ -403,7 +417,7 @@ export function ListingWizard({ listing }: Props) {
                           cancelLabel: t('listings.edit.stay'),
                           tone: 'danger',
                         }).then((leave) => {
-                          if (leave) void navigate('/me/listings');
+                          if (leave) void navigate(mine);
                         });
                       },
                     }
@@ -415,8 +429,8 @@ export function ListingWizard({ listing }: Props) {
               <ol className="flex items-start justify-between gap-1 lg:flex-col lg:items-stretch lg:gap-3">
                 {steps.map((name, i) => {
                   const n = i + 1;
-                  const done = n < step;
-                  const isCurrent = n === step;
+                  const done = n < shown;
+                  const isCurrent = n === shown;
                   return (
                     <li
                       key={name}
@@ -452,15 +466,15 @@ export function ListingWizard({ listing }: Props) {
               </ol>
               <div
                 role="progressbar"
-                aria-valuenow={step}
+                aria-valuenow={shown}
                 aria-valuemin={1}
-                aria-valuemax={4}
+                aria-valuemax={total}
                 aria-labelledby={`${id}-title`}
                 className="flex h-1 overflow-hidden rounded-full bg-border"
               >
                 <div
                   className="rounded-full bg-accent transition-all motion-reduce:transition-none"
-                  style={{ width: `${String((step / 4) * 100)}%` }}
+                  style={{ width: `${String((shown / total) * 100)}%` }}
                 />
               </div>
             </div>
@@ -477,7 +491,7 @@ export function ListingWizard({ listing }: Props) {
             <div className="flex flex-col gap-1">
               <h2 className="font-display text-h2">{heading}</h2>
               <p className="text-body-sm text-ink-muted">
-                <span>{t('listings.stepOf', { n: step, total: 4 })}</span>
+                <span>{t('listings.stepOf', { n: shown, total })}</span>
                 {hint !== null && (
                   <>
                     {' · '}
@@ -531,7 +545,7 @@ export function ListingWizard({ listing }: Props) {
             className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-surface px-4 pt-3 pb-[max(theme(spacing.6),env(safe-area-inset-bottom))] md:-mx-6 md:px-6 lg:bottom-4 lg:mx-0 lg:rounded-lg lg:border lg:px-4 lg:pb-3"
           >
             <div className="mx-auto flex w-full max-w-narrow gap-3 lg:max-w-none lg:justify-between">
-              {step > 1 && (
+              {step > firstStep && (
                 <Button
                   variant="secondary"
                   size="lg"

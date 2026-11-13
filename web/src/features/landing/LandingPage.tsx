@@ -99,6 +99,10 @@ export function LandingPage() {
                 {t('landing.cta.seeker')}
               </Button>
             </div>
+            {/* The one entry point to the market (spec 0010a, Q7), under the two CTAs. */}
+            <Button to="/market" variant="ghost" size="lg" className="w-full lg:w-auto">
+              {t('landing.cta.market')}
+            </Button>
           </div>
 
           {/* The visual group: the page's one turtle (decorative), above the example card. */}

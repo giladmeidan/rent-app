@@ -649,10 +649,12 @@ def test_ac5_apartment_applications_have_no_flatmates(
     _set_status(owner, apartment, old, "shortlisted")
     _message(db_engine, old, old_seeker, "about the apartment", 1)
 
-    switched = owner.patch(
-        f"/listings/{apartment}", json={"listing_type": "room", "flatmates_count": 2}
+    # A listing switched before spec 0010a (an edit can no longer switch the type).
+    _execute(
+        db_engine,
+        "UPDATE listings SET listing_type = 'room', flatmates_count = 2 WHERE id = :id",
+        id=apartment,
     )
-    assert switched.status_code == 200, switched.text
     _ok(_join(mate, _invite(owner, apartment)))
 
     assert old not in [uuid.UUID(i) for i in _ids(mate)]
@@ -670,21 +672,6 @@ def test_ac5_apartment_applications_have_no_flatmates(
     _set_status(owner, apartment, new, "shortlisted")
     assert _ids(mate) == [str(new)]
     assert _ok(_thread(mate, new))["members"] == _members("Noa", ["Fay"], "New", me="Fay")
-
-    back = owner.patch(f"/listings/{apartment}", json={"listing_type": "apartment"})
-    assert back.status_code == 200, back.text
-    assert (
-        _scalar(db_engine, "SELECT flatmate_invite_hash FROM listings WHERE id = :id", id=apartment)
-        is None
-    )
-    assert _my_listing(owner, apartment)["flatmate_invite_active"] is False
-    # Memberships stay, and reach the room application only.
-    assert _my_listing(owner, apartment)["flatmate_count"] == 1
-    assert _ids(mate) == [str(new)]
-    assert owner.post(f"/listings/{apartment}/flatmate-invite").status_code == 404
-    # Another edit of an apartment never brings a link back.
-    assert owner.patch(f"/listings/{apartment}", json={"price_ils": 7300}).status_code == 200
-    assert _my_listing(owner, apartment)["flatmate_invite_active"] is False
 
 
 def test_ac6_remove_and_rejoin(

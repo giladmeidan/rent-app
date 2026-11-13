@@ -336,9 +336,9 @@ describe('FlatmatesPage', () => {
       expect(
         await screen.findByRole('heading', { level: 1, name: he.flatmates.notFound }),
       ).toBeVisible();
-      expect(screen.getByRole('link', { name: he.flatmates.back })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: he.market.mine.back })).toHaveAttribute(
         'href',
-        '/me/listings',
+        '/market/mine',
       );
       expect(api.calls(`GET /listings/${id}/flatmates`)).toHaveLength(0);
       expect(screen.queryByRole('button', { name: he.flatmates.invite.create })).toBeNull();
@@ -393,9 +393,9 @@ describe('FlatmatesPage', () => {
       extra: { [CREATE]: [json({ token: 'T' }, 201)] },
     });
     const h1 = await heading();
-    expect(screen.getByRole('link', { name: he.flatmates.back })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: he.market.mine.back })).toHaveAttribute(
       'href',
-      '/me/listings',
+      '/market/mine',
     );
     expect(screen.getAllByRole('heading', { level: 1 })).toEqual([h1]);
     expect(screen.getByText(cardTitle(i18n.t, ROOM)).tagName).toBe('P');

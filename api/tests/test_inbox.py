@@ -924,6 +924,24 @@ def _edit_listing(owner: TestClient, listing_id: Any, body: dict[str, Any]) -> N
     assert response.status_code == 200, response.text
 
 
+def _switch_type(engine: Engine, listing_id: Any, to: str, lifestyle: str = "{}") -> None:
+    """Switch a listing's type by SQL, as a listing switched before spec 0010a would be (an edit can
+    no longer switch it). To a room: two flatmates and `lifestyle`; to an apartment: the room
+    fields reset to `ROOM_FIELD_DEFAULTS` and no invite link, as 0007e's switch wrote them."""
+    if to == "room":
+        sql = (
+            "UPDATE listings SET listing_type = 'room', flatmates_count = 2,"
+            " lifestyle = CAST(:lifestyle AS jsonb) WHERE id = :id"
+        )
+    else:
+        sql = (
+            "UPDATE listings SET listing_type = 'apartment', gender_preference = 'any',"
+            " flatmates_count = NULL, flatmate_ages = '{}', lifestyle = '{}'::jsonb,"
+            " flatmate_invite_hash = NULL WHERE id = :id"
+        )
+    _execute(engine, sql, id=listing_id, lifestyle=lifestyle)
+
+
 def _owner_match(owner: TestClient, listing_id: Any, application_id: str) -> Any:
     return _by_id(_ok(_applicants(owner, listing_id)))[application_id]["match"]
 
@@ -1137,11 +1155,7 @@ def test_ac4_apartment_applicant_lifestyle_never_scored_for_owner(
     assert _owner_match(owner, apartment, s1) == baseline
 
     # The probe: turn the apartment into a room and set one flat answer.
-    _edit_listing(
-        owner,
-        apartment,
-        {"listing_type": "room", "flatmates_count": 2, "lifestyle": {"night": 3}},
-    )
+    _switch_type(db_engine, apartment, "room", lifestyle='{"night": 3}')
     assert _owner_match(owner, apartment, s1) == baseline
     assert _patched_match(owner, apartment, s1, "shortlisted") == baseline
     # The seeker's own view is live: round(0.8 * 100 + 20 * 0).
@@ -1301,11 +1315,7 @@ def test_ac3_apartment_applicants_stay_hidden_after_switch_to_room(
     assert item["room"] is None
     assert item["match"] == baseline
 
-    _edit_listing(
-        owner,
-        apartment,
-        {"listing_type": "room", "flatmates_count": 2, "lifestyle": {"night": 1}},
-    )
+    _switch_type(db_engine, apartment, "room", lifestyle='{"night": 1}')
     # The seeker's own view is live: round(0.8 * 100 + 20 * 0).
     live = _match(80, TOP3, "lifestyle")
     assert _ok(seeker.get(f"/listings/{apartment}"))["match"] == live
@@ -1344,7 +1354,7 @@ def test_ac4_room_applicants_keep_room_after_switch_to_apartment(
     w_room = _by_id(_ok(_applicants(owner, room)))[w]["room"]
     assert w_room == {"gender": "woman", "age": 27, "lifestyle": {"cleanliness": 3, "night": 1}}
 
-    _edit_listing(owner, room, {"listing_type": "apartment"})
+    _switch_type(db_engine, room, "apartment")
 
     assert _application_type(db_engine, w) == "room"
     item = _by_id(_ok(_applicants(owner, room)))[w]

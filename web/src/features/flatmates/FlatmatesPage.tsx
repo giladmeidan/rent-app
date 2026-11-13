@@ -318,7 +318,8 @@ export function FlatmatesPage() {
   }, [removals]);
   const notFound = listings.data !== undefined && (listing === undefined || !isRoom);
   usePageTitle(t(notFound ? 'flatmates.notFound' : 'flatmates.title'));
-  const back = { to: '/me/listings', label: t('flatmates.back') };
+  // Flatmates are a room's: back to the market's "שלי" (spec 0010a).
+  const back = { to: '/market/mine', label: t('market.mine.back') };
 
   // Loading and a failed list keep the page's <h1>: its text needs no data.
   if (listings.data === undefined) {

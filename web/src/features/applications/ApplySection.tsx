@@ -301,7 +301,10 @@ function Applied({ application }: { application: MyApplicationOut }) {
       {application.status === 'declined' && (
         <p className="text-start text-body-sm text-ink-muted">{t('applications.declinedHint')}</p>
       )}
-      <Button variant="ghost" to="/me/applications">
+      <Button
+        variant="ghost"
+        to={application.listing.listing_type === 'room' ? '/market/mine' : '/me/applications'}
+      >
         {t('applications.viewMine')}
       </Button>
     </div>

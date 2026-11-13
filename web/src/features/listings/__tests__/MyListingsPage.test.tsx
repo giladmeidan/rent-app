@@ -23,6 +23,8 @@ afterEach(() => {
 });
 
 const render = () => renderAt('/me/listings', <MyListingsPage />);
+/** The rooms, as the market's "שלי" embeds them (spec 0010a). */
+const renderRooms = () => renderAt('/market/mine', <MyListingsPage type="room" panel />);
 const badge = (card: HTMLElement) => within(card).getByTestId('status-badge');
 const newLink = () => screen.getByRole('link', { name: he.listings.mine.new });
 
@@ -36,7 +38,7 @@ describe('MyListingsPage', () => {
     const busy = screen.getByText(he.common.loading).closest<HTMLElement>('[aria-busy="true"]');
     expect(busy).toHaveAttribute('aria-busy', 'true');
     expect(within(busy as HTMLElement).getAllByTestId('skeleton')).toHaveLength(3);
-    expect(newLink()).toHaveAttribute('href', '/listings/new');
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -53,7 +55,7 @@ describe('MyListingsPage', () => {
     mockApi({ 'GET /me/listings': [json([])] });
     view = render();
     expect(await screen.findByText(he.listings.mine.empty)).toBeVisible();
-    expect(newLink()).toHaveAttribute('href', '/listings/new');
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
     expect(screen.getByText(i18n.t('listings.mine.count', { live: 0, cap: 3 }))).toBeVisible();
     view.unmount();
     vi.unstubAllGlobals();
@@ -86,7 +88,7 @@ describe('MyListingsPage', () => {
         .map((b) => b.textContent),
     ).toEqual([he.listings.actions.resume]);
     expect(within(expiredCard).queryAllByRole('button')).toHaveLength(0);
-    expect(newLink()).toHaveAttribute('href', '/listings/new');
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
     expect(api.calls('GET /me/listings')[0]?.request.credentials).toBe('include');
   });
 
@@ -354,13 +356,15 @@ describe('MyListingsPage', () => {
     const expired = listing({ listing_type: 'room', expires_at: '2020-01-01T00:00:00Z' });
     const apartment = listing({ liked_me_count: 4 });
     mockApi({ 'GET /me/listings': [json([two, one, none, paused, expired, apartment])] });
-    render();
+    renderRooms();
     const cards = await screen.findAllByRole('article');
+    // The rooms only (spec 0010a): the apartment lives on /me/listings.
+    expect(cards).toHaveLength(5);
     const peopleLink = (card: HTMLElement) =>
       within(card)
         .queryAllByRole('link')
         .find((a) => a.getAttribute('href')?.endsWith('/people'));
-    const [cTwo, cOne, cNone, cPaused, cExpired, cApartment] = cards as HTMLElement[];
+    const [cTwo, cOne, cNone, cPaused, cExpired] = cards as HTMLElement[];
 
     const a = peopleLink(cTwo as HTMLElement);
     expect(a).toHaveAttribute('href', `/me/listings/${two.id}/people`);
@@ -380,7 +384,7 @@ describe('MyListingsPage', () => {
     ).toBeNull();
     expect(c).toHaveAccessibleName(he.listings.mine.people);
 
-    for (const card of [cPaused, cExpired, cApartment]) {
+    for (const card of [cPaused, cExpired]) {
       expect(peopleLink(card as HTMLElement)).toBeUndefined();
     }
   });
@@ -389,7 +393,7 @@ describe('MyListingsPage', () => {
     const one = listing({ listing_type: 'room', new_applicant_count: 1, liked_me_count: 1 });
     const two = listing({ listing_type: 'room', new_applicant_count: 2, liked_me_count: 3 });
     mockApi({ 'GET /me/listings': [json([one, two])] });
-    render();
+    renderRooms();
     const [cOne, cTwo] = (await screen.findAllByRole('article')) as HTMLElement[];
     expect(
       within(cOne as HTMLElement).getByText('\u05d7\u05d3\u05e9\u05d4 \u05d0\u05d7\u05ea'),
@@ -413,18 +417,15 @@ describe('MyListingsPage', () => {
     const expired = listing({ listing_type: 'room', expires_at: '2020-01-01T00:00:00Z' });
     const apartment = listing({ flatmate_count: 3 });
     mockApi({ 'GET /me/listings': [json([live, paused, expired, apartment])] });
-    render();
+    let view = renderRooms();
     const cards = (await screen.findAllByRole('article')) as HTMLElement[];
+    // The rooms only (spec 0010a).
+    expect(cards).toHaveLength(3);
     const hrefs = (card: HTMLElement) =>
       within(card)
         .queryAllByRole('link')
         .map((a) => a.getAttribute('href') ?? '');
-    const [cLive, cPaused, cExpired, cApartment] = cards as [
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-    ];
+    const [cLive, cPaused, cExpired] = cards as [HTMLElement, HTMLElement, HTMLElement];
 
     // Every room card links to its flatmates page with the count, as the last link: after
     // "people" on a live room, after the applicants link on a paused or expired one.
@@ -444,8 +445,14 @@ describe('MyListingsPage', () => {
     }
     expect(within(cLive).getByRole('link', { name: 'שותפים בדירה (2)' })).toBeVisible();
 
-    // Apartments have none.
-    expect(hrefs(cApartment).some((h) => h.endsWith('/flatmates'))).toBe(false);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Apartments (on /me/listings) have none.
+    mockApi({ 'GET /me/listings': [json([live, paused, expired, apartment])] });
+    view = render();
+    const [cApartment] = (await screen.findAllByRole('article')) as HTMLElement[];
+    expect(hrefs(cApartment as HTMLElement).some((h) => h.endsWith('/flatmates'))).toBe(false);
   });
 
   it('ac1_owner_block', async () => {
@@ -472,72 +479,84 @@ describe('MyListingsPage', () => {
       status: 'paused',
       expires_at: '2020-01-01T10:00:00Z',
     });
-    mockApi({ 'GET /me/listings': [json([live, paused, expired, room, pausedPast])] });
-    render();
-    const cards = (await screen.findAllByRole('article')) as HTMLElement[];
+    const all = [live, paused, expired, room, pausedPast];
     const day = (iso: string) => formatDate(todayInIsrael(new Date(iso)));
-    const texts = (card: HTMLElement) =>
-      [...within(card).queryAllByRole('button'), ...within(card).queryAllByRole('link')].map(
-        (el) => el.textContent ?? '',
-      );
     const order = (card: HTMLElement) =>
       within(card)
         .queryAllByRole('link')
         .concat(within(card).queryAllByRole('button'))
         .sort((x, y) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
         .map((el) => el.textContent ?? '');
-    expect(texts(cards[0] as HTMLElement).length).toBeGreaterThan(0);
-
     const expiresOn = (l: { expires_at: string }) =>
       i18n.t('listings.mine.expiresOn', { date: day(l.expires_at) });
     const expiredOn = (l: { expires_at: string }) =>
       i18n.t('listings.mine.expiredOn', { date: day(l.expires_at) });
-    const [cLive, cPaused, cExpired, cRoom, cPausedPast] = cards as [
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-    ];
-    expect(within(cLive).getByText(expiresOn(live))).toBeVisible();
-    expect(within(cPaused).getByText(expiresOn(paused))).toBeVisible();
-    expect(within(cExpired).getByText(expiredOn(expired))).toBeVisible();
-    expect(within(cRoom).getByText(expiresOn(room))).toBeVisible();
-    expect(within(cPausedPast).getByText(expiredOn(pausedPast))).toBeVisible();
-    expect(badge(cLive)).toHaveTextContent(he.listings.status.live);
-    expect(badge(cPaused)).toHaveTextContent(he.listings.status.paused);
-    expect(badge(cExpired)).toHaveTextContent(he.listings.status.expired);
-    expect(badge(cPausedPast)).toHaveTextContent(he.listings.status.paused);
-
     const a = (n: number, nw: number) => {
       const text = i18n.t('applicants.link', { count: n });
       return nw > 0 ? `${text} ${i18n.t('applicants.newBadge', { count: nw })}` : text;
     };
-    expect(order(cLive)).toEqual([he.listings.actions.pause, he.listings.actions.edit, a(12, 5)]);
-    expect(order(cPaused)).toEqual([
+
+    // The apartments, on /me/listings (spec 0010a).
+    mockApi({ 'GET /me/listings': [json(all)] });
+    let view = render();
+    const [cLive, cPaused, cExpired, ...noRooms] = (await screen.findAllByRole(
+      'article',
+    )) as HTMLElement[];
+    expect(noRooms).toHaveLength(0);
+    expect(within(cLive as HTMLElement).getByText(expiresOn(live))).toBeVisible();
+    expect(within(cPaused as HTMLElement).getByText(expiresOn(paused))).toBeVisible();
+    expect(within(cExpired as HTMLElement).getByText(expiredOn(expired))).toBeVisible();
+    expect(badge(cLive as HTMLElement)).toHaveTextContent(he.listings.status.live);
+    expect(badge(cPaused as HTMLElement)).toHaveTextContent(he.listings.status.paused);
+    expect(badge(cExpired as HTMLElement)).toHaveTextContent(he.listings.status.expired);
+    expect(order(cLive as HTMLElement)).toEqual([
+      he.listings.actions.pause,
+      he.listings.actions.edit,
+      a(12, 5),
+    ]);
+    expect(order(cPaused as HTMLElement)).toEqual([
       he.listings.actions.resume,
       he.listings.actions.edit,
       a(paused.applicant_count, paused.new_applicant_count),
     ]);
-    expect(order(cExpired)).toEqual([a(expired.applicant_count, expired.new_applicant_count)]);
-    expect(order(cRoom)).toEqual([
+    expect(order(cExpired as HTMLElement)).toEqual([
+      a(expired.applicant_count, expired.new_applicant_count),
+    ]);
+    // Each badge is inside its link.
+    const applicantsLink = within(cLive as HTMLElement).getByRole('link', { name: a(12, 5) });
+    expect(
+      within(applicantsLink).getByText(i18n.t('applicants.newBadge', { count: 5 })),
+    ).toBeVisible();
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The rooms, in the market's "שלי".
+    mockApi({ 'GET /me/listings': [json(all)] });
+    view = renderRooms();
+    const [cRoom, cPausedPast, ...noFlats] = (await screen.findAllByRole(
+      'article',
+    )) as HTMLElement[];
+    expect(noFlats).toHaveLength(0);
+    expect(within(cRoom as HTMLElement).getByText(expiresOn(room))).toBeVisible();
+    expect(within(cPausedPast as HTMLElement).getByText(expiredOn(pausedPast))).toBeVisible();
+    expect(badge(cPausedPast as HTMLElement)).toHaveTextContent(he.listings.status.paused);
+    expect(order(cRoom as HTMLElement)).toEqual([
       he.listings.actions.pause,
       he.listings.actions.edit,
       a(room.applicant_count, room.new_applicant_count),
       `${he.listings.mine.people} ${i18n.t('listings.mine.peopleLiked', { count: 2 })}`,
       i18n.t('listings.mine.flatmates', { count: 1 }),
     ]);
-    expect(order(cPausedPast)).toEqual([
+    expect(order(cPausedPast as HTMLElement)).toEqual([
       he.listings.actions.resume,
       a(pausedPast.applicant_count, pausedPast.new_applicant_count),
       i18n.t('listings.mine.flatmates', { count: pausedPast.flatmate_count }),
     ]);
-    // Each badge is inside its link.
-    const applicantsLink = within(cLive).getByRole('link', { name: a(12, 5) });
-    expect(
-      within(applicantsLink).getByText(i18n.t('applicants.newBadge', { count: 5 })),
-    ).toBeVisible();
-    expect(newLink()).toHaveAttribute('href', '/listings/new');
+    expect(screen.getByRole('link', { name: he.market.mine.newRoom })).toHaveAttribute(
+      'href',
+      '/listings/new?type=room',
+    );
   });
 
   it('ac2_cached_list_survives_failed_refetch', async () => {
@@ -596,7 +615,73 @@ describe('MyListingsPage', () => {
     expect(document.querySelectorAll('img[src*="sleep"]')).toHaveLength(1);
     expect(screen.getByRole('link', { name: he.listings.mine.emptyAction })).toHaveAttribute(
       'href',
-      '/listings/new',
+      '/listings/new?type=apartment',
     );
+  });
+
+  it('ac11_apartments_only', async () => {
+    // Spec 0010a: one live apartment and one live room. Each side shows its own; the count line
+    // counts both (the cap of live listings is shared).
+    const flat = listing({ street: 'דירה' });
+    const room = listing({ street: 'חדר', listing_type: 'room', flatmates_count: 2 });
+    const count = i18n.t('listings.mine.count', { live: 2, cap: 3 });
+    mockApi({ 'GET /me/listings': [json([flat, room])] });
+    let view = render();
+    let hrefs: string[];
+    let cards = await screen.findAllByRole('article');
+    expect(cards).toHaveLength(1);
+    hrefs = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.includes(flat.id))).toBe(true);
+    expect(hrefs.some((h) => h.includes(room.id))).toBe(false);
+    expect(screen.getByText(count)).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: he.listings.mine.title })).toBeVisible();
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The rooms panel: an <h2>, the room only, "חדר חדש" → the wizard on a room.
+    mockApi({ 'GET /me/listings': [json([flat, room])] });
+    view = renderRooms();
+    cards = await screen.findAllByRole('article');
+    expect(cards).toHaveLength(1);
+    hrefs = within(cards[0] as HTMLElement)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.includes(room.id))).toBe(true);
+    expect(hrefs.some((h) => h.includes(flat.id))).toBe(false);
+    expect(screen.getByText(count)).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(
+      screen.getByRole('heading', { level: 2, name: he.market.mine.tabs.listings }),
+    ).toBeVisible();
+    expect(screen.getByRole('link', { name: he.market.mine.newRoom })).toHaveAttribute(
+      'href',
+      '/listings/new?type=room',
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Each side's empty state, with its own copy and action, while the other side has listings.
+    mockApi({ 'GET /me/listings': [json([room])] });
+    view = render();
+    expect(await screen.findByText(he.listings.mine.empty)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.listings.mine.emptyAction })).toHaveAttribute(
+      'href',
+      '/listings/new?type=apartment',
+    );
+    expect(screen.getByText(i18n.t('listings.mine.count', { live: 1, cap: 3 }))).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    mockApi({ 'GET /me/listings': [json([flat])] });
+    renderRooms();
+    expect(await screen.findByText(he.market.mine.empty)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.market.mine.emptyAction })).toHaveAttribute(
+      'href',
+      '/listings/new?type=room',
+    );
+    expect(screen.queryByText(he.listings.mine.empty)).toBeNull();
   });
 });

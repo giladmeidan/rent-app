@@ -15,10 +15,11 @@ const loggedOut = () => json({ detail: 'unauthenticated' }, 401);
 
 describe('routes', () => {
   it('ac1_public_routes_and_static_new_wins', async () => {
-    // /search renders for a visitor, a seeker and an owner, with no redirect. The header's search
-    // link is "חיפוש דירות" for a visitor and the "חיפוש" tab when signed in (spec 0009a).
+    // /search renders for a visitor, a seeker and an owner, with no redirect. The header leads to
+    // it through the side switch's "דירות" for a visitor (spec 0010a) and the "חיפוש" tab when
+    // signed in (spec 0009a).
     for (const [me, name] of [
-      [loggedOut, he.header.search],
+      [loggedOut, he.side.apartments],
       [() => json(seeker), he.nav.search],
       [() => json(owner), he.nav.search],
     ] as const) {
@@ -37,14 +38,22 @@ describe('routes', () => {
       vi.unstubAllGlobals();
     }
 
-    // The header link is there on other pages too (not `/`, whose seeker CTA is the same link),
-    // not marked current.
+    // The switch is there on other pages too, its "דירות" not the current page; there is no
+    // "חיפוש דירות" link any more.
     mockApi({ 'GET /me': [loggedOut()], 'GET /areas': [json([])] });
     let view = renderRoutes('/login', <AppRoutes />);
-    const link = await within(screen.getByRole('banner')).findByRole('link', {
-      name: he.header.search,
+    const sides = within(screen.getByRole('banner')).getByRole('navigation', {
+      name: he.side.label,
     });
-    expect(link).not.toHaveAttribute('aria-current');
+    const link = within(sides).getByRole('link', { name: he.side.apartments });
+    expect(link).toHaveAttribute('href', '/search');
+    expect(link).not.toHaveAttribute('aria-current', 'page');
+    expect(
+      await within(screen.getByRole('banner')).findByRole('link', { name: he.header.login }),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole('banner')).queryByRole('link', { name: he.header.search }),
+    ).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
 

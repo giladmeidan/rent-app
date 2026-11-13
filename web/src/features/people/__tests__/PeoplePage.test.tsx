@@ -377,9 +377,9 @@ describe('PeoplePage', () => {
     ] as const) {
       const { view } = renderPage([json({ detail }, status)]);
       expect(await screen.findByRole('heading', { level: 1, name: text })).toBeVisible();
-      expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: he.market.mine.back })).toHaveAttribute(
         'href',
-        '/me/listings',
+        '/market/mine',
       );
       view.unmount();
       vi.unstubAllGlobals();
@@ -387,9 +387,9 @@ describe('PeoplePage', () => {
 
     // "My listings" pending and failed: the <h1> and the back link stay.
     const mineBack = () =>
-      expect(screen.getByRole('link', { name: he.listings.edit.backToMine })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: he.market.mine.back })).toHaveAttribute(
         'href',
-        '/me/listings',
+        '/market/mine',
       );
     const mineWait = deferred();
     let run = renderPage([page([])], { mine: [mineWait.promise] });
