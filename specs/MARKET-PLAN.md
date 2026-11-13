@@ -328,3 +328,94 @@ orchestrator's reading and is confirmed when its spec is written: who counts as 
 | Q21 | Who answers the flat's questionnaire? | The lister, as today; each shown flatmate's own answers appear on their card. |
 | Q22 | Room size and furnished | Size and furnished already exist on every listing. Keep them as the flat's; add one optional "room size". New facts: private bathroom, balcony, bills, who is posting, all optional. |
 | Q23 | Is the lister counted in "flatmates living there"? | No: the count is the other people in the flat; the lister appears as a person only if they say they live there (who is posting = current flatmate). |
+
+## 7. Spec split and shared contract (orchestrator, 2026-11-13)
+
+Every `0010*` spec author reads this section first. Names here are binding across specs; a spec that needs
+to change one says so in its Risks and the orchestrator decides.
+
+Gilad's answer to decision 13 (2026-11-13): a **seeker**, for the room-privacy rule (flatmate ages, answers,
+and shown flatmates), is a signed-in account with `users.role = 'seeker'` **or** any account whose profile
+has the "what I am looking for" part filled.
+
+### Specs, order, migrations
+
+| Spec | What | Migration | depends_on | Reviewers |
+| --- | --- | --- | --- | --- |
+| `0010a-market-move` | The move: two-way switch, market area, apartments-only search, no type switch on edit | none | — | code, qa, ux |
+| `0010d-photos-api` | Photo storage (file in dev/CI, R2 in prod), upload/delete/order, person photo, photo URLs on every read surface | `0013` | — | code, qa, security |
+| `0010b-role-free-market` | Room actions for any account, `is_mine`, signup from the market, seeker rule (decision 13) | none | 0010a | code, qa, security, ux |
+| `0010g-direct-chat` | Conversations get their own id; a chat with no application (plumbing + no-listing chat UI) | `0014` | 0010d (migration chain only) | code, qa, security, perf |
+| `0010c-profile-split` | Profile = personal part + "looking for" part; one visibility switch re-worded | `0015` | 0010b, 0010g (chain) | code, qa, security, ux |
+| `0010e-photos-web` | Wizard photo step, listing gallery, card covers, shared `Avatar`, person photo on the profile | none | 0010a, 0010c, 0010d | code, qa, ux |
+| `0010f-flat-profile` | Optional room facts, who is posting, flatmates shown as people by their choice | `0016` | 0010c, 0010d | code, qa, security, ux |
+| `0010h-people-browse` | People browse people, person likes, mutual like opens a direct chat, remove match, browse rate limits | `0017` | 0010c, 0010g, 0010f (chain) | code, qa, security, perf, ux |
+
+Waves (at most 3 builds at a time): **a ∥ d** → **b ∥ g** → **c** → **e ∥ f** → **h**.
+Why 8, not 7: role-free + profile split together exceed one coder run (≈15 gate swaps and their tests, plus a
+migration with every NULL-profile consumer and the profile page rework). Every other pair was merged or kept
+split for the size or security reasons in section 2. Migration revisions are fixed by the chain above:
+`down_revision` is the previous row's number; a spec never starts its migration before its chain parent is on
+`main` (or its PR is open and the spec branches from it).
+
+### Shared names
+
+- **Sides.** `web/src/app/side.ts` (0010a): `type Side = 'apartments' | 'market'`; `sideOf(pathname): Side | null`
+  (market: `/market`, `/market/*`, `/me/likes`, `/me/flats`, `/flatmates/join`, `/me/listings/:id/people`,
+  `/me/listings/:id/flatmates`; apartments: `/search`, `/me/listings` exact, `/me/applications`; else null =
+  shared); `useSide()` = `sideOf` or the last side stored in `localStorage` key `homie.side` (try/catch,
+  default `apartments`); `setSide(side)` lets a shared page (listing page by type, chat) record it.
+- **Switch.** A two-option link control in the header, `aria-current` on the active side: דירות → the
+  apartments home (owner `/me/listings`, else `/search`), שוק השותפים → `/market`. Shown signed in and out.
+- **Market routes** (0010a): `/market` = the rooms search (`SearchPage` with `type="room"`, list + map, no type
+  filter; it gets an inner חדרים / אנשים switch only in 0010h); `/market/mine` = "שלי": `MyListingsPage`
+  (rooms) and `MyApplicationsPage` (room applications) as two panels of the pill `Tabs` (`?tab=applications`
+  deep link); one panel only while roles still apply (0010a). `/search?listing_type=room…` redirects to
+  `/market?…` keeping other params. `/me/listings` shows apartments only, `/me/applications` apartment
+  applications only (client-side filter on `listing.listing_type`; no API change).
+- **Bottom bar per side.** Apartments: owner המודעות שלי · צ'אט · חיפוש; seeker חיפוש · מועמדויות · צ'אט ·
+  פרופיל. Market (0010a, roles): seeker שוק · לייקים · שלי · צ'אט · פרופיל; owner שלי · צ'אט · שוק. Market
+  (0010b on): every account שוק · לייקים · שלי · צ'אט · פרופיל. Chat is in both.
+- **Wizard entry.** `/listings/new?type=room|apartment` preselects the type and skips the type step (3 steps);
+  no param keeps today's type step; edit never reaches the type step. After publish: `/me/listings` or
+  `/market/mine` by type. (0010b: a non-owner never sees the apartment option.)
+- **API:** `GET /listings` (and the map) with `listing_type` omitted means `apartment` (0010a). `ListingPatch`
+  loses `listing_type`; the type-switch code in `services/listings.py` (`update_listing`, `_merged`) goes
+  (0010a). `is_mine: bool` on `ListingPublic` / `ListingDetail` (0010b). `services/profiles.has_profile` keeps
+  its name and from 0010c means "the looking part is filled" (`budget_max_ils IS NOT NULL`).
+- **Photos (0010d).** Table `listing_photos` (id, listing_id FK cascade, `key` random text unique, position
+  0–9 unique per listing, width, height, created_at); person photo = `users.photo_key text NULL`. Keys are
+  `secrets.token_urlsafe(32)`, never an id; two WebP sizes `{key}-s.webp` (480 px long edge) and
+  `{key}-l.webp` (1600 px). Response type `PhotoOut {id, small_url, large_url}`; listings carry
+  `photos: list[PhotoOut]` (search/map cards: `cover: PhotoOut | None` only); people/applicants/chat members
+  carry `photo_url: str | None` (small) only where the card or chat-member rule already lets the caller see
+  that person. Settings `photo_backend: Literal["file","r2"]`, `photo_dir`, `photo_public_base_url`, `r2_*`;
+  the file backend is served by the API at `/media` in dev/CI. Limits (Q11): 10 per listing, 8 MB, JPEG/PNG/WebP.
+- **Direct chat (0010g).** `conversations.id` (existing rows: `id = application_id`), `application_id` NULL +
+  unique, `closed_at timestamptz NULL` for direct chats; the two people sit in `owner_id` / `seeker_id`
+  (ordered low/high uuid), unique per pair while `application_id IS NULL`. `ConversationOut.listing` and
+  `ThreadOut.listing` become nullable; `can_send` for a direct chat = `closed_at IS NULL`. Service API for
+  0010h: `open_direct(db, a, b) -> conversation_id` (reopens a closed one) and `close_direct(db, a, b)`.
+- **Profile (0010c).** Personal part: `gender` (required to fill it), `birth_year`, `about_me`, `lifestyle`,
+  photo (0010e UI). Looking part: the 7 housing fields (now nullable, all-or-none) + `move_in_flexible`,
+  `parking_needed`, `flatmate_gender`. `people_visible` needs both parts; copy "להציג את הכרטיס שלי בשוק
+  השותפים". One `PUT /me/profile` with nullable fields (no nested shape).
+- **Flat profile (0010f).** Nullable room-only listing columns `room_size_sqm`, `private_bathroom`, `balcony`,
+  `bills_included`, `poster` (`lives_here` | `leaving` | `landlord`); `listing_flatmates.shown bool NOT NULL
+  DEFAULT false` chosen at join and editable from `/me/flats`; shown flatmates (and the lister when
+  `poster = 'lives_here'`) appear as people on the room page **to seekers only** (decision 13 rule).
+- **People (0010h).** `users.card_id uuid` random, unique, the only person id in market cards and likes;
+  `person_pairs` (user_low, user_high, low_liked_at, high_liked_at, created_at; one row per pair, written only
+  on a like). Entry ticket: own visible card or a live room, else 403 `card_required`. Gender rule both ways;
+  a viewer with no gender sees only people whose `flatmate_gender = 'any'`. No score; the card compares the
+  questionnaire with the viewer's answers. Browse limit `rl:browse:user:{id}` also on the room-side
+  `GET /listings/{id}/people`.
+
+### Rules for every author
+
+- House style: copy the shape and density of `specs/0008d-flatmates-api.md` and `specs/0009k-*`; fill every
+  `_template.md` section; real paths, i18n keys and test names; spot-check every `path:line` you cite.
+- Full-stack per spec; e2e runs **only in CI** (no local `make e2e`); list the e2e tests the spec breaks and how.
+- Copy: brand voice (no slash forms, never one gender; `specs/0009-brand-amendment.md`).
+- Run the `spec-verifier` once (Opus, high), apply its findings, set `status: verified` yourself, and say
+  "round 1: N findings applied" in Risks. Product questions go to the orchestrator, not into the spec.
