@@ -1,7 +1,7 @@
 ---
 id: 0009y
 title: On the search map a person jumps to their own area or to a named city or neighbourhood, an empty area offers to show the whole region, and the listing page shows an honest ~300 m area with a link to that spot on the search map
-status: in-progress
+status: done
 depends_on: [0009w]   # MapCanvas `camera` and `panel`, mapPosition.ts (c / z / pin), the first-open fit; independent of 0009x (may build in parallel with it)
 reviewers: [code, qa, ux, security]   # security (Sonnet is enough): the device's position is personal data; check it is snapped before the URL or a request and never stored. ux: map buttons, messages, place box, listing page circle; qa: geolocation outcomes, place data checks, the link. No perf: no new request
 estimate: 1 coder run   # coder Opus/medium (verifier): geolocation privacy, 0009t's focus and live-region rules and 0009w's camera interplay
