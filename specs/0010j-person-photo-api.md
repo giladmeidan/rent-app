@@ -146,7 +146,7 @@ separate round (one verifier round).
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
 
-Spec 0010j — person photo API   READY TO MERGE (stacked on 0010d's #69; merge after it)
+Spec 0010j — person photo API   READY TO MERGE (0010d merged as #69)
 Shipped: any signed-in account sets, replaces or removes one photo of themselves (`PUT`/`DELETE /me/photo`); its
 small address shows only where the caller already sees that person (own account, applicants inbox and status
 PATCH, people page, chat list/thread/members, flatmates list). Demo (API only; web is 0010k): sign in → `PUT /me/photo`
