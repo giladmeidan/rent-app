@@ -120,7 +120,7 @@ function Thread({
 }) {
   const { t } = useTranslation();
   const back = useBack();
-  const { listing, messages } = thread;
+  const { messages } = thread;
   const lastRef = useRef<HTMLLIElement>(null);
   const scrolledFirst = useRef(false);
   // The caller's own sent message, scrolled to once it is the last bubble.
@@ -189,18 +189,28 @@ function Thread({
         }
       />
       {group && <MemberLine members={thread.members} />}
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-muted">
-        <span>
-          {cardTitle(t, listing)} · {formatIls(listing.price_ils)} {t('listings.units.ils')}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          to={owner ? `/me/listings/${listing.id}/applicants` : `/listings/${listing.id}`}
-        >
-          {owner ? t('chat.thread.toApplicants') : t('chat.thread.toListing')}
-        </Button>
-      </p>
+      {thread.listing ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-muted">
+          <span>
+            {cardTitle(t, thread.listing)} · {formatIls(thread.listing.price_ils)}{' '}
+            {t('listings.units.ils')}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            to={
+              owner
+                ? `/me/listings/${thread.listing.id}/applicants`
+                : `/listings/${thread.listing.id}`
+            }
+          >
+            {owner ? t('chat.thread.toApplicants') : t('chat.thread.toListing')}
+          </Button>
+        </p>
+      ) : (
+        // A direct chat (spec 0010g): no listing, one caption line and no button.
+        <p className="text-caption text-ink-muted">{t('chat.thread.direct')}</p>
+      )}
       <p
         role="note"
         className="flex items-start gap-2 rounded-lg border border-border bg-surface-subtle px-4 py-3 text-body leading-relaxed text-ink"
@@ -292,7 +302,7 @@ function Thread({
               tabIndex={-1}
               className="text-body text-ink-muted focus:outline-none"
             >
-              {t('chat.thread.closed')}
+              {thread.listing ? t('chat.thread.closed') : t('chat.thread.closedDirect')}
             </p>
           </Card>
           {unsent !== '' && (

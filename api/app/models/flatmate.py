@@ -1,9 +1,9 @@
 """`listing_flatmates` and `conversation_reads` tables (spec 0008d): who joined a room listing's
 flat through its invite link, and each flatmate's read marker per conversation.
 
-Every FK, the unique constraint and the index match migration 0012 exactly (autogenerate must see no
-diff). `services/flatmates.py` writes memberships; `services/chat.py` reads both and writes
-`conversation_reads`.
+Every FK, the unique constraint and the index match migrations 0012 and 0014 (which moves and
+names the `conversation_reads` FK) exactly (autogenerate must see no diff). `services/flatmates.py`
+writes memberships; `services/chat.py` reads both and writes `conversation_reads`.
 
 A membership reaches only conversations of **room** applications (`listing_type_at_apply =
 'room'`), and only the messages sent from its `joined_at` on. `conversation_reads` holds flatmates'
@@ -48,7 +48,9 @@ class ConversationRead(Base):
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("conversations.application_id", ondelete="CASCADE"),
+        ForeignKey(
+            "conversations.id", ondelete="CASCADE", name="fk_conversation_reads_conversation_id"
+        ),
         primary_key=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(

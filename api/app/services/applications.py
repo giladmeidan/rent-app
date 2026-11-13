@@ -447,6 +447,7 @@ def set_applicant_status(
             db.execute(
                 insert(Conversation)
                 .values(
+                    id=application.id,  # an application chat's id is its application's (0010g)
                     application_id=application.id,
                     owner_id=owner.id,
                     seeker_id=application.seeker_id,

@@ -5,8 +5,10 @@ conversation's members (the owner, the seeker and, on a room application, the ro
 spec 0008d) are known only by their `display_name`, and only to the members: `other_name` is the
 seeker's name for the owner and for a flatmate and the owner's for the seeker; `members` lists
 every member with their role and `is_me`; who sent a message is `mine` and `sender_name`. The
-caller's own role is `my_role`. A conversation's `id` is its application's id (PRODUCT.md "Chat",
-Q4). Bodies are plain text: stored and returned as validated, never processed as HTML."""
+caller's own role is `my_role`. A conversation has its own `id`: an application chat's equals its
+application's id (PRODUCT.md "Chat", Q4), a direct chat's (two people, no application, spec 0010g)
+is random; a direct chat has no `listing` and both its people have the role `person`. Bodies are
+plain text: stored and returned as validated, never processed as HTML."""
 
 import datetime as dt
 import uuid
@@ -20,7 +22,7 @@ from app.schemas.listing import _lf_newlines
 
 BODY_MAX_LENGTH = 2000  # ck_messages_body_length (migration 0006)
 
-MemberRole = Literal["owner", "seeker", "flatmate"]
+MemberRole = Literal["owner", "seeker", "flatmate", "person"]
 
 
 def _visible_body(value: str) -> str:
@@ -76,12 +78,13 @@ class LastMessageOut(BaseModel):
 class ConversationOut(BaseModel):
     """One of the caller's conversations in `GET /me/conversations`."""
 
-    id: uuid.UUID  # the application's id
-    listing: ApplicationListingOut
+    id: uuid.UUID  # the application's id for an application chat
+    listing: ApplicationListingOut | None  # null exactly for a direct chat
     other_name: str  # the seeker's name for the owner and a flatmate, the owner's for the seeker
     my_role: MemberRole
     member_count: int  # 2, plus the room's flatmates on a room application
-    can_send: bool  # the application is `shortlisted`
+    # an application chat: the application is `shortlisted`; a direct chat: not closed
+    can_send: bool
     is_new: bool  # the caller never opened it
     unread_count: int
     last_message: LastMessageOut | None
@@ -95,7 +98,7 @@ class ThreadOut(BaseModel):
     null for the owner and the seeker."""
 
     id: uuid.UUID
-    listing: ApplicationListingOut
+    listing: ApplicationListingOut | None  # null exactly for a direct chat
     other_name: str
     my_role: MemberRole
     members: list[MemberOut]
