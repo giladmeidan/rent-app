@@ -23,8 +23,8 @@ Overall: IN_PROGRESS (Slice 10 "שוק השותפים" complete; next slice not 
 
 Current focus:
 **Slice 10 is fully built and merged: all 11 specs `status: done` on `main`** (#68–#72 on 2026-11-13, #76–#81 on
-2026-11-14). Alembic head on `main` is `0017`. Three product questions from the second half wait on Gilad (Next
-Steps 1); the code ships the recommended option for each. Nothing is in flight: no open PRs, no spec worktrees,
+2026-11-14). Alembic head on `main` is `0017`. Gilad answered the second half's three product questions (option (a) each,
+in PRODUCT.md). Nothing is in flight: no open PRs, no spec worktrees,
 no `spec/0010*` branches. Spec status on `main` is the source of truth; `git log` beats this file.
 
 Last updated:
@@ -100,11 +100,7 @@ Last updated:
   "Rooms", "People & likes", "Flatmates", …).
 
 ## Next Steps
-1. **Gilad's answers to three Slice 10 questions** (code ships the recommended (a) of each; write the answers
-   into `specs/PRODUCT.md`): **Q1** on a gendered room, a viewer with no gender sees no people (a) or sees them
-   (b); **Q2** a shown person without a looking part relies on the room's gender preference (a) or gets a
-   personal "who may see me" setting in a later spec (b); **Q3** profile-photo hint lists every place (a,
-   0010h extended it with people browse), a short list-free line (b), or no photos on room pages (c).
+1. (Done 2026-11-14) Gilad accepted (a) for Q1–Q3; written into `specs/PRODUCT.md` "שוק השותפים". No code change.
 2. Choose the next slice with Gilad (the report button waits for Slice 11; trust/safety was pushed back).
 3. Send Gilad the Slice 10 digest (11 merged, the FOLLOWUPS lines each added) and the Slice 9 / 9c digests
    (still owed).
