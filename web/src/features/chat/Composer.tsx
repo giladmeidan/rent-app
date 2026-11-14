@@ -28,6 +28,8 @@ type Props = {
   userId: string | undefined;
   /** After a message of the caller's own was sent (the page scrolls to it). */
   onSent: (message: MessageOut) => void;
+  /** The "offer a viewing" chip: listing chats only, not a roommate-market match. */
+  viewing: boolean;
 };
 
 /**
@@ -35,7 +37,7 @@ type Props = {
  * is kept on every error, and as `userId`'s draft in this tab (spec 0009g): a remount (a trip
  * through login, the chat reopening) starts with it.
  */
-export function Composer({ conversationId, userId, onSent }: Props) {
+export function Composer({ conversationId, userId, onSent, viewing }: Props) {
   const { t } = useTranslation();
   const send = useSendMessage(conversationId);
   const [text, setText] = useState(() => readDraft('chat', conversationId, userId));
@@ -123,9 +125,13 @@ export function Composer({ conversationId, userId, onSent }: Props) {
           </p>
         )}
         <div className="flex items-center justify-between gap-2">
-          <Button variant="soft" size="sm" shape="pill" onClick={onViewing}>
-            {t('chat.composer.viewing')}
-          </Button>
+          {viewing ? (
+            <Button variant="soft" size="sm" shape="pill" onClick={onViewing}>
+              {t('chat.composer.viewing')}
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button
             variant="primary"
             type="submit"

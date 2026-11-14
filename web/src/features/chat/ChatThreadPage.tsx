@@ -344,6 +344,7 @@ function Thread({
             conversationId={id}
             userId={userId}
             onSent={(message) => setSentId(message.id)}
+            viewing={thread.listing != null}
           />
         </div>
       ) : (

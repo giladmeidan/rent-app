@@ -997,6 +997,8 @@ describe('ChatThreadPage', () => {
     expect(screen.queryByRole('group', { name: he.chat.members })).toBeNull();
     expect(bubbles()).toHaveLength(1);
     expect(textarea()).toBeVisible();
+    // No viewing chip in a match chat: there is no apartment to tour.
+    expect(screen.queryByRole('button', { name: he.chat.composer.viewing })).toBeNull();
     expect(screen.queryByText(he.chat.thread.closedDirect)).toBeNull();
     reset(view);
 
