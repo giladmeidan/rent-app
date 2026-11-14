@@ -1,18 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { PageContainer } from '../../components/PageContainer';
 import { useSide } from '../../app/side';
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { useOnline } from '../../components/useOnline';
 import { ListingWizard } from './ListingWizard';
 import { isPastExpiry } from './StatusBadge';
 import { useMyListings } from './useMyListings';
+import { actionErrorText, useRenewListing } from './useRenewListing';
 
 const section = 'flex flex-col items-center';
 
@@ -31,6 +34,9 @@ export function EditListingPage() {
   const now = new Date();
   const listing = listings.data?.find((l) => l.id === id);
   const side = useSide();
+  const renew = useRenewListing(id ?? '');
+  const online = useOnline();
+  const navigate = useNavigate();
   const readOnly = listing !== undefined && isPastExpiry(listing, now);
   const notFound = listings.data !== undefined && listing === undefined;
   // Focus the explanation on arrival (the hook runs before any early return).
@@ -100,8 +106,27 @@ export function EditListingPage() {
             title={t('listings.edit.expiredTitle')}
             titleRef={expiredHeading}
           />
-          <Card padding="md">
+          <Card padding="md" className="flex flex-col gap-3">
             <p className="text-body text-ink-muted">{t('listings.edit.expiredBody')}</p>
+            <Button
+              variant="primary"
+              className="self-start"
+              busy={renew.isPending}
+              onClick={() =>
+                renew.mutate(undefined, {
+                  // Back to "my listings", whose status line announces the new date (0011a).
+                  onSuccess: (updated) =>
+                    void navigate(back.to, { state: { renewed: updated.expires_at } }),
+                })
+              }
+            >
+              {t('listings.actions.renew')}
+            </Button>
+            {renew.isError && (
+              <p role="alert" className="text-label text-danger">
+                {actionErrorText(t, renew.error, online)}
+              </p>
+            )}
           </Card>
         </div>
       </PageContainer>

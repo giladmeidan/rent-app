@@ -4,6 +4,9 @@ import type { CloseReason, Condition, GenderPreference, Household, Poster } from
  * later slice; until then an admin-raised cap is not reflected in the client's copy. */
 export const LISTING_CAP = 3;
 
+/** A listing renews from this many days before it expires (mirrors `services/listings.py`). */
+export const RENEWAL_WINDOW_DAYS = 7;
+
 /** The households an owner may accept, in the order the wizard and the listing page show them. */
 export const HOUSEHOLDS: readonly Household[] = ['single', 'couple', 'family', 'roommates'];
 
