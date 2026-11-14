@@ -138,7 +138,7 @@ function ListingRow({
                       },
                     );
                   }}
-                  disabled={patch.isPending}
+                  disabled={patch.isPending || renew.isPending}
                   aria-busy={patch.isPending}
                   aria-describedby={titleId}
                 >
@@ -150,6 +150,8 @@ function ListingRow({
                   variant="ghost"
                   size="sm"
                   busy={renew.isPending}
+                  // One action at a time: each click resets the other mutation, which would drop its result.
+                  disabled={patch.isPending}
                   onClick={() => {
                     patch.reset();
                     renew.mutate(undefined, {
