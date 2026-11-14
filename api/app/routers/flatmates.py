@@ -9,7 +9,9 @@ Invitee and flatmate side: preview, join and `/me/flats` require a session of an
 (`current_user`): 401 `unauthenticated`. The invite token travels **only in a POST body**, never in
 a path or query (uvicorn's access log records full paths). Preview and join share one rate limit
 per user (429 `rate_limited` with `Retry-After`), counted on every authenticated attempt, found or
-not. Leaving (`DELETE /me/flats/{listing_id}`) is always a 204, so it reveals nothing."""
+not. Leaving (`DELETE /me/flats/{listing_id}`) is always a 204, so it reveals nothing.
+`PATCH /me/flats/{listing_id}` (spec 0010f) sets the caller's own `shown` choice and requires a
+session (`current_user`, 401) and membership of that flat: anything else is a 404 `not_found`."""
 
 import uuid
 from typing import Annotated, Any
@@ -28,8 +30,10 @@ from app.schemas.flatmates import (
     InviteOut,
     InvitePreviewOut,
     InviteTokenIn,
+    JoinIn,
     JoinOut,
     MyFlatOut,
+    ShownIn,
 )
 from app.services import flatmates as flatmates_service
 from app.services.applications import AlreadyAppliedError
@@ -145,10 +149,11 @@ def preview_invite(body: InviteTokenIn, me: UserDep, db: DbDep, r: RedisDep) -> 
         },
     },
 )
-def join(body: InviteTokenIn, me: UserDep, db: DbDep, r: RedisDep) -> JoinOut:
-    """Join the flat. Idempotent: a member gets 200 and keeps the original `joined_at`."""
+def join(body: JoinIn, me: UserDep, db: DbDep, r: RedisDep) -> JoinOut:
+    """Join the flat, shown on the room's page or not (`shown`, default off). Idempotent: a member
+    gets 200 and keeps the original `joined_at` and `shown`."""
     try:
-        listing_id = flatmates_service.join(db, r, me, body.token)
+        listing_id = flatmates_service.join(db, r, me, body.token, body.shown)
     except RateLimitedError as exc:
         raise _rate_limited(exc) from None
     except ListingNotFoundError:
@@ -216,9 +221,25 @@ def my_flats(me: UserDep, db: DbDep) -> list[MyFlatOut]:
             listing=ApplicationListingOut.model_validate(row.Listing),
             owner_name=row.owner_name,
             joined_at=row.joined_at,
+            shown=row.shown,
         )
         for row in flatmates_service.my_flats(db, me)
     ]
+
+
+@router.patch(
+    "/me/flats/{listing_id}",
+    status_code=204,
+    responses={
+        **_SESSION,
+        404: {"model": ErrorOut, "description": "not_found: not a flatmate there, or unknown"},
+    },
+)
+def set_shown(listing_id: uuid.UUID, body: ShownIn, me: UserDep, db: DbDep) -> Response:
+    """Show or hide the caller on the room's page (spec 0010f)."""
+    if not flatmates_service.set_shown(db, me, listing_id, body.shown):
+        raise _not_found()
+    return Response(status_code=204)
 
 
 @router.delete("/me/flats/{listing_id}", status_code=204, responses=_SESSION)

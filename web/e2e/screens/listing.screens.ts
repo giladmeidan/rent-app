@@ -55,6 +55,12 @@ function detail(overrides: Record<string, unknown>) {
     flatmates_count: null,
     flatmate_ages: [],
     lifestyle: {},
+    // The flat facts (spec 0010f): not said.
+    room_size_sqm: null,
+    private_bathroom: null,
+    balcony: null,
+    bills_included: null,
+    poster: null,
     created_at: '2026-11-01T10:00:00Z',
     lat: 32.0707,
     lng: 34.811,
@@ -64,9 +70,17 @@ function detail(overrides: Record<string, unknown>) {
     room_fit: null,
     like: null,
     photos: [],
+    people: [], // spec 0010f
     ...overrides,
   };
 }
+
+/** A fake person photo (spec 0010f): an inline SVG, so no request leaves the page. */
+const FAKE_PHOTO =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="#f2a97f"/><circle cx="48" cy="38" r="18" fill="#fff"/><rect x="18" y="62" width="60" height="34" rx="17" fill="#fff"/></svg>',
+  );
 
 const APARTMENT = detail({});
 
@@ -97,6 +111,32 @@ const ROOM_SEEKER = detail({
   room_fit: true,
   like: { liked_by_me: false, liked_me: true },
   applicant_count: 0,
+  // Spec 0010f: the flat facts, and "גרים בדירה" (the lister lives there, one flatmate shown).
+  room_size_sqm: 12,
+  private_bathroom: true,
+  balcony: false,
+  bills_included: true,
+  poster: 'lives_here',
+  people: [
+    {
+      display_name: 'מאיה',
+      photo_url: FAKE_PHOTO,
+      age: 29,
+      gender: 'woman',
+      about_me: 'עובדת מהבית רוב השבוע, אוהבת לבשל בערב.',
+      lifestyle: { cleanliness: 3, night: 2 },
+      lister: true,
+    },
+    {
+      display_name: 'שירה',
+      photo_url: null,
+      age: 31,
+      gender: null,
+      about_me: null,
+      lifestyle: {},
+      lister: false,
+    },
+  ],
 });
 
 /** The same room as a visitor gets it: no ages, no answers, no like state. */
@@ -106,6 +146,7 @@ const ROOM_VISITOR = {
   lifestyle: {},
   like: null,
   room_fit: null,
+  people: [],
 };
 
 type Setup = {
@@ -223,6 +264,7 @@ const STATES: State[] = [
     act: async (page) => {
       await expect(page.getByText(he.likes.likedYouLine)).toBeVisible();
       await expect(page.getByTestId('room-lifestyle')).toBeVisible();
+      await expect(page.getByRole('region', { name: he.rooms.people.title })).toBeVisible();
       await mapReady(page);
     },
   },
@@ -231,6 +273,7 @@ const STATES: State[] = [
     setup: { listing: ROOM_VISITOR, seeker: false },
     act: async (page) => {
       await expect(page.getByTestId('room-facts')).toBeVisible();
+      await expect(page.getByRole('region', { name: he.rooms.people.title })).toHaveCount(0);
       await mapReady(page);
     },
   },

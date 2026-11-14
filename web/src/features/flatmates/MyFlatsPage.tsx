@@ -11,8 +11,9 @@ import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { Switch } from '../../components/Switch';
 import { cardTitle } from '../listings/cardTitle';
-import { useLeaveFlat, useMyFlats, type MyFlatOut } from './api';
+import { useLeaveFlat, useMyFlats, useSetShown, type MyFlatOut } from './api';
 import { formatDay } from './format';
 
 const section = 'flex flex-col gap-4';
@@ -29,6 +30,7 @@ function FlatRow({
 }) {
   const { t } = useTranslation();
   const leave = useLeaveFlat();
+  const show = useSetShown(flat.listing.id);
   const titleId = useId();
   // Same-tick guard: a double click sends one DELETE. Re-checked after the confirm's await.
   const inFlight = useRef(false);
@@ -66,6 +68,23 @@ function FlatRow({
     });
   }
 
+  // While the change is saved (until "my flats" has refetched) the switch shows the new value,
+  // disabled; after a failure it shows the stored one again (0010f). Local state, set in the same
+  // tick as the click: the mutation's own pending state arrives a render later, and the switch
+  // would flash back meanwhile.
+  const [saving, setSaving] = useState<boolean | null>(null);
+  const shown = saving ?? flat.shown;
+
+  function onShow(next: boolean) {
+    if (saving !== null) return;
+    setSaving(next);
+    // A new toggle clears the card's last failure line: the toggle's (not pending: `saving` guards
+    // that) and a failed leave's (an errored mutation is settled, so resetting it drops nothing).
+    show.reset();
+    if (leave.isError) leave.reset();
+    show.mutate(next, { onSettled: () => setSaving(null) });
+  }
+
   return (
     <Card
       as="li"
@@ -94,7 +113,15 @@ function FlatRow({
       >
         {t('flatmates.mine.leave')}
       </Button>
-      {leave.isError && (
+      <div className="rounded-md border border-border lg:basis-full">
+        <Switch
+          label={t('flatmates.join.show')}
+          checked={shown}
+          onChange={onShow}
+          disabled={saving !== null}
+        />
+      </div>
+      {(leave.isError || show.isError) && (
         <p role="alert" className="text-body-sm font-semibold text-danger lg:basis-full">
           {t('common.error')}
         </p>

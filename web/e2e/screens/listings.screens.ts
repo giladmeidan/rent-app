@@ -164,7 +164,9 @@ async function toPreferences(page: Page, type: 'apartment' | 'room') {
   ).toBeVisible();
 }
 
-/** A room's block: women, two flatmates aged 27 and 30, two questions answered. */
+/** A room's block: women, two flatmates aged 27 and 30, a 12 m² room with a private bathroom and
+ * bills included, the balcony left unsaid, the lister living there (spec 0010f), two questions
+ * answered. */
 async function fillRoomBlock(page: Page) {
   const room = he.listings.room;
   const block = page.getByRole('region', { name: room.title });
@@ -175,6 +177,18 @@ async function fillRoomBlock(page: Page) {
   await block.getByLabel(room.flatmatesCount).selectOption('2');
   await block.getByLabel(room.ageOf.replace('{{n}}', '1'), { exact: true }).fill('27');
   await block.getByLabel(room.ageOf.replace('{{n}}', '2'), { exact: true }).fill('30');
+  await block.getByLabel(room.roomSize).fill('12');
+  for (const legend of [room.privateBathroom, room.bills]) {
+    await block
+      .getByRole('group', { name: legend })
+      .getByText(he.common.yes, { exact: true })
+      .click();
+  }
+  await block
+    .getByRole('group', { name: room.poster.title })
+    .getByText(room.poster.lives_here, { exact: true })
+    .click();
+  await expect(block.getByText(room.poster.livesHereHint)).toBeVisible();
   const { cleanliness, guests } = he.lifestyle;
   await block
     .getByRole('group', { name: cleanliness.question.flat })

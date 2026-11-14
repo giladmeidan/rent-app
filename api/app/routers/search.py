@@ -11,12 +11,16 @@ page's `room_fit` (spec 0007b). That is why every 200 says `Vary: Cookie` and a 
 carrying the session cookie is `Cache-Control: private` (0006b): the body may differ per caller. The
 cookie also decides whether a room's flatmates' ages and questionnaire answers are shown: only a
 signed-in seeker gets them, and a seeker is a role seeker **or** any account with a profile with the
-looking part (`_sees_room_privacy`, decision 13, Gilad 2026-11-13); everyone else gets `[]` and `{}`
-(`ListingPublic.from_listing`). Every listing says `is_mine`, whether the caller owns it (spec
-0010b; false for a visitor). Search returns one type: `listing_type` omitted means `apartment` (spec
-0010a), the market asks for `room`; the listing page serves both. A listing that is not public is a
-404 `not_found`, the same body as an unknown id. Any signed-in account on a room it does not own
-also gets the listing page's `like` (spec 0008a), the likes between them and the room."""
+looking part (`services/profiles.py::sees_room_privacy`, decision 13, Gilad 2026-11-13); everyone
+else gets `[]` and `{}` (`ListingPublic.from_listing`). Every listing says `is_mine`, whether the
+caller owns it (spec 0010b; false for a visitor). Search returns one type: `listing_type` omitted
+means `apartment` (spec 0010a), the market asks for `room`; the listing page serves both. A
+listing that is not public is a 404 `not_found`, the same body as an unknown id. Any signed-in
+account on a room it does not own also gets the listing page's `like` (spec 0008a), the likes
+between them and the room. A seeker on a room that fits them (`room_fit` not false) also gets the
+listing page's `people` (spec 0010f, `services/flatmates.py::shown_people`): the lister when they
+live there and the flatmates who chose to be shown (on a gendered room, only to a viewer of the
+room's gender); everyone else gets `[]`."""
 
 import uuid
 from typing import Annotated, Any
@@ -28,8 +32,15 @@ from app.auth import COOKIE_NAME, optional_user
 from app.db import get_session
 from app.models import Listing, User
 from app.schemas.error import ErrorOut
-from app.schemas.search import ListingDetail, ListingPublic, ListingSearchOut, SearchParams
+from app.schemas.search import (
+    FlatPersonOut,
+    ListingDetail,
+    ListingPublic,
+    ListingSearchOut,
+    SearchParams,
+)
 from app.services import applications as applications_service
+from app.services import flatmates as flatmates_service
 from app.services import people as people_service
 from app.services import photos as photos_service
 from app.services import profiles as profiles_service
@@ -44,21 +55,6 @@ OptionalUserDep = Annotated[User | None, Depends(optional_user)]
 _DB_DOWN: dict[int | str, dict[str, Any]] = {
     503: {"model": ErrorOut, "description": "The database is unreachable"}
 }
-
-
-def _profile_user_id(db: Session, user: User | None) -> uuid.UUID | None:
-    """The caller's id when they have a profile with the looking part, whatever their role (spec
-    0010b; one PK lookup), else None (a visitor runs no statement)."""
-    if user is None:
-        return None
-    return user.id if profiles_service.has_profile(db, user.id) else None
-
-
-def _sees_room_privacy(user: User | None, profile_user_id: uuid.UUID | None) -> bool:
-    """Whether the caller gets a room's flatmate ages and answers (decision 13, Gilad 2026-11-13):
-    signed in with the seeker role, or with a profile with the looking part (`profile_user_id`,
-    already read). No statement."""
-    return user is not None and (user.role == "seeker" or profile_user_id is not None)
 
 
 def _is_mine(user: User | None, listing: Listing) -> bool:
@@ -83,9 +79,9 @@ def search_listings(
     request: Request,
     response: Response,
 ) -> ListingSearchOut:
-    profile_user_id = _profile_user_id(db, user)
+    profile_user_id = profiles_service.profile_user_id(db, user)
     page, total, sort = search_service.search_listings(db, params, profile_user_id)
-    seeker = _sees_room_privacy(user, profile_user_id)
+    seeker = profiles_service.sees_room_privacy(user, profile_user_id)
     items: list[ListingPublic] = []
     for listing, match, cover_id, cover_key in page:
         mine = _is_mine(user, listing)
@@ -122,9 +118,10 @@ def get_listing(
     response: Response,
 ) -> ListingDetail:
     """A public listing with its applicant count, the caller's match, room fit and like state
-    (spec 0008a; 0010b: any signed-in account on a room, not their own) and `is_mine`; counts one
-    view (`listings.view_count`). A 404 counts nothing."""
-    profile_user_id = _profile_user_id(db, user)
+    (spec 0008a; 0010b: any signed-in account on a room, not their own), `is_mine` and, for a
+    seeker on a room that fits them, the flat's people (spec 0010f); counts one view
+    (`listings.view_count`). A 404 counts nothing."""
+    profile_user_id = profiles_service.profile_user_id(db, user)
     try:
         listing, match, room_fit = search_service.get_public_listing_with_match(
             db, listing_id, profile_user_id
@@ -136,6 +133,22 @@ def get_listing(
     like = None
     if user is not None and listing.listing_type == "room" and listing.owner_id != user.id:
         like = people_service.like_state(db, user.id, listing.id)
+    # Decision 13, read once: the room privacy fields and the flat's people (spec 0010f).
+    seeker = profiles_service.sees_room_privacy(user, profile_user_id)
+    people: list[FlatPersonOut] = []
+    if user is not None and seeker and listing.listing_type == "room" and room_fit is not False:
+        people = [
+            FlatPersonOut(
+                display_name=row.display_name,
+                photo_url=photos_service.person_photo_url(row.photo_key),
+                age=people_service.age(row.birth_year),
+                gender=row.gender,
+                about_me=row.about_me,
+                lifestyle=row.lifestyle or {},
+                lister=row.lister,
+            )
+            for row in flatmates_service.shown_people(db, listing, user.id)
+        ]
     # The last statement (spec 0010d), after `record_view`.
     photos = photos_service.photos_out(
         photos_service.photos_by_listing(db, [listing.id])[listing.id]
@@ -144,7 +157,7 @@ def get_listing(
     # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
         listing,
-        seeker=_sees_room_privacy(user, profile_user_id),
+        seeker=seeker,
         match=None if mine else match,
         applicant_count=count,
         room_fit=room_fit,
@@ -152,4 +165,5 @@ def get_listing(
         cover=photos[0] if photos else None,
         photos=photos,
         is_mine=mine,
+        people=people,
     )

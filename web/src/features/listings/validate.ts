@@ -14,12 +14,17 @@ import type {
   ListingOut,
   ListingPatch,
   ListingType,
+  Poster,
+  RoomFactKey as RoomFact,
 } from './api';
 
+/** A yes / no fact the lister may leave unsaid (0010f): `''` is "לא לציין" (sent as `null`). */
+export type YesNo = 'yes' | 'no' | '';
+
 /** Every input is kept as the string the person typed; `toListingIn` converts. The preferences
- * (0006e) and the room fields (0007e) hold the API values, except the ages. The room fields are
- * kept when the type switches to an apartment (switching back restores them) but never sent for
- * one. */
+ * (0006e) and the room fields (0007e) hold the API values, except the ages and the flat facts
+ * (0010f). The room fields are kept when the type switches to an apartment (switching back
+ * restores them) but never sent for one. */
 export type ListingForm = {
   listing_type: ListingType | null;
   area_id: string;
@@ -52,6 +57,12 @@ export type ListingForm = {
   flatmate_ages: string[];
   /** The flat's questionnaire: answered keys only. */
   lifestyle: LifestyleAnswers;
+  /** The flat facts (0010f), all optional: the room's own size as typed, `''` = not said. */
+  room_size_sqm: string;
+  private_bathroom: YesNo;
+  balcony: YesNo;
+  bills_included: YesNo;
+  poster: Poster | '';
 };
 
 export const emptyForm: ListingForm = {
@@ -80,6 +91,11 @@ export const emptyForm: ListingForm = {
   flatmates_count: null,
   flatmate_ages: [],
   lifestyle: {},
+  room_size_sqm: '',
+  private_bathroom: '',
+  balcony: '',
+  bills_included: '',
+  poster: '',
 };
 
 /** The validated fields, in the order they appear on the form (focus goes to the first invalid):
@@ -103,6 +119,7 @@ export const FIELD_ORDER = [
   'min_contract_months',
   'flatmates_count',
   'flatmate_ages',
+  'room_size_sqm',
 ] as const;
 export type FieldName = (typeof FIELD_ORDER)[number];
 
@@ -135,6 +152,8 @@ export const LIMITS = {
   vaad_ils: { min: 0, max: 5_000 },
   flatmates_count: { min: 1, max: 7 },
   flatmate_age: { min: 18, max: 99 },
+  /** At most the flat's `size_sqm` too (`roomSizeError`). */
+  room_size_sqm: { min: 4, max: 100 },
 } as const;
 
 // Control, format (bidi marks, zero-width), line- and paragraph-separator, private-use characters,
@@ -243,6 +262,7 @@ export function validate(form: ListingForm, today: string): FieldErrors {
     min_contract_months: undefined,
     flatmates_count: undefined,
     flatmate_ages: undefined,
+    room_size_sqm: undefined,
   };
   if (
     found.floor === undefined &&
@@ -273,8 +293,25 @@ export function firstInvalidAge(form: ListingForm): number | undefined {
   return undefined;
 }
 
-/** The preferences step's errors: at least one household; for a room, the flatmates count and
- * an age range error for the ages as a group (the slot is `firstInvalidAge`). */
+/** The largest room size the API takes (0010f): the flat's `size_sqm` once it is a whole number,
+ * and never above 100. */
+export function roomSizeMax(form: ListingForm): number {
+  const flat = form.size_sqm.trim();
+  const { max } = LIMITS.room_size_sqm;
+  return flat !== '' && Number.isInteger(Number(flat)) ? Math.min(max, Number(flat)) : max;
+}
+
+/** The room's own size (0010f): empty, or a whole number from 4 to `roomSizeMax`. */
+export function roomSizeError(form: ListingForm): FieldError | undefined {
+  return integer(
+    form.room_size_sqm,
+    { min: LIMITS.room_size_sqm.min, max: roomSizeMax(form) },
+    true,
+  );
+}
+
+/** The preferences step's errors: at least one household; for a room, the flatmates count, an
+ * age range error for the ages as a group (the slot is `firstInvalidAge`) and the room size. */
 export function validatePreferences(form: ListingForm): FieldErrors {
   const errors: FieldErrors = {};
   if (form.accepted_households.length === 0) {
@@ -284,6 +321,8 @@ export function validatePreferences(form: ListingForm): FieldErrors {
     if (form.flatmates_count === null) errors.flatmates_count = required;
     const slot = firstInvalidAge(form);
     if (slot !== undefined) errors.flatmate_ages = flatmateAgeError(form.flatmate_ages[slot] ?? '');
+    const roomSize = roomSizeError(form);
+    if (roomSize !== undefined) errors.room_size_sqm = roomSize;
   }
   return errors;
 }
@@ -317,12 +356,25 @@ function answeredLifestyle(answers: LifestyleAnswers): LifestyleAnswers {
   return answered;
 }
 
-/** The `POST /listings` body for a form that `validate` and `validatePreferences` accept. Always
- * every key: an apartment sends the room fields' defaults (the only values the API takes for one). */
+const yesNoValue = (value: YesNo): boolean | null => (value === '' ? null : value === 'yes');
+const yesNoOf = (value: boolean | null): YesNo => (value === null ? '' : value ? 'yes' : 'no');
+
+/** The `POST /listings` body for a form that `validate` and `validatePreferences` accept. Every
+ * key: an apartment sends the room fields' defaults (the only values the API takes for one), and
+ * never the flat facts (0010f), which a room sends with `null` for "not said". */
 export function toListingIn(form: ListingForm): ListingInBody {
   if (form.listing_type === null) throw new Error('toListingIn: no listing type');
   const description = cleanText(form.description, { multiline: true });
   const room = form.listing_type === 'room';
+  const facts: Pick<ListingInBody, RoomFact> = room
+    ? {
+        room_size_sqm: optionalInt(form.room_size_sqm),
+        private_bathroom: yesNoValue(form.private_bathroom),
+        balcony: yesNoValue(form.balcony),
+        bills_included: yesNoValue(form.bills_included),
+        poster: form.poster === '' ? null : form.poster,
+      }
+    : {};
   return {
     listing_type: form.listing_type,
     rooms: Number(form.rooms),
@@ -350,6 +402,7 @@ export function toListingIn(form: ListingForm): ListingInBody {
     flatmates_count: room ? form.flatmates_count : null,
     flatmate_ages: room ? agesOf(form) : [],
     lifestyle: room ? answeredLifestyle(form.lifestyle) : {},
+    ...facts,
   };
 }
 
@@ -384,6 +437,11 @@ export function formFromListing(listing: ListingOut): ListingForm {
     // Copies: `listing` is the query cache's object.
     flatmate_ages: [...listing.flatmate_ages].sort(byNumber).map(String),
     lifestyle: { ...listing.lifestyle },
+    room_size_sqm: fromOptionalInt(listing.room_size_sqm),
+    private_bathroom: yesNoOf(listing.private_bathroom),
+    balcony: yesNoOf(listing.balcony),
+    bills_included: yesNoOf(listing.bills_included),
+    poster: listing.poster ?? '',
   };
 }
 
@@ -405,12 +463,17 @@ function sameEntries(a: Readonly<Record<string, number>>, b: Readonly<Record<str
   return entries.length === Object.keys(b).length && entries.every(([key, n]) => b[key] === n);
 }
 
-/** The room-only keys of the body (0007a). */
+/** The room-only keys of the body (0007a; the flat facts, 0010f). */
 const ROOM_FIELDS: ReadonlySet<string> = new Set([
   'gender_preference',
   'flatmates_count',
   'flatmate_ages',
   'lifestyle',
+  'room_size_sqm',
+  'private_bathroom',
+  'balcony',
+  'bills_included',
+  'poster',
 ]);
 
 /**

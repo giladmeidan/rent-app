@@ -184,14 +184,19 @@ def test_ac1_rooms_are_public_with_room_fields(
             items[apartment]["flatmate_ages"],
             items[apartment]["lifestyle"],
         ) == ("any", None, [], {})
+        # Spec 0010f: the five flat facts are public, null when not said and on an apartment.
+        facts = ("room_size_sqm", "private_bathroom", "balcony", "bills_included", "poster")
+        assert [items[room][k] for k in facts] == [None] * 5, name
+        assert [items[apartment][k] for k in facts] == [None] * 5, name
 
         page = _detail(caller, room)
         assert page["room_fit"] is None, name
         # 0008a; spec 0010b: any signed-in account on a room it does not own.
         no_like = {"liked_by_me": False, "liked_me": False}
         assert page["like"] == (None if name == "visitor" else no_like), name
-        # `like`: 0008a; `photos`: 0010d
-        detail_only = {"applicant_count", "room_fit", "like", "photos"}
+        # `like`: 0008a; `photos`: 0010d; `people`: 0010f (no one lives-here nor is shown)
+        assert page["people"] == [], name
+        detail_only = {"applicant_count", "room_fit", "like", "photos", "people"}
         assert {k: v for k, v in page.items() if k not in detail_only} == items[room]
 
         for listing_id in hidden:

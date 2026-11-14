@@ -61,6 +61,7 @@ const PREFERENCE_FIELDS: readonly FieldName[] = [
   'min_contract_months',
   'flatmates_count',
   'flatmate_ages',
+  'room_size_sqm',
 ];
 
 /**

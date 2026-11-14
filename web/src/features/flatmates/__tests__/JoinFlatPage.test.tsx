@@ -100,7 +100,7 @@ describe('JoinFlatPage', () => {
         ([r]) => new URL(r.url).pathname === '/flatmate-invites/join',
       ),
     ).toHaveLength(1);
-    expect(api.calls(JOIN)[0]?.body).toEqual({ token: T });
+    expect(api.calls(JOIN)[0]?.body).toEqual({ token: T, shown: false });
     expect(readInviteToken()).toBe(T);
     joining.resolve(json({ listing_id: P.listing.id }));
     expect(await screen.findByText(he.flatmates.join.done)).toHaveAttribute('role', 'status');
@@ -190,6 +190,47 @@ describe('JoinFlatPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
     expect(await screen.findByText(he.flatmates.join.done)).toBeVisible();
     expect(api.calls(JOIN)).toHaveLength(2);
+    reset(view);
+  });
+
+  it('ac9_show_switch_off_by_default_and_sent', async () => {
+    // Spec 0010f AC9: "להציג אותי בעמוד החדר" is off by default and its value goes in the body;
+    // it shows only while the person can join.
+    let { api, view } = renderJoin({
+      [PREVIEW]: [json(P)],
+      [JOIN]: [json({ listing_id: P.listing.id })],
+    });
+    const button = await cta();
+    const show = screen.getByRole('switch', { name: he.flatmates.join.show });
+    expect(show).not.toBeChecked();
+    expect(show).toHaveAccessibleDescription(he.flatmates.join.showHint);
+    fireEvent.click(show);
+    expect(show).toBeChecked();
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(api.calls(JOIN)).toHaveLength(1);
+    });
+    expect(api.calls(JOIN)[0]?.body).toEqual({ token: T, shown: true });
+    expect(await screen.findByText(he.flatmates.join.done)).toBeVisible();
+    reset(view);
+
+    // A member, and a final answer, show no switch.
+    ({ view } = renderJoin({ [PREVIEW]: [json(invitePreview({ member: true }))] }));
+    expect(await screen.findByText(he.flatmates.join.member)).toBeVisible();
+    expect(screen.queryByRole('switch')).toBeNull();
+    reset(view);
+    ({ view } = renderJoin({ [PREVIEW]: [err(404, 'not_found')] }));
+    expect(await screen.findByText(he.flatmates.join.invalid)).toBeVisible();
+    expect(screen.queryByRole('switch')).toBeNull();
+    reset(view);
+    ({ api, view } = renderJoin({
+      [PREVIEW]: [json(P)],
+      [JOIN]: [err(409, 'flatmates_full')],
+    }));
+    fireEvent.click(await cta());
+    expect(await screen.findByText(he.flatmates.join.full)).toBeVisible();
+    expect(api.calls(JOIN)[0]?.body).toEqual({ token: T, shown: false });
+    expect(screen.queryByRole('switch')).toBeNull();
     reset(view);
   });
 
@@ -382,7 +423,7 @@ describe('JoinFlatPage', () => {
       });
       expect(screen.getByText(he.flatmates.join.done)).toBeVisible();
       expect(api.calls(PREVIEW)[0]?.body).toEqual({ token: T });
-      expect(api.calls(JOIN)[0]?.body).toEqual({ token: T });
+      expect(api.calls(JOIN)[0]?.body).toEqual({ token: T, shown: false });
       expect(readInviteToken()).toBeNull();
       for (const call of api.fetchMock.mock.calls) {
         expect(call[0].url).not.toContain(T);
@@ -588,7 +629,10 @@ describe('JoinFlatPage', () => {
 
     // The token went in the POST bodies only.
     expect(api.calls(PREVIEW)[0]?.body).toEqual({ token: T });
-    expect(api.calls(JOIN).map((call) => call.body)).toEqual([{ token: T }, { token: T }]);
+    expect(api.calls(JOIN).map((call) => call.body)).toEqual([
+      { token: T, shown: false },
+      { token: T, shown: false },
+    ]);
     for (const call of api.fetchMock.mock.calls) {
       expect(call[0].url).not.toContain(T);
     }

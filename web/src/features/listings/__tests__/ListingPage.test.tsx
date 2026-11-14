@@ -594,6 +594,139 @@ describe('ListingPage', () => {
     expect(screen.queryByText(he.rooms.facts.title)).toBeNull();
   });
 
+  describe('flat profile (spec 0010f)', () => {
+    const visitor = { 'GET /me': [json({ detail: 'unauthenticated' }, 401)] };
+    const roomFacts = () => screen.getByRole('region', { name: he.rooms.facts.title });
+    const rowsOf = (dl: HTMLElement) =>
+      within(dl)
+        .getAllByRole('term')
+        .map((dt) => `${dt.textContent ?? ''}: ${dt.nextElementSibling?.textContent ?? ''}`);
+    const show = async (overrides: Parameters<typeof listingDetail>[0]) => {
+      const l = listingDetail({
+        listing_type: 'room',
+        gender_preference: 'any',
+        flatmates_count: 2,
+        description: 'חדר מואר',
+        ...overrides,
+      });
+      mockApi({ ...visitor, [`GET /listings/${l.id}`]: [json(l)] });
+      const view = render(l.id);
+      await screen.findByRole('heading', { level: 1 });
+      return view;
+    };
+    const v = he.rooms.facts.values;
+
+    it('ac8 room facts show their cells, none when not said', async () => {
+      let view = await show({
+        room_size_sqm: 12,
+        private_bathroom: true,
+        balcony: false,
+        bills_included: true,
+        poster: 'lives_here',
+      });
+      expect(rowsOf(within(roomFacts()).getByTestId('room-facts'))).toEqual([
+        'העדפת מגדר: לא משנה',
+        'שותפים בדירה: 2 שותפים',
+        `${he.rooms.facts.roomSize}: ${i18n.t('rooms.facts.values.sqm', { size: 12 })}`,
+        `${he.rooms.facts.privateBathroom}: ${v.yes}`,
+        `${he.rooms.facts.balcony}: ${v.no}`,
+        `${he.rooms.facts.bills}: ${v.billsIncluded}`,
+        `${he.rooms.facts.poster}: ${v.poster.lives_here}`,
+      ]);
+      for (const dt of within(within(roomFacts()).getByTestId('room-facts')).getAllByRole('term')) {
+        expect(dt.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
+      }
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      view = await show({ bills_included: false, poster: 'landlord' });
+      expect(rowsOf(within(roomFacts()).getByTestId('room-facts'))).toEqual([
+        'העדפת מגדר: לא משנה',
+        'שותפים בדירה: 2 שותפים',
+        `${he.rooms.facts.bills}: ${v.billsNotIncluded}`,
+        `${he.rooms.facts.poster}: ${v.poster.landlord}`,
+      ]);
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      // None said: today's two cells.
+      view = await show({});
+      expect(rowsOf(within(roomFacts()).getByTestId('room-facts'))).toEqual([
+        'העדפת מגדר: לא משנה',
+        'שותפים בדירה: 2 שותפים',
+      ]);
+      view.unmount();
+    });
+
+    it('ac8 flat people listed in order, the lister tagged, photo or initial', async () => {
+      const people = () => screen.getByRole('region', { name: he.rooms.people.title });
+      let view = await show({
+        poster: 'lives_here',
+        people: [
+          {
+            display_name: 'נועה',
+            photo_url: '/media/fake-person-s.webp',
+            age: 40,
+            gender: 'man',
+            about_me: null,
+            lifestyle: {},
+            lister: true,
+          },
+          {
+            display_name: 'פז',
+            photo_url: null,
+            age: 29,
+            gender: null,
+            about_me: 'אוהבת צמחים',
+            lifestyle: { cleanliness: 3, night: 1 },
+            lister: false,
+          },
+        ],
+      });
+      const region = people();
+      expect(
+        within(region).getByRole('heading', { level: 2, name: he.rooms.people.title }),
+      ).toBeVisible();
+      // Right after the room facts, before the description.
+      expect(roomFacts().nextElementSibling).toBe(region);
+      expect(region.nextElementSibling).toContainElement(screen.getByTestId('listing-description'));
+      const list = within(region).getByRole('list', { name: he.rooms.people.title });
+      const [lister, mate] = within(list).getAllByRole('listitem') as [HTMLElement, HTMLElement];
+      expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+
+      expect(lister).toHaveTextContent('נועה');
+      expect(within(lister).getByText(he.rooms.people.lister)).toBeVisible();
+      const photo = lister.querySelector('img');
+      expect(photo).toHaveAttribute('src', '/media/fake-person-s.webp');
+      expect(photo).toHaveAttribute('alt', '');
+      expect(
+        within(lister).getByText(
+          i18n.t('rooms.people.ageGender', { age: 40, gender: he.profile.room.gender.man }),
+        ),
+      ).toBeVisible();
+
+      expect(mate).toHaveTextContent('פז');
+      expect(within(mate).queryByText(he.rooms.people.lister)).toBeNull();
+      expect(mate.querySelector('img')).toBeNull();
+      expect(within(mate).getByText('פ')).toHaveAttribute('aria-hidden', 'true');
+      expect(within(mate).getByText(i18n.t('rooms.people.age', { age: 29 }))).toBeVisible();
+      expect(within(mate).getByText('אוהבת צמחים')).toBeVisible();
+      expect(rowsOf(mate.querySelector('dl') as HTMLElement)).toEqual([
+        `${he.lifestyle.cleanliness.topic}: ${he.lifestyle.cleanliness.answer['3']}`,
+        `${he.lifestyle.night.topic}: ${he.lifestyle.night.answer['1']}`,
+      ]);
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      // No people (a visitor, the owner, or nobody shown): no section at all.
+      view = await show({ poster: 'lives_here', people: [] });
+      expect(screen.queryByRole('region', { name: he.rooms.people.title })).toBeNull();
+      expect(screen.queryByTestId('flat-people')).toBeNull();
+      expect(screen.queryByRole('heading', { name: he.rooms.people.title })).toBeNull();
+      view.unmount();
+    });
+  });
+
   it('ac5_room_privacy_unchanged', async () => {
     const base = {
       listing_type: 'room',

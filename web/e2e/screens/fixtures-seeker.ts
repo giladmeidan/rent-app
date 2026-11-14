@@ -129,6 +129,11 @@ function room(overrides: Partial<ListingPublic> = {}): LikedRoomOut {
       flatmates_count: 2,
       flatmate_ages: [27, 29],
       lifestyle: {},
+      room_size_sqm: null, // spec 0010f: the flat facts
+      private_bathroom: null,
+      balcony: null,
+      bills_included: null,
+      poster: null,
       created_at: '2026-11-01T10:00:00Z',
       lat: null,
       lng: null,
