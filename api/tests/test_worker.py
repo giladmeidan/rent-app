@@ -15,6 +15,7 @@ import httpx
 import pytest
 from sqlalchemy import Engine, text
 
+from app.redis_client import get_redis
 from app.services import geocoding
 from app.services.geocoding import FakeGeocoder, NominatimGeocoder
 from tests.conftest import make_listing, make_owner
@@ -118,3 +119,32 @@ async def test_nf3_worker_logs_no_address(
     assert any(record.name == "app.worker" for record in caplog.records)  # the counts line
     for leaked in (katz, giv, "/search?"):
         assert leaked not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("redis_clean", "httpx_log_level")
+async def test_ac5_worker_flushes_views_every_minute(
+    gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    # Spec 0011e: the autouse `views_prefix` keeps these pending views out of the stack's worker.
+    from app import worker
+
+    importlib.reload(worker)
+    (job,) = (
+        j for j in worker.WorkerSettings.cron_jobs if j.coroutine is worker.flush_listing_views
+    )
+    assert job.second == {30}
+    assert job.minute is None  # every minute
+    assert job.unique is True
+
+    listing_id = make_listing(db_engine, make_owner(db_engine, "owner@example.com"), gush_dan)
+    get_redis().hincrby("test-views:pending", str(listing_id), 2)
+
+    assert await worker.flush_listing_views({}) == 2
+
+    with db_engine.connect() as conn:
+        views = conn.execute(
+            text("SELECT view_count FROM listings WHERE id = :id"), {"id": listing_id}
+        ).scalar_one()
+    assert views == 2
+    assert not get_redis().exists("test-views:pending")

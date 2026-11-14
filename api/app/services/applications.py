@@ -54,7 +54,8 @@ Rules (PRODUCT.md "Applications"):
   authenticated, body-valid attempt that passes the profile check and the room gate counts, a
   refused one does not.
 - The applicant count is every application of the listing except withdrawn ones (declined ones
-  applied); `view_count` is approximate by design (bots, refetches and the owner all count).
+  applied). Views are counted in Redis and flushed into `view_count` by the worker
+  (`services/listing_views.py`, spec 0011e).
 - Owner side (0004c): a withdrawn application is invisible to the owner (a 404, like an unknown
   id, another owner's listing or an application of a different listing); a decline is final
   (PRODUCT.md, Q6). The listing's own state (live, paused, expired) never matters. The owner learns
@@ -363,28 +364,13 @@ def withdraw(db: Session, seeker: User, application_id: uuid.UUID) -> tuple[Appl
     return application, listing
 
 
-def record_view(db: Session, listing_id: uuid.UUID) -> int:
-    """Count one view of a public listing and return its applicant count (every application
-    except withdrawn ones). Call only after `get_public_listing_with_match` succeeded. The count
-    runs first and the UPDATE last, so the listing row lock is held only for the UPDATE and the
-    commit, not across the count."""
-    try:
-        count = db.scalar(
-            select(func.count())
-            .select_from(Application)
-            .where(Application.listing_id == listing_id, Application.status != "withdrawn")
-        )
-        db.execute(
-            update(Listing)
-            .where(Listing.id == listing_id)
-            .values(view_count=Listing.view_count + 1)
-            # The loaded `listing` keeps its old `view_count`: no public schema shows it.
-            .execution_options(synchronize_session=False)
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+def applicant_count(db: Session, listing_id: uuid.UUID) -> int:
+    """The listing's applicant count: every application except withdrawn ones."""
+    count = db.scalar(
+        select(func.count())
+        .select_from(Application)
+        .where(Application.listing_id == listing_id, Application.status != "withdrawn")
+    )
     return int(count or 0)
 
 

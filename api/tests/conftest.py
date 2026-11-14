@@ -49,6 +49,7 @@ from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Application, Listing, SeekerProfile  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
+from app.services import listing_views  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
 from app.services.photo_store import FilePhotoStore, get_photo_store  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
@@ -141,6 +142,13 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", refuse)
 
 
+@pytest.fixture(autouse=True)
+def views_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Listing views use `test-views:` (spec 0011e): the spec stack's own worker drains
+    `views:pending` on the same Redis every minute."""
+    monkeypatch.setattr(listing_views, "KEY_PREFIX", "test-views:")
+
+
 @pytest.fixture
 def geo_clean() -> None:
     """Delete the test sweeps' Redis keys (`test-geo:*`) before the test. The spec stack's worker
@@ -152,10 +160,10 @@ def geo_clean() -> None:
 
 @pytest.fixture
 def redis_clean() -> None:
-    """Delete the OTP and rate-limit keys before the test. Tests share the dev Redis, so only these
-    key families are touched, never FLUSHDB."""
+    """Delete the OTP, rate-limit and test listing-view keys before the test. Tests share the dev
+    Redis, so only these key families are touched, never FLUSHDB."""
     r = get_redis()
-    for pattern in ("otp:*", "rl:*"):
+    for pattern in ("otp:*", "rl:*", "test-views:*"):
         for key in r.scan_iter(match=pattern):
             r.delete(key)
 

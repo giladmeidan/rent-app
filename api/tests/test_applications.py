@@ -19,7 +19,7 @@ from app.db import get_sessionmaker
 from app.models import Application, Listing, User
 from app.redis_client import get_redis
 from app.services import applications as applications_service
-from app.services import chat_events
+from app.services import chat_events, listing_views
 from app.services import people as people_service
 from scripts.seed import GUSH_DAN_WKT
 from tests import test_people as people_tests
@@ -549,19 +549,19 @@ def test_ac8_applicant_count_and_view_counter(
     # `like`: 0008a; `photos`: 0010d
     assert set(body) == PUBLIC_KEYS | {"applicant_count", "room_fit", "like", "photos", "people"}
     assert body["applicant_count"] == 3
-    assert _view_count(db_engine, listing_a) == 1
     assert client.get(f"/listings/{listing_a}").status_code == 200
-    assert _view_count(db_engine, listing_a) == 2
 
     for missing in (paused, uuid.uuid4()):
         assert client.get(f"/listings/{missing}").status_code == 404
-    assert _view_count(db_engine, paused) == 0
-    assert _view_count(db_engine, listing_a) == 2
 
     search = client.get("/listings")
     assert search.status_code == 200
     assert [set(item) for item in search.json()["items"]] == [PUBLIC_KEYS]
-    assert _view_count(db_engine, listing_a) == 2
+    # Spec 0011e: views reach `view_count` through the worker's flush, one per viewer per hour.
+    with get_sessionmaker()() as db:
+        assert listing_views.flush_views(db, get_redis()) == 1
+    assert _view_count(db_engine, listing_a) == 1
+    assert _view_count(db_engine, paused) == 0
 
     client.get(f"/listings/{listing_a}")  # warm-up: a first connect sends its own setup statements
     statements.clear()
@@ -569,11 +569,10 @@ def test_ac8_applicant_count_and_view_counter(
     sent = list(statements)
     assert measured.status_code == 200
     assert measured.json()["applicant_count"] == 3
-    assert len(sent) == 4, sent
+    assert len(sent) == 3, sent
     assert "FROM listings" in sent[0]
     assert "FROM applications" in sent[1]
-    assert sent[2].lstrip().startswith("UPDATE listings")
-    assert "FROM listing_photos" in sent[3]  # spec 0010d: the photos, last
+    assert "FROM listing_photos" in sent[2]  # spec 0010d: the photos, last
 
 
 def _hourly(seeker_id: uuid.UUID) -> int:

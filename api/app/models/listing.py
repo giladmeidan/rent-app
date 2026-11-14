@@ -255,8 +255,8 @@ class Listing(Base):
     geocode_attempts: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=text("0")
     )
-    # Public listing-page views (spec 0004a, `services/applications.py` `record_view`); approximate
-    # by design (bots, refetches and the owner count). Never in a public schema.
+    # Public listing-page views (spec 0004a), counted by `services/listing_views.py` once per viewer
+    # per hour (spec 0011e); approximate by design. Never in a public schema.
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     # Deferred: only `_public_listings()` undefers them (owner endpoints never load them).
     lat: Mapped[float | None] = column_property(
