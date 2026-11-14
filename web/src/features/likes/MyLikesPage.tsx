@@ -343,7 +343,7 @@ export function MyLikesPage() {
       </div>
       {mutualId !== null && (
         <div className="flex flex-col gap-3">
-          <MutualBanner applicationId={mutualId} />
+          <MutualBanner key={mutualId} applicationId={mutualId} />
         </div>
       )}
       {body}

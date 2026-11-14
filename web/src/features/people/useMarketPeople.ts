@@ -35,7 +35,11 @@ type Browse = InfiniteData<PeopleBrowseOut>;
 
 /** Neither query refetches by itself: a stale page costs at most a minute, and a refetch of N
  * loaded pages is N browse calls. */
-const QUIET = { staleTime: 60_000, refetchOnWindowFocus: false } as const;
+const QUIET = {
+  staleTime: 60_000,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+} as const;
 
 /** The cards of every loaded page, a repeated card (an offset shifted by a change) dropped. */
 export function flattenCards(data: Browse): PersonCardOut[] {

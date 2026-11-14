@@ -22,9 +22,10 @@ export function useSaveProfile() {
       for (const queryKey of [['search'], ['search-map'], ['listing']])
         queryClient.resetQueries({ queryKey });
       // A save can change the gender rule and the ticket (0010c): the people lists follow it.
-      for (const queryKey of [MARKET_PEOPLE_KEY, PEOPLE_LIKES_KEY]) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
+      // Browse is reset, not invalidated: the next visit then loads one counted page, not every
+      // page that was loaded.
+      void queryClient.resetQueries({ queryKey: MARKET_PEOPLE_KEY });
+      void queryClient.invalidateQueries({ queryKey: PEOPLE_LIKES_KEY });
     },
     onError: (error) => {
       if (hasStatus(error, 401)) clearSession(queryClient);

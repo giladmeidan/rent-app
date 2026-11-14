@@ -160,16 +160,13 @@ export function MarketPersonCard({
         )}
         {shared > 0 && (
           <p data-testid="market-person-alike" className="text-start text-body-sm text-ink-muted">
-            <span>{t('market.people.alike', { same, shared })}</span>
+            <span className="block">{t('market.people.alike', { same, shared })}</span>
             {differing.length > 0 && (
-              <>
-                {' '}
-                <span>
-                  {t('market.people.differs', {
-                    topics: differing.map((key) => lifestyleTopic(key, t)).join(', '),
-                  })}
-                </span>
-              </>
+              <span className="block">
+                {t('market.people.differs', {
+                  topics: differing.map((key) => lifestyleTopic(key, t)).join(', '),
+                })}
+              </span>
             )}
           </p>
         )}

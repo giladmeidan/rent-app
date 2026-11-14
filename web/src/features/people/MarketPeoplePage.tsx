@@ -124,19 +124,33 @@ export function MarketPeoplePage() {
               />
             ))}
           </ul>
-          {people.hasNextPage && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                focusFrom.current = items.length;
-                void people.fetchNextPage();
-              }}
-              disabled={people.isFetchingNextPage}
-              aria-busy={people.isFetchingNextPage}
-              className="self-center"
-            >
-              {t('people.loadMore')}
-            </Button>
+          {people.isFetchNextPageError && hasStatus(people.error, 429) ? (
+            // The browse limit: no retry, a click would only make another counted call.
+            <p role="alert" className="text-start text-body-sm font-semibold text-danger">
+              {t('people.browseRateLimited')}
+            </p>
+          ) : (
+            people.hasNextPage && (
+              <>
+                {people.isFetchNextPageError && (
+                  <p role="alert" className="text-start text-body-sm font-semibold text-danger">
+                    {t('common.error')}
+                  </p>
+                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    focusFrom.current = items.length;
+                    void people.fetchNextPage();
+                  }}
+                  disabled={people.isFetchingNextPage}
+                  aria-busy={people.isFetchingNextPage}
+                  className="self-center"
+                >
+                  {t('people.loadMore')}
+                </Button>
+              </>
+            )
           )}
         </>
       );

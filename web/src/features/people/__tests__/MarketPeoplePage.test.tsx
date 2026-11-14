@@ -337,4 +337,37 @@ describe('MarketPeoplePage', () => {
     expect(client.getQueryData(MARKET_PEOPLE_KEY)).toBeUndefined();
     expect(client.getQueryData(PEOPLE_LIKES_KEY)).toBeUndefined();
   });
+
+  it('ac15_load_more_errors', async () => {
+    const first = Array.from({ length: 2 }, (_, i) =>
+      personCard({ display_name: `A${String(i)}` }),
+    );
+    const more = () => screen.queryByRole('button', { name: he.people.loadMore });
+
+    // 429: the browse text under the grid, no button (a click would be another counted call).
+    let run = renderPage([page(first, 4), json({ detail: 'rate_limited' }, 429)]);
+    await screen.findAllByRole('article');
+    fireEvent.click(more() as HTMLElement);
+    expect(await screen.findByText(he.people.browseRateLimited)).toBeVisible();
+    expect(screen.getByText(he.people.browseRateLimited)).toHaveAttribute('role', 'alert');
+    expect(more()).toBeNull();
+    expect(cards()).toHaveLength(2);
+    expect(run.api.calls(PEOPLE)).toHaveLength(2);
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // 500: an inline error, the cards stay and the button is the retry.
+    const third = [personCard({ display_name: 'B0' })];
+    run = renderPage([page(first, 3), json({ detail: 'boom' }, 500), page(third, 3)]);
+    await screen.findAllByRole('article');
+    fireEvent.click(more() as HTMLElement);
+    expect(await screen.findByText(he.common.error)).toHaveAttribute('role', 'alert');
+    expect(more()).toBeVisible();
+    expect(cards()).toHaveLength(2);
+    fireEvent.click(more() as HTMLElement);
+    await waitFor(() => {
+      expect(cards()).toHaveLength(3);
+    });
+    expect(screen.queryByText(he.common.error)).toBeNull();
+  });
 });
