@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Avatar } from '../../components/Avatar';
 import { Badge, type BadgeTone } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -65,12 +66,7 @@ export function ApplicantPane({ id, applicant, spots, flatLifestyle, flatIsRoom 
     >
       <Card padding="md" className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <div
-            aria-hidden="true"
-            className="flex size-14 flex-none items-center justify-center rounded-full bg-accent-soft text-h3 text-accent-strong"
-          >
-            {Array.from(name)[0] ?? ''}
-          </div>
+          <Avatar name={name} photoUrl={applicant.photo_url} size="lg" tone="accent" />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {/* `overflow-wrap: anywhere` (no Tailwind token): a long unbroken name wraps. */}
             <h2 id={headingId} className="font-display text-h2 [overflow-wrap:anywhere]">

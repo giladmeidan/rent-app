@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
+import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -184,17 +185,12 @@ export function ApplicantCard({
       className={cx('flex flex-col gap-3', compact && 'relative')}
     >
       <div className="flex items-start gap-3">
-        <div
-          aria-hidden="true"
-          className={cx(
-            'flex size-12 flex-none items-center justify-center rounded-full text-h3',
-            compact && selected
-              ? 'bg-accent-soft text-accent-strong'
-              : 'bg-surface-subtle text-ink-muted',
-          )}
-        >
-          {Array.from(name)[0] ?? ''}
-        </div>
+        <Avatar
+          name={name}
+          photoUrl={applicant.photo_url}
+          size="md"
+          tone={compact && selected ? 'accent' : 'neutral'}
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div
             data-testid="applicant-name-row"

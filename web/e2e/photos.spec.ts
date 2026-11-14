@@ -1,11 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { signUpOwner } from './helpers';
-import { test } from './fixtures';
+import { API, postListing, signUpOwner } from './helpers';
+import { newTileContext, test } from './fixtures';
 
 /** A small committed JPEG (320x200). */
 const PHOTO = fileURLToPath(new URL('./fixtures/photo.jpg', import.meta.url));
@@ -91,4 +92,68 @@ test('ac7_wizard_photo', async ({ page }) => {
     .toBeGreaterThan(0);
   // Every photo uploaded: no "not uploaded" alert.
   await expect(page.getByText(/לא הועלו?/)).toHaveCount(0);
+});
+
+// Spec 0010k AC5, NF1: a listing's photo is the large WebP on its public page and the small one on
+// its search card; the owner's own photo is set on the profile page and shown there. One sign-up
+// (the owner is also the profile-photo user); the visitor is a second context with no session.
+test('ac5_gallery_and_profile_photo', async ({ page, browser }) => {
+  const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  await signUpOwner(page);
+  const id = await postListing(page, street);
+
+  // The upload: the raw JPEG as the body (not multipart).
+  const upload = await page.request.post(`${API}/listings/${id}/photos`, {
+    data: readFileSync(PHOTO),
+    headers: { 'Content-Type': 'image/jpeg' },
+  });
+  expect(upload.status()).toBe(201);
+
+  const visitor = await newTileContext(browser);
+  try {
+    const guest = await visitor.newPage();
+
+    // The public listing page: one photo, the large copy, and it loads; no counter, no thumbnails.
+    await guest.goto(`/listings/${id}`);
+    await expect(guest.getByRole('heading', { level: 1 })).toBeVisible();
+    const main = guest.getByRole('article').locator('img');
+    await expect(main).toHaveCount(1);
+    await expect(main).toHaveAttribute('src', /-l\.webp$/);
+    await expect
+      .poll(() => main.evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : 0)))
+      .toBeGreaterThan(0);
+    await expectNoAxeViolations(guest, 'listing page with a photo');
+
+    // The search card: the small copy, and it loads.
+    await guest.goto('/search');
+    const card = guest.getByRole('article').filter({ hasText: street });
+    await expect(card).toHaveCount(1);
+    const cover = card.locator('img');
+    await expect(cover).toHaveCount(1);
+    await expect(cover).toHaveAttribute('src', /-s\.webp$/);
+    await expect
+      .poll(() => cover.evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : 0)))
+      .toBeGreaterThan(0);
+  } finally {
+    await visitor.close();
+  }
+
+  // The profile: no photo, then the same file through the page.
+  await page.goto('/me/profile');
+  await expect(page.getByRole('button', { name: he.profile.photo.add })).toBeVisible();
+  await expectNoAxeViolations(page, 'profile page without a photo');
+  await page.locator('input[type="file"]').setInputFiles(PHOTO);
+  await expect(page.getByText(he.profile.photo.saved, { exact: true })).toBeVisible();
+  const mine = page.locator('#profile-about img');
+  await expect(mine).toHaveCount(1);
+  await expect(mine).toHaveAttribute('src', /-s\.webp$/);
+  await expect
+    .poll(() => mine.evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : 0)))
+    .toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: he.profile.photo.replace })).toBeVisible();
+  await expectNoAxeViolations(page, 'profile page with a photo');
+
+  // It is the account's: still there after a reload.
+  await page.reload();
+  await expect(page.locator('#profile-about img')).toHaveAttribute('src', /-s\.webp$/);
 });

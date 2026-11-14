@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -109,12 +110,7 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
     <li>
       <Card as="article" aria-labelledby={headingId} padding="sm" className="flex flex-col gap-3">
         <div className="flex items-start gap-3">
-          <div
-            aria-hidden="true"
-            className="flex size-12 flex-none items-center justify-center rounded-full bg-surface-subtle text-h3 text-ink-muted"
-          >
-            {Array.from(name)[0] ?? ''}
-          </div>
+          <Avatar name={name} photoUrl={person.photo_url} size="md" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div
               data-testid="person-name-row"

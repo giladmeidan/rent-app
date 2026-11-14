@@ -1,7 +1,7 @@
 ---
 id: 0010k
 title: The listing page shows a photo gallery, every public listing card its cover, every person their photo through one shared Avatar, and anyone sets, replaces or removes their own photo on the profile
-status: in-progress
+status: done
 depends_on: [0010c, 0010d, 0010j]   # 0010c: the profile's "עליי" section; 0010d: `cover` / `photos` on listing responses; 0010j: /me/photo and every photo_url
 reviewers: [code, qa, ux]   # no security: display only, the server decides who gets an address (0010d/0010j have security); ux: gallery, avatars on five screens, profile photo (no artboard body for the last two); qa: every card and avatar site
 estimate: 1 coder run   # coder Sonnet/high

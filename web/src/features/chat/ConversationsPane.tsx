@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 
 import { usePageTitle } from '../../app/usePageTitle';
+import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -62,12 +63,12 @@ function ConversationRow({
         to={`/chat/${conversation.id}`}
         className={() => cx('flex min-h-tap items-start gap-3 rounded-lg p-3.5', focusRing)}
       >
-        <span
-          aria-hidden="true"
-          className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-soft text-h3 font-semibold text-accent-strong"
-        >
-          {Array.from(conversation.other_name)[0] ?? ''}
-        </span>
+        <Avatar
+          name={conversation.other_name}
+          photoUrl={conversation.other_photo_url}
+          size="md"
+          tone="accent"
+        />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex min-w-0 items-center gap-2">
             <span dir="auto" className="min-w-0 flex-1 truncate text-h3 font-medium">

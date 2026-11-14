@@ -317,6 +317,7 @@ export function SearchMap({
       to={`/listings/${listing.id}`}
       seekerBirthYear={profile?.birth_year}
       layout="compact"
+      coverUrl={listing.cover?.small_url}
       badge={listing.match && <MatchBadge score={listing.match.score} />}
     >
       {listing.match && <MatchChips match={listing.match} listing={listing} profile={profile} />}

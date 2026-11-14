@@ -69,6 +69,7 @@ function detail(overrides: Record<string, unknown>) {
     applicant_count: 3,
     room_fit: null,
     like: null,
+    photos: [],
     people: [], // spec 0010f
     ...overrides,
   };
@@ -226,6 +227,15 @@ const SUBMITTED = {
   },
 };
 
+/** A photo whose two sizes are inline SVGs of one colour (no media request to answer). */
+const photo = (n: number, colour: string) => {
+  const svg = (w: number, h: number) =>
+    `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${String(w)}" height="${String(h)}"><rect width="100%" height="100%" fill="${colour}"/></svg>`,
+    )}`;
+  return { id: `p${String(n)}`, small_url: svg(480, 300), large_url: svg(1600, 1000) };
+};
+
 const STATES: State[] = [
   {
     name: 'apartment-visitor',
@@ -272,6 +282,33 @@ const STATES: State[] = [
     setup: { listing: APARTMENT_SEEKER, seeker: true, applications: [SUBMITTED] },
     act: async (page) => {
       await expect(page.getByRole('link', { name: he.applications.viewMine })).toBeVisible();
+      await mapReady(page);
+    },
+  },
+  {
+    name: 'gallery-three',
+    setup: {
+      listing: detail({
+        photos: [photo(1, '#D9D2CA'), photo(2, '#C9BFB3'), photo(3, '#B8AC9E')],
+      }),
+      seeker: false,
+    },
+    act: async (page) => {
+      await expect(heading(page)).toBeVisible();
+      await page
+        .getByRole('button', {
+          name: he.listing.photos.show.replace('{{n}}', '2').replace('{{total}}', '3'),
+        })
+        .click();
+      await expect(page.getByText('2 / 3')).toBeVisible();
+      await mapReady(page);
+    },
+  },
+  {
+    name: 'gallery-one',
+    setup: { listing: detail({ photos: [photo(1, '#D9D2CA')] }), seeker: false },
+    act: async (page) => {
+      await expect(heading(page)).toBeVisible();
       await mapReady(page);
     },
   },

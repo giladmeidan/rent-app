@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Card } from '../../components/Card';
 import type { FlatPersonOut } from '../listings/api';
@@ -24,23 +25,7 @@ function PersonRow({ person }: { person: FlatPersonOut }) {
   const line = ageGenderLine(t, person);
   return (
     <Card as="li" padding="sm" className="flex items-start gap-3">
-      {/* shortcut: inline avatar, swap for 0010k's Avatar once merged */}
-      {person.photo_url !== null ? (
-        <img
-          src={person.photo_url}
-          alt=""
-          width={48}
-          height={48}
-          className="size-12 flex-none rounded-full object-cover"
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          className="flex size-12 flex-none items-center justify-center rounded-full bg-surface-subtle text-h3 text-ink-muted"
-        >
-          {Array.from(person.display_name)[0] ?? ''}
-        </div>
-      )}
+      <Avatar name={person.display_name} photoUrl={person.photo_url} size="md" />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           {/* `overflow-wrap: anywhere` (no Tailwind token): a long unbroken name wraps. */}
