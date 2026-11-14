@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../components/Avatar';
-import { Badge, type BadgeTone } from '../../components/Badge';
+import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { focusRing } from '../../components/focusRing';
+import { ownerTone } from '../applications/ApplicationStatusChip';
 import { appliedOn } from '../applications/format';
 import type { LifestyleAnswers } from '../lifestyle/keys';
 import { MatchRing } from '../match/MatchRing';
@@ -27,13 +28,6 @@ type Props = {
   flatLifestyle: LifestyleAnswers;
   /** Whether the listing is a room now (0007c: the "fill the flat's questionnaire" hint). */
   flatIsRoom: boolean;
-};
-
-// The same words and tones as the card's status chip (`ApplicationStatusChip`, owner's view).
-const STATUS_TONE: Record<ApplicantStatus, BadgeTone> = {
-  submitted: 'accent',
-  shortlisted: 'success',
-  declined: 'neutral',
 };
 
 /**
@@ -73,7 +67,7 @@ export function ApplicantPane({ id, applicant, spots, flatLifestyle, flatIsRoom 
               {name}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={STATUS_TONE[applicant.status]} data-testid="pane-status">
+              <Badge tone={ownerTone[applicant.status]} data-testid="pane-status">
                 {statusLabel[applicant.status]}
               </Badge>
               {applicant.source === 'like' && (

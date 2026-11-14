@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -16,6 +16,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { Tag } from '../../components/Tag';
 import { useOnline } from '../../components/useOnline';
+import { DisclosureButton } from '../applicants/DisclosureButton';
 import { ApiError, type ListingType } from '../listings/api';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
@@ -218,8 +219,16 @@ function MyApplications({ type, panel }: { type: ListingType; panel: boolean }) 
   const { t } = useTranslation();
   const applications = useMyApplications();
   const room = type === 'room';
+  // Ids seen active on this visit. They stay in the active list after a withdraw or a refetch: moving
+  // a card into "past" would remount it and drop its focus target and its 409 alert (spec 0009t).
+  const [seenActive] = useState(() => new Set<string>());
+  const [pastOpen, setPastOpen] = useState(false);
+  const pastId = useId();
 
   const shown = (applications.data ?? []).filter((a) => a.listing.listing_type === type);
+  for (const a of shown) if (isWithdrawable(a.status)) seenActive.add(a.id);
+  const active = shown.filter((a) => seenActive.has(a.id));
+  const past = shown.filter((a) => !seenActive.has(a.id));
 
   let body;
   if (applications.isPending) {
@@ -249,11 +258,42 @@ function MyApplications({ type, panel }: { type: ListingType; panel: boolean }) 
     );
   } else {
     body = (
-      <ul className="flex flex-col gap-4">
-        {shown.map((application) => (
-          <ApplicationCard key={application.id} application={application} />
-        ))}
-      </ul>
+      <>
+        {active.length > 0 ? (
+          <ul className="flex flex-col gap-4">
+            {active.map((application) => (
+              <ApplicationCard key={application.id} application={application} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-body text-ink-muted">{t('applications.mine.noActive')}</p>
+        )}
+        {past.length > 0 && (
+          // Declined and withdrawn ones, closed by default. Always in the DOM, so `aria-controls`
+          // names the list; a display class would override `hidden`, so it is set only when open.
+          <div className="flex flex-col gap-4">
+            <div>
+              <DisclosureButton
+                open={pastOpen}
+                controls={pastId}
+                onToggle={() => setPastOpen((o) => !o)}
+              >
+                {t('applications.mine.past', { count: past.length })}
+              </DisclosureButton>
+            </div>
+            <ul
+              id={pastId}
+              hidden={!pastOpen}
+              data-testid="past-applications"
+              className={pastOpen ? 'flex flex-col gap-4' : undefined}
+            >
+              {past.map((application) => (
+                <ApplicationCard key={application.id} application={application} />
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
     );
   }
 
