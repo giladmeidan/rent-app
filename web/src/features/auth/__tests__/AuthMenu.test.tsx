@@ -116,34 +116,31 @@ describe('AuthMenu', () => {
   });
 
   it('ac9_my_applications_link', async () => {
-    // A seeker: "מועמדויות", not "my listings".
+    // A seeker: "הפעילות שלי" is their applications.
     mockApi({ 'GET /me': [json(noa)], [LIST]: [json([])] });
     let view = renderRoutes('/', menu);
-    expect(await screen.findByRole('link', { name: he.nav.applications })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: he.nav.mine })).toHaveAttribute(
       'href',
       '/me/applications',
     );
-    expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner: "my listings" only.
+    // An owner: "הפעילות שלי" is their listings.
     mockApi({ 'GET /me': [json({ ...noa, role: 'owner' })], [LIST]: [json([])] });
     view = renderRoutes('/', menu);
-    expect(await screen.findByRole('link', { name: he.header.myListings })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: he.nav.mine })).toHaveAttribute(
       'href',
       '/me/listings',
     );
-    expect(screen.queryByRole('link', { name: he.nav.applications })).toBeNull();
     view.unmount();
     vi.unstubAllGlobals();
 
-    // A visitor: neither.
+    // A visitor: no "הפעילות שלי".
     mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)] });
     renderRoutes('/', menu);
     expect(await screen.findByRole('link', { name: he.header.login })).toBeVisible();
-    expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
-    expect(screen.queryByRole('link', { name: he.nav.applications })).toBeNull();
+    expect(screen.queryByRole('link', { name: he.nav.mine })).toBeNull();
   });
   it('ac1_chat_link_and_count', async () => {
     const chatLink = () => screen.findByRole('link', { name: new RegExp(`^${he.header.chat}`) });
@@ -162,10 +159,10 @@ describe('AuthMenu', () => {
     expect(link).toHaveAttribute('href', '/chat');
     expect(await within(link).findByText('2')).toHaveAttribute('aria-hidden', 'true');
     expect(link).toHaveAccessibleName(`${he.header.chat} ${newCount(2)}`);
-    // After the owner's first tab, "המודעות שלי" (spec 0009a).
+    // Right after "הפעילות שלי", as on the market.
     const links = screen.getAllByRole('link');
-    expect(links.indexOf(link)).toBeGreaterThan(
-      links.indexOf(screen.getByRole('link', { name: he.header.myListings })),
+    expect(links.indexOf(link)).toBe(
+      links.indexOf(screen.getByRole('link', { name: he.nav.mine })) + 1,
     );
     view.unmount();
     vi.unstubAllGlobals();
@@ -182,7 +179,7 @@ describe('AuthMenu', () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
       expect(link).toHaveAccessibleName(he.header.chat);
-      expect(screen.getByRole('link', { name: he.nav.applications })).toBeVisible();
+      expect(screen.getByRole('link', { name: he.nav.mine })).toBeVisible();
       expect(screen.getByRole('button', { name: he.header.logout })).toBeVisible();
       view.unmount();
       vi.unstubAllGlobals();
@@ -228,30 +225,28 @@ describe('AuthMenu', () => {
     }
   });
   it('ac10_profile_link', async () => {
-    // A seeker: "פרופיל" links to /me/profile, last: after "מועמדויות" and "צ'אט".
-    mockApi({
-      'GET /me': [json(noa)],
-      [LIST]: [json([])],
-      'GET /me/likes': [json({ liked_me: [], mine: [] })],
-    });
-    let view = renderRoutes('/', menu);
-    const profile = await screen.findByRole('link', { name: he.nav.profile });
-    expect(profile).toHaveAttribute('href', '/me/profile');
-    const links = screen.getAllByRole('link');
-    const applications = screen.getByRole('link', { name: he.nav.applications });
-    expect(links.indexOf(profile)).toBe(links.indexOf(applications) + 2);
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // An owner and a visitor: no profile link.
-    for (const me of [json({ ...noa, role: 'owner' }), json({ detail: 'unauthenticated' }, 401)]) {
-      mockApi({ 'GET /me': [me], [LIST]: [json([])] });
-      view = renderRoutes('/', menu);
-      expect(await screen.findAllByRole('link')).not.toHaveLength(0);
-      expect(screen.queryByRole('link', { name: he.nav.profile })).toBeNull();
+    // A seeker and an owner: "פרופיל" links to /me/profile, last: after "הפעילות שלי" and "צ'אט".
+    for (const me of [noa, { ...noa, role: 'owner' }]) {
+      mockApi({
+        'GET /me': [json(me)],
+        [LIST]: [json([])],
+        'GET /me/likes': [json({ liked_me: [], mine: [] })],
+      });
+      const view = renderRoutes('/', menu);
+      const profile = await screen.findByRole('link', { name: he.nav.profile });
+      expect(profile).toHaveAttribute('href', '/me/profile');
+      const links = screen.getAllByRole('link');
+      const mine = screen.getByRole('link', { name: he.nav.mine });
+      expect(links.indexOf(profile)).toBe(links.indexOf(mine) + 2);
       view.unmount();
       vi.unstubAllGlobals();
     }
+
+    // A visitor: no profile link.
+    mockApi({ 'GET /me': [json({ detail: 'unauthenticated' }, 401)], [LIST]: [json([])] });
+    renderRoutes('/', menu);
+    expect(await screen.findAllByRole('link')).not.toHaveLength(0);
+    expect(screen.queryByRole('link', { name: he.nav.profile })).toBeNull();
   });
 
   // The likes tab is the market's (spec 0010a): these render at `/market`.
@@ -341,7 +336,7 @@ describe('AuthMenu', () => {
       'GET /me/likes': [json({ liked_me: [], mine: [] })],
     });
     renderRoutes('/search', menu);
-    expect(await screen.findByRole('link', { name: he.header.myListings })).toBeVisible();
+    expect(await screen.findByRole('link', { name: he.nav.mine })).toBeVisible();
     expect(screen.queryByRole('link', { name: he.header.likes })).toBeNull();
     expect(api.calls('GET /me/likes')).toHaveLength(0);
   });

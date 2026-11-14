@@ -42,22 +42,6 @@ const houseIcon = (
   </NavIcon>
 );
 
-const postIcon = (
-  <NavIcon>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 8v8" />
-    <path d="M8 12h8" />
-  </NavIcon>
-);
-
-const applicationsIcon = (
-  <NavIcon>
-    <path d="M4 5h16v14H4z" />
-    <path d="M4 9h16" />
-    <path d="M8 13h5" />
-  </NavIcon>
-);
-
 const profileIcon = (
   <NavIcon>
     <circle cx="12" cy="8" r="4" />
@@ -72,8 +56,8 @@ const profileIcon = (
  *   login is not asked owner or seeker (`OtpForm`).
  * - Signed in: one named `<nav data-bottom-nav>` with the tabs of the current side (a bottom tab
  *   bar below `lg`, the top bar's text tabs from `lg`; MARKET-PLAN section 7), then the greeting
- *   and logout outside it. The market has no roles (spec 0010b): every account gets the same five
- *   tabs there; the apartments tabs follow the role (an owner's include posting an apartment). Chat is on both sides.
+ *   and logout outside it. Both sides share one tab order; only the routes differ, and the
+ *   apartments' "הפעילות שלי" follows the role (an owner's listings, a seeker's applications).
  */
 export function AuthMenu() {
   const { t } = useTranslation();
@@ -109,39 +93,26 @@ export function AuthMenu() {
   }
 
   const focused = FOCUSED_ROUTES.some((pattern) => matchPath(pattern, pathname) !== null);
-  const owner = user.role === 'owner';
-  const search = <NavTab to="/search" icon={searchIcon} label={t('nav.search')} />;
-  const market = <NavTab to="/market" end icon={searchIcon} label={t('nav.market')} />;
-  const mine = <NavTab to="/market/mine" icon={houseIcon} label={t('nav.mine')} />;
-  const profile = <NavTab to="/me/profile" icon={profileIcon} label={t('nav.profile')} />;
-  let tabs;
-  if (side === 'market') {
-    tabs = (
-      <>
-        {market}
-        <LikesNavLink />
-        {mine}
-        <ChatNavLink />
-        {profile}
-      </>
-    );
-  } else {
-    tabs = owner ? (
-      <>
-        <NavTab to="/me/listings" icon={houseIcon} label={t('header.myListings')} />
-        <NavTab to="/listings/new?type=apartment" icon={postIcon} label={t('nav.post')} />
-        <ChatNavLink />
-        {search}
-      </>
-    ) : (
-      <>
-        {search}
-        <NavTab to="/me/applications" icon={applicationsIcon} label={t('nav.applications')} />
-        <ChatNavLink />
-        {profile}
-      </>
-    );
-  }
+  // One skeleton on both sides: חיפוש · (לייקים, market only) · הפעילות שלי · צ'אט · פרופיל.
+  // Posting lives inside הפעילות שלי (the my-listings "new" button).
+  const market = side === 'market';
+  let mineTo = '/me/applications';
+  if (market) mineTo = '/market/mine';
+  else if (user.role === 'owner') mineTo = '/me/listings';
+  const tabs = (
+    <>
+      <NavTab
+        to={market ? '/market' : '/search'}
+        end={market}
+        icon={searchIcon}
+        label={t('nav.search')}
+      />
+      {market && <LikesNavLink />}
+      <NavTab to={mineTo} icon={houseIcon} label={t('nav.mine')} />
+      <ChatNavLink />
+      <NavTab to="/me/profile" icon={profileIcon} label={t('nav.profile')} />
+    </>
+  );
 
   return (
     <>
