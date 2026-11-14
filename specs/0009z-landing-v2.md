@@ -1,7 +1,7 @@
 ---
 id: 0009z
 title: A visitor at `/` gets a full landing page that shows what the site holds (map search, match score, שוק השותפים, the owner side, real listings) and leads into each part
-status: verified
+status: in-review
 depends_on: []
 reviewers: [ux, qa, code]   # ux: a rebuilt screen, compared against design/screens-v2/Main.html. qa: a UI change with a new query and rewritten tests (checklist line 8). code: a new shared Button variant + the blast radius. No auth, data or API change.
 estimate: 1 coder run   # coder Opus/medium: the product's front door, design-heavy
@@ -42,9 +42,11 @@ market entry point of 0010a stays.
       dash). The example's facts back the lines (7,200 ₪, one parking spot; a profile's `parking_needed`
       goes up to 2).
    2. **"מה מחכה בפנים": four doors.** A grid (`lg`: six columns; map tile spans 4, match 2, market 2,
-      owner 4; below `lg`: one column). Each tile is one `<Link>` (the whole card, `focusRing`), named by
-      `aria-labelledby` = its `<h3>`'s id (so its accessible name is the title alone, and the owner tile's
-      "more" label "פרסום דירה" never collides with the CTAs of that name), with an icon chip, the `<h3>`,
+      owner 4; below `lg`: one column). Each tile is one `<Link>` (the whole card, `focusRing`) with no `aria-labelledby` /
+      `aria-label`: its accessible name is its visible text (title, sentence, "more" label), as WCAG 2.5.3
+      Label in Name asks (review round, qa blocker: a title-only name fails axe's
+      `label-content-name-mismatch`; the owner tile's name ends in "פרסום דירה", so tests and e2e find the
+      CTAs of that name by exact name or inside their region), with an icon chip, the `<h3>`,
       one sentence, a small decorative mini-illustration (`aria-hidden`) and a "more" label:
       | Tile | Destination |
       | --- | --- |
@@ -186,7 +188,8 @@ No emoji. Plural, gender-neutral Hebrew. The turtle joke appears once (the closi
   `within(region named TITLE)`: the CTA names repeat in "איך זה עובד" and the closing band)
 - [ ] AC2 The hero's figure holds the example listing with "התאמה 91%" and the "why" list of three lines —
   `LandingPage.test.tsx::ac2_example_and_why`
-- [ ] AC3 The doors section has four links, each named by its title, going to `/search?view=map`,
+- [ ] AC3 The doors section has four links, each with a name that starts with its title and holds its
+  sentence and "more" label, going to `/search?view=map`,
   `/signup?role=seeker&next=%2Fme%2Fprofile`, `/market` and the owner signup address; the mini-illustrations
   are hidden from assistive technology — `LandingPage.test.tsx::ac3_doors`
 - [ ] AC4 Given the listings request returns three or more items Then "עלו לאחרונה" shows exactly three
@@ -313,3 +316,22 @@ One round; every fixable fact was fixed in place (listed in the report). Remaini
       PRODUCT.md's "one entry point to the market" line gets a landing-v2 note when he accepts it.
     Reviewers: ux, qa, code   Estimated: 1 coder run (Opus/medium), 1 review round
     Links: specs/0009z-landing-v2.md · Product Plan screen 1 (Landing) · design/screens-v2/Main.html
+
+    Spec 0009z — Landing page v2   BUILT, PR open, not merged (Gilad merges after seeing the page)
+    Shipped: a visitor at `/` gets six sections (hero with the example and its "why", four doors, up to
+      three real listings, how it works for both sides, five questions, a closing band); every door,
+      listing and CTA leads into the site.
+    Demo: 1. `make dev`, open `/` signed out, at desktop and phone width  2. click a door (map search,
+      profile signup, שוק השותפים, owner signup) and the CTAs  3. with three or more live apartments
+      "עלו לאחרונה" shows them; with fewer the section is absent.
+    Tests: +4 unit (LandingPage.test 5 → 9, plus the `inverse` row in Button.test), +2 e2e (phone
+      overflow, reduced motion)   CI: once, on the push (Speed rule 7)
+    Findings: 1 blocker fixed (the door links were named by their title alone, which fails axe's Label
+      in Name rule and would have failed e2e; they are now named by their visible text, Scope 2.2 and
+      AC3 amended), 0 majors, 2 one-line minors fixed, 6 follow-ups logged
+    Built differently from the artboard, accepted by the ux reviewer: the example caption is for screen
+      readers only; the "why" card overlaps the listing card by 8 px, not 20; the match badge sits in
+      the price row (the shared card, unchanged); the hero tag is the neutral tag, not a white chip.
+    Changed in PRODUCT.md: nothing yet (the orchestrator adds the landing-v2 line when Gilad accepts Q1–Q3)
+    Decisions open to change on the PR: Q1 real listings only with three or more  Q2 the new copy
+      Q3 no footer
