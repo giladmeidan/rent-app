@@ -14,6 +14,13 @@ self-contained HTML/CSS with Heebo, RTL, and the teal accent as a tweakable vari
 | Inbox.dc.html | 05 מועמדויות — בעל הדירה (mobile) | 9 Applicant inbox |
 | InboxDesktop.dc.html | 05 מועמדויות — דסקטופ | 9 Applicant inbox |
 
+`screens-v2/` holds artboards drawn after the brand kit, as plain responsive HTML that already uses the
+brand tokens (open the file in a browser; narrow the window for the phone layout).
+
+| File | Artboard | Spec |
+| --- | --- | --- |
+| screens-v2/Main.html | דף נחיתה v2 (phone + desktop) | 0009z |
+
 How agents use this: a spec's UI section references the artboard file; the coder reads it for
 structure, spacing, copy and component anatomy (not pixel-perfect); the UX reviewer compares
 the built screen against it. Colour, type, shape and voice come from `design/brand/` (it wins over
