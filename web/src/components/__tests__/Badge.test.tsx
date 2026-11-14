@@ -91,6 +91,15 @@ describe('Badge', () => {
     expect(badge).toHaveClass('inline-flex', 'rounded-full');
   });
 
+  it('danger_tone', () => {
+    render(<Badge tone="danger">{he.applicants.status.declined}</Badge>);
+    const badge = screen.getByText(he.applicants.status.declined);
+    expect(classesOf(badge)).toEqual(
+      expect.arrayContaining(['border', 'border-border', 'bg-surface', 'text-danger']),
+    );
+    expect(badge.querySelector('svg')).toBeNull();
+  });
+
   it('success_tone', () => {
     render(<Badge tone="success">{he.applicants.status.shortlisted}</Badge>);
     const badge = screen.getByText(he.applicants.status.shortlisted);
