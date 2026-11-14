@@ -9,7 +9,7 @@ You may run the stack and attempt the attacks below; you do not edit code.
 
 Check:
 1. Authorization on every endpoint: object-level checks (can user A read/modify user B's listing, application, conversation?). Try it.
-2. Authentication: OTP generation entropy, expiry, attempt limits, brute-force protection; JWT signing, expiry, refresh rotation; logout invalidation.
+2. Authentication: OTP generation entropy, expiry, attempt limits, brute-force protection; session cookie (`rent_session`) flags, expiry and logout invalidation.
 3. Input: Pydantic validation on every body/query; no raw SQL with interpolation; file uploads validate type, size, and re-encode images; no path traversal in storage keys.
 4. PII: phone/email never in logs, never in responses where the spec does not list them; Sentry scrubbing; chat exposes phone only after mutual agreement.
 5. Rate limits present where the spec says and on anything that sends email/SMS.

@@ -1,6 +1,6 @@
 import type { Config } from 'tailwindcss';
 
-// The homie brand tokens (design/brand/tokens.json; names from specs/0009-brand-amendment.md,
+// The homie brand tokens (design/brand/tokens.json; names from specs/archive/0009-brand-amendment.md,
 // spec 0009d). The brand kit wins over design/screens-v1/ for colour, type and shape.
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
