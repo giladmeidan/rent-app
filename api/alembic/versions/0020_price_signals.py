@@ -18,7 +18,7 @@ Downgrade: **an apartment's balcony answer is lost** (set NULL so the old CHECK 
 `ck_listings_room_fields`, then the six columns with their CHECKs and the table go.
 
 Revision ID: 0020
-Revises: 0018
+Revises: 0019
 Create Date: 2026-11-14
 """
 
@@ -29,7 +29,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 revision: str = "0020"
-down_revision: str | None = "0018"
+down_revision: str | None = "0019"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
