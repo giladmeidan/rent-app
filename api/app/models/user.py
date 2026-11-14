@@ -23,6 +23,8 @@ class User(Base):
         # The person photo's key (spec 0010d migration 0013; read and written from spec 0010j).
         UniqueConstraint("photo_key", name="uq_users_photo_key"),
         CheckConstraint(photo_key_check("photo_key"), name="ck_users_photo_key"),
+        # The person's market card id (spec 0010h migration 0017).
+        UniqueConstraint("card_id", name="uq_users_card_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -45,3 +47,8 @@ class User(Base):
     # The person photo's random object key (`{photo_key}-s.webp` / `-l.webp`), NULL = no photo.
     # Column only in spec 0010d; nothing reads or writes it until 0010j.
     photo_key: Mapped[str | None] = mapped_column(Text)
+    # The only person id in market cards and likes (spec 0010h): random, never changes, and never
+    # appears beside a user id in any response.
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
+    )

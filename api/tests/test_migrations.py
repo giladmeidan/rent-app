@@ -2319,3 +2319,122 @@ def test_ac6_flat_profile_upgrade_downgrade(migration_db_url: str) -> None:
             assert _check_definition(conn, "ck_listings_room_fields") != room_fields_0015
     finally:
         engine.dispose()
+
+
+def _index_columns(conn: Any, table: str) -> dict[str, list[str]]:
+    """`table`'s indexes (not its primary key) and their columns."""
+    return {index["name"]: index["column_names"] for index in inspect(conn).get_indexes(table)}
+
+
+def test_ac14_person_likes_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0010h: 0017 adds `users.card_id` (random, unique, backfilled by its default) and the
+    # `person_pairs` table with its ordered-pair CHECK, PK and `user_high` index. Downgrade drops
+    # both; a direct chat (0010g) survives either way.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0016")
+    engine = create_engine(migration_db_url)
+    try:
+        with engine.begin() as conn:
+            users = [
+                conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, 'seeker') RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name},
+                ).scalar_one()
+                for name in ("avi", "bat", "cam")
+            ]
+            chat_id = conn.execute(
+                text(
+                    "INSERT INTO conversations (owner_id, seeker_id)"
+                    " VALUES (least(CAST(:a AS uuid), CAST(:b AS uuid)),"
+                    " greatest(CAST(:a AS uuid), CAST(:b AS uuid))) RETURNING id"
+                ),
+                {"a": users[0], "b": users[1]},
+            ).scalar_one()
+            assert "card_id" not in _columns(conn, "users")
+            assert not _regclass_exists(conn, "person_pairs")
+
+        command.upgrade(cfg, "0017")
+        with engine.connect() as conn:
+            assert _columns(conn, "users")["card_id"] is False
+            card_ids = conn.execute(text("SELECT card_id FROM users")).scalars().all()
+            assert len(card_ids) == 3
+            assert None not in card_ids
+            assert len(set(card_ids)) == 3
+            assert set(card_ids).isdisjoint(users)
+            assert _columns(conn, "person_pairs") == {
+                "user_low": False,
+                "user_high": False,
+                "low_liked_at": True,
+                "high_liked_at": True,
+                "created_at": False,
+            }
+            pk = inspect(conn).get_pk_constraint("person_pairs")
+            assert (pk["name"], pk["constrained_columns"]) == (
+                "person_pairs_pkey",
+                ["user_low", "user_high"],
+            )
+            assert _index_columns(conn, "person_pairs") == {
+                "ix_person_pairs_user_high": ["user_high"]
+            }
+            assert (
+                _check_definition(conn, "ck_person_pairs_order") == "CHECK ((user_low < user_high))"
+            )
+            assert conn.execute(
+                text("SELECT closed_at FROM conversations WHERE id = :id"), {"id": chat_id}
+            ).one() == (None,)
+
+        low, high = sorted(users[:2], key=lambda user: user.bytes)
+        with pytest.raises(IntegrityError, match="ck_person_pairs_order"), engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO person_pairs (user_low, user_high) VALUES (:low, :high)"),
+                {"low": high, "high": low},
+            )
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO person_pairs (user_low, user_high, low_liked_at)"
+                    " VALUES (:low, :high, now())"
+                ),
+                {"low": low, "high": high},
+            )
+        with pytest.raises(IntegrityError, match="person_pairs_pkey"), engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO person_pairs (user_low, user_high) VALUES (:low, :high)"),
+                {"low": low, "high": high},
+            )
+        with pytest.raises(IntegrityError, match="uq_users_card_id"), engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE users SET card_id = (SELECT card_id FROM users WHERE id = :a)"
+                    " WHERE id = :b"
+                ),
+                {"a": users[0], "b": users[2]},
+            )
+
+        command.downgrade(cfg, "0016")
+        with engine.connect() as conn:
+            assert "card_id" not in _columns(conn, "users")
+            assert not _regclass_exists(conn, "person_pairs")
+            assert _check_definition(conn, "ck_person_pairs_order") is None
+            assert conn.execute(text("SELECT count(*) FROM users")).scalar_one() == 3
+            assert (
+                conn.execute(
+                    text("SELECT id FROM conversations WHERE application_id IS NULL")
+                ).scalar_one()
+                == chat_id
+            )
+
+        command.upgrade(cfg, "0017")
+        with engine.connect() as conn:
+            card_ids = conn.execute(text("SELECT card_id FROM users")).scalars().all()
+            assert len(set(card_ids)) == 3
+            assert conn.execute(text("SELECT count(*) FROM person_pairs")).scalar_one() == 0
+            assert _index_columns(conn, "person_pairs") == {
+                "ix_person_pairs_user_high": ["user_high"]
+            }
+            assert conn.execute(text("SELECT count(*) FROM conversations")).scalar_one() == 1
+    finally:
+        engine.dispose()
