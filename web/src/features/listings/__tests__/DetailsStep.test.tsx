@@ -364,3 +364,156 @@ describe('DetailsStep', () => {
     expect(screen.queryByRole('group', { name: r.balcony })).toBeNull();
   });
 });
+
+describe('rent estimate hint (0014c)', () => {
+  const estimate = {
+    low_ils: 5800,
+    high_ils: 6900,
+    confidence: 'high',
+    level: 'neighbourhood',
+    area_name: 'הצפון הישן',
+    figure_rooms: [4],
+    quarters: 4,
+    latest_period: '2026-06-01',
+  };
+  const hint = () => screen.queryByText(/nadlan\.gov\.il/);
+
+  async function fillAddress(type: 'apartment' | 'room' = 'apartment') {
+    const view = renderWizard();
+    chooseTypeAndContinue(he.listings.type[type]);
+    await areasLoaded();
+    change(f.city, 'תל אביב');
+    change(f.street, 'תירוש');
+    change(f.rooms, '4');
+    return view;
+  }
+
+  it('ac11 rent estimate hint', async () => {
+    // Several quarters: the `_other` form, wired to the price input.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'GET /rent-estimate': [json({ estimate, reason: null })],
+    });
+    let view = renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    change(f.city, 'תל אביב');
+    change(f.street, 'תירוש');
+    change(f.rooms, '4');
+    await vi.waitFor(() => {
+      expect(hint()).not.toBeNull();
+    });
+    expect(hint()).toHaveTextContent(
+      'שכר דירה ממוצע ל־4 חדרים בהצפון הישן: 5,800–6,900 ₪ · ודאות גבוהה · לפי nadlan.gov.il, 4 רבעונים עד רבעון 2 2026',
+    );
+    expect(hint()).toHaveClass('text-caption', 'text-ink-muted');
+    const hintId = (hint() as HTMLElement).id;
+    expect(field(f.price).getAttribute('aria-describedby')?.split(' ')).toContain(hintId);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // One quarter, two room counts, medium: the `_one` form and the rooms pair.
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'GET /rent-estimate': [
+        json({
+          estimate: {
+            ...estimate,
+            confidence: 'medium',
+            level: 'city',
+            area_name: 'תל אביב -יפו',
+            figure_rooms: [3, 4],
+            quarters: 1,
+            latest_period: '2026-03-01',
+          },
+          reason: null,
+        }),
+      ],
+    });
+    view = renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    change(f.city, 'תל אביב');
+    change(f.street, 'הרצל');
+    change(f.rooms, '3.5');
+    await vi.waitFor(() => {
+      expect(hint()).not.toBeNull();
+    });
+    expect(hint()).toHaveTextContent(
+      'שכר דירה ממוצע ל־3–4 חדרים בתל אביב -יפו: 5,800–6,900 ₪ · ודאות בינונית · לפי nadlan.gov.il, רבעון אחד: רבעון 1 2026',
+    );
+    const url = new URL(api.calls('GET /rent-estimate')[0]?.request.url ?? '');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      city: 'תל אביב',
+      street: 'הרצל',
+      rooms: '3.5',
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A reason answer, then a 500: a request, no hint.
+    for (const reply of [
+      json({ estimate: null, reason: 'no_figures' }),
+      json({ detail: 'x' }, 500),
+    ]) {
+      const calls = mockApi({ 'GET /areas': [json([gushDan])], 'GET /rent-estimate': [reply] });
+      const shown = await fillAddress();
+      await vi.waitFor(() => {
+        expect(calls.calls('GET /rent-estimate')).toHaveLength(1);
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(hint()).toBeNull();
+      expect(field(f.price)).not.toHaveAttribute('aria-describedby');
+      shown.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // A room: no request at all.
+    const room = mockApi({
+      'GET /areas': [json([gushDan])],
+      'GET /rent-estimate': [json({ estimate, reason: null })],
+    });
+    await fillAddress('room');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(room.calls('GET /rent-estimate')).toHaveLength(0);
+    expect(hint()).toBeNull();
+  });
+
+  it('ac12 estimate request is debounced', async () => {
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'GET /rent-estimate': [json({ estimate, reason: null })],
+    });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    vi.useFakeTimers();
+    try {
+      const advance = (ms: number) =>
+        act(async () => {
+          await vi.advanceTimersByTimeAsync(ms);
+        });
+      change(f.city, 'תל אביב');
+      change(f.rooms, '4');
+      for (const typed of ['ת', 'תי', 'תיר', 'תירו', 'תירוש']) {
+        change(f.street, typed);
+        await advance(300);
+      }
+      // 300 ms after the last keystroke: nothing yet.
+      expect(api.calls('GET /rent-estimate')).toHaveLength(0);
+      await advance(99);
+      expect(api.calls('GET /rent-estimate')).toHaveLength(0);
+      await advance(1);
+      await advance(10);
+      const calls = api.calls('GET /rent-estimate');
+      expect(calls).toHaveLength(1);
+      expect(new URL(calls[0]?.request.url ?? '').searchParams.get('street')).toBe('תירוש');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

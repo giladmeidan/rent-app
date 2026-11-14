@@ -155,6 +155,18 @@
       "ils": "₪",
       "perMonth": "/ חודש"
     },
+    "estimate": {
+      "hint_one": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il, רבעון אחד: {{period}}",
+      "hint_two": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il, 2 רבעונים עד {{period}}",
+      "hint_other": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il, {{count}} רבעונים עד {{period}}",
+      "range": "{{low}}–{{high}} ₪",
+      "roomsPair": "{{low}}–{{high}}",
+      "confidence": {
+        "high": "ודאות גבוהה",
+        "medium": "ודאות בינונית"
+      },
+      "period": "רבעון {{quarter}} {{year}}"
+    },
     "furnished": {
       "none": "לא מרוהטת",
       "partial": "מרוהטת חלקית",
