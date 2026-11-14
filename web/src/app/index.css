@@ -85,3 +85,78 @@ html:has([data-sticky-footer]) {
   outline: 2px solid theme('colors.accent.DEFAULT');
   outline-offset: -2px;
 }
+
+/* The landing (spec 0009z, design/screens-v2/Main.html). The hero panel's faint dot pattern. */
+.landing-dots {
+  background-image: radial-gradient(theme('colors.mascot.blush') 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* The map door's sketch: three white streets over the subtle fill. */
+.landing-map {
+  background:
+    linear-gradient(
+      115deg,
+      transparent 47%,
+      theme('colors.surface.DEFAULT') 47%,
+      theme('colors.surface.DEFAULT') 50%,
+      transparent 50%
+    ),
+    linear-gradient(
+      20deg,
+      transparent 58%,
+      theme('colors.surface.DEFAULT') 58%,
+      theme('colors.surface.DEFAULT') 61%,
+      transparent 61%
+    ),
+    linear-gradient(
+      170deg,
+      transparent 30%,
+      theme('colors.surface.DEFAULT') 30%,
+      theme('colors.surface.DEFAULT') 32%,
+      transparent 32%
+    ),
+    theme('colors.surface.subtle');
+}
+
+/* A door lifts 2px and takes an ink border on hover and keyboard focus. */
+.landing-door {
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.landing-door:hover,
+.landing-door:focus-visible {
+  border-color: theme('colors.ink.DEFAULT');
+}
+
+/* Cards rise 24px and fade in as they enter the viewport. `translate` (not `transform`), so the
+   door's hover lift still applies after the entrance. Browsers without scroll timelines, and
+   people who asked for less motion, see the page still. */
+@media (prefers-reduced-motion: no-preference) {
+  .landing-door:hover,
+  .landing-door:focus-visible {
+    transform: translateY(-2px);
+  }
+
+  @supports (animation-timeline: view()) {
+    .landing-reveal {
+      animation: landing-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    translate: 0 24px;
+  }
+
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
