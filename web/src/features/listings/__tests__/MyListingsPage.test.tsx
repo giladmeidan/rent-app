@@ -1,5 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render as rtlRender,
+  renderHook,
+  screen,
+  within,
+} from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +24,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { formatDate, todayInIsrael } from '../format';
 import { MY_LISTINGS_KEY } from '../useMyListings';
+import { usePatchListing } from '../usePatchListing';
 import { MyListingsPage } from '../MyListingsPage';
 import type { MyListingOut } from '../api';
 import { listing, withoutCounts } from './fixtures';
@@ -875,5 +884,28 @@ describe('MyListingsPage', () => {
     expect(within(cRoom).queryByRole('button', { name: c.title })).toBeNull();
     expect(within(cRoom).queryByRole('button', { name: c.change })).toBeNull();
     view.unmount();
+  });
+
+  it('ac11 only a resume of a paused listing clears the cached answer', async () => {
+    // Spec 0014b API rule 3, mirrored in the cache: `active` on an active (expired) listing keeps it.
+    const answer = { close_reason: 'rented_here', final_rent_ils: 7000 } as const;
+    const paused = listing({ status: 'paused', ...answer });
+    const expired = listing({ expires_at: '2020-01-01T00:00:00Z', ...answer });
+    mockApi({
+      [`PATCH /listings/${paused.id}`]: [json(withoutCounts({ ...paused, status: 'active' }))],
+      [`PATCH /listings/${expired.id}`]: [json(withoutCounts(expired))],
+    });
+    const client = testQueryClient();
+    client.setQueryData<MyListingOut[]>(MY_LISTINGS_KEY, [paused, expired]);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    for (const l of [paused, expired]) {
+      const { result } = renderHook(() => usePatchListing(l.id), { wrapper });
+      await act(() => result.current.mutateAsync({ status: 'active' }));
+    }
+    const [resumed, kept] = client.getQueryData<MyListingOut[]>(MY_LISTINGS_KEY) ?? [];
+    expect(resumed).toMatchObject({ status: 'active', close_reason: null, final_rent_ils: null });
+    expect(kept).toMatchObject(answer);
   });
 });
