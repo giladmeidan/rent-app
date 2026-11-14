@@ -1,7 +1,7 @@
 ---
 id: 0014a
 title: homie keeps the official rent figures for Gush Dan (per city and neighbourhood, by room count, per quarter) in its own database, refreshed every month by the worker
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, security]   # security: outbound HTTP to a third party and parsing its untrusted JSON, new config (as 0003c). No qa / ux: no endpoint and no screen
 estimate: 1 coder run   # coder Opus/high (migration + data import; Speed rule 6)
