@@ -28,3 +28,18 @@ def test_ac8_auth_and_validation(client: TestClient, outbox: Outbox) -> None:
     body = response.json()
     assert set(body) == {"estimate", "reason"}
     assert (body["estimate"] is None) != (body["reason"] is None)
+
+
+@pytest.mark.usefixtures("rent_figures", "cbs_figures")
+def test_ac10_small_flat_api(client: TestClient, outbox: Outbox) -> None:
+    assert client.get("/rent-estimate", params={**VALID, "rooms": "2"}).status_code == 401
+
+    owner = signup(client, outbox, "small@example.com", "owner")
+    response = owner.get("/rent-estimate", params={**VALID, "rooms": "2"})
+    assert response.status_code == 200
+    estimate = response.json()["estimate"]
+    assert (estimate["small_flat_ratio"], estimate["figure_rooms"]) == ("city", [1, 2])
+
+    response = owner.get("/rent-estimate", params=VALID)
+    assert response.status_code == 200
+    assert response.json()["estimate"]["small_flat_ratio"] is None

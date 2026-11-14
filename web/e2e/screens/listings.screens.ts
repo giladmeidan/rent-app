@@ -342,6 +342,7 @@ const STATES: State[] = [
           figure_rooms: [4],
           quarters: 4,
           latest_period: '2026-06-01',
+          small_flat_ratio: null,
         },
         reason: null,
       },

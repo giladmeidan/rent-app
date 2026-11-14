@@ -84,6 +84,9 @@ class Settings(DatabaseSettings):
     # `nadlan` = the monthly import from `nadlan_rent_url` (https, never with a trailing `/`).
     rent_reference: Literal["off", "nadlan"] = "off"
     nadlan_rent_url: str = "https://data.nadlan.gov.il/api/pages"
+    # CBS small-flat rent figures (spec 0014d), worker only. `off` = no request (dev, tests, CI);
+    # `cbs` = the monthly import of Table 4.9 from cbs.gov.il.
+    cbs_rent: Literal["off", "cbs"] = "off"
 
     @field_validator("photo_public_base_url")
     @classmethod

@@ -1,7 +1,7 @@
 ---
 id: 0014d
 title: An owner pricing a 1, 1.5 or 2 room apartment in the listing wizard sees the average rent for 1–2 rooms in its neighbourhood (or city), from nadlan's 3-room figure scaled by the CBS small-flat ratio, always at medium confidence
-status: verified
+status: in-progress
 depends_on: [0014c]   # done (PR #91 merged): the engine this extends
 reviewers: [code, security, qa]   # security: a new outbound fetch + parsing an untrusted xlsx with a new dependency (as 0014a); qa: engine + hint change. No ux: one more copy line in the existing hint slot. No perf: one more small query
 estimate: 1 coder run   # coder Opus/high (migration + data import + the price the owner sees; Speed rule 6)

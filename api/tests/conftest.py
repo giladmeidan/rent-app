@@ -160,6 +160,114 @@ def redis_clean() -> None:
             r.delete(key)
 
 
+# Official rent figures (specs 0014a, 0014c, 0014d), shared by the engine, API and import tests.
+# Six quarters, newest last; the default window (4) is the last four.
+QUARTERS = [
+    dt.date(2025, 3, 1),
+    dt.date(2025, 6, 1),
+    dt.date(2025, 9, 1),
+    dt.date(2025, 12, 1),
+    dt.date(2026, 3, 1),
+    dt.date(2026, 6, 1),
+]
+TEL_AVIV = "תל אביב -יפו"  # the source's spelling
+HOOD_A = "הצפון הישן"
+HOOD_B = "לב העיר"
+# rooms → the first quarter's figure; each later quarter adds 100.
+CITY_BASE = {3: 5000, 4: 6600, 5: 8200}
+HOOD_A_BASE = {3: 4000, 4: 6000, 5: 7600}
+SETTLEMENTS = {
+    5000: TEL_AVIV,
+    6400: "הרצליה",
+    7900: "פתח תקווה",
+    8300: "ראשון לציון",
+    2620: "קריית אונו",
+    9400: "יהוד-מונוסון",
+    229: "גני תקווה",
+    8600: "רמת גן",
+}
+
+
+@pytest.fixture
+def rent_clean(migrated_db: Engine) -> Engine:
+    with migrated_db.begin() as conn:
+        conn.execute(text("TRUNCATE rent_prices, rent_areas"))
+    return migrated_db
+
+
+def _rent_area(
+    conn: Any, kind: str, source_id: int, code: int, name: str, streets: list[str]
+) -> Any:
+    return conn.execute(
+        text(
+            "INSERT INTO rent_areas (kind, source_id, settlement_code, name_he, centre, streets,"
+            " source_version) VALUES (:kind, :source, :code, :name,"
+            " ST_SetSRID(ST_MakePoint(34.78, 32.08), 4326), :streets, '20-08-2026') RETURNING id"
+        ),
+        {"kind": kind, "source": source_id, "code": code, "name": name, "streets": streets},
+    ).scalar_one()
+
+
+def _rent_price(conn: Any, area_id: uuid.UUID, rooms: int, period: dt.date, price: int) -> None:
+    conn.execute(
+        text("INSERT INTO rent_prices (area_id, rooms, period, price_ils) VALUES (:a, :r, :p, :v)"),
+        {"a": area_id, "r": rooms, "p": period, "v": price},
+    )
+
+
+@pytest.fixture
+def rent_figures(rent_clean: Engine) -> Engine:
+    """Settlement rows for the eight alias codes, figures on 5000 only: the city and
+    neighbourhood A (rooms 3-5, six quarters), neighbourhood B one 4-room figure (thin)."""
+    with rent_clean.begin() as conn:
+        ids = {
+            code: _rent_area(conn, "settlement", code, code, name, [])
+            for code, name in SETTLEMENTS.items()
+        }
+        hood_a = _rent_area(
+            conn, "neighbourhood", 101, 5000, HOOD_A, ["תירוש", "דיזנגוף", "רחוב הירקון"]
+        )
+        hood_b = _rent_area(conn, "neighbourhood", 102, 5000, HOOD_B, ["דיזנגוף", "בלפור"])
+        for i, period in enumerate(QUARTERS):
+            for rooms in (3, 4, 5):
+                _rent_price(conn, ids[5000], rooms, period, CITY_BASE[rooms] + 100 * i)
+                _rent_price(conn, hood_a, rooms, period, HOOD_A_BASE[rooms] + 100 * i)
+        _rent_price(conn, hood_b, 4, QUARTERS[-1], 9000)
+    return rent_clean
+
+
+@pytest.fixture
+def cbs_clean(migrated_db: Engine) -> Engine:
+    with migrated_db.begin() as conn:
+        conn.execute(text("TRUNCATE cbs_rent_prices"))
+    return migrated_db
+
+
+def insert_cbs(
+    engine: Engine, kind: str, code: int, ratio: Decimal, periods: list[dt.date]
+) -> None:
+    """CBS rows for one geography: 2.5-3 rooms at 7,000 and 1-2 rooms at 7,000 × `ratio` in each
+    period (bulletin 7/2026)."""
+    with engine.begin() as conn:
+        for period in periods:
+            for group, price in (("2.5-3", Decimal(7000)), ("1-2", 7000 * ratio)):
+                conn.execute(
+                    text(
+                        "INSERT INTO cbs_rent_prices (geo_kind, geo_code, room_group, period,"
+                        " price_ils, bulletin) VALUES (:k, :c, :g, :p, :v, '2026-07-01')"
+                    ),
+                    {"k": kind, "c": code, "g": group, "p": period, "v": price},
+                )
+
+
+@pytest.fixture
+def cbs_figures(cbs_clean: Engine) -> Engine:
+    """CBS ratios over the last four of `QUARTERS`: city 5000 at 0.8, district 5 at 0.85."""
+    insert_cbs(cbs_clean, "city", 5000, Decimal("0.8"), QUARTERS[-4:])
+    insert_cbs(cbs_clean, "district", 5, Decimal("0.85"), QUARTERS[-4:])
+    return cbs_clean
+
+
 class Outbox:
     """In-memory `EmailSender`: collects `(to, subject, body)`."""
 

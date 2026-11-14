@@ -83,13 +83,6 @@ def _expected(data: dict[str, Any], price_key: str) -> dict[tuple[int, dt.date],
 
 
 @pytest.fixture
-def rent_clean(migrated_db: Engine) -> Engine:
-    with migrated_db.begin() as conn:
-        conn.execute(text("TRUNCATE rent_prices, rent_areas"))
-    return migrated_db
-
-
-@pytest.fixture
 def db(rent_clean: Engine) -> Iterator[Session]:
     with get_sessionmaker()() as session:
         yield session
