@@ -16,7 +16,7 @@ as `general-purpose` agents told to read their definition file first.
 Overall: MVP feature work done through Slice 10 (שוק השותפים, incl. 0010m two streams). Slice 14 "Rent price
 estimate" is started: its two data specs are merged, its engine is not specced yet.
 
-- `main` = a5ec89b (0014b done, PR #90). Alembic head `0020` (`0020_price_signals.py`; `0019_rent_reference.py`
+- `main` = the commit after a5ec89b (0014b done, PR #90; then this handoff). Alembic head `0020` (`0020_price_signals.py`; `0019_rent_reference.py`
   before it). 83 spec files `done`, in `specs/archive/`. No open PRs, no spec worktrees, no build stacks.
 - **Slice 14 so far** (PRODUCT.md "Rent price estimate" holds Gilad's decisions of 2026-11-14):
   - `0014a` (PR #89): tables `rent_areas` / `rent_prices`, `services/rent_reference.py`, a monthly arq cron and
