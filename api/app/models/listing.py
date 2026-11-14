@@ -1,8 +1,8 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
 Every CHECK, FK, unique constraint and index here matches migrations 0003, 0004, 0005, 0007, 0009,
-0010, 0012 and 0016 exactly (autogenerate must see no diff). A listing is **live** while `status =
-'active' AND expires_at > now()`.
+0010, 0012, 0016 and 0020 exactly (autogenerate must see no diff). A listing is **live** while
+`status = 'active' AND expires_at > now()`.
 
 Room fields (spec 0007a): `gender_preference` (who the room is for), `flatmates_count` (people
 already living there), `flatmate_ages` (optional: none, some or all of them) and `lifestyle` (the
@@ -11,8 +11,15 @@ flat's questionnaire answers, key -> 1-3). An apartment always holds the default
 next edit.
 
 Flat facts (spec 0010f): `room_size_sqm` (the room itself, at most the flat's `size_sqm`),
-`private_bathroom`, `balcony`, `bills_included` and `poster` (who is posting), all optional and
-room-only (NULL on an apartment, `ck_listings_room_fields`); public on every listing response.
+`private_bathroom`, `bills_included` and `poster` (who is posting), all optional and room-only (NULL
+on an apartment, `ck_listings_room_fields`); public on every listing response. `balcony` was one of
+them and is a fact of any listing since 0020.
+
+Price signals (spec 0014b, migration 0020): `safe_room`, `air_conditioning` and `condition`,
+optional and public, on any listing. The closure answer `close_reason`, `final_rent_ils` and
+`closed_at` is private: only the owner's `GET /me/listings` returns the first two; a resume clears
+all three. Every price a listing had is a `listing_price_changes` row
+(`models/listing_price_change.py`).
 
 Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
 `approximate_point`), never the geocoder's raw point; the worker fills it while `geocode_status` is
@@ -122,9 +129,26 @@ class Listing(Base):
         CheckConstraint(
             "listing_type = 'room' OR (gender_preference = 'any' AND flatmates_count IS NULL"
             " AND flatmate_ages = '{}' AND lifestyle = '{}'::jsonb AND room_size_sqm IS NULL"
-            " AND private_bathroom IS NULL AND balcony IS NULL AND bills_included IS NULL"
-            " AND poster IS NULL)",
+            " AND private_bathroom IS NULL AND bills_included IS NULL AND poster IS NULL)",
             name="ck_listings_room_fields",
+        ),
+        # The price signals (spec 0014b), optional.
+        CheckConstraint(
+            "condition IS NULL OR condition IN ('new', 'renovated', 'good', 'needs_work')",
+            name="ck_listings_condition",
+        ),
+        CheckConstraint(
+            "close_reason IS NULL OR close_reason IN ('rented_here', 'rented_elsewhere',"
+            " 'not_renting')",
+            name="ck_listings_close_reason",
+        ),
+        CheckConstraint(
+            "final_rent_ils IS NULL OR (final_rent_ils BETWEEN 500 AND 100000"
+            " AND close_reason IN ('rented_here', 'rented_elsewhere'))",
+            name="ck_listings_final_rent_ils",
+        ),
+        CheckConstraint(
+            "(close_reason IS NULL) = (closed_at IS NULL)", name="ck_listings_closed_at"
         ),
         # NULLs never collide: many listings have no live invite link (spec 0008d).
         UniqueConstraint("flatmate_invite_hash", name="uq_listings_flatmate_invite_hash"),
@@ -193,10 +217,20 @@ class Listing(Base):
     # Flat facts (spec 0010f); NULL = not said, always NULL on an apartment.
     room_size_sqm: Mapped[int | None] = mapped_column(SmallInteger)
     private_bathroom: Mapped[bool | None] = mapped_column(Boolean)
+    # NULL = not said; on any listing since 0020 (spec 0014b).
     balcony: Mapped[bool | None] = mapped_column(Boolean)
     bills_included: Mapped[bool | None] = mapped_column(Boolean)
     # `lives_here` puts the lister on the room's page as a person, to seekers only (decision 13).
     poster: Mapped[str | None] = mapped_column(Text)
+    # Apartment facts (spec 0014b); NULL = not said, valid on any listing.
+    safe_room: Mapped[bool | None] = mapped_column(Boolean)
+    air_conditioning: Mapped[bool | None] = mapped_column(Boolean)
+    condition: Mapped[str | None] = mapped_column(Text)
+    # The closure answer (spec 0014b): private to the owner, set only while not live, cleared by a
+    # resume (`services/listings.py`).
+    close_reason: Mapped[str | None] = mapped_column(Text)
+    final_rent_ils: Mapped[int | None] = mapped_column(Integer)  # monthly
+    closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

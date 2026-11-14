@@ -55,6 +55,9 @@ PUBLIC_KEYS = {
     "balcony",
     "bills_included",
     "poster",
+    "safe_room",  # spec 0014b: the apartment facts, public
+    "air_conditioning",
+    "condition",
     "created_at",
     "lat",
     "lng",
@@ -227,6 +230,10 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "balcony": None,
         "bills_included": None,
         "poster": None,
+        # The apartment facts (spec 0014b): not said.
+        "safe_room": None,
+        "air_conditioning": None,
+        "condition": None,
         "lat": None,  # not located yet (spec 0003c)
         "lng": None,
         "match": None,  # a visitor (spec 0006b)

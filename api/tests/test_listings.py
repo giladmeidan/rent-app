@@ -409,6 +409,11 @@ def test_ac6_me_listings_is_own_newest_first(
     ]
     assert all("flatmate_invite_hash" not in item for item in body)
     assert [item["photos"] for item in body] == [[], []]  # spec 0010d
+    # NF1 (spec 0014b): the closure answer is two columns of the same row, unanswered here.
+    assert [(item["close_reason"], item["final_rent_ils"]) for item in body] == [
+        (None, None),
+        (None, None),
+    ]
     # The session, the listings, their photos (spec 0010d: one statement for the whole list).
     assert len(sent) == 3, sent
     assert sum("FROM listings" in statement for statement in sent) == 1
@@ -960,3 +965,64 @@ def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
         assert [entry["loc"] for entry in detail] == [["body", "lifestyle"]]
         assert "I am pregnant" not in response.text
     assert _count(db_engine) == 0
+
+
+# --- Spec 0014b: the four facts ----------------------------------------------------------------
+
+FACTS: dict[str, Any] = {
+    "balcony": True,
+    "safe_room": True,
+    "air_conditioning": False,
+    "condition": "renovated",
+}
+
+
+def _facts(item: dict[str, Any]) -> dict[str, Any]:
+    return {name: item[name] for name in FACTS}
+
+
+def test_ac4_apartment_facts(owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine) -> None:
+    created = _create(owner, gush_dan, **FACTS)
+    assert _facts(created) == FACTS
+    assert _facts(_row(db_engine, created["id"])) == FACTS
+    plain = _create(owner, gush_dan)
+    assert _facts(plain) == dict.fromkeys(FACTS)
+
+    changed = {"balcony": False, "safe_room": False, "air_conditioning": True, "condition": "new"}
+    assert _facts(_patched(owner, plain["id"], changed)) == changed
+    assert _facts(_row(db_engine, plain["id"])) == changed
+    # An explicit `null` clears each one.
+    for name in FACTS:
+        assert _patched(owner, created["id"], {name: None})[name] is None
+    assert _facts(_row(db_engine, created["id"])) == dict.fromkeys(FACTS)
+
+    response = owner.post("/listings", json=_body(gush_dan, condition="old"))
+    assert response.status_code == 422, response.text
+    assert [entry["loc"] for entry in response.json()["detail"]] == [["body", "condition"]]
+    _assert_refused(owner, db_engine, plain["id"], [{"condition": "old"}, {"safe_room": "maybe"}])
+    assert _count(db_engine) == 2
+
+
+def test_ac5_facts_on_a_room_and_room_fields_still_room_only(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    room = _create_room(owner, gush_dan, **FACTS)
+    assert _facts(room) == FACTS
+    assert _facts(_row(db_engine, room["id"])) == FACTS
+    assert _facts(_patched(owner, room["id"], {"condition": "needs_work"})) == {
+        **FACTS,
+        "condition": "needs_work",
+    }
+
+    # The other room-only fields are still refused on an apartment.
+    for name, value in {
+        "room_size_sqm": 12,
+        "private_bathroom": True,
+        "bills_included": True,
+        "poster": "lives_here",
+        "flatmates_count": 2,
+    }.items():
+        response = owner.post("/listings", json=_body(gush_dan, **{name: value}))
+        assert response.status_code == 422, (name, response.text)
+        assert "are for a room only" in response.text
+    assert _count(db_engine) == 1

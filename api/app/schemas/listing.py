@@ -1,7 +1,8 @@
 """API schemas for listings (spec 0002a). Never the ORM model.
 
-Every bound of the `listings` CHECKs (migrations 0003, 0007, 0009 and 0016, the room fields of
-spec 0007a and the flat facts of spec 0010f included) is repeated here, so a bad value is a 422
+Every bound of the `listings` CHECKs (migrations 0003, 0007, 0009, 0016 and 0020, the room fields of
+spec 0007a, the flat facts of spec 0010f and the price signals of spec 0014b included) is repeated
+here, so a bad value is a 422
 with a list `detail`, never a database `IntegrityError` (a 500)."""
 
 import datetime as dt
@@ -100,6 +101,10 @@ FlatmateAges = Annotated[list[Annotated[int, Field(ge=AGE_MIN, le=AGE_MAX)]], Fi
 # is posting (`lives_here` puts the lister on the room's page, to seekers only).
 Poster = Literal["lives_here", "leaving", "landlord"]
 RoomSizeSqm = Annotated[int, Field(ge=4, le=100)]
+# Price signals (spec 0014b): an optional fact of any listing, and the owner's private closure
+# answer.
+Condition = Literal["new", "renovated", "good", "needs_work"]
+CloseReason = Literal["rented_here", "rented_elsewhere", "not_renting"]
 
 # The room fields as an apartment must hold them (`ck_listings_room_fields`). Never mutated.
 ROOM_FIELD_DEFAULTS: dict[str, Any] = {
@@ -109,7 +114,6 @@ ROOM_FIELD_DEFAULTS: dict[str, Any] = {
     "lifestyle": {},
     "room_size_sqm": None,
     "private_bathroom": None,
-    "balcony": None,
     "bills_included": None,
     "poster": None,
 }
@@ -128,6 +132,10 @@ NULLABLE_FIELDS = frozenset(
         "balcony",
         "bills_included",
         "poster",
+        # The apartment facts (spec 0014b), on any listing.
+        "safe_room",
+        "air_conditioning",
+        "condition",
     }
 )
 
@@ -167,12 +175,17 @@ class ListingIn(BaseModel):
     flatmates_count: FlatmatesCount | None = None
     flatmate_ages: FlatmateAges = Field(default_factory=list)
     lifestyle: Lifestyle = Field(default_factory=dict)
-    # Flat facts (spec 0010f), room only; `None` = not said.
+    # Flat facts (spec 0010f), room only except `balcony` (any listing since 0014b); `None` = not
+    # said.
     room_size_sqm: RoomSizeSqm | None = None
     private_bathroom: bool | None = None
     balcony: bool | None = None
     bills_included: bool | None = None
     poster: Poster | None = None
+    # Apartment facts (spec 0014b), on any listing; `None` = not said.
+    safe_room: bool | None = None
+    air_conditioning: bool | None = None
+    condition: Condition | None = None
 
     @field_validator("description")
     @classmethod
@@ -243,6 +256,11 @@ class ListingPatch(BaseModel):
     balcony: bool | None = None
     bills_included: bool | None = None
     poster: Poster | None = None
+    # Apartment facts (spec 0014b): in `NULLABLE_FIELDS`. The closure answer is not patchable
+    # (`PUT /listings/{id}/closure`): `extra="forbid"` refuses it.
+    safe_room: bool | None = None
+    air_conditioning: bool | None = None
+    condition: Condition | None = None
     status: ListingStatus | None = None
 
     @field_validator("description")
@@ -302,6 +320,9 @@ class ListingOut(BaseModel):
     balcony: bool | None
     bills_included: bool | None
     poster: Poster | None
+    safe_room: bool | None
+    air_conditioning: bool | None
+    condition: Condition | None
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime
@@ -323,3 +344,22 @@ class MyListingOut(ListingOut):
     # never leaves the server.
     flatmate_count: int
     flatmate_invite_active: bool
+    # The owner's private closure answer (spec 0014b); `null` while unanswered or after a resume.
+    close_reason: CloseReason | None
+    final_rent_ils: int | None
+
+
+class ClosureIn(BaseModel):
+    """`PUT /listings/{id}/closure` (spec 0014b): what happened to a listing that is not live. The
+    rent goes only with a `rented_*` reason; left out or `null` stores NULL."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: CloseReason
+    final_rent_ils: PriceIls | None = None
+
+    @model_validator(mode="after")
+    def _rent_only_when_rented(self) -> Self:
+        if self.reason == "not_renting" and self.final_rent_ils is not None:
+            raise ValueError("final_rent_ils goes only with a rented reason")
+        return self

@@ -530,7 +530,8 @@ def test_ac6_my_listings_counts(
     by_id = {item["id"]: item for item in response.json()}
     assert set(by_id) == {str(listing_a), str(listing_b)}
     for item in by_id.values():
-        assert set(item) == LISTING_OUT_KEYS | COUNT_KEYS
+        # The owner's closure answer (spec 0014b).
+        assert set(item) == LISTING_OUT_KEYS | COUNT_KEYS | {"close_reason", "final_rent_ils"}
         assert "view_count" not in item
     counts = {
         listing_id: (item["applicant_count"], item["new_applicant_count"])
