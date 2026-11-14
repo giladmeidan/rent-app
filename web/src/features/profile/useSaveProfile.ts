@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { hasStatus } from '../applications/api';
 import { clearSession } from '../auth/useLogout';
 import { putProfile, type SeekerProfileIn, type SeekerProfileOut } from './api';
+import { MARKET_PEOPLE_KEY, PEOPLE_LIKES_KEY } from '../people/useMarketPeople';
 import { PROFILE_KEY } from './useProfile';
 
 /**
@@ -20,6 +21,10 @@ export function useSaveProfile() {
       queryClient.setQueryData<SeekerProfileOut | null>(PROFILE_KEY, saved);
       for (const queryKey of [['search'], ['search-map'], ['listing']])
         queryClient.resetQueries({ queryKey });
+      // A save can change the gender rule and the ticket (0010c): the people lists follow it.
+      for (const queryKey of [MARKET_PEOPLE_KEY, PEOPLE_LIKES_KEY]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
     },
     onError: (error) => {
       if (hasStatus(error, 401)) clearSession(queryClient);
