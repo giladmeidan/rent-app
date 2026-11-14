@@ -31,6 +31,7 @@ const PAGES: Record<string, { file: string; width: TableWidth }> = {
   // One width for both panels (spec 0010b), so switching tabs never moves the tablist; the
   // applications keep their reading column inside it.
   MarketMinePage: { file: 'features/market/MarketMinePage.tsx', width: 'wide' },
+  MarketPeoplePage: { file: 'features/people/MarketPeoplePage.tsx', width: 'wide' },
   MyLikesPage: { file: 'features/likes/MyLikesPage.tsx', width: 'wide' },
   ProfilePage: { file: 'features/profile/ProfilePage.tsx', width: 'wide' },
   // The phone's column and the desktop's two panes (spec 0009s); the pages sit inside it.
