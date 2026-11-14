@@ -61,9 +61,10 @@ def count_report(r: RedisClient, user: User) -> None:
 
 def report(db: Session, r: RedisClient, me: User, body: ReportIn) -> bool:
     """Store `me`'s report. True when stored now, False when `me` had already reported this
-    target (nothing changed). In order: the limiter (every authenticated attempt counts, a 404
-    and a repeat too; `RateLimitedError`), the target's lookup (`NotFoundError` for None or `me`),
-    one INSERT ... ON CONFLICT DO NOTHING. One commit."""
+    target (nothing changed). In order: the limiter (every authenticated, well-formed attempt
+    counts, a 404 and a repeat too; a 422 is refused before it; `RateLimitedError`), the target's
+    lookup (`NotFoundError` for None or `me`), one INSERT ... ON CONFLICT DO NOTHING. One
+    commit."""
     try:
         count_report(r, me)
         reported = _LOOKUPS[body.target_type](db, me, body.target_id)

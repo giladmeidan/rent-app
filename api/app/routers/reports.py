@@ -4,7 +4,8 @@
 one. The target must be visible to the caller where it was seen and not the caller's own; anything
 else is one 404 `not_found`. 201 `{already_reported: false}` when stored, 200
 `{already_reported: true}` on a repeat (nothing changed). Rate limited per user (10 an hour, 30 a
-day; a 429 with `Retry-After`), every attempt counted. No response echoes the note."""
+day; a 429 with `Retry-After`), every authenticated, well-formed attempt counted. No response
+echoes the note."""
 
 from typing import Annotated
 

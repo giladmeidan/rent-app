@@ -147,6 +147,7 @@ def test_ac1_report_listing(
         (seeker_id, "listing", apartment, owner_id, "money_before_viewing", "first line\nsecond"),
         (seeker_id, "listing", room, owner_id, "money_before_viewing", "first line\nsecond"),
     ]
+    assert len(outbox.messages) == sent_before  # no email
 
     # A blank note is no note.
     other = signup(client, outbox, "other@example.com", "seeker")
@@ -431,7 +432,7 @@ def test_ac8_validation_and_auth(
         {"target_type": "page"},
         {"reason": "spam"},
         {"target_id": "not-a-uuid"},
-        {"note": secret + "x" * 501},
+        {"note": secret.ljust(501, "x")},
         {"note": secret + "‮"},
         {"note": "?!"},
     ):

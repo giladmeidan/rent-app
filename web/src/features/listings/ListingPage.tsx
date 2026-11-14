@@ -229,7 +229,7 @@ export function ListingPage() {
       body = (
         <>
           {body}
-          <div data-testid="listing-report" className="flex justify-start">
+          <div data-testid="listing-report" className="mt-2 flex justify-start">
             {reportControl}
           </div>
         </>
