@@ -1,7 +1,7 @@
 ---
 id: 0014d
 title: An owner pricing a 1, 1.5 or 2 room apartment in the listing wizard sees the average rent for 1–2 rooms in its neighbourhood (or city), from nadlan's 3-room figure scaled by the CBS small-flat ratio, always at medium confidence
-status: in-review
+status: done
 depends_on: [0014c]   # done (PR #91 merged): the engine this extends
 reviewers: [code, security, qa]   # security: a new outbound fetch + parsing an untrusted xlsx with a new dependency (as 0014a); qa: engine + hint change. No ux: one more copy line in the existing hint slot. No perf: one more small query
 estimate: 1 coder run   # coder Opus/high (migration + data import + the price the owner sees; Speed rule 6)
@@ -417,3 +417,14 @@ has no node for `estimate_rent`, `RentEstimateRange`, `figure_keys`, `backtest` 
   migration test's `command.check` need the model and migration to agree (AC13).
 
 ## Digest (filled by orchestrator after verification)
+    Spec 0014d — the owner sees an estimate for 1, 1.5 and 2 room flats   (done, PR #92, merged 2026-11-14)
+    What a user can do after this: an owner pricing a 1–2 room apartment sees "average rent for 1–2 rooms in
+      <area>: ₪X–Y · medium certainty · nadlan.gov.il and הלמ״ס" (nadlan's 3-room figure × the CBS 1–2 / 2.5–3 ratio).
+    Backtest (CBS bulletins 7/2025–7/2026, 506 figures, 11 quarters): RATIO_WINDOW_QUARTERS = 1, RATIO_HALF_WIDTH
+      city ±2% / district ±7%. Combined with nadlan's widths: neighbourhood ±8–11%, city ±18–19%, under the ±20% cap,
+      so district-ratio cities show a number too. Bulletin 10/2025 is rejected (CBS labels a quarter twice); its
+      quarters are in later bulletins.
+    Review: 0 blockers, 3 majors fixed (October-layout bulletins rejected, duplicate room rows, malformed values
+      crashing the job), 3 minors (1 to FOLLOWUPS).
+    CI: merged without a green e2e on Gilad's word (load timeouts in tests 0014d does not touch; see FOLLOWUPS).
+    Off until `CBS_RENT=cbs` (Slice 13, after the licence read); empty tables show no hint.
