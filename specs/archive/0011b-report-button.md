@@ -416,3 +416,15 @@ Risks: migration number race with 0014d (`0021`): the orchestrator merges 0011b 
 to `0022_reports` when a `0021_*` is on main; any not-visible or own target is one 404 (no existence oracle).
 Reviewers: code, security, qa, ux   Estimated: 1 coder run (Opus/high), 1 review round
 Links: `specs/0011b-report-button.md` · PRODUCT.md "Trust (MVP)" · `specs/0011d-report-chat-inbox.md`
+
+Spec 0011b — Report a listing or a person   MERGED 500401e (PR #94, 2026-11-15)
+Shipped: a signed-in user reports an apartment or room from its page, or a person from their card (browse + likes),
+with a reason and an optional note; stored in `reports` (migration `0022_reports`) for Slice 12, nothing else happens;
+signed-out visitors get a login link. `POST /reports` already accepts chat, inbox and room-person targets for 0011d.
+Demo: make dev → sign in as a seeker, open an apartment, "דיווח על המודעה" → pick a reason, send → "תודה, הדיווח
+התקבל."; send again → "כבר דיווחתם על זה"; in שוק השותפים press "דיווח" on a card.
+Tests: +11 pytest (incl. NF1, migration), +7 vitest, +1 e2e, +1 screens state   CI: green (second run after the
+0014d merge; the first failed on Mac-load e2e timeouts)
+Findings: 0 blockers, 0 majors, 5 minors fixed, 2 resolved by checking; security: every not-visible/own/unknown 404
+is byte-identical, 404s and repeats count toward the limit, the note is never echoed or logged.
+Changed in PRODUCT.md: nothing. Next: 0011d (verified, not started).
