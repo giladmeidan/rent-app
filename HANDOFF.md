@@ -13,34 +13,56 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
-Overall: MVP feature work done through Slice 10 (שוק השותפים) plus 0009z landing v2 and 0010l; next slice not chosen.
+Overall: MVP feature work done through Slice 10 (שוק השותפים, incl. 0010m two streams). Slice 14 "Rent price
+estimate" is started: its two data specs are merged, its engine is not specced yet.
 
-- `main` = 8d30d12 (#85, market nav label). Alembic head `0018_one_room_interest`. all 80 spec files `done`, in
-  `specs/archive/`. No open PRs, no spec worktrees.
-- Main checkout `../rent-app` is on `main` with uncommitted demo-seed work (`Makefile` `seed-demo` target +
-  `DESTROY_MAIN=1` guard on `make down`, `api/scripts/seed_demo.py`) and the knowledge graph.
+- `main` = a5ec89b (0014b done, PR #90). Alembic head `0020` (`0020_price_signals.py`; `0019_rent_reference.py`
+  before it). 83 spec files `done`, in `specs/archive/`. No open PRs, no spec worktrees, no build stacks.
+- **Slice 14 so far** (PRODUCT.md "Rent price estimate" holds Gilad's decisions of 2026-11-14):
+  - `0014a` (PR #89): tables `rent_areas` / `rent_prices`, `services/rent_reference.py`, a monthly arq cron and
+    `make rent-import`. Off by default (`RENT_REFERENCE=off`); the tables are empty until someone runs it with
+    `RENT_REFERENCE=nadlan`. The source facts and the Gush Dan coverage numbers are in the archived spec.
+  - `0014b` (PR #90): `listing_price_changes` (every price a listing had), the private closure answer
+    (`close_reason`, `final_rent_ils`, `closed_at`; `PUT /listings/{id}/closure`, asked after pausing an
+    apartment), and four apartment facts (`balcony`, `safe_room`, `air_conditioning`, `condition`).
+  - Nothing computes or shows a price yet.
+- Main checkout `../rent-app` is on `main` at 978791c, **behind `origin/main`**, with uncommitted work
+  (`Makefile`, `.gitignore`, `api/scripts/seed_demo.py`, `api/scripts/seed_promo.py`) and the knowledge graph. It
+  needs a `git pull` (which also rebuilds the graph).
 - `../rent-app-orch` is the docs worktree (detached on `origin/main` between uses).
-- Remote branch `origin/market-mine-rename` (#85's, merged) can be deleted.
+- Merging is delegated to the orchestrator for Slice 14 (Gilad, 2026-11-14); Slices 11–13 are not delegated yet.
 
-Last updated: 2026-11-14 (knowledge cleanup: specs archived, FOLLOWUPS swept, docs trimmed).
+Last updated: 2026-11-14 (Slice 14 data specs 0014a and 0014b merged).
 
 ## Next Steps
-1. Choose the next slice with Gilad. Order in PRODUCT.md: 11 Trust basics (report button, renewal, rate limits),
-   12 Admin minimal, 13 Launch readiness (deploy, one registrable domain, SMS).
-2. Commit or drop the demo-seed work in the main checkout.
-3. Digests still owed to Gilad: Slice 9, 9c, 10.
-4. FOLLOWUPS worth a sweep before launch: the `make screens` failures (0010f line), the flaky
-   `test_ac5_apply_racing_lister_like`, the Slice 12 deploy items (cookie domain, real client IPs, image pins).
-5. Housekeeping: cancel the 4 queued Slice 8 CI runs (`gh run list --status queued`); Gilad to mark GitGuardian
-   incident 40007526 a false positive; Gilad's open decisions in FOLLOWUPS (person-card score inference,
-   re-apply after decline, 0010l invite expiry).
+1. **Continue the rent price estimate plan with Gilad.** Agreed order: the engine comes after Slice 11. The engine
+   as planned: (1) baseline from `rent_prices` per neighbourhood and room count, falling back to the city;
+   (2) adjustments for size, floor, parking, furnishing and the new facts; (3) comparable listings from homie's
+   own data once there are enough; (4) a learned model only if a backtest says it is better. Output is a range
+   with a confidence level, no number at low confidence. First surface: the owner's price step in the wizard;
+   later a tab where anyone enters apartment facts (possibly paid, not decided), so the engine takes facts, not
+   a listing id. Open inputs for the engine spec: CBS city tables for 1–2 room flats (the imported source has
+   3, 4, 5 and "all" only); assigning a listing to a neighbourhood (street lists are in `rent_areas.streets`,
+   94% of streets map, 10% of those to more than one neighbourhood); averaging several quarters (neighbourhood
+   figures are jumpy); a backtest harness.
+2. Choose the next slice with Gilad. Order in PRODUCT.md: 11 Trust basics (report button, renewal, rate limits;
+   renewal must clear the closure answer, see FOLLOWUPS 0014b), 12 Admin minimal, 13 Launch readiness (deploy,
+   one registrable domain, SMS; read nadlan.gov.il's terms of use before `RENT_REFERENCE=nadlan`).
+3. Pull the main checkout; commit or drop its uncommitted seed work.
+4. Digests still owed to Gilad: Slice 9, 9c, 10 (Slice 14's are in the archived specs and were reported in chat).
+5. FOLLOWUPS worth a sweep before launch: the `make screens` failures (24 states red, same as the 0010f line; not
+   re-run on `main`), the 0014a and 0014b review minors (two e2e flows for the new screens are not written), the
+   flaky e2e line from PR #89, the flaky `test_ac5_apply_racing_lister_like`, the Slice 12 deploy items.
+6. Housekeeping: Gilad to mark GitGuardian incident 40007526 a false positive; Gilad's open decisions in
+   FOLLOWUPS (person-card score inference, re-apply after decline, 0010l invite expiry).
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → 503, 422 never echoes
   input), `auth.py` (`current_user` / `optional_user`, cookie `rent_session`), `models/` vs `schemas/` (never
   shared; `schemas/_text.py::visible_characters_only` is the one user-text rule), `matching/`, thin `routers/`,
-  logic in `services/` (`search.py::_public_listings()` is the only definition of "public"), `worker.py` (geocoding).
-- Migrations `api/alembic/versions/0001`–`0018`. Photos on Cloudflare R2 behind unguessable keys (0010d/j).
+  logic in `services/` (`search.py::_public_listings()` is the only definition of "public"), `worker.py` (geocoding; the monthly rent reference import,
+  off by default).
+- Migrations `api/alembic/versions/0001`–`0020`. Photos on Cloudflare R2 behind unguessable keys (0010d/j).
 - `web/src/`: `app/` (routes, layout, side switch), `features/<domain>/`, `components/` (UI kit, 0009d),
   `locales/he.json`, generated `api/schema.d.ts` (`make client`, git-ignored). `web/e2e/` Playwright (CI only),
   `web/e2e/screens/` the mocked screenshot check (`make screens`).
