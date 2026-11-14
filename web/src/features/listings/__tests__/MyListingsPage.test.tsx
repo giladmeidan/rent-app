@@ -349,12 +349,12 @@ describe('MyListingsPage', () => {
   });
 
   it('ac7_people_link', async () => {
-    const two = listing({ listing_type: 'room', liked_me_count: 2 });
-    const one = listing({ listing_type: 'room', liked_me_count: 1 });
-    const none = listing({ listing_type: 'room', liked_me_count: 0 });
-    const paused = listing({ listing_type: 'room', status: 'paused', liked_me_count: 3 });
+    const two = listing({ listing_type: 'room' });
+    const one = listing({ listing_type: 'room' });
+    const none = listing({ listing_type: 'room' });
+    const paused = listing({ listing_type: 'room', status: 'paused' });
     const expired = listing({ listing_type: 'room', expires_at: '2020-01-01T00:00:00Z' });
-    const apartment = listing({ liked_me_count: 4 });
+    const apartment = listing();
     mockApi({ 'GET /me/listings': [json([two, one, none, paused, expired, apartment])] });
     renderRooms();
     const cards = await screen.findAllByRole('article');
@@ -366,23 +366,17 @@ describe('MyListingsPage', () => {
         .find((a) => a.getAttribute('href')?.endsWith('/people'));
     const [cTwo, cOne, cNone, cPaused, cExpired] = cards as HTMLElement[];
 
-    const a = peopleLink(cTwo as HTMLElement);
-    expect(a).toHaveAttribute('href', `/me/listings/${two.id}/people`);
-    expect(a).toHaveTextContent(he.listings.mine.people);
-    expect(
-      within(a as HTMLElement).getByText(i18n.t('listings.mine.peopleLiked', { count: 2 })),
-    ).toHaveClass('bg-accent-soft', 'text-accent-strong');
-    const b = peopleLink(cOne as HTMLElement);
-    expect(b).toHaveAttribute('href', `/me/listings/${one.id}/people`);
-    expect(
-      within(b as HTMLElement).getByText(i18n.t('listings.mine.peopleLiked', { count: 1 })),
-    ).toBeVisible();
-    const c = peopleLink(cNone as HTMLElement);
-    expect(c).toHaveAttribute('href', `/me/listings/${none.id}/people`);
-    expect(
-      within(c as HTMLElement).queryByText(i18n.t('listings.mine.peopleLiked', { count: 2 })),
-    ).toBeNull();
-    expect(c).toHaveAccessibleName(he.listings.mine.people);
+    // Spec 0010l: no liked-me chip (new applicants already show); the link is named by its text.
+    for (const [card, room] of [
+      [cTwo, two],
+      [cOne, one],
+      [cNone, none],
+    ] as const) {
+      const link = peopleLink(card as HTMLElement);
+      expect(link).toHaveAttribute('href', `/me/listings/${room.id}/people`);
+      expect(link).toHaveAccessibleName(he.listings.mine.people);
+      expect(within(link as HTMLElement).queryByText(/\d/)).toBeNull();
+    }
 
     for (const card of [cPaused, cExpired]) {
       expect(peopleLink(card as HTMLElement)).toBeUndefined();
@@ -390,8 +384,8 @@ describe('MyListingsPage', () => {
   });
 
   it('ac3_badges_one_two_many', async () => {
-    const one = listing({ listing_type: 'room', new_applicant_count: 1, liked_me_count: 1 });
-    const two = listing({ listing_type: 'room', new_applicant_count: 2, liked_me_count: 3 });
+    const one = listing({ listing_type: 'room', new_applicant_count: 1 });
+    const two = listing({ listing_type: 'room', new_applicant_count: 2 });
     mockApi({ 'GET /me/listings': [json([one, two])] });
     renderRooms();
     const [cOne, cTwo] = (await screen.findAllByRole('article')) as HTMLElement[];
@@ -399,16 +393,6 @@ describe('MyListingsPage', () => {
       within(cOne as HTMLElement).getByText('\u05d7\u05d3\u05e9\u05d4 \u05d0\u05d7\u05ea'),
     ).toBeVisible();
     expect(within(cTwo as HTMLElement).getByText('2 \u05d7\u05d3\u05e9\u05d5\u05ea')).toBeVisible();
-    expect(
-      within(cOne as HTMLElement).getByText(
-        '\u05d0\u05d3\u05dd \u05d0\u05d7\u05d3 \u05d0\u05d4\u05d1 \u05d0\u05ea \u05d4\u05d7\u05d3\u05e8',
-      ),
-    ).toBeVisible();
-    expect(
-      within(cTwo as HTMLElement).getByText(
-        '3 \u05d0\u05d4\u05d1\u05d5 \u05d0\u05ea \u05d4\u05d7\u05d3\u05e8',
-      ),
-    ).toBeVisible();
   });
 
   it('ac5_flatmates_link', async () => {
@@ -470,7 +454,6 @@ describe('MyListingsPage', () => {
     const room = listing({
       street: '\u05d0\u05e8\u05d1\u05e2',
       listing_type: 'room',
-      liked_me_count: 2,
       flatmate_count: 1,
     });
     const pausedPast = listing({
@@ -545,7 +528,7 @@ describe('MyListingsPage', () => {
       he.listings.actions.pause,
       he.listings.actions.edit,
       a(room.applicant_count, room.new_applicant_count),
-      `${he.listings.mine.people} ${i18n.t('listings.mine.peopleLiked', { count: 2 })}`,
+      he.listings.mine.people,
       i18n.t('listings.mine.flatmates', { count: 1 }),
     ]);
     expect(order(cPausedPast as HTMLElement)).toEqual([

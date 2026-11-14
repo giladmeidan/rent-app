@@ -703,46 +703,38 @@ describe('SearchMap', () => {
     const mark = (l: ListingPublic) =>
       document.querySelector(`[data-pin-id="${l.id}"]`)?.getAttribute('data-mark') ?? null;
     // Replies are built per request: a Response body is read once.
-    const likes = () =>
-      json({
-        liked_me: [],
-        mine: [{ listing: room, liked_at: '2026-11-10T10:00:00Z' }],
-      });
     const applications = () =>
       json([
         application({ listing: { ...application().listing, id: flat.id } }),
         application({ status: 'declined', listing: { ...application().listing, id: declined.id } }),
       ]);
 
-    // A signed-in seeker: likes and applications are each asked once; the marks join by id.
+    // A signed-in seeker: the applications are asked once; the marks join by id. Spec 0010l: the
+    // pins never ask for `/me/likes` (no "liked" mark).
     let api = mockApi({
       'GET /me': [json(noa)],
       'GET /me/profile': [json(profile())],
-      'GET /me/likes': [likes],
       'GET /me/applications': [applications],
       [SEARCH]: [json(page([room, flat, plain, declined]))],
     });
     let view = render('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
-      expect(mark(room)).toBe('liked');
-    });
-    await vi.waitFor(() => {
       expect(mark(flat)).toBe('applied');
     });
+    expect(mark(room)).toBeNull();
     expect(mark(plain)).toBeNull();
     expect(mark(declined)).toBeNull();
     await settle();
-    expect(api.calls('GET /me/likes')).toHaveLength(1);
+    expect(api.calls('GET /me/likes')).toHaveLength(0);
     expect(api.calls('GET /me/applications')).toHaveLength(1);
     view.unmount();
     vi.unstubAllGlobals();
 
-    // A visitor and an owner: neither request, no marks.
+    // A visitor and an owner: no request, no marks.
     for (const me of [json({ detail: 'unauthenticated' }, 401), json(owner)]) {
       api = mockApi({
         'GET /me': [me],
-        'GET /me/likes': [likes],
         'GET /me/applications': [applications],
         [SEARCH]: [json(page([room, flat, plain]))],
       });
@@ -755,7 +747,6 @@ describe('SearchMap', () => {
         expect(api.calls('GET /me')).toHaveLength(1);
       });
       await settle();
-      expect(api.calls('GET /me/likes')).toHaveLength(0);
       expect(api.calls('GET /me/applications')).toHaveLength(0);
       expect(pins().map((p) => p.mark)).toEqual([null, null, null]);
       expect(document.querySelectorAll('[data-mark]')).toHaveLength(0);
@@ -763,41 +754,32 @@ describe('SearchMap', () => {
       vi.unstubAllGlobals();
     }
 
-    // GET /me/likes failing with 500: the pins render without the liked mark.
+    // GET /me/applications failing with 500: the pins render without marks.
     api = mockApi({
       'GET /me': [json(noa)],
       'GET /me/profile': [json(profile())],
-      'GET /me/likes': [json({ detail: 'boom' }, 500)],
-      'GET /me/applications': [applications],
+      'GET /me/applications': [json({ detail: 'boom' }, 500)],
       [SEARCH]: [json(page([room, flat, plain]))],
     });
     render('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
-      expect(mark(flat)).toBe('applied');
+      expect(pins()).toHaveLength(3);
     });
     await vi.waitFor(() => {
-      expect(api.calls('GET /me/likes')).toHaveLength(1);
+      expect(api.calls('GET /me/applications').length).toBeGreaterThanOrEqual(1);
     });
     await settle();
-    expect(mark(room)).toBeNull();
-    expect(pins()).toHaveLength(3);
+    expect(document.querySelectorAll('[data-mark]')).toHaveLength(0);
   });
 
-  it('ac7_owner_on_the_market_gets_liked_and_applied_marks', async () => {
+  it('ac7_owner_on_the_market_gets_applied_marks', async () => {
     const room = located({ listing_type: 'room' });
     const other = located({ listing_type: 'room' });
     const mark = (l: ListingPublic) =>
       document.querySelector(`[data-pin-id="${l.id}"]`)?.getAttribute('data-mark') ?? null;
     const api = mockApi({
       'GET /me': [json(owner)],
-      'GET /me/likes': [
-        () =>
-          json({
-            liked_me: [],
-            mine: [{ listing: room, liked_at: '2026-11-10T10:00:00Z' }],
-          }),
-      ],
       'GET /me/applications': [
         () => json([application({ listing: { ...application().listing, id: other.id } })]),
       ],
@@ -806,12 +788,10 @@ describe('SearchMap', () => {
     render('/market?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
-      expect(mark(room)).toBe('liked');
-    });
-    await vi.waitFor(() => {
       expect(mark(other)).toBe('applied');
     });
-    expect(api.calls('GET /me/likes')).toHaveLength(1);
+    expect(mark(room)).toBeNull();
+    expect(api.calls('GET /me/applications')).toHaveLength(1);
   });
 
   it('ac4_first_open_fits_once', async () => {

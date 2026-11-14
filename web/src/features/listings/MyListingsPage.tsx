@@ -131,14 +131,6 @@ function ListingRow({
                 aria-describedby={titleId}
               >
                 {t('listings.mine.people')}
-                {listing.liked_me_count > 0 && (
-                  <>
-                    {' '}
-                    <Badge tone="accent">
-                      {t('listings.mine.peopleLiked', { count: listing.liked_me_count })}
-                    </Badge>
-                  </>
-                )}
               </Button>
             )}
             {/* Every room card (live, paused, expired), after "people" when that is shown. */}

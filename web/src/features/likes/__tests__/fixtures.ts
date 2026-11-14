@@ -10,7 +10,5 @@ export function likedRoom(overrides: Partial<LikedRoomOut['listing']> = {}): Lik
   };
 }
 
-export const myLikes = (liked_me: LikedRoomOut[], mine: LikedRoomOut[]): MyLikesOut => ({
-  liked_me,
-  mine,
-});
+/** `GET /me/likes`: the rooms that invited the caller (spec 0010l: no `mine`). */
+export const myLikes = (liked_me: LikedRoomOut[]): MyLikesOut => ({ liked_me });

@@ -23,7 +23,7 @@ import { ProfileGate } from './ProfileGate';
 import { loginPath, useApply } from './useApply';
 import { useMyApplications } from './useMyApplications';
 
-/** The API's message limit (PRODUCT.md "Applications", 1-500 characters). */
+/** The API's message limit (PRODUCT.md "Applications", 1-500 characters; optional on a room). */
 const MESSAGE_MAX = 500;
 /** The counter is announced only near the limit. */
 const ANNOUNCE_BELOW = 50;
@@ -67,17 +67,27 @@ const FOCUSED_BRANCHES = new Set<Branch>(['applied', 'misfit', 'roomGate', 'prof
  *
  * The message is kept as `userId`'s draft in this tab (spec 0009g): a form mounted with a draft
  * opens with it, without taking focus. Cancel clears it; `useApply` clears it on the final answers.
+ *
+ * On a room (spec 0010l) the button reads "I'm interested", the message is optional (an empty one is
+ * sent as none) and, when the lister already invited the caller, a hint above the button says the
+ * chat opens at once.
  */
 function ApplyForm({
   apply,
   listingId,
   userId,
+  room,
+  invited,
   onSubmitted,
 }: {
   apply: Apply;
   listingId: string;
   /** The signed-in seeker, whose draft this is. */
   userId: string | undefined;
+  /** A room: the message is optional. */
+  room: boolean;
+  /** The room's lister liked the caller (`like.liked_me`). */
+  invited: boolean;
   onSubmitted: (submitted: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -86,6 +96,7 @@ function ApplyForm({
   const fieldId = `${id}-message`;
   const counterId = `${id}-counter`;
   const serverErrorId = `${id}-server-error`;
+  const invitedId = `${id}-invited`;
 
   // Read once, on mount: a saved draft opens the form with its text.
   const [draft] = useState(() => readDraft('apply', listingId, userId));
@@ -101,7 +112,7 @@ function ApplyForm({
   const unavailableRef = useRef<HTMLParagraphElement>(null);
   // Same-tick guard: a double click sends one request (every attempt counts toward the limit).
   const inFlight = useRef(false);
-  const lastBody = useRef('');
+  const lastBody = useRef<string | null>(null);
 
   // Focus follows the person opening the form, never the mount: a form reopened from a draft
   // takes no focus (it would raise the mobile keyboard and fight `RouteFocus`).
@@ -116,7 +127,7 @@ function ApplyForm({
     if (unavailable) unavailableRef.current?.focus();
   }, [unavailable]);
 
-  function send(body: string) {
+  function send(body: string | null) {
     if (inFlight.current) return;
     inFlight.current = true;
     lastBody.current = body;
@@ -156,13 +167,13 @@ function ApplyForm({
     event.preventDefault();
     if (inFlight.current) return;
     const body = message.trim();
-    if (body === '') {
+    if (body === '' && !room) {
       setFieldErr('required');
       fieldRef.current?.focus();
       return;
     }
     setFieldErr(null);
-    send(body);
+    send(body === '' ? null : body);
   }
 
   function onCancel() {
@@ -195,6 +206,11 @@ function ApplyForm({
 
   return (
     <div className="flex flex-col gap-3">
+      {invited && (
+        <p id={invitedId} className="text-start text-body-sm font-medium text-accent-strong">
+          {t('applications.room.invitedHint')}
+        </p>
+      )}
       <Button
         ref={buttonRef}
         variant="primary"
@@ -202,15 +218,16 @@ function ApplyForm({
         fullWidth
         aria-expanded={open}
         aria-controls={formId}
+        aria-describedby={invited ? invitedId : undefined}
         onClick={() => setOpen((o) => !o)}
       >
-        {t('applications.apply')}
+        {room ? t('applications.room.cta') : t('applications.apply')}
       </Button>
       {open && (
         <form id={formId} noValidate onSubmit={onSubmit} className="flex flex-col gap-1.5">
           <Field
             id={fieldId}
-            label={t('applications.form.label')}
+            label={room ? t('applications.room.messageOptional') : t('applications.form.label')}
             hint={t('applications.form.hint')}
             error={
               fieldErr === null
@@ -282,9 +299,11 @@ function ApplyForm({
   );
 }
 
-/** The applied state: when, the status, and the way to "my applications". */
+/** The applied state: when, the status, the chat of a shortlisted room application (spec 0010l)
+ * and the way to "my applications". */
 function Applied({ application }: { application: MyApplicationOut }) {
   const { t } = useTranslation();
+  const room = application.listing.listing_type === 'room';
   return (
     <div className="flex flex-col items-start gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -304,10 +323,12 @@ function Applied({ application }: { application: MyApplicationOut }) {
       {application.status === 'declined' && (
         <p className="text-start text-body-sm text-ink-muted">{t('applications.declinedHint')}</p>
       )}
-      <Button
-        variant="ghost"
-        to={application.listing.listing_type === 'room' ? '/market/mine' : '/me/applications'}
-      >
+      {room && application.status === 'shortlisted' && (
+        <Button variant="primary" to={`/chat/${application.id}`} data-chat-link>
+          {t('applications.chat')}
+        </Button>
+      )}
+      <Button variant="ghost" to={room ? '/market/mine' : '/me/applications'}>
         {t('applications.viewMine')}
       </Button>
     </div>
@@ -463,6 +484,8 @@ export function ApplySection({
         apply={apply}
         listingId={listing.id}
         userId={me.data?.id}
+        room={listing.listing_type === 'room'}
+        invited={listing.like?.liked_me === true}
         onSubmitted={(value) => {
           submitted.current = value;
         }}
@@ -471,12 +494,16 @@ export function ApplySection({
   }
 
   // After a submit, the first line of the branch that replaced the form takes focus: the sent
-  // line (201), the misfit line, a gate's paragraph, or the applied block (409s). A branch shown
-  // without a submit in this tab (on mount, after a reload or a push) takes none.
+  // line (201), the misfit line, a gate's paragraph, or the applied block (409s); a room
+  // application that came back shortlisted (an invite answered, spec 0010l) focuses its chat link,
+  // the way forward. A branch shown without a submit in this tab (on mount, after a reload or a
+  // push) takes none.
   useEffect(() => {
     if (!submitted.current || branch === 'form') return;
     submitted.current = false;
-    if (FOCUSED_BRANCHES.has(branch)) controlsRef.current?.querySelector('p')?.focus();
+    if (!FOCUSED_BRANCHES.has(branch)) return;
+    const chat = controlsRef.current?.querySelector<HTMLElement>('[data-chat-link]');
+    (chat ?? controlsRef.current?.querySelector('p'))?.focus();
   }, [branch]);
 
   return (
@@ -487,7 +514,11 @@ export function ApplySection({
         tabIndex={-1}
         className="text-h3 font-semibold focus:outline-none"
       >
-        {ownerView ? t('applications.headingOwner') : t('applications.heading')}
+        {ownerView
+          ? t('applications.headingOwner')
+          : listing.listing_type === 'room'
+            ? t('applications.room.cta')
+            : t('applications.heading')}
       </h2>
       <p className="text-start text-body text-ink-muted">{countLine}</p>
       <div ref={controlsRef} className="contents">

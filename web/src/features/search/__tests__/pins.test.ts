@@ -11,7 +11,7 @@ import { publicListing } from './fixtures';
 
 const t = i18n.t;
 const NONE: ReadonlySet<string> = new Set();
-const ctx = { t, seen: NONE, liked: NONE, applied: NONE };
+const ctx = { t, seen: NONE, applied: NONE };
 
 const located = (overrides: Partial<ListingPublic> = {}) =>
   publicListing({ lat: 32.08, lng: 34.8, ...overrides });
@@ -87,7 +87,6 @@ describe('toPins', () => {
     const W = located();
     const X = located({ listing_type: 'room' });
     const Q = located();
-    const liked = new Set([R.id, X.id]);
     // The seeker's applications: only submitted and shortlisted ones are open.
     const on = (l: ListingPublic) => ({ ...application().listing, id: l.id });
     const applied = openApplicationIds([
@@ -99,14 +98,14 @@ describe('toPins', () => {
     ]);
     expect(applied).toEqual(new Set([A.id, S.id, X.id]));
     const seen = new Set([A.id, Q.id]);
-    const pins = toPins([R, A, S, D, W, X, Q], { t, seen, liked, applied });
+    const pins = toPins([R, A, S, D, W, X, Q], { t, seen, applied });
     const get = (l: ListingPublic) => pins.find((p) => p.id === l.id);
 
-    expect(get(R)?.mark).toBe('liked');
+    // Spec 0010l: no "liked" mark; a room is marked once applied to, like an apartment.
+    expect(get(R)?.mark).toBeNull();
     expect(get(A)?.mark).toBe('applied');
     // Shortlisted counts as applied; declined and withdrawn get no mark.
     expect(get(S)?.mark).toBe('applied');
-    // Liked and applied: applied wins.
     expect(get(X)?.mark).toBe('applied');
     expect(get(D)?.mark).toBeNull();
     expect(get(W)?.mark).toBeNull();
@@ -114,7 +113,7 @@ describe('toPins', () => {
     expect(pins.filter((p) => p.seen).map((p) => p.id)).toEqual([A.id, Q.id]);
 
     // Words in the order match -> mark -> seen.
-    expect(get(R)?.label).toBe(`${baseLabel(R)}, התאמה 85%${he.search.map.pinLiked}`);
+    expect(get(R)?.label).toBe(`${baseLabel(R)}, התאמה 85%`);
     expect(get(A)?.label).toBe(
       `${baseLabel(A)}, התאמה 70%${he.search.map.pinApplied}${he.search.map.pinSeen}`,
     );

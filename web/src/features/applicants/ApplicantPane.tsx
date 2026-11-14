@@ -119,7 +119,8 @@ export function ApplicantPane({ id, applicant, spots, flatLifestyle, flatIsRoom 
             </div>
           </div>
         )}
-        {applicant.source !== 'like' && (
+        {/* Whenever there is one, whatever the source (spec 0010l: optional on a room). */}
+        {applicant.message !== null && (
           <section className="flex flex-col gap-2">
             <h3 className="text-h3">{t('applicants.pane.message')}</h3>
             {/* Free text from a seeker: React text children only (never linkified or HTML), line
@@ -129,7 +130,7 @@ export function ApplicantPane({ id, applicant, spots, flatLifestyle, flatIsRoom 
               data-testid="pane-message"
               className="whitespace-pre-line break-words rounded-md bg-surface-subtle px-3 py-3 text-body-sm text-ink"
             >
-              {applicant.message ?? ''}
+              {applicant.message}
             </p>
           </section>
         )}

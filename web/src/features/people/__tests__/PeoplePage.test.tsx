@@ -76,8 +76,6 @@ function renderPage(
 
 const page = (items: ReturnType<typeof person>[], total = items.length) => json({ items, total });
 // The harness's location probe is an `<output>` (role status): the banner is found by its text.
-const banners = () =>
-  screen.queryAllByRole('status').filter((el) => el.textContent.includes('התאמה הדדית עם'));
 // The page's alert region is always in the DOM (empty until used): only non-empty ones count.
 const alerts = () => screen.queryAllByRole('alert').filter((el) => el.textContent !== '');
 const cards = () => screen.getAllByRole('article');
@@ -98,7 +96,6 @@ describe('PeoplePage', () => {
   it('ac1_cards', async () => {
     const p1 = person({
       display_name: 'P1',
-      liked_me: true,
       age: 27,
       area_ids: [gushDan.id, GIVATAYIM.id],
       about_me: 'line one\nline two',
@@ -115,7 +112,6 @@ describe('PeoplePage', () => {
     expect(screen.getByText(i18n.t('people.count', { count: 2 }))).toBeVisible();
 
     const one = within(cardOf('P1'));
-    expect(one.getByText(he.people.likedMe)).toBeVisible();
     expect(one.getByText('אישה · גיל 27')).toBeVisible();
     expect(one.getByText('אזורים: גוש דן וגבעתיים')).toBeVisible();
     expect(
@@ -129,7 +125,8 @@ describe('PeoplePage', () => {
     expect(about).toHaveAttribute('dir', 'auto');
     expect(one.getByTestId('match-ring')).toBeVisible();
     expect(within(one.getByTestId('person-name-row')).queryByTestId('match-ring')).toBeNull();
-    expect(within(one.getByTestId('person-name-row')).getByText(he.people.likedMe)).toBeVisible();
+    // Spec 0010l: no "liked you" marker (a seeker has no room-like); only the name.
+    expect(within(one.getByTestId('person-name-row')).getAllByText(/./)).toHaveLength(1);
     const why0 = one.getByRole('button', { name: he.applicants.why });
     const more0 = one.getByRole('button', { name: he.people.moreDetails });
     expect(why0.parentElement).toBe(more0.parentElement);
@@ -159,7 +156,6 @@ describe('PeoplePage', () => {
     fireEvent.click(why);
 
     const two = within(cardOf('P2'));
-    expect(two.queryByText(he.people.likedMe)).toBeNull();
     expect(two.getByText('גבר')).toBeVisible();
     expect(two.queryByTestId('person-about')).toBeNull();
     expect(
@@ -244,16 +240,18 @@ describe('PeoplePage', () => {
     expect(button()).not.toBeDisabled();
     expect(button()).toHaveFocus();
     fireEvent.click(button());
-    pending.resolve(json({ liked: true, application_id: null }));
+    pending.resolve(json({ liked: true }));
     await waitFor(() => {
       expect(button()).toHaveAttribute('aria-pressed', 'true');
     });
     // The name stays "אהבתי" (the tick is decoration); aria-pressed carries the state.
     expect(button()).toHaveAccessibleName(he.people.like);
     expect(button()).not.toHaveAttribute('aria-disabled', 'true');
-    expect(banners()).toHaveLength(0);
+    // An invite (spec 0010l): no banner, no chat; nothing about "my listings" changes.
+    expect(screen.queryByText(new RegExp(he.applications.mutual))).toBeNull();
+    expect(screen.queryByRole('link', { name: /צ'אט/ })).toBeNull();
     expect(api.calls(likeRoute('PUT', p2))).toHaveLength(1);
-    expect(api.calls(MINE).length).toBeGreaterThan(1);
+    expect(api.calls(MINE)).toHaveLength(1);
 
     fireEvent.click(button());
     await waitFor(() => {
@@ -261,39 +259,6 @@ describe('PeoplePage', () => {
     });
     expect(api.calls(likeRoute('DELETE', p2))).toHaveLength(1);
     expect(alerts()).toHaveLength(0);
-  });
-
-  it('ac4_mutual_banner', async () => {
-    const p1 = person({ display_name: 'P1', liked_me: true });
-    const p2 = person({ display_name: 'P2' });
-    const applicationId = '00000000-0000-0000-0000-00000000dddd';
-    const { api } = renderPage([page([p1, p2]), page([p2])], {
-      extra: {
-        [likeRoute('PUT', p1)]: [json({ liked: true, application_id: applicationId })],
-        [`GET /listings/${ROOM.id}/applications`]: [json([])],
-        'GET /conversations': [json([])],
-      },
-    });
-    await screen.findAllByRole('article');
-    fireEvent.click(likeButton('P1'));
-    const banner = await waitFor(() => {
-      const [found] = banners();
-      expect(found).toBeDefined();
-      return found as HTMLElement;
-    });
-    expect(banner).toHaveTextContent(he.people.mutual.replace('{{name}}', 'P1'));
-    expect(banner).toHaveFocus();
-    expect(within(banner).getByRole('link', { name: he.people.toChat })).toHaveAttribute(
-      'href',
-      `/chat/${applicationId}`,
-    );
-    // The refetch drops P1's card; the banner stays.
-    await waitFor(() => {
-      expect(cards()).toHaveLength(1);
-    });
-    expect(screen.queryByRole('article', { name: 'P1' })).toBeNull();
-    expect(banners()).toEqual([banner]);
-    expect(api.calls(PEOPLE)).toHaveLength(2);
   });
 
   it('ac5_like_errors', async () => {

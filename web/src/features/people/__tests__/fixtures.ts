@@ -21,7 +21,6 @@ export function person(overrides: Partial<PersonOut> = {}): PersonOut {
     about_me: null,
     match: match(88, ['budget', 'area'], 'pets'),
     liked_by_me: false,
-    liked_me: false,
     ...overrides,
   };
 }

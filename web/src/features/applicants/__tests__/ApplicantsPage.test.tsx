@@ -1295,7 +1295,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
   it('ac8_mutual_tag', async () => {
     const mutual = applicant({ applicant_name: 'L', source: 'like', message: null });
     const applied = applicant({ applicant_name: 'M', message: 'Hello there' });
-    renderPage([json([mutual, applied])]);
+    const { view } = renderPage([json([mutual, applied])]);
     await screen.findAllByRole('article');
     const inMutual = within(cardOf('L'));
     expect(inMutual.getByTestId('applicant-mutual')).toHaveTextContent(he.applicants.mutual);
@@ -1307,6 +1307,40 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     const inApplied = within(cardOf('M'));
     expect(inApplied.getByTestId('applicant-message')).toHaveTextContent('Hello there');
     expect(inApplied.queryByTestId('applicant-mutual')).toBeNull();
+    reset(view);
+
+    // Spec 0010l AC14: the message shows whenever there is one, whatever the source. An invite
+    // answered with a message shows the tag and the message; a room application without one shows
+    // no empty box.
+    const answered = applicant({ applicant_name: 'N', source: 'like', message: 'Count me in' });
+    const silent = applicant({ applicant_name: 'O', source: 'apply', message: null });
+    renderPage([json([answered, silent])]);
+    await screen.findAllByRole('article');
+    const inAnswered = within(cardOf('N'));
+    expect(inAnswered.getByTestId('applicant-mutual')).toHaveTextContent(he.applicants.mutual);
+    expect(inAnswered.getByTestId('applicant-message')).toHaveTextContent('Count me in');
+    const inSilent = within(cardOf('O'));
+    expect(inSilent.queryByTestId('applicant-message')).toBeNull();
+    expect(inSilent.queryByTestId('applicant-mutual')).toBeNull();
+  });
+
+  it('ac14_pane_message_whenever_there_is_one', async () => {
+    // Spec 0010l AC14, the desktop pane: the same rule as the card.
+    stubDesktop();
+    const answered = applicant({ applicant_name: 'N', source: 'like', message: 'Count me in' });
+    const silent = applicant({ applicant_name: 'O', source: 'apply', message: null });
+    renderPage([json([answered, silent])]);
+    await screen.findAllByRole('article');
+    expect(within(pane()).getByTestId('pane-message')).toHaveTextContent('Count me in');
+    expect(
+      within(pane()).getByRole('heading', { level: 3, name: he.applicants.pane.message }),
+    ).toBeVisible();
+    selectCard('O');
+    expect(within(pane()).getByRole('heading', { level: 2, name: 'O' })).toBeVisible();
+    expect(within(pane()).queryByTestId('pane-message')).toBeNull();
+    expect(
+      within(pane()).queryByRole('heading', { level: 3, name: he.applicants.pane.message }),
+    ).toBeNull();
   });
 
   it('ac6_disclosures_share_a_row', async () => {

@@ -113,11 +113,14 @@ function ApplicationCard({ application }: { application: MyApplicationOut }) {
             </p>
           )}
         </div>
-        {application.source === 'like' ? (
+        {/* The tag and the message are independent (spec 0010l): an invite answered may carry a
+            message, and a room application may have none. */}
+        {application.source === 'like' && (
           <Tag tone="accent" data-testid="application-mutual" className="self-start">
             {t('applications.mutual')}
           </Tag>
-        ) : (
+        )}
+        {application.message !== null && (
           <div className="flex flex-col gap-1">
             <p className="text-label text-ink-muted">{t('applications.yourMessage')}</p>
             {/* Plain text from the seeker: React children only, line breaks kept. */}

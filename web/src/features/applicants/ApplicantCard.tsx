@@ -251,7 +251,8 @@ export function ApplicantCard({
       {profile !== null && match !== null && (
         <MatchChips voice="owner" match={match} profile={profile} spots={spots} />
       )}
-      {applicant.source !== 'like' &&
+      {/* Whenever there is one, whatever the source (spec 0010l: optional on a room). */}
+      {applicant.message !== null &&
         (compact ? (
           // A two-line preview for scanning; the pane shows the whole message, so nothing is hidden.
           // Line breaks fold into spaces here, so a blank first line cannot leave a lone "…" line.
@@ -260,11 +261,11 @@ export function ApplicantCard({
             data-testid="applicant-message"
             className="line-clamp-2 whitespace-normal break-words text-body-sm text-ink-muted"
           >
-            {applicant.message ?? ''}
+            {applicant.message}
           </p>
         ) : (
           // Free text from a seeker: React text children only (never linkified or HTML), line breaks
-          // kept, direction from its first strong character. A mutual match has no message.
+          // kept, direction from its first strong character.
           <ClampedText
             lines={4}
             id={`${headingId}-message`}
@@ -276,7 +277,7 @@ export function ApplicantCard({
                 'self-stretch whitespace-pre-line break-words rounded-md bg-surface-subtle px-3 py-3 text-body-sm text-ink',
             }}
           >
-            {applicant.message ?? ''}
+            {applicant.message}
           </ClampedText>
         ))}
       {!compact && (profile !== null || room !== null) && (
