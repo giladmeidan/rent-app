@@ -1,7 +1,7 @@
 ---
 id: 0011a
 title: An owner renews a listing (apartment or room) from 7 days before it expires, or any time after, for 90 more days from the renewal, and it is live again; the API stops accepting edits, pauses and resumes of a listing past its expiry
-status: verified
+status: in-progress
 depends_on: []   # no code dependency. 0011c (rate limits) also edits api/app/routers/listings.py: the second to merge merges origin/main
 reviewers: [code, qa, ux]   # qa: one new endpoint, a PATCH rule, two screens; ux: a new card button on both sides, the expired edit page's button, one status line. No security: the endpoint copies PATCH /listings/{id}'s owner rule (404 for anyone else) and the existing cap lock, no PII. No perf: one row lock + the existing cap count
 estimate: 1 coder run   # coder Opus/high (the owner rule and the cap's row locks: Speed rule 6, data); no migration; about 16 files, half of them tests
