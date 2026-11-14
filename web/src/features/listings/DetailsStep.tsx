@@ -17,6 +17,7 @@ import { TextInput } from '../../components/TextInput';
 import { CONDITIONS } from './constants';
 import { addDays, formatIls, formatRooms } from './format';
 import { furnishedLabel } from './furnished';
+import { useRentEstimate } from './useRentEstimate';
 import { conditionLabel } from './facts';
 import { yesNoOptions } from './RoomFields';
 import {
@@ -126,6 +127,24 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
     if (priceFocused && !pricePointer.current) priceRef.current?.select();
     pricePointer.current = false;
   }, [priceFocused]);
+
+  const estimate = useRentEstimate(form);
+  const estimateHint = (() => {
+    if (estimate === undefined) return undefined;
+    const [low, high] = estimate.figure_rooms;
+    const [year, month] = estimate.latest_period.split('-').map(Number);
+    return t('listings.estimate.hint', {
+      count: estimate.quarters,
+      rooms: high === undefined ? String(low) : t('listings.estimate.roomsPair', { low, high }),
+      area: estimate.area_name,
+      range: t('listings.estimate.range', {
+        low: formatIls(estimate.low_ils),
+        high: formatIls(estimate.high_ils),
+      }),
+      confidence: t(`listings.estimate.confidence.${estimate.confidence}`),
+      period: t('listings.estimate.period', { quarter: (month ?? 0) / 3, year }),
+    });
+  })();
 
   const errorId = (name: FieldName) => `${fieldId(name)}-error`;
   const message = (name: FieldName): string | undefined => {
@@ -298,6 +317,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
         <Field
           id={fieldId('price_ils')}
           label={t('listings.fields.price')}
+          hint={estimateHint}
           error={message('price_ils')}
         >
           <TextInput

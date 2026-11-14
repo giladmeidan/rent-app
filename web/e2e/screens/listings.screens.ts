@@ -1,6 +1,6 @@
 // The visual check for the listing wizard (spec 0009k, AC11): one screenshot per state at each
 // project's size, in web/screens/0009k/; the photos step's states (spec 0010e) in
-// web/screens/0010e/. Every API request is answered here, so it needs only the vite server: no
+// web/screens/0010e/; the rent estimate hint (spec 0014c) in web/screens/0014c/. Every API request is answered here, so it needs only the vite server: no
 // sign-up, no OTP. An unmatched request fails the run.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
-import type { MyListingOut } from '../../src/features/listings/api';
+import type { MyListingOut, RentEstimateOut } from '../../src/features/listings/api';
 import { API } from '../helpers';
 import { AREA, EXPIRED, LISTING_ID, OWNER, UNKNOWN_ID, listing } from './fixtures-listings';
 import { WEB_ORIGIN } from './origin';
@@ -21,6 +21,8 @@ type Setup = {
   post?: { status: number; body: unknown };
   /** The statuses of the photo uploads, in order (the last repeats); `'hold'` never answers. */
   uploads?: (number | 'hold')[];
+  /** What `GET /rent-estimate` answers (spec 0014c); by default no figures, so no hint. */
+  estimate?: RentEstimateOut;
 };
 
 /** The committed e2e JPEG: every photo the screens pick, and every `/media` image they show. */
@@ -48,7 +50,12 @@ const reply = (route: Route, body: unknown, status = 200) =>
 
 async function mockApi(page: Page, setup: Setup): Promise<string[]> {
   const unmatched: string[] = [];
-  const { mine = [], post = { status: 201, body: listing() }, uploads = [201] } = setup;
+  const {
+    mine = [],
+    post = { status: 201, body: listing() },
+    uploads = [201],
+    estimate = { estimate: null, reason: 'no_figures' },
+  } = setup;
   let uploaded = 0;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
@@ -69,6 +76,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     if (key === 'GET /me') return reply(route, OWNER);
     if (key === 'GET /areas') return reply(route, [AREA]);
     if (key === 'GET /me/conversations') return reply(route, []);
+    if (key === 'GET /rent-estimate') return reply(route, estimate);
     if (key === 'GET /me/listings') {
       // A held request never answers: the page stays on its loading state.
       if (mine === 'pending') return new Promise<void>(() => {});
@@ -316,6 +324,33 @@ const STATES: State[] = [
       await page
         .getByRole('group', { name: f.condition })
         .evaluate((group) => group.scrollIntoView({ block: 'center' }));
+      await expectFactsFit(page);
+    },
+  },
+  {
+    // Spec 0014c: the official average rent under the price, at neighbourhood level.
+    name: '01-details-estimate',
+    spec: '0014c',
+    setup: {
+      estimate: {
+        estimate: {
+          low_ils: 6500,
+          high_ils: 7700,
+          confidence: 'high',
+          level: 'neighbourhood',
+          area_name: 'בורוכוב',
+          figure_rooms: [4],
+          quarters: 4,
+          latest_period: '2026-06-01',
+        },
+        reason: null,
+      },
+    },
+    path: NEW,
+    act: async (page) => {
+      await toDetails(page, 'apartment');
+      await fillDetails(page, 'apartment');
+      await expect(page.getByText(/nadlan\.gov\.il/)).toBeVisible();
       await expectFactsFit(page);
     },
   },

@@ -101,3 +101,19 @@ export async function fetchPublicListing(id: string): Promise<ListingDetail> {
   if (data === undefined) throw new ApiError('GET', '/listings/{id}', response.status, error);
   return data;
 }
+
+export type RentEstimateOut = components['schemas']['RentEstimateOut'];
+export type RentEstimateRange = components['schemas']['RentEstimateRange'];
+
+/** The official average rent for an apartment's facts (0014c); signed in, any role. */
+export async function fetchRentEstimate(
+  city: string,
+  street: string,
+  rooms: string,
+): Promise<RentEstimateOut> {
+  const { data, error, response } = await api.GET('/rent-estimate', {
+    params: { query: { city, street, rooms } },
+  });
+  if (data === undefined) throw new ApiError('GET', '/rent-estimate', response.status, error);
+  return data;
+}
