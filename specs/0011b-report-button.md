@@ -1,7 +1,7 @@
 ---
 id: 0011b
 title: A signed-in user reports a listing (apartment or room) from its page, or a person from their card in שוק השותפים, with a reason and an optional note; the report is stored for the admin and nothing else happens; the API already takes reports from a chat, the owner's inbox and a room's people page (their buttons are 0011d)
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa, ux]   # security: a new write path holding user text about other users, five visibility rules reused (one 404, no existence oracle), a new table of PII; qa: API + dialog states; ux: a new dialog and two entry points
 estimate: 1 coder run   # coder Opus/high (new table + migration + user text + five visibility rules; Speed rule 6). The other entry points are 0011d
