@@ -397,6 +397,39 @@ describe('MarketPeoplePage', () => {
     expect(api.calls(PEOPLE)).toHaveLength(1);
   });
 
+  it('ac17 like rate limit says when to retry', async () => {
+    // Spec 0011c: with a `Retry-After` the card's line says when; without one, the fixed line.
+    const limited = (retryAfter?: string) =>
+      new Response(JSON.stringify({ detail: 'rate_limited' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(retryAfter === undefined ? {} : { 'Retry-After': retryAfter }),
+        },
+      });
+    const c1 = personCard({ display_name: 'C1' });
+    const c2 = personCard({ display_name: 'C2' });
+    renderPage([page([c1, c2])], {
+      extra: {
+        [likeRoute('PUT', c1)]: [() => limited('3600')],
+        [likeRoute('PUT', c2)]: [() => limited()],
+      },
+    });
+    await screen.findAllByRole('article');
+
+    fireEvent.click(likeButton('C1'));
+    // "בעוד שעה"
+    const when = '\u05d1\u05e2\u05d5\u05d3 \u05e9\u05e2\u05d4';
+    expect((await within(cardOf('C1')).findByRole('alert')).textContent).toBe(
+      he.people.errors.rateLimitedIn.replace('{{when}}', when),
+    );
+
+    fireEvent.click(likeButton('C2'));
+    expect((await within(cardOf('C2')).findByRole('alert')).textContent).toBe(
+      he.people.errors.rateLimited,
+    );
+  });
+
   it('ac15_logout_forgets_the_browse_pages_and_the_likes', () => {
     // The next person on this device must not see the last one's people.
     const client = testQueryClient();

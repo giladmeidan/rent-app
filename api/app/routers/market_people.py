@@ -4,9 +4,10 @@
 Every endpoint requires a session of any role (`current_user`): 401 `unauthenticated` without one.
 
 - `GET /people` and `GET /me/people-likes` need the caller's own **visible card** (a live room is
-  not enough, spec 0010m): 403 `card_required` without it. Browse is rate limited per user
-  (`BROWSE_RATE_LIMIT_HOUR` / `_DAY`, shared with the room side's `GET /listings/{id}/people`;
-  a 429 with `Retry-After`), and every attempt counts, a 403 included.
+  not enough, spec 0010m): 403 `card_required` without it. Both are rate limited per user by the
+  browse limit (`BROWSE_RATE_LIMIT_HOUR` / `_DAY`, shared with the room side's
+  `GET /listings/{id}/people`; `GET /me/people-likes` since spec 0011c; a 429 with
+  `Retry-After`), and every attempt counts, a 403 included.
 - `PUT /people/{card_id}/like` needs the caller's own **visible card** (403 `card_required`). An
   unknown card, the caller's own and one that is not a candidate
   for the caller are one 404 `not_found`. It shares the like limit with room likes
@@ -16,6 +17,7 @@ Every endpoint requires a session of any role (`current_user`): 401 `unauthentic
   409 `mutual_match` on a match (remove it instead).
 - `DELETE /me/matches/{conversation_id}` removes a match: 204, also when already removed; an
   unknown id, an application chat and a chat the caller is not in are one 404 `not_found`.
+- Both DELETEs count the shared `write` budget (spec 0011c, `app/limits.py`), every attempt.
 
 A person is their `card_id`, never their user id; a chat is its `conversation_id`. Neither
 reveals an account in a URL."""
@@ -27,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.models import User
@@ -143,9 +146,11 @@ def like_person(card_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) -> Pe
             "description": "mutual_match: the pair is a match; remove it with "
             "DELETE /me/matches/{conversation_id}",
         },
+        **limits.RATE_LIMITED,
     },
 )
-def unlike_person(card_id: uuid.UUID, user: UserDep, db: DbDep) -> Response:
+def unlike_person(card_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) -> Response:
+    limits.check(r, user.id, limits.WRITE)
     try:
         market_service.unlike(db, user, card_id)
     except market_service.MutualMatchError:
@@ -162,9 +167,11 @@ def unlike_person(card_id: uuid.UUID, user: UserDep, db: DbDep) -> Response:
             "model": ErrorOut,
             "description": "not_found: unknown id, an application chat, or not the caller's",
         },
+        **limits.RATE_LIMITED,
     },
 )
 def remove_match(conversation_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) -> Response:
+    limits.check(r, user.id, limits.WRITE)
     try:
         market_service.remove_match(db, r, user, conversation_id)
     except market_service.NotFoundError:
@@ -175,11 +182,13 @@ def remove_match(conversation_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisD
 @router.get(
     "/me/people-likes",
     response_model=MyPeopleLikesOut,
-    responses={**_SESSION, **_CARD_REQUIRED},
+    responses={**_SESSION, **_CARD_REQUIRED, **_RATE_LIMITED},
 )
-def my_people_likes(user: UserDep, db: DbDep) -> MyPeopleLikesOut:
+def my_people_likes(user: UserDep, db: DbDep, r: RedisDep) -> MyPeopleLikesOut:
     try:
-        rows = market_service.my_people_likes(db, user)
+        rows = market_service.my_people_likes(db, r, user)
+    except RateLimitedError as exc:
+        raise _rate_limited(exc) from None
     except market_service.CardRequiredError:
         raise _card_required() from None
     out = MyPeopleLikesOut(liked_me=[], mine=[], matches=[])

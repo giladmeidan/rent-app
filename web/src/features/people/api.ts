@@ -69,7 +69,9 @@ export async function likePersonCard(cardId: string): Promise<PersonLikeOut> {
   const { data, error, response } = await api.PUT('/people/{card_id}/like', {
     params: { path: { card_id: cardId } },
   });
-  if (data === undefined) throw new ApiError('PUT', '/people/{id}/like', response.status, error);
+  if (data === undefined) {
+    throw new ApiError('PUT', '/people/{id}/like', response.status, error, response.headers);
+  }
   return data;
 }
 
@@ -78,7 +80,8 @@ export async function unlikePersonCard(cardId: string): Promise<void> {
   const { error, response } = await api.DELETE('/people/{card_id}/like', {
     params: { path: { card_id: cardId } },
   });
-  if (!response.ok) throw new ApiError('DELETE', '/people/{id}/like', response.status, error);
+  if (!response.ok)
+    throw new ApiError('DELETE', '/people/{id}/like', response.status, error, response.headers);
 }
 
 /** The people who liked the caller, the people the caller liked, and the matches. 403

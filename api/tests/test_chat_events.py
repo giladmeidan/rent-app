@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
@@ -247,7 +248,10 @@ async def test_ac1_stream_auth_holds_no_db_connection(
     assert stream.status == 200
     assert stream.headers["content-type"].startswith("text/event-stream")
     assert stream.headers["cache-control"] == "no-cache"
-    assert b"retry: 3000" in stream.body
+    # AC15 (spec 0011c): the reconnect delay is drawn per stream from 2–10 s.
+    retry = re.search(rb"retry: (\d+)", stream.body)
+    assert retry is not None
+    assert 2000 <= int(retry.group(1)) <= 10_000
     assert not stream.complete
     assert get_engine().pool.checkedout() == 0  # type: ignore[attr-defined]  # Pool stub
 

@@ -19,11 +19,15 @@ Each applicant carries their current `match` and housing `profile` (spec 0006c);
 by match by default (`?sort=newest` for the 0004c order), applicants without a profile last. A room
 application also carries the applicant's room section as `room` (spec 0007c: gender, age, answers).
 
-Every successful lister status change and applicant withdraw publishes a `status` chat event to the
-chat's members after the commit (spec 0005c): it may open or close the application's chat. On a
+Every lister status change that changed the status (a same-status request is a no-op that writes
+and publishes nothing, spec 0011c) and every applicant withdraw publishes a `status` chat event to
+the chat's members after the commit (spec 0005c): it may open or close the application's chat. On a
 room application that includes the listing's flatmates (`chat.event_members`, spec 0008d). So does
 an apply that answered the lister's invite (spec 0010l: it comes back `shortlisted`, its chat
-open); a `submitted` apply publishes nothing."""
+open); a `submitted` apply publishes nothing.
+
+Rate limits (spec 0011c, `app/limits.py`): a withdraw counts the shared `write` budget, a lister
+status change the `status` budget (200 / h, 1000 / day), every attempt whatever its outcome."""
 
 import datetime as dt
 import uuid
@@ -33,6 +37,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.matching.score import explain_row
@@ -158,6 +163,7 @@ def my_applications(user: UserDep, db: DbDep) -> list[MyApplicationOut]:
         **_SESSION,
         404: {"model": ErrorOut, "description": "not_found: unknown id, or another account's"},
         409: {"model": ErrorOut, "description": "not_withdrawable: already withdrawn, or declined"},
+        **limits.RATE_LIMITED,
     },
 )
 def withdraw(
@@ -166,6 +172,7 @@ def withdraw(
     db: DbDep,
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> MyApplicationOut:
+    limits.check(r, user.id, limits.WRITE)
     try:
         application, listing = applications_service.withdraw(db, user, application_id)
     except applications_service.ApplicationNotFoundError:
@@ -253,6 +260,7 @@ def list_applicants(
             "an application of a different listing, or a withdrawn one",
         },
         409: {"model": ErrorOut, "description": "invalid_transition: the applicant is declined"},
+        **limits.RATE_LIMITED,
     },
 )
 def set_applicant_status(
@@ -263,15 +271,17 @@ def set_applicant_status(
     db: DbDep,
     r: Annotated[RedisClient, Depends(get_redis)],
 ) -> ApplicantOut:
+    limits.check(r, user.id, limits.STATUS)
     try:
-        row = applications_service.set_applicant_status(
+        row, changed = applications_service.set_applicant_status(
             db, user, listing_id, application_id, body.status
         )
     except (ListingNotFoundError, applications_service.ApplicationNotFoundError):
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.InvalidTransitionError:
         raise HTTPException(status_code=409, detail="invalid_transition") from None
-    application: Application = row.Application
-    members = chat_service.event_members(db, application, user.id)
-    chat_events.publish(r, members, application.id, "status")
+    if changed:
+        application: Application = row.Application
+        members = chat_service.event_members(db, application, user.id)
+        chat_events.publish(r, members, application.id, "status")
     return _applicant_out(row)

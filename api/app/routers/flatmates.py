@@ -9,9 +9,14 @@ Invitee and flatmate side: preview, join and `/me/flats` require a session of an
 (`current_user`): 401 `unauthenticated`. The invite token travels **only in a POST body**, never in
 a path or query (uvicorn's access log records full paths). Preview and join share one rate limit
 per user (429 `rate_limited` with `Retry-After`), counted on every authenticated attempt, found or
-not. Leaving (`DELETE /me/flats/{listing_id}`) is always a 204, so it reveals nothing.
+not. Leaving (`DELETE /me/flats/{listing_id}`) is a 204 (or a 429 at the write limit), so it
+reveals nothing.
 `PATCH /me/flats/{listing_id}` (spec 0010f) sets the caller's own `shown` choice and requires a
-session (`current_user`, 401) and membership of that flat: anything else is a 404 `not_found`."""
+session (`current_user`, 401) and membership of that flat: anything else is a 404 `not_found`.
+
+Every other write here (create, rotate or disable the link, remove a flatmate, set `shown`, leave)
+counts the shared `write` budget (spec 0011c, `app/limits.py`), every attempt: a refused one is a
+429 `rate_limited` with `Retry-After`, the only answer to a leave other than 204."""
 
 import uuid
 from typing import Annotated, Any
@@ -19,6 +24,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.models import Listing, User
@@ -85,11 +91,15 @@ def _rate_limited(exc: RateLimitedError) -> HTTPException:
             "model": ErrorOut,
             "description": "not_found: unknown id, another account's, or an apartment",
         },
+        **limits.RATE_LIMITED,
     },
 )
-def create_invite(listing_id: uuid.UUID, me: UserDep, db: DbDep, response: Response) -> InviteOut:
+def create_invite(
+    listing_id: uuid.UUID, me: UserDep, db: DbDep, r: RedisDep, response: Response
+) -> InviteOut:
     """Create the room's invite link, or rotate it (the old link stops working). The token is
     returned only here and can never be read again; the response is never cached."""
+    limits.check(r, me.id, limits.WRITE)
     try:
         token = flatmates_service.create_invite(db, me, listing_id)
     except ListingNotFoundError:
@@ -101,9 +111,10 @@ def create_invite(listing_id: uuid.UUID, me: UserDep, db: DbDep, response: Respo
 @router.delete(
     "/listings/{listing_id}/flatmate-invite",
     status_code=204,
-    responses={**_SESSION, **_NOT_OWN},
+    responses={**_SESSION, **_NOT_OWN, **limits.RATE_LIMITED},
 )
-def disable_invite(listing_id: uuid.UUID, me: UserDep, db: DbDep) -> Response:
+def disable_invite(listing_id: uuid.UUID, me: UserDep, db: DbDep, r: RedisDep) -> Response:
+    limits.check(r, me.id, limits.WRITE)
     try:
         flatmates_service.disable_invite(db, me, listing_id)
     except ListingNotFoundError:
@@ -200,13 +211,15 @@ def list_flatmates(listing_id: uuid.UUID, me: UserDep, db: DbDep) -> list[Flatma
             "description": "not_found: unknown listing or membership, another account's listing, "
             "or another listing's membership",
         },
+        **limits.RATE_LIMITED,
     },
 )
 def remove_flatmate(
-    listing_id: uuid.UUID, flatmate_id: uuid.UUID, me: UserDep, db: DbDep
+    listing_id: uuid.UUID, flatmate_id: uuid.UUID, me: UserDep, db: DbDep, r: RedisDep
 ) -> Response:
     """Remove a flatmate: their chat access ends at once, and the invite link is turned off (they
     may still hold it); make a new one for the others."""
+    limits.check(r, me.id, limits.WRITE)
     try:
         flatmates_service.remove_flatmate(db, me, listing_id, flatmate_id)
     except ListingNotFoundError:
@@ -233,17 +246,24 @@ def my_flats(me: UserDep, db: DbDep) -> list[MyFlatOut]:
     responses={
         **_SESSION,
         404: {"model": ErrorOut, "description": "not_found: not a flatmate there, or unknown"},
+        **limits.RATE_LIMITED,
     },
 )
-def set_shown(listing_id: uuid.UUID, body: ShownIn, me: UserDep, db: DbDep) -> Response:
+def set_shown(
+    listing_id: uuid.UUID, body: ShownIn, me: UserDep, db: DbDep, r: RedisDep
+) -> Response:
     """Show or hide the caller on the room's page (spec 0010f)."""
+    limits.check(r, me.id, limits.WRITE)
     if not flatmates_service.set_shown(db, me, listing_id, body.shown):
         raise _not_found()
     return Response(status_code=204)
 
 
-@router.delete("/me/flats/{listing_id}", status_code=204, responses=_SESSION)
-def leave_flat(listing_id: uuid.UUID, me: UserDep, db: DbDep) -> Response:
-    """Leave the flat (always 204, member or not)."""
+@router.delete(
+    "/me/flats/{listing_id}", status_code=204, responses={**_SESSION, **limits.RATE_LIMITED}
+)
+def leave_flat(listing_id: uuid.UUID, me: UserDep, db: DbDep, r: RedisDep) -> Response:
+    """Leave the flat (204, member or not)."""
+    limits.check(r, me.id, limits.WRITE)
     flatmates_service.leave(db, me, listing_id)
     return Response(status_code=204)

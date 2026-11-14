@@ -335,6 +335,44 @@ describe('JoinFlatPage', () => {
     reset(view);
   });
 
+  it('ac16 rate limit says when to retry', async () => {
+    // Spec 0011c: with a `Retry-After` the line says when; without one it keeps the fixed line.
+    const limited = (retryAfter?: string) =>
+      new Response(JSON.stringify({ detail: 'rate_limited' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(retryAfter === undefined ? {} : { 'Retry-After': retryAfter }),
+        },
+      });
+    const inWhen = (when: string) => he.flatmates.join.rateLimitedIn.replace('{{when}}', when);
+
+    // The preview, `Retry-After: 120`: "בעוד 2 דקות".
+    let { view } = renderJoin({ [PREVIEW]: [() => limited('120')] });
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      inWhen('\u05d1\u05e2\u05d5\u05d3 2 \u05d3\u05e7\u05d5\u05ea'),
+    );
+    reset(view);
+
+    // The join, `Retry-After: 7200`: "בעוד שעתיים", and the join button stays.
+    ({ view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [() => limited('7200')] }));
+    fireEvent.click(await cta());
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      inWhen('\u05d1\u05e2\u05d5\u05d3 \u05e9\u05e2\u05ea\u05d9\u05d9\u05dd'),
+    );
+    expect(screen.getByRole('button', { name: he.flatmates.join.cta })).toBeEnabled();
+    reset(view);
+
+    // Without the header: the fixed line, on both.
+    ({ view } = renderJoin({ [PREVIEW]: [() => limited()] }));
+    expect((await screen.findByRole('alert')).textContent).toBe(he.flatmates.join.rateLimited);
+    reset(view);
+    ({ view } = renderJoin({ [PREVIEW]: [json(P)], [JOIN]: [() => limited()] }));
+    fireEvent.click(await cta());
+    expect((await screen.findByRole('alert')).textContent).toBe(he.flatmates.join.rateLimited);
+    reset(view);
+  });
+
   it('ac12_outcomes_to_market', async () => {
     // Spec 0010a: declined, full and invalid lead to the market ("לשוק השותפים"), own and applied
     // to the market's "שלי".

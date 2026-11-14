@@ -15,11 +15,12 @@ runs on the two-thread photo pool (`encode_upload`), the store and the database 
 threadpool: the event loop is never blocked.
 Nothing here logs or echoes the body; a 413 / 415 logs the route and the error code only.
 
-Delete and reorder are not rate-limited.
+Delete and reorder count the shared `write` budget (spec 0011c, `app/limits.py`), every attempt.
 
 Person photo (spec 0010j): `PUT /me/photo` and `DELETE /me/photo`, any role. The upload runs exactly
 as a listing upload (no listing check), counting against the same limit and the same one upload
-slot; it returns the caller's `UserOut`. The delete is not rate-limited and is idempotent."""
+slot; it returns the caller's `UserOut`. The delete counts the shared `write` budget and is
+idempotent."""
 
 import logging
 import uuid
@@ -32,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.models import User
@@ -232,12 +234,19 @@ async def upload_listing_photo(
             "model": ErrorOut,
             "description": "not_found: unknown listing, another's, or not a photo of this listing",
         },
+        **limits.RATE_LIMITED,
     },
 )
 def delete_listing_photo(
-    listing_id: uuid.UUID, photo_id: uuid.UUID, user: UserDep, db: DbDep, store: StoreDep
+    listing_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    user: UserDep,
+    db: DbDep,
+    r: RedisDep,
+    store: StoreDep,
 ) -> Response:
     """Delete one photo; the photos after it move up one position."""
+    limits.check(r, user.id, limits.WRITE)
     try:
         photos_service.delete_listing_photo(db, store, user, listing_id, photo_id)
     except (ListingNotFoundError, photos_service.PhotoNotFoundError):
@@ -255,12 +264,14 @@ def delete_listing_photo(
             "description": "photo_order_mismatch: not exactly the listing's photos, each once;"
             " or a malformed body (list `detail`)"
         },
+        **limits.RATE_LIMITED,
     },
 )
 def reorder_listing_photos(
-    listing_id: uuid.UUID, body: PhotoOrderIn, user: UserDep, db: DbDep
+    listing_id: uuid.UUID, body: PhotoOrderIn, user: UserDep, db: DbDep, r: RedisDep
 ) -> list[PhotoOut]:
     """Set the photos' order (the first is the cover); returns them in that order."""
+    limits.check(r, user.id, limits.WRITE)
     try:
         photos = photos_service.reorder_listing_photos(db, user, listing_id, body.photo_ids)
     except ListingNotFoundError:
@@ -297,8 +308,9 @@ async def set_my_photo(
     return user_out(user)
 
 
-@router.delete("/me/photo", status_code=204, responses=_AUTH)
-def clear_my_photo(user: UserDep, db: DbDep, store: StoreDep) -> Response:
+@router.delete("/me/photo", status_code=204, responses={**_AUTH, **limits.RATE_LIMITED})
+def clear_my_photo(user: UserDep, db: DbDep, r: RedisDep, store: StoreDep) -> Response:
     """Remove the caller's person photo (also a 204 without one)."""
+    limits.check(r, user.id, limits.WRITE)
     photos_service.clear_user_photo(db, store, user)
     return Response(status_code=204)

@@ -8,6 +8,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ClampedText } from '../../components/ClampedText';
 import { focusRing } from '../../components/focusRing';
+import { retryAfterText } from '../../components/retryAfter';
 import { ApiError } from '../listings/api';
 import { hasStatus } from '../applications/api';
 import { formatDate, todayInIsrael } from '../listings/format';
@@ -68,6 +69,8 @@ export function MarketPersonCard({
   const headingId = useId();
   const aboutId = `${headingId}-about`;
   const [error, setError] = useState<Exclude<LikeError, 'gone'> | null>(null);
+  /** A 429's `Retry-After` in seconds, when it sent one (spec 0011c). */
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const like = useLikeCard();
   const unlike = useUnlikeCard();
   const inFlight = useRef(false);
@@ -92,6 +95,7 @@ export function MarketPersonCard({
       }
     } catch (caught) {
       const kind = errorKind(caught);
+      setRetryAfter(caught instanceof ApiError ? caught.retryAfter : null);
       if (kind === 'gone') onGone();
       else setError(kind);
     } finally {
@@ -195,7 +199,10 @@ export function MarketPersonCard({
           </div>
           {error !== null && (
             <p role="alert" className="text-body-sm font-semibold text-danger">
-              {error === 'rateLimited' && t('people.errors.rateLimited')}
+              {error === 'rateLimited' &&
+                (retryAfter !== null
+                  ? t('people.errors.rateLimitedIn', { when: retryAfterText(t, retryAfter) })
+                  : t('people.errors.rateLimited'))}
               {error === 'failed' && t('common.error')}
               {error === 'needsCard' && (
                 <>

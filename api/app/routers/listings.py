@@ -13,7 +13,12 @@ listing that is not live: the same owner rule as PATCH, 409 `listing_live` while
 `POST /listings/{id}/renew` (spec 0011a) makes the caller's listing live for 90 days from now,
 from 7 days before it expires and any time after: the same owner rule as PATCH, 409
 `renewal_not_open` earlier, and the cap as a resume. PATCH refuses a listing past its expiry (409
-`listing_expired`)."""
+`listing_expired`).
+
+Rate limits (spec 0011c, `app/limits.py`): the POST counts `create` (5 / h, 10 / day) after the
+`owner_only` check; PATCH, the renew POST and the closure PUT count the shared `write` budget,
+and a PATCH that sends an address key also counts `address`. Every attempt past the role check
+counts, whatever its outcome; a refused one is 429 `rate_limited` with `Retry-After`."""
 
 import uuid
 from typing import Annotated, Any
@@ -21,9 +26,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.models import User
+from app.redis_client import RedisClient, get_redis
 from app.schemas.error import ErrorOut
 from app.schemas.listing import ClosureIn, ListingIn, ListingOut, ListingPatch, MyListingOut
 from app.services import listings as listings_service
@@ -33,6 +40,10 @@ router = APIRouter(tags=["listings"])
 
 DbDep = Annotated[Session, Depends(get_session)]
 UserDep = Annotated[User, Depends(current_user)]
+RedisDep = Annotated[RedisClient, Depends(get_redis)]
+
+# The keys that make the worker geocode again, `services/listings.py::_ADDRESS_FIELDS`.
+_ADDRESS_KEYS = {"city", "street", "area_id"}
 
 _AUTH_ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorOut, "description": "unauthenticated"},
@@ -56,12 +67,19 @@ _UNKNOWN_AREA: dict[int | str, dict[str, Any]] = {
     "/listings",
     status_code=201,
     response_model=ListingOut,
-    responses={**_AUTH_ERRORS, **_OWNER_ONLY, **_CAP_REACHED, **_UNKNOWN_AREA},
+    responses={
+        **_AUTH_ERRORS,
+        **_OWNER_ONLY,
+        **_CAP_REACHED,
+        **_UNKNOWN_AREA,
+        **limits.RATE_LIMITED,
+    },
 )
-def create_listing(body: ListingIn, user: UserDep, db: DbDep) -> ListingOut:
+def create_listing(body: ListingIn, user: UserDep, db: DbDep, r: RedisDep) -> ListingOut:
     # Apartments keep the roles (PRODUCT.md "Account roles"); a room is open to any account.
     if body.listing_type == "apartment" and user.role != "owner":
         raise HTTPException(status_code=403, detail="owner_only")
+    limits.check(r, user.id, limits.CREATE)
     try:
         listing = listings_service.create_listing(db, user, body)
     except listings_service.ListingCapReachedError:
@@ -107,11 +125,16 @@ def my_listings(user: UserDep, db: DbDep) -> list[MyListingOut]:
             "renew it)",
         },
         **_UNKNOWN_AREA,
+        **limits.RATE_LIMITED,
     },
 )
 def update_listing(
-    listing_id: uuid.UUID, body: ListingPatch, user: UserDep, db: DbDep
+    listing_id: uuid.UUID, body: ListingPatch, user: UserDep, db: DbDep, r: RedisDep
 ) -> ListingOut:
+    if body.model_fields_set & _ADDRESS_KEYS:
+        limits.check(r, user.id, limits.WRITE, limits.ADDRESS)
+    else:
+        limits.check(r, user.id, limits.WRITE)
     try:
         listing = listings_service.update_listing(db, user, listing_id, body)
     except listings_service.ListingNotFoundError:
@@ -141,9 +164,11 @@ def update_listing(
             "listing_cap_reached",
         },
         422: {"description": "A malformed id (list `detail`)"},
+        **limits.RATE_LIMITED,
     },
 )
-def renew_listing(listing_id: uuid.UUID, user: UserDep, db: DbDep) -> ListingOut:
+def renew_listing(listing_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) -> ListingOut:
+    limits.check(r, user.id, limits.WRITE)
     try:
         listing = listings_service.renew_listing(db, user, listing_id)
     except listings_service.ListingNotFoundError:
@@ -166,9 +191,13 @@ def renew_listing(listing_id: uuid.UUID, user: UserDep, db: DbDep) -> ListingOut
         **_NOT_FOUND,
         409: {"model": ErrorOut, "description": "listing_live: the listing is still live"},
         422: {"description": "A malformed body (list `detail`)"},
+        **limits.RATE_LIMITED,
     },
 )
-def set_closure(listing_id: uuid.UUID, body: ClosureIn, user: UserDep, db: DbDep) -> Response:
+def set_closure(
+    listing_id: uuid.UUID, body: ClosureIn, user: UserDep, db: DbDep, r: RedisDep
+) -> Response:
+    limits.check(r, user.id, limits.WRITE)
     try:
         listings_service.set_closure(db, user, listing_id, body)
     except listings_service.ListingNotFoundError:

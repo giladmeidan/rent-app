@@ -380,7 +380,8 @@ def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
     seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
     # Review round 1 (security): one error at the field, never one per key, never naming a key.
-    many = {**{f"k{n}": 2 for n in range(19_999)}, "I am pregnant": 2}
+    # 4,000 keys: 20,000 is now a 413 `body_too_large` (spec 0011c, test_hardening.py AC12).
+    many = {**{f"k{n}": 2 for n in range(3_999)}, "I am pregnant": 2}
     eight = {**_s()["lifestyle"], "I am pregnant": 1}
     for lifestyle in (many, eight):
         response = _put(seeker, {**_p(gush_dan), "gender": "woman", "lifestyle": lifestyle})

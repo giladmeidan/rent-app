@@ -9,9 +9,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.models import User
+from app.redis_client import RedisClient, get_redis
 from app.schemas.error import ErrorOut
 from app.schemas.profile import SeekerProfileIn, SeekerProfileOut
 from app.services import profiles as profiles_service
@@ -21,6 +23,7 @@ router = APIRouter(tags=["profiles"])
 
 DbDep = Annotated[Session, Depends(get_session)]
 UserDep = Annotated[User, Depends(current_user)]
+RedisDep = Annotated[RedisClient, Depends(get_redis)]
 
 _SESSION: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorOut, "description": "unauthenticated"},
@@ -49,9 +52,11 @@ def get_profile(user: UserDep, db: DbDep) -> SeekerProfileOut:
     responses={
         **_SESSION,
         422: {"description": "unknown_area, or a malformed body (list `detail`)"},
+        **limits.RATE_LIMITED,
     },
 )
-def put_profile(body: SeekerProfileIn, user: UserDep, db: DbDep) -> SeekerProfileOut:
+def put_profile(body: SeekerProfileIn, user: UserDep, db: DbDep, r: RedisDep) -> SeekerProfileOut:
+    limits.check(r, user.id, limits.WRITE)
     try:
         profile = profiles_service.put_profile(db, user, body)
     except UnknownAreaError:

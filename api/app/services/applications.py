@@ -483,20 +483,21 @@ def set_applicant_status(
     listing_id: uuid.UUID,
     application_id: uuid.UUID,
     status: ApplicantStatus,
-) -> Row[Any]:
+) -> tuple[Row[Any], bool]:
     """Set an applicant of one of `owner`'s listings to `status` (`shortlisted`, `submitted` or
     `declined`), whatever the listing's state, and return its row as `list_applicants` does (the
     `_applicants` SELECT, run in the same transaction before the commit, so it sees the new
-    status). One conditional UPDATE: ownership, the listing / application pair and `ALLOWED_FROM`
-    are all in its WHERE, so a concurrent withdraw or decline cannot interleave. A same-status
-    change keeps `updated_at` (in Postgres the SET clause's CASE sees the pre-update status).
-    Raises `ApplicationNotFoundError` (unknown listing or application, another owner's listing, an
+    status) and whether the status changed. One conditional UPDATE: ownership, the listing /
+    application pair and a real transition of `ALLOWED_FROM` are all in its WHERE, so a
+    concurrent withdraw or decline cannot interleave. A same-status request is a no-op (spec
+    0011c): nothing is written or committed and `changed` is False. Raises
+    `ApplicationNotFoundError` (unknown listing or application, another owner's listing, an
     application of a different listing, a withdrawn one) or `InvalidTransitionError`. The fallback
     status SELECT runs in a fresh READ COMMITTED snapshot, so a seeker withdrawing or re-applying
-    between the UPDATE and the SELECT can turn a 404 into a 409 or the reverse; no data changes in
-    either case and the client re-fetches. To `shortlisted`, also opens the application's chat in
-    the same transaction (spec 0005a: one conversation per application, insert on conflict do
-    nothing). Commits."""
+    between the UPDATE and the SELECT can turn a 404 into a 409, a no-op or the reverse; no data
+    changes in any case and the client re-fetches. To `shortlisted`, also opens the application's
+    chat in the same transaction (spec 0005a: one conversation per application, insert on conflict
+    do nothing). Commits."""
     try:
         application = db.scalar(
             update(Application)
@@ -505,14 +506,9 @@ def set_applicant_status(
                 Application.listing_id == listing_id,
                 Listing.id == Application.listing_id,
                 Listing.owner_id == owner.id,
-                Application.status.in_(ALLOWED_FROM[status]),
+                Application.status.in_(ALLOWED_FROM[status] - {status}),
             )
-            .values(
-                status=status,
-                updated_at=case(
-                    (Application.status == status, Application.updated_at), else_=func.now()
-                ),
-            )
+            .values(status=status, updated_at=func.now())
             .returning(Application)
             .execution_options(populate_existing=True, synchronize_session=False)
         )
@@ -527,7 +523,14 @@ def set_applicant_status(
             )
             if current is None or current == "withdrawn":
                 raise ApplicationNotFoundError
-            raise InvalidTransitionError
+            if current != status:
+                raise InvalidTransitionError
+            query, _ = _applicants(listing_id)
+            # A withdraw may land between the two statements.
+            row = db.execute(query.where(Application.id == application_id)).one_or_none()
+            if row is None:
+                raise ApplicationNotFoundError
+            return row, False
         if status == "shortlisted":
             # Opens the chat (spec 0005a), once per application ever: a re-shortlist finds the
             # row and inserts nothing; an un-shortlist or a decline never touches it.
@@ -550,4 +553,4 @@ def set_applicant_status(
     except Exception:
         db.rollback()
         raise
-    return row
+    return row, True
