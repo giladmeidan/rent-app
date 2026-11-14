@@ -133,7 +133,8 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
     if (estimate === undefined) return undefined;
     const [low, high] = estimate.figure_rooms;
     const [year, month] = estimate.latest_period.split('-').map(Number);
-    return t('listings.estimate.hint', {
+    // Small flats (spec 0014d): the copy also credits the CBS, whose ratio scales the figure.
+    return t(estimate.small_flat_ratio ? 'listings.estimate.hintSmall' : 'listings.estimate.hint', {
       count: estimate.quarters,
       rooms: high === undefined ? String(low) : t('listings.estimate.roomsPair', { low, high }),
       area: estimate.area_name,

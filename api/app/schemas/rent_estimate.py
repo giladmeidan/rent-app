@@ -27,9 +27,12 @@ class RentEstimateRange(BaseModel):
     confidence: Literal["high", "medium"]
     level: Literal["neighbourhood", "city"]
     area_name: str  # the rent_areas name_he of the level used
-    figure_rooms: list[int]  # the room counts behind it: [3], [3, 4], [5]
+    figure_rooms: list[int]  # the room counts behind it: [3], [3, 4], [5]; [1, 2] for small flats
     quarters: int  # figures behind it (the smallest count over its room counts)
     latest_period: dt.date  # the newest period in rent_prices
+    # 1-2 rooms (spec 0014d): the CBS ratio applied to the 3-room baseline, the city's or its
+    # district's; None on every 2.5+ answer
+    small_flat_ratio: Literal["city", "district"] | None
 
 
 class RentEstimateOut(BaseModel):
