@@ -1,6 +1,6 @@
 // The visual check for the listing wizard (spec 0009k, AC11): one screenshot per state at each
 // project's size, in web/screens/0009k/; the photos step's states (spec 0010e) in
-// web/screens/0010e/; the rent estimate hint (spec 0014c) in web/screens/0014c/. Every API request is answered here, so it needs only the vite server: no
+// web/screens/0010e/; the rent estimate hint (spec 0014c) in web/screens/0014c/, its small-flat copy (spec 0014d) in web/screens/0014d/. Every API request is answered here, so it needs only the vite server: no
 // sign-up, no OTP. An unmatched request fails the run.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -352,6 +352,35 @@ const STATES: State[] = [
       await toDetails(page, 'apartment');
       await fillDetails(page, 'apartment');
       await expect(page.getByText(/nadlan\.gov\.il/)).toBeVisible();
+      await expectFactsFit(page);
+    },
+  },
+  {
+    // Spec 0014d: a 1–2 room apartment, the 3-room figure scaled by the CBS ratio.
+    name: '01-details-estimate-small',
+    spec: '0014d',
+    setup: {
+      estimate: {
+        estimate: {
+          low_ils: 4550,
+          high_ils: 5400,
+          confidence: 'medium',
+          level: 'neighbourhood',
+          area_name: 'בורוכוב',
+          figure_rooms: [1, 2],
+          quarters: 4,
+          latest_period: '2026-06-01',
+          small_flat_ratio: 'city',
+        },
+        reason: null,
+      },
+    },
+    path: NEW,
+    act: async (page) => {
+      await toDetails(page, 'apartment');
+      await fillDetails(page, 'apartment');
+      await page.getByLabel(f.rooms).selectOption('2');
+      await expect(page.getByText(/הלמ״ס/)).toBeVisible();
       await expectFactsFit(page);
     },
   },
