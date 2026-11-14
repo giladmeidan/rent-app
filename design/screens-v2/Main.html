@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>דף נחיתה v2</title>
+<!-- Artboard for spec 0009z (landing v2). One responsive page: phone below 1024px, desktop from it.
+     Colour, type and shape are design/brand/tokens.json; the app header is only sketched here. -->
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Rubik:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#FFFFFF;--surface-subtle:#F3F4F6;--ink:#111111;--ink-muted:#5B6370;--on-ink:#FFFFFF;
+  --accent:#2563EB;--accent-strong:#1D4ED8;--accent-soft:#E8F0FE;--border:#E5E7EB;--border-strong:#868E9B;
+  --success:#15803D;--blush:#BFD3FA;
+  --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:999px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface);color:var(--ink);font:400 16px/24px Rubik,system-ui,sans-serif}
+a{color:inherit;text-decoration:none}
+h1,h2,h3,p,ol,ul,figure{margin:0;padding:0}
+ol,ul{list-style:none}
+svg.i{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:83.5rem;margin-inline:auto;padding-inline:16px}
+.display{font:600 32px/40px Fredoka,Rubik,sans-serif}
+.h2{font:600 24px/32px Fredoka,Rubik,sans-serif}
+.h3{font:500 18px/26px Rubik,sans-serif}
+.sm{font-size:14px;line-height:20px}
+.label{font:500 14px/20px Rubik,sans-serif}
+.caption{font:500 12px/16px Rubik,sans-serif}
+.muted{color:var(--ink-muted)}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-strong);font:500 14px/20px Rubik}
+.badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-strong);font:500 12px/16px Rubik}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding-inline:20px;border-radius:var(--r-md);font:500 16px/24px Rubik;border:1.5px solid transparent}
+.btn.primary{background:var(--ink);color:var(--on-ink)}
+.btn.secondary{background:var(--surface);border-color:var(--border-strong)}
+.btn.ghost{color:var(--accent);min-height:44px;padding-inline:8px}
+.btn.on-ink{background:var(--surface);color:var(--ink)}
+.btn.on-ink-outline{border-color:var(--on-ink);color:var(--on-ink)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg)}
+.more{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font:500 14px/20px Rubik;min-height:44px}
+section{padding-block:32px}
+.section-head{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-block-end:16px}
+.section-head p{margin-block-start:4px}
+
+/* header (the app's own; sketched) */
+.top{display:flex;align-items:center;justify-content:space-between;height:64px}
+.top img{height:32px}
+.switch{display:none;padding:4px;border-radius:var(--r-pill);background:var(--surface-subtle);gap:4px}
+.switch span{padding:6px 14px;border-radius:var(--r-pill);font:500 14px/20px Rubik;color:var(--ink-muted)}
+.switch span.on{background:var(--surface);color:var(--ink)}
+
+/* 1 hero: a soft panel, copy at the inline start, the product collage at the end */
+.hero{background:var(--accent-soft);border-radius:var(--r-lg);padding:24px 16px;display:grid;gap:24px;
+  background-image:radial-gradient(var(--blush) 1px,transparent 1px);background-size:20px 20px}
+.hero-copy{display:flex;flex-direction:column;align-items:flex-start;gap:16px}
+.hero h1{white-space:pre-line}
+.ctas{display:flex;flex-direction:column;gap:12px;width:100%}
+.trust{display:flex;flex-wrap:wrap;gap:8px 16px}
+.trust li{display:inline-flex;align-items:center;gap:6px;font:500 14px/20px Rubik}
+.trust svg{color:var(--accent)}
+.collage{position:relative;max-width:26rem;width:100%;margin-inline:auto;padding-block-start:96px}
+.collage .turtle{position:absolute;inset-block-start:0;inset-inline-start:8px;width:150px}
+.listing .photo{aspect-ratio:16/10;background:var(--surface-subtle);border-radius:var(--r-lg) var(--r-lg) 0 0;display:grid;place-items:center;color:var(--border-strong);position:relative}
+.listing .photo .badge{position:absolute;inset-block-start:12px;inset-inline-start:12px;font-size:14px;line-height:20px;padding:4px 12px}
+.listing .body{padding:12px;display:flex;flex-direction:column;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:4px 10px;color:var(--ink-muted);font-size:14px;line-height:20px}
+.collage .listing .body{padding-block-end:32px}
+.hero .tag{background:var(--surface)}
+.why{position:relative;margin-block-start:-20px;margin-inline:16px -8px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.why li{display:flex;align-items:center;gap:8px;font-size:14px;line-height:20px}
+.why .ok{color:var(--success)}.why .meh{color:var(--ink-muted)}
+
+/* 2 what is inside: a bento of four doors into the site */
+.bento{display:grid;gap:12px}
+.tile{padding:20px;display:flex;flex-direction:column;gap:12px;overflow:hidden;transition:border-color .15s,transform .15s}
+.tile:hover{border-color:var(--ink);transform:translateY(-2px)}
+.tile .ico{width:44px;height:44px;border-radius:var(--r-md);background:var(--accent-soft);color:var(--accent-strong);display:grid;place-items:center}
+.tile .more{margin-block-start:auto}
+.mini{border-radius:var(--r-md);background:var(--surface-subtle);padding:12px;min-height:104px;display:flex;flex-direction:column;justify-content:center}
+.map{position:relative;min-height:170px;background:
+  linear-gradient(115deg,transparent 47%,#fff 47%,#fff 50%,transparent 50%),
+  linear-gradient(20deg,transparent 58%,#fff 58%,#fff 61%,transparent 61%),
+  linear-gradient(170deg,transparent 30%,#fff 30%,#fff 32%,transparent 32%),var(--surface-subtle)}
+.pin{position:absolute;padding:4px 10px;border-radius:var(--r-pill);background:var(--surface);border:1px solid var(--border-strong);font:500 12px/16px Rubik;box-shadow:0 3px 8px rgba(0,0,0,.12)}
+.pin.on{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.score{display:flex;align-items:center;gap:12px}
+.score b{font:600 32px/40px Fredoka;color:var(--accent-strong)}
+.bar{height:8px;border-radius:var(--r-pill);background:var(--surface);overflow:hidden;margin-block-start:8px}
+.bar i{display:block;height:100%;width:91%;background:var(--accent);border-radius:var(--r-pill)}
+.people{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.av{width:44px;height:44px;border-radius:50%;background:var(--accent-soft);color:var(--accent-strong);display:grid;place-items:center;font:500 16px/24px Rubik;border:2px solid var(--surface)}
+.av+.av{margin-inline-start:-14px}
+.row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--r-sm);background:var(--surface)}
+.row+.row{margin-block-start:8px}
+.faq-grid{display:grid;gap:16px}
+.row .grow{flex:1;min-width:0}
+
+/* 3 live listings: a swipe row on phones, three columns on desktop */
+.listings{display:grid;gap:12px;grid-auto-flow:column;grid-auto-columns:82%;overflow-x:auto;scroll-snap-type:x mandatory;padding-block-end:4px}
+.listings>*{scroll-snap-align:start}
+
+/* 4 how it works: one column per side */
+.how{display:grid;gap:12px}
+.how .col{padding:20px;display:flex;flex-direction:column;gap:16px}
+.how ol{display:flex;flex-direction:column;gap:16px}
+.how li{display:flex;gap:12px;align-items:flex-start}
+.num{width:36px;height:36px;flex:none;border-radius:var(--r-md);background:var(--accent-soft);color:var(--accent-strong);display:grid;place-items:center;font:500 18px/26px Rubik}
+
+/* 5 questions */
+.faq{display:flex;flex-direction:column;gap:8px}
+.faq details{padding:4px 16px}
+.faq summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;cursor:pointer;list-style:none;font:500 16px/24px Rubik}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary svg{transition:transform .15s;color:var(--ink-muted)}
+.faq details[open] summary svg{transform:rotate(180deg)}
+.faq details p{padding-block-end:16px;color:var(--ink-muted)}
+
+/* 6 closing band */
+.band{background:var(--ink);color:var(--on-ink);border-radius:var(--r-lg);padding:32px 16px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+.band .ctas{max-width:26rem}
+.band p{color:var(--on-ink)}
+
+/* gentle entrance; nothing moves for people who ask for less motion */
+@media (prefers-reduced-motion:no-preference){
+  @supports (animation-timeline:view()){
+    .reveal{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 35%}
+    @keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+  }
+}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}.tile:hover{transform:none}}
+
+@media (min-width:1024px){
+  .wrap{padding-inline:32px}
+  .display{font-size:48px;line-height:52px}
+  section{padding-block:48px}
+  .switch{display:flex}
+  .hero{grid-template-columns:1.1fr .9fr;align-items:center;padding:56px;gap:48px}
+  .hero-copy p{max-width:36rem}
+  .ctas{flex-direction:row;width:auto}
+  .collage .turtle{width:190px}.collage{padding-block-start:120px}
+  .bento{grid-template-columns:repeat(6,1fr)}
+  .t-map{grid-column:span 4;display:grid;grid-template-columns:1fr 1.2fr;gap:20px;align-items:stretch}
+  .t-map .text,.t-owner .text{display:flex;flex-direction:column;gap:12px}
+  .t-match,.t-market{grid-column:span 2}
+  .t-owner{grid-column:span 4;display:grid;grid-template-columns:1fr 1.2fr;gap:20px}
+  .listings{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:repeat(3,1fr);overflow:visible}
+  .how{grid-template-columns:1fr 1fr}
+  .faq-grid{grid-template-columns:1fr 2fr;gap:48px;align-items:start}
+  .band{padding:56px}
+  .band .ctas{flex-direction:row;justify-content:center;max-width:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <img src="../brand/logos/homie-lockup-he.svg" alt="הומי">
+    <div class="switch"><span class="on">דירות</span><span>שוק השותפים</span></div>
+    <a class="label" href="#">כניסה</a>
+  </header>
+
+  <!-- 1 hero -->
+  <div class="hero">
+    <div class="hero-copy">
+      <span class="tag">גוש דן · השקה בעברית</span>
+      <h1 class="display">מתאימים,
+לא גוללים.</h1>
+      <p class="muted">פרופילים מובנים, ציון התאמה לכל דירה וכרטיסי מועמדות מסודרים — במקום מאות הודעות בקבוצות.</p>
+      <div class="ctas">
+        <a class="btn primary" href="#"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>פרסום דירה</a>
+        <a class="btn secondary" href="#"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>חיפוש דירה</a>
+      </div>
+      <a class="btn ghost" href="#">מחפשים שותפים? לשוק השותפים</a>
+      <ul class="trust">
+        <li><svg class="i" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>משתמשים מאומתים באימייל</li>
+        <li><svg class="i" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>בלי מתווכים</li>
+        <li><svg class="i" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>חינם למחפשים</li>
+      </ul>
+    </div>
+
+    <!-- the product collage: turtle, example listing, and why it matches -->
+    <div class="collage">
+      <img class="turtle" src="../brand/mascot/homie-turtle-hello.svg" alt="">
+      <figure>
+        <div class="card listing">
+          <div class="photo">
+            <svg class="i" width="28" height="28" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>
+            <span class="badge">התאמה 91%</span>
+          </div>
+          <div class="body">
+            <p><b>7,200 ₪</b> <span class="muted sm">/ חודש</span></p>
+            <p class="label">4 חדרים, רחוב כצנלסון, גבעתיים</p>
+            <p class="chips"><span>קומה 2 מתוך 4</span><span>95 מ״ר</span><span>מעלית</span><span>חניה</span></p>
+          </div>
+        </div>
+        <ul class="card why">
+          <li class="caption muted">לדוגמה: למה 91%</li>
+          <li><svg class="i ok" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>בתוך התקציב</li>
+          <li><svg class="i ok" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>תאריך הכניסה מתאים</li>
+          <li><svg class="i meh" width="18" height="18" viewBox="0 0 24 24"><path d="M6 12h12"/></svg>חניה אחת, חיפשתם שתיים</li>
+        </ul>
+      </figure>
+    </div>
+  </div>
+
+  <!-- 2 what is inside -->
+  <section>
+    <div class="section-head">
+      <div><h2 class="h2">מה מחכה בפנים</h2><p class="muted">ארבע דלתות לאתר. כל אחת נפתחת בלחיצה.</p></div>
+    </div>
+    <div class="bento">
+      <a class="card tile t-map reveal" href="#">
+        <div class="text">
+          <span class="ico"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
+          <h3 class="h3">חיפוש עם מפה</h3>
+          <p class="muted sm">מסננים לפי מחיר, חדרים ותאריך כניסה, ורואים כל דירה במקום שלה על המפה.</p>
+          <span class="more">לחיפוש על המפה <svg class="i" width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+        </div>
+        <div class="mini map" aria-hidden="true">
+          <span class="pin" style="inset-block-start:18%;inset-inline-start:12%">6,400 ₪</span>
+          <span class="pin on" style="inset-block-start:42%;inset-inline-start:40%">7,200 ₪</span>
+          <span class="pin" style="inset-block-start:68%;inset-inline-start:18%">5,900 ₪</span>
+          <span class="pin" style="inset-block-start:22%;inset-inline-start:66%">8,100 ₪</span>
+          <span class="pin" style="inset-block-start:72%;inset-inline-start:62%">6,800 ₪</span>
+        </div>
+      </a>
+
+      <a class="card tile t-match reveal" href="#">
+        <span class="ico"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"/></svg></span>
+        <h3 class="h3">ציון התאמה לכל דירה</h3>
+        <p class="muted sm">ממלאים פרופיל פעם אחת, ורואים מה מסתדר ומה פחות לפני הסיור.</p>
+        <div class="mini" aria-hidden="true">
+          <div class="score"><b>91%</b><span class="sm muted">התאמה לפרופיל שלכם</span></div>
+          <div class="bar"><i></i></div>
+        </div>
+        <span class="more">יצירת פרופיל <svg class="i" width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+      </a>
+
+      <a class="card tile t-market reveal" href="#">
+        <span class="ico"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.500 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.6c2.400.2 4 1.700 4.500 4.400"/></svg></span>
+        <h3 class="h3">שוק השותפים</h3>
+        <p class="muted sm">חדרים בדירות שותפים, ואנשים שמחפשים יחד. לייק הדדי פותח צ'אט.</p>
+        <div class="mini" aria-hidden="true">
+          <div class="people"><span class="av">נ</span><span class="av">ע</span><span class="av">ד</span>
+            <svg class="i" width="22" height="22" viewBox="0 0 24 24" style="color:var(--accent);margin-inline-start:8px"><path d="M12 20s-7-4.400-7-10a4 4 0 0 1 7-2.500A4 4 0 0 1 19 10c0 5.600-7 10-7 10z"/></svg>
+            <span class="badge">יש התאמה</span></div>
+        </div>
+        <span class="more">לשוק השותפים <svg class="i" width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+      </a>
+
+      <a class="card tile t-owner reveal" href="#">
+        <div class="text">
+          <span class="ico"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12.500h5"/></svg></span>
+          <h3 class="h3">מועמדויות מסודרות לבעלי דירות</h3>
+          <p class="muted sm">כל פנייה מגיעה ככרטיס עם פרופיל וציון התאמה. בוחרים, וממשיכים בצ'אט באתר.</p>
+          <span class="more">פרסום דירה <svg class="i" width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+        </div>
+        <div class="mini" aria-hidden="true">
+          <div class="row"><span class="av">מ</span><div class="grow"><p class="label">מאיה, 29</p><p class="caption muted">זוג · כניסה ב־1.1</p></div><span class="badge">94%</span></div>
+          <div class="row"><span class="av">י</span><div class="grow"><p class="label">יואב, 34</p><p class="caption muted">יחיד · כניסה גמישה</p></div><span class="badge">87%</span></div>
+          <div class="row"><span class="av">ש</span><div class="grow"><p class="label">שירה ואורי</p><p class="caption muted">משפחה · כניסה ב־15.12</p></div><span class="badge">81%</span></div>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <!-- 3 live listings (real data; the section is absent when there are fewer than three) -->
+  <section>
+    <div class="section-head">
+      <div><h2 class="h2">עלו לאחרונה</h2><p class="muted">דירות אמיתיות שמחכות עכשיו באתר.</p></div>
+      <a class="more" href="#">לכל הדירות <svg class="i" width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></a>
+    </div>
+    <div class="listings">
+      <a class="card listing reveal" href="#"><div class="photo"><svg class="i" width="28" height="28" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg></div><div class="body"><p><b>7,500 ₪</b> <span class="muted sm">/ חודש</span></p><p class="label">3.5 חדרים, שמעון בן צבי, גבעתיים</p><p class="chips"><span>קומה 7 מתוך 10</span><span>101 מ״ר</span><span>מעלית</span></p></div></a>
+      <a class="card listing reveal" href="#"><div class="photo"><svg class="i" width="28" height="28" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg></div><div class="body"><p><b>6,200 ₪</b> <span class="muted sm">/ חודש</span></p><p class="label">3 חדרים, ביאליק, רמת גן</p><p class="chips"><span>קומה 1 מתוך 3</span><span>72 מ״ר</span><span>חיות מחמד</span></p></div></a>
+      <a class="card listing reveal" href="#"><div class="photo"><svg class="i" width="28" height="28" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg></div><div class="body"><p><b>8,900 ₪</b> <span class="muted sm">/ חודש</span></p><p class="label">4 חדרים, ארלוזורוב, תל אביב</p><p class="chips"><span>קומה 3 מתוך 5</span><span>110 מ״ר</span><span>חניה</span></p></div></a>
+    </div>
+  </section>
+
+  <!-- 4 how it works -->
+  <section>
+    <div class="section-head"><h2 class="h2">איך זה עובד</h2></div>
+    <div class="how">
+      <div class="card col reveal">
+        <span class="tag" style="align-self:flex-start">מחפשים דירה</span>
+        <ol>
+          <li><span class="num">1</span><div><h3 class="h3">ממלאים פרופיל קצר</h3><p class="muted sm">תקציב, תאריך כניסה, אורח חיים והעדפות דיור — פעם אחת.</p></div></li>
+          <li><span class="num">2</span><div><h3 class="h3">רואים ציון התאמה לכל דירה</h3><p class="muted sm">מה מסתדר, מה פחות — לפני שמבזבזים זמן על סיור.</p></div></li>
+          <li><span class="num">3</span><div><h3 class="h3">מגישים מועמדות בהודעה קצרה</h3><p class="muted sm">בעלי הדירה מקבלים כרטיס מסודר, לא עוד הודעה בצ'אט.</p></div></li>
+        </ol>
+        <a class="btn secondary" href="#">חיפוש דירה</a>
+      </div>
+      <div class="card col reveal">
+        <span class="tag" style="align-self:flex-start">מפרסמים דירה</span>
+        <ol>
+          <li><span class="num">1</span><div><h3 class="h3">מפרסמים מודעה בחמישה צעדים</h3><p class="muted sm">פרטי הדירה, תמונות ומה חשוב לכם בדיירים.</p></div></li>
+          <li><span class="num">2</span><div><h3 class="h3">מקבלים מועמדויות מסודרות</h3><p class="muted sm">כל מועמדות מגיעה עם פרופיל וציון התאמה לדירה.</p></div></li>
+          <li><span class="num">3</span><div><h3 class="h3">בוחרים וממשיכים בצ'אט</h3><p class="muted sm">מעבירים לרשימה הקצרה את מי שמתאים, וממשיכים בצ'אט באתר לתיאום סיור.</p></div></li>
+        </ol>
+        <a class="btn primary" href="#">פרסום דירה</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 questions -->
+  <section>
+    <div class="faq-grid">
+    <div><h2 class="h2">שאלות נפוצות</h2><p class="muted" style="margin-block-start:4px">התשובות הקצרות. את השאר רואים בפנים.</p></div>
+    <div class="faq">
+      <details class="card" open><summary>צריך להירשם כדי לחפש?<svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></summary><p>לא. החיפוש והמפה פתוחים לכולם. נרשמים כשרוצים לראות ציון התאמה או להגיש מועמדות.</p></details>
+      <details class="card"><summary>כמה זה עולה?<svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></summary><p>האתר חינם למחפשים, ואין דמי תיווך.</p></details>
+      <details class="card"><summary>איך מחושב ציון ההתאמה?<svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></summary><p>משווים את הפרופיל שלכם לפרטי הדירה ולמה שבעלי הדירה מחפשים: תקציב, תאריך כניסה, סוג משק הבית ועוד. ליד הציון מופיע הסבר.</p></details>
+      <details class="card"><summary>מה זה שוק השותפים?<svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></summary><p>אזור נפרד לחדרים בדירות שותפים ולאנשים שמחפשים שותפים. לייק הדדי פותח צ'אט.</p></details>
+      <details class="card"><summary>באילו אזורים האתר פועל?<svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></summary><p>כרגע בגוש דן.</p></details>
+    </div>
+    </div>
+  </section>
+
+  <!-- 6 closing band -->
+  <section>
+    <div class="band reveal">
+      <h2 class="display">הבית הבא מתחיל כאן.</h2>
+      <p>לאט לאט? ממש לא.</p>
+      <div class="ctas">
+        <a class="btn on-ink" href="#">חיפוש דירה</a>
+        <a class="btn on-ink-outline" href="#">פרסום דירה</a>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
