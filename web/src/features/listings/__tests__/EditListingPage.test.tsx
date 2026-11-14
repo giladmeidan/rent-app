@@ -869,4 +869,27 @@ describe('EditListingPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
     view.unmount();
   });
+
+  it('ac13 apartment facts load and a cleared one is sent as null', async () => {
+    // Spec 0014b AC13.
+    const a = stored({
+      balcony: true,
+      safe_room: false,
+      air_conditioning: true,
+      condition: 'good',
+    });
+    const { api } = await openEdit(a, [json({ ...a, balcony: null, condition: null })]);
+    const fact = (legend: string, name: string) =>
+      within(screen.getByRole('group', { name: legend })).getByRole('radio', { name });
+    const cond = he.listings.condition;
+    expect(fact(r.balcony, he.common.yes)).toBeChecked();
+    expect(fact(f.safeRoom, he.common.no)).toBeChecked();
+    expect(fact(f.airConditioning, he.common.yes)).toBeChecked();
+    expect(fact(f.condition, cond.good)).toBeChecked();
+
+    fireEvent.click(fact(r.balcony, r.unset));
+    fireEvent.click(fact(f.condition, r.unset));
+    detailsToPreferences();
+    expect(await saveFromPreferences(api, a)).toEqual([{ balcony: null, condition: null }]);
+  });
 });

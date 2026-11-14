@@ -213,6 +213,63 @@ describe('ListingPage', () => {
     }
   });
 
+  it('ac14 apartment facts show only when said', async () => {
+    // Spec 0014b AC14: two of the four filled, two cells; a room shows none of the three new ones.
+    const f = he.listings.fields;
+    const l = listingDetail({ ...katznelson, balcony: true, condition: 'needs_work' });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${l.id}`]: [json(l)],
+    });
+    let view = render(l.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(Object.keys(facts())).toEqual([
+      f.elevator,
+      f.parking,
+      f.furnished,
+      f.pets,
+      he.listings.room.balcony,
+      f.condition,
+      f.arnona,
+      f.vaad,
+    ]);
+    expect(facts()[he.listings.room.balcony]).toBe(he.listing.yes);
+    expect(facts()[f.condition]).toBe(he.listings.condition.needsWork);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    const all = listingDetail({ safe_room: false, air_conditioning: true });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${all.id}`]: [json(all)],
+    });
+    view = render(all.id);
+    await screen.findByRole('heading', { level: 1 });
+    expect(facts()[f.safeRoom]).toBe(he.listing.no);
+    expect(facts()[f.airConditioning]).toBe(he.listing.yes);
+    expect(facts()).not.toHaveProperty(he.listings.room.balcony);
+    expect(facts()).not.toHaveProperty(f.condition);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    const room = listingDetail({
+      listing_type: 'room',
+      flatmates_count: 2,
+      safe_room: true,
+      air_conditioning: true,
+      condition: 'new',
+    });
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${room.id}`]: [json(room)],
+    });
+    render(room.id);
+    await screen.findByRole('heading', { level: 1 });
+    for (const label of [f.safeRoom, f.airConditioning, f.condition]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
   it('ac4_room_facts_furnished', async () => {
     const l = listingDetail({ listing_type: 'room', furnished: 'full' });
     mockApi({

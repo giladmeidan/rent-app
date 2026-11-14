@@ -83,3 +83,27 @@ export const PersonIcon = () => (
 
 /** A room's "שותפים בדירה": the vaad people icon. */
 export const FlatmatesIcon = VaadIcon;
+
+/** An apartment's ממ״ד (0014b): a shield. */
+export const SafeRoomIcon = () => (
+  <Icon>
+    <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
+  </Icon>
+);
+
+/** An apartment's air conditioning (0014b): a snowflake. */
+export const AirConditioningIcon = () => (
+  <Icon>
+    <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" />
+    <path d="M9.5 4.5L12 7l2.5-2.5M9.5 19.5L12 17l2.5 2.5" />
+  </Icon>
+);
+
+/** An apartment's condition (0014b): a paint roller. */
+export const ConditionIcon = () => (
+  <Icon>
+    <rect x="4" y="3" width="14" height="6" rx="1.5" />
+    <path d="M18 6h2v5h-8v3" />
+    <rect x="10.5" y="14" width="3" height="7" rx="1" />
+  </Icon>
+);

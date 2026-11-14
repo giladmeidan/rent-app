@@ -219,6 +219,28 @@ type State = {
   spec?: string;
 };
 
+/** Spec 0014b: no horizontal page scroll, and every apartment-fact option inside the amenities card
+ * (the condition's five wrap onto a second row on a phone). */
+async function expectFactsFit(page: Page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'horizontal overflow (px)').toBe(0);
+  const card = await page
+    .getByRole('switch', { name: f.pets })
+    .locator('xpath=ancestor::*[contains(@class, "divide-y")][1]')
+    .boundingBox();
+  expect(card).not.toBeNull();
+  const labels = page.getByRole('group', { name: f.condition }).locator('label');
+  await expect(labels).toHaveCount(5);
+  for (const box of await Promise.all((await labels.all()).map((label) => label.boundingBox()))) {
+    expect(box).not.toBeNull();
+    if (box === null || card === null) continue;
+    expect(box.x).toBeGreaterThanOrEqual(card.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width);
+  }
+}
+
 const EDIT = `/me/listings/${LISTING_ID}/edit`;
 const NEW = '/listings/new';
 const editOpened = async (page: Page) => {
@@ -252,6 +274,7 @@ const STATES: State[] = [
     act: async (page) => {
       await toDetails(page, 'apartment');
       await expect(heading(page, he.listings.stepTitle.details)).toBeVisible();
+      await expectFactsFit(page);
     },
   },
   {
@@ -275,6 +298,25 @@ const STATES: State[] = [
       // Focused: the bare digits, as typed.
       await expect(page.getByLabel(f.price)).toBeFocused();
       await expect(page.getByLabel(f.price)).toHaveValue('7200');
+      await expectFactsFit(page);
+    },
+  },
+  {
+    // Spec 0014b: the apartment facts at the narrowest phone width, one condition chosen.
+    name: '01-details-facts-360',
+    spec: '0014b',
+    setup: {},
+    path: NEW,
+    // The viewport only: a full-page capture would draw the sticky step bar over the facts.
+    modal: true,
+    act: async (page) => {
+      await page.setViewportSize({ width: 360, height: 800 });
+      await toDetails(page, 'apartment');
+      await page.getByText(he.listings.condition.needsWork, { exact: true }).click();
+      await page
+        .getByRole('group', { name: f.condition })
+        .evaluate((group) => group.scrollIntoView({ block: 'center' }));
+      await expectFactsFit(page);
     },
   },
   {

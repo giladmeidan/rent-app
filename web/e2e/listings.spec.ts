@@ -116,6 +116,36 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.paused);
   await expect(card.getByRole('button', { name: he.listings.actions.resume })).toBeVisible();
   await expect(header.getByRole('link', { name: he.nav.mine })).toBeVisible();
+
+  // Spec 0014b: pausing an apartment asks once, optionally and privately, what happened.
+  const c = he.listings.closure;
+  const closure = page.getByRole('dialog', { name: c.title });
+  await expect(closure).toBeVisible();
+  await expect(closure).toContainText(c.intro);
+  // Focus moved into the dialog.
+  await expect(closure.locator(':focus')).toHaveCount(1);
+  await expectNoAxeViolations(page, 'closure dialog');
+  await expect(closure.getByRole('button', { name: c.save })).toBeDisabled();
+  await closure.getByText(c.reasons.rentedElsewhere, { exact: true }).click();
+  await closure.getByLabel(c.finalRent).fill('6800');
+  const closed = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname === `/listings/${id}/closure` &&
+      response.status() === 204,
+  );
+  await closure.getByRole('button', { name: c.save }).click();
+  expect((await closed).request().postDataJSON()).toEqual({
+    reason: 'rented_elsewhere',
+    final_rent_ils: 6800,
+  });
+  await expect(closure).toBeHidden();
+  await expect(page.getByText(c.saved, { exact: true })).toBeVisible();
+  // Focus is back on the card, and the card shows the answer.
+  await expect(card.getByRole('button', { name: he.listings.actions.resume })).toBeFocused();
+  await expect(card.getByText(c.reasons.rentedElsewhere, { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: c.change })).toBeVisible();
+  await expectNoAxeViolations(page, '/me/listings with a closure answer');
 });
 
 test('ac12_owner_edits_listing', async ({ page }) => {

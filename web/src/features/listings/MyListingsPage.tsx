@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -14,6 +14,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { ApiError, type ListingType, type MyListingOut } from './api';
+import { ClosureDialog, closeReasonLabel } from './ClosureDialog';
 import { LISTING_CAP } from './constants';
 import { formatDate, todayInIsrael } from './format';
 import { ListingCard } from './ListingCard';
@@ -45,18 +46,35 @@ function ListingRow({
   now,
   today,
   onChanged,
+  onClosureSaved,
 }: {
   listing: MyListingOut;
   now: Date;
   today: string;
   /** A pause or resume succeeded. */
   onChanged: () => void;
+  /** The closure answer was stored (0014b). */
+  onClosureSaved: () => void;
 }) {
   const { t } = useTranslation();
   const patch = usePatchListing(listing.id);
   const state = listingState(listing, now);
   const titleId = useId();
   const past = isPastExpiry(listing, now);
+  // The closure question (0014b): apartments only. Each opening mounts a fresh dialog (`key`), so it
+  // starts from the stored answer.
+  const asksClosure = listing.listing_type === 'apartment';
+  const [closure, setClosure] = useState({ open: false, key: 0 });
+  const openClosure = () => setClosure((c) => ({ open: true, key: c.key + 1 }));
+  const closeClosure = () => setClosure((c) => ({ ...c, open: false }));
+  const toggleRef = useRef<HTMLButtonElement | HTMLAnchorElement>(null);
+  // Runs after the dialog's own focus return (child effects first): the pause button was disabled
+  // while pending, which can drop focus to the page, so the dialog had no opener to return to.
+  useEffect(() => {
+    if (!closure.open && closure.key > 0 && document.activeElement === document.body) {
+      toggleRef.current?.focus();
+    }
+  }, [closure]);
 
   // Expired listings cannot be paused or resumed (renewal is Slice 10); a listing past its expiry cannot be edited either (0002f).
   const next = state === 'live' ? 'paused' : state === 'paused' ? 'active' : null;
@@ -81,9 +99,20 @@ function ListingRow({
             <div className="flex flex-wrap gap-2">
               {next !== null && (
                 <Button
+                  ref={toggleRef}
                   variant="ghost"
                   size="sm"
-                  onClick={() => patch.mutate({ status: next }, { onSuccess: onChanged })}
+                  onClick={() =>
+                    patch.mutate(
+                      { status: next },
+                      {
+                        onSuccess: () => {
+                          onChanged();
+                          if (asksClosure && next === 'paused') openClosure();
+                        },
+                      },
+                    )
+                  }
                   disabled={patch.isPending}
                   aria-busy={patch.isPending}
                   aria-describedby={titleId}
@@ -101,6 +130,21 @@ function ListingRow({
                   {t('listings.actions.edit')}
                 </Button>
               )}
+            </div>
+          )}
+          {asksClosure && state !== 'live' && (
+            <div className="flex flex-wrap items-center gap-2">
+              {listing.close_reason !== null && (
+                <p className="text-caption text-ink-muted">
+                  {closeReasonLabel(t, listing.close_reason)}
+                </p>
+              )}
+              {/* One button in both states, so focus stays on it after an answer is saved. */}
+              <Button variant="ghost" size="sm" onClick={openClosure} aria-describedby={titleId}>
+                {listing.close_reason === null
+                  ? t('listings.closure.title')
+                  : t('listings.closure.change')}
+              </Button>
             </div>
           )}
           <div className="flex flex-wrap gap-2 border-t border-border pt-3">
@@ -154,6 +198,18 @@ function ListingRow({
           )}
         </div>
       </ListingCard>
+      {asksClosure && closure.key > 0 && (
+        <ClosureDialog
+          key={closure.key}
+          listing={listing}
+          open={closure.open}
+          onClose={closeClosure}
+          onSaved={() => {
+            closeClosure();
+            onClosureSaved();
+          }}
+        />
+      )}
     </li>
   );
 }
@@ -205,7 +261,8 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   const [savedOnArrival] = useState(() => isSaved(location.state));
   const [publishedOnArrival] = useState(() => isPublished(location.state));
   const [failedOnArrival] = useState(() => photosFailed(location.state));
-  const [saved, setSaved] = useState(false);
+  // The status line: an edit's "saved" or the closure answer's (0014b).
+  const [saved, setSaved] = useState<'saved' | 'closureSaved' | null>(null);
   const [published, setPublished] = useState(false);
   const [failed, setFailed] = useState(0);
 
@@ -218,7 +275,7 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   useEffect(() => {
     if (!savedOnArrival && !publishedOnArrival) return;
     const frame = requestAnimationFrame(() => {
-      if (savedOnArrival) setSaved(true);
+      if (savedOnArrival) setSaved('saved');
       if (publishedOnArrival) setPublished(true);
       setFailed(failedOnArrival);
     });
@@ -261,7 +318,8 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
             listing={listing}
             now={now}
             today={today}
-            onChanged={() => setSaved(false)}
+            onChanged={() => setSaved(null)}
+            onClosureSaved={() => setSaved('closureSaved')}
           />
         ))}
       </ul>
@@ -299,10 +357,13 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
       <p
         role="status"
         className={
-          saved ? 'rounded-md bg-accent-soft px-4 py-3 text-label text-accent-strong' : 'sr-only'
+          saved !== null
+            ? 'rounded-md bg-accent-soft px-4 py-3 text-label text-accent-strong'
+            : 'sr-only'
         }
       >
-        {saved ? t('listings.edit.saved') : ''}
+        {saved === 'saved' && t('listings.edit.saved')}
+        {saved === 'closureSaved' && t('listings.closure.saved')}
       </p>
       <div role="status" className={published ? undefined : 'sr-only'}>
         {published && (

@@ -1,7 +1,7 @@
 ---
 id: 0014b
 title: A listing remembers every price it had and, once it is paused or expired, what happened to it (optional and private); an apartment listing can say four more facts (ממ״ד, balcony, condition, air conditioning)
-status: verified
+status: in-review
 depends_on: []   # no code dependency on 0014a; only the migration chain (0014a's 0019 merges first, see Data)
 reviewers: [code, qa, ux]   # qa: wizard, edit, listing page and my-listings end to end; ux: new fields in the wizard and a new dialog. No security: the one new endpoint copies PATCH /listings/{id}'s owner rule, and AC6 proves the private fields never reach a public response
 estimate: 1 coder run, large   # coder Opus/high (migration + money data; Speed rule 6); about 40 files, half of them tests and fixtures
@@ -92,7 +92,7 @@ compares them):
 - `ck_listings_close_reason`: `close_reason IS NULL OR close_reason IN ('rented_here', 'rented_elsewhere',
   'not_renting')`
 - `ck_listings_final_rent_ils`: `final_rent_ils IS NULL OR (final_rent_ils BETWEEN 500 AND 100000 AND
-  close_reason IN ('rented_here', 'rented_elsewhere'))`
+  close_reason IS NOT NULL AND close_reason IN ('rented_here', 'rented_elsewhere'))`
 - `ck_listings_closed_at`: `(close_reason IS NULL) = (closed_at IS NULL)`
 - `ck_listing_price_changes_price_ils`: `price_ils BETWEEN 500 AND 100000`
 
@@ -177,7 +177,7 @@ i18n keys added (`web/src/locales/he.json`):
 | `listings.condition.good` | שמורה |
 | `listings.condition.needsWork` | דורשת שיפוץ |
 | `listings.closure.title` | מה קרה עם הדירה? |
-| `listings.closure.intro` | התשובה נשמרת אצלנו בלבד, לא מוצגת באתר, ועוזרת להעריך מחירי שכירות. |
+| `listings.closure.intro` | התשובה פרטית ולא מוצגת באתר. היא עוזרת לנו להעריך מחירי שכירות. |
 | `listings.closure.reason` | בחירת תשובה |
 | `listings.closure.reasons.rentedHere` | הושכרה דרך הומי |
 | `listings.closure.reasons.rentedElsewhere` | הושכרה במקום אחר |
@@ -432,3 +432,24 @@ balcony edit would never be sent.
       — 0014a merges first, then one re-point line here.
     Reviewers: code, qa, ux   Estimated: 1 coder run, large (Opus/high), 1 review round
     Links: specs/0014b-listing-price-signals.md · PRODUCT.md "Rent price estimate" · no artboard (design from the kit)
+
+Built 2026-11-14 (merged shape; PR #90 open, not merged — the orchestrator merges with `make merge PR=90`):
+
+    Spec 0014b — A listing remembers its prices and what happened to it; four more apartment facts   IN REVIEW (PR #90, ready-to-merge)
+    Shipped: every price a listing had is recorded; after pausing an apartment the owner is asked, optionally
+      and privately, what happened to it and the final rent; the wizard, the edit page and the listing page
+      carry four optional apartment facts (ממ״ד, מרפסת, מצב הדירה, מיזוג אוויר). Rooms are unchanged on screen.
+    Demo: 1. `make dev`, sign in as an owner, new listing → דירה שלמה → details: answer the four facts and
+      publish; the listing page shows them  2. הדירות שלי → pause the apartment: the dialog opens; choose
+      "הושכרה במקום אחר", type 6800, save; the card shows the answer with "עדכון התשובה"  3. resume it: the
+      answer is gone; search and the listing page never showed it.
+    Tests: +10 unit, +11 integration, +0 e2e (one e2e extended with the dialog flow; pytest 626 green,
+      vitest 695 green)   CI: on the PR
+    Findings: 0 blockers; 1 major fixed (the condition options overflowed the card at 390 px); 4 minors
+      fixed (a rent could be stored without a reason at DB level; the page cleared a cached answer in a case
+      the server keeps it; the privacy line's wording; a duplicated helper); 0 waived; 5 follow-ups logged
+      (4 from the review, 1 from Scope: Slice 11 renewal must clear the answer as a resume does).
+    Changed in PRODUCT.md: nothing. Differences from the spec's first text, both applied above: the
+      `ck_listings_final_rent_ils` SQL and the `listings.closure.intro` copy.
+    Next spec I propose: the rent estimate engine, after Slice 11 (PRODUCT.md "Rent price estimate"); no
+      decision needed now. `make screens` has 24 states red from before this spec (FOLLOWUPS, 0010f line).

@@ -17,6 +17,11 @@ Room fields (spec 0007a): `gender_preference`, `flatmates_count`, `flatmate_ages
 create (spec 0010a): `ListingPatch` has no `listing_type` and forbids unknown keys. A pause or
 resume of a legacy room (NULL count) is not an edit and is let through; every other PATCH of it
 must send `flatmates_count`.
+
+Price signals (spec 0014b): every price a listing has is a `listing_price_changes` row, written in
+the listing's own transaction (on create, and on a PATCH that changes `price_ils`). The closure
+answer (`set_closure`) is set only while the listing is not live and does not move `updated_at`;
+only a real resume (a paused listing PATCHed to `active`) clears it.
 """
 
 import datetime as dt
@@ -26,11 +31,11 @@ from typing import Any
 
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import and_, func, insert, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Application, Area, Listing, ListingFlatmate, User
-from app.schemas.listing import ListingIn, ListingPatch
+from app.models import Application, Area, Listing, ListingFlatmate, ListingPriceChange, User
+from app.schemas.listing import ClosureIn, ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
 # Changing any of these resets the listing's map location to `pending` (spec 0003c).
@@ -47,6 +52,10 @@ class UnknownAreaError(Exception):
 
 class ListingNotFoundError(Exception):
     """No listing with this id belongs to the caller (unknown id or another owner's listing)."""
+
+
+class ListingLiveError(Exception):
+    """The listing is live (`status = 'active' AND expires_at > now()`): no closure answer yet."""
 
 
 def _check_area(db: Session, area_id: uuid.UUID) -> None:
@@ -96,6 +105,9 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
             )
             .returning(Listing)
         ).one()
+        db.execute(
+            insert(ListingPriceChange).values(listing_id=listing.id, price_ils=data.price_ils)
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -165,12 +177,15 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         data = _merged(listing, patch)
         if "area_id" in patch.model_fields_set:
             _check_area(db, data.area_id)
-        if patch.status == "active" and listing.status == "paused":
-            # The paused listing is not live, so the count is of the others only.
-            _enforce_cap(db, owner.id)
         values: dict[str, Any] = {
             name: getattr(data, name) for name in patch.model_fields_set - {"status"}
         }
+        if patch.status == "active" and listing.status == "paused":
+            # The paused listing is not live, so the count is of the others only.
+            _enforce_cap(db, owner.id)
+            # Live again, so it was not rented: the closure answer goes (spec 0014b).
+            values.update(close_reason=None, final_rent_ils=None, closed_at=None)
+        price_changed = data.price_ils != listing.price_ils
         if patch.status is not None:
             values["status"] = patch.status
         if any(getattr(data, name) != getattr(listing, name) for name in _ADDRESS_FIELDS):
@@ -183,8 +198,42 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
             .returning(Listing),
             execution_options={"populate_existing": True},
         ).one()
+        if price_changed:
+            db.execute(
+                insert(ListingPriceChange).values(
+                    listing_id=listing_id, price_ils=updated.price_ils
+                )
+            )
         db.commit()
     except Exception:
         db.rollback()
         raise
     return updated
+
+
+def set_closure(db: Session, owner: User, listing_id: uuid.UUID, data: ClosureIn) -> None:
+    """Store what happened to the caller's listing, replacing any earlier answer, with `closed_at =
+    now()`; `updated_at` does not move. Raises `ListingNotFoundError` or `ListingLiveError` (nothing
+    written). Commits."""
+    try:
+        # Row lock, as `update_listing`: serialises with a concurrent resume.
+        live = db.scalar(
+            select(and_(Listing.status == "active", Listing.expires_at > func.now()))
+            .where(Listing.id == listing_id, Listing.owner_id == owner.id)
+            .with_for_update()
+        )
+        if live is None:
+            raise ListingNotFoundError
+        if live:
+            raise ListingLiveError
+        db.execute(
+            update(Listing)
+            .where(Listing.id == listing_id)
+            .values(
+                close_reason=data.reason, final_rent_ils=data.final_rent_ils, closed_at=func.now()
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise

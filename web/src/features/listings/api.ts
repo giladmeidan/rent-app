@@ -24,12 +24,19 @@ export type Poster = NonNullable<ListingOut['poster']>;
 /** A room's optional flat facts (0010f): `null` means not said. */
 export type RoomFactKey =
   'room_size_sqm' | 'private_bathroom' | 'balcony' | 'bills_included' | 'poster';
+/** An apartment's optional facts (0014b), with `balcony`: `null` means not said. */
+export type ApartmentFactKey = 'safe_room' | 'air_conditioning' | 'condition';
+/** The apartment's condition (0014b). */
+export type Condition = NonNullable<ListingOut['condition']>;
+/** What happened to a listing that is not live (0014b), private to its owner. */
+export type CloseReason = NonNullable<MyListingOut['close_reason']>;
+export type ClosureIn = components['schemas']['ClosureIn'];
 
 /** The create body as the wizard sends it: every key present, `rooms` a JSON number; the flat
- * facts only for a room (an apartment never sends them). */
-export type ListingInBody = Required<Omit<ListingIn, 'rooms' | RoomFactKey>> & {
+ * facts for a room, `balcony` and the apartment facts for an apartment. */
+export type ListingInBody = Required<Omit<ListingIn, 'rooms' | RoomFactKey | ApartmentFactKey>> & {
   rooms: number;
-} & Pick<ListingIn, RoomFactKey>;
+} & Pick<ListingIn, RoomFactKey | ApartmentFactKey>;
 
 /** A non-2xx answer. A network failure is the `TypeError` fetch throws, never this. */
 export class ApiError extends Error {
@@ -68,6 +75,15 @@ export async function patchListing(id: string, body: ListingPatch): Promise<List
   });
   if (data === undefined) throw new ApiError('PATCH', '/listings/{id}', response.status, error);
   return data;
+}
+
+/** The owner's closure answer (0014b). 204 on success; 409 while the listing is live. */
+export async function putClosure(id: string, body: ClosureIn): Promise<void> {
+  const { error, response } = await api.PUT('/listings/{listing_id}/closure', {
+    params: { path: { listing_id: id } },
+    body,
+  });
+  if (!response.ok) throw new ApiError('PUT', '/listings/{id}/closure', response.status, error);
 }
 
 export type ListingPublic = components['schemas']['ListingPublic'];

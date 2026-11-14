@@ -145,7 +145,10 @@
       "charsLeft_zero": "לא נותרו תווים",
       "charsLeft_one": "נותר תו אחד",
       "charsLeft_two": "נותרו 2 תווים",
-      "charsLeft_other": "נותרו {{count}} תווים"
+      "charsLeft_other": "נותרו {{count}} תווים",
+      "safeRoom": "ממ״ד",
+      "airConditioning": "מיזוג אוויר",
+      "condition": "מצב הדירה"
     },
     "units": {
       "sqm": "מ״ר",
@@ -156,6 +159,12 @@
       "none": "לא מרוהטת",
       "partial": "מרוהטת חלקית",
       "full": "מרוהטת"
+    },
+    "condition": {
+      "new": "חדשה",
+      "renovated": "משופצת",
+      "good": "שמורה",
+      "needsWork": "דורשת שיפוץ"
     },
     "errors": {
       "required": "שדה חובה",
@@ -278,6 +287,21 @@
       "pause": "השהיה",
       "resume": "הפעלה מחדש",
       "edit": "עריכה"
+    },
+    "closure": {
+      "title": "מה קרה עם הדירה?",
+      "intro": "התשובה פרטית ולא מוצגת באתר. היא עוזרת לנו להעריך מחירי שכירות.",
+      "reason": "בחירת תשובה",
+      "reasons": {
+        "rentedHere": "הושכרה דרך הומי",
+        "rentedElsewhere": "הושכרה במקום אחר",
+        "notRenting": "לא הושכרה"
+      },
+      "finalRent": "בכמה הושכרה? (שכר דירה לחודש)",
+      "save": "שמירה",
+      "skip": "לא עכשיו",
+      "change": "עדכון התשובה",
+      "saved": "התשובה נשמרה, תודה"
     },
     "furnishedRoom": {
       "none": "לא מרוהט",

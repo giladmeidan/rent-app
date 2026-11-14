@@ -12,6 +12,7 @@ from app.models.area import Area  # noqa: E402
 from app.models.conversation import Conversation, Message  # noqa: E402
 from app.models.flatmate import ConversationRead, ListingFlatmate  # noqa: E402
 from app.models.listing import Listing  # noqa: E402
+from app.models.listing_price_change import ListingPriceChange  # noqa: E402
 from app.models.person_pair import PersonPair  # noqa: E402
 from app.models.photo import ListingPhoto  # noqa: E402
 from app.models.rent_area import RentArea  # noqa: E402
@@ -30,6 +31,7 @@ __all__ = [
     "Listing",
     "ListingFlatmate",
     "ListingPhoto",
+    "ListingPriceChange",
     "Message",
     "PersonPair",
     "RentArea",

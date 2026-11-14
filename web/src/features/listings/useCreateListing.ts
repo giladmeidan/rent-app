@@ -11,7 +11,7 @@ export function useCreateListing() {
       // The new card shows at once on "my listings" (API order is newest first); the list is marked
       // stale, so that page refetches it in the background. An empty cache stays empty: that page
       // loads it itself. The POST's `ListingOut` has no counts; a new listing has no applicants,
-      // likes, flatmates or invite link.
+      // likes, flatmates, invite link or closure answer.
       queryClient.setQueryData<MyListingOut[]>(MY_LISTINGS_KEY, (old) =>
         old
           ? [
@@ -21,6 +21,8 @@ export function useCreateListing() {
                 new_applicant_count: 0,
                 flatmate_count: 0,
                 flatmate_invite_active: false,
+                close_reason: null,
+                final_rent_ils: null,
               },
               ...old,
             ]

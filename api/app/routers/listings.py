@@ -5,19 +5,22 @@ without one. Any account posts and manages a room; only an **owner** posts an ap
 `owner_only` on the POST, checked before anything is locked or counted). The live-listing cap is
 per account and shared by both types. `GET /me/listings` lists the caller's own rows of both
 types; PATCH requires the listing to be the caller's (404 `not_found` otherwise, the same body as
-an unknown id)."""
+an unknown id).
+
+`PUT /listings/{id}/closure` (spec 0014b) stores the owner's private answer on what happened to a
+listing that is not live: the same owner rule as PATCH, 409 `listing_live` while it is live."""
 
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.auth import current_user
 from app.db import get_session
 from app.models import User
 from app.schemas.error import ErrorOut
-from app.schemas.listing import ListingIn, ListingOut, ListingPatch, MyListingOut
+from app.schemas.listing import ClosureIn, ListingIn, ListingOut, ListingPatch, MyListingOut
 from app.services import listings as listings_service
 from app.services import photos as photos_service
 
@@ -35,6 +38,9 @@ _OWNER_ONLY: dict[int | str, dict[str, Any]] = {
 }
 _CAP_REACHED: dict[int | str, dict[str, Any]] = {
     409: {"model": ErrorOut, "description": "listing_cap_reached"}
+}
+_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"model": ErrorOut, "description": "not_found: unknown id or another account's"},
 }
 _UNKNOWN_AREA: dict[int | str, dict[str, Any]] = {
     422: {"description": "unknown_area, or a malformed body (list `detail`)"}
@@ -72,6 +78,8 @@ def my_listings(user: UserDep, db: DbDep) -> list[MyListingOut]:
             new_applicant_count=new_applicant_count,
             flatmate_count=flatmate_count,
             flatmate_invite_active=listing.flatmate_invite_hash is not None,
+            close_reason=listing.close_reason,
+            final_rent_ils=listing.final_rent_ils,
         ).model_copy(update={"photos": photos_service.photos_out(photos[listing.id])})
         for (
             listing,
@@ -87,7 +95,7 @@ def my_listings(user: UserDep, db: DbDep) -> list[MyListingOut]:
     response_model=ListingOut,
     responses={
         **_AUTH_ERRORS,
-        404: {"model": ErrorOut, "description": "not_found: unknown id or another account's"},
+        **_NOT_FOUND,
         **_CAP_REACHED,
         **_UNKNOWN_AREA,
     },
@@ -107,3 +115,23 @@ def update_listing(
     return ListingOut.model_validate(listing).model_copy(
         update={"photos": photos_service.photos_out(photos)}
     )
+
+
+@router.put(
+    "/listings/{listing_id}/closure",
+    status_code=204,
+    responses={
+        **_AUTH_ERRORS,
+        **_NOT_FOUND,
+        409: {"model": ErrorOut, "description": "listing_live: the listing is still live"},
+        422: {"description": "A malformed body (list `detail`)"},
+    },
+)
+def set_closure(listing_id: uuid.UUID, body: ClosureIn, user: UserDep, db: DbDep) -> Response:
+    try:
+        listings_service.set_closure(db, user, listing_id, body)
+    except listings_service.ListingNotFoundError:
+        raise HTTPException(status_code=404, detail="not_found") from None
+    except listings_service.ListingLiveError:
+        raise HTTPException(status_code=409, detail="listing_live") from None
+    return Response(status_code=204)

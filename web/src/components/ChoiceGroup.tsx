@@ -13,6 +13,8 @@ type Props<T extends string | number> = {
   onChange: (value: T) => void;
   /** A message shown after the options (`role="alert"`); every radio is then marked invalid. */
   error?: string;
+  /** Lets the options wrap onto more rows, each as wide as its label (for many options). */
+  wrap?: boolean;
 };
 
 /**
@@ -37,6 +39,7 @@ export function ChoiceGroup<T extends string | number>({
   value,
   onChange,
   error,
+  wrap = false,
 }: Props<T>) {
   const id = useId();
   const errorId = `${id}-error`;
@@ -44,9 +47,9 @@ export function ChoiceGroup<T extends string | number>({
   return (
     <fieldset className="flex flex-col">
       <legend className="mb-2 text-label text-ink">{legend}</legend>
-      <div className="flex gap-2">
+      <div className={cx('flex gap-2', wrap && 'flex-wrap')}>
         {options.map((option) => (
-          <div key={option.value} className="flex flex-1">
+          <div key={option.value} className={cx('flex', wrap ? 'flex-auto' : 'flex-1')}>
             <input
               id={`${id}-${String(option.value)}`}
               type="radio"

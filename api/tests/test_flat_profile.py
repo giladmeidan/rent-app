@@ -235,9 +235,10 @@ def test_ac2_room_fact_rules(
         assert isinstance(response.json()["detail"], list)
 
     for name, value in SET_FACTS.items():
-        refused(_body(gush_dan, **{name: value}))
-    apartment = owner.post("/listings", json=_body(gush_dan, balcony=True))
-    assert "room_size_sqm, private_bathroom, balcony, bills_included, poster" in apartment.text
+        if name != "balcony":  # a fact of any listing since spec 0014b
+            refused(_body(gush_dan, **{name: value}))
+    apartment = owner.post("/listings", json=_body(gush_dan, bills_included=True))
+    assert "room_size_sqm, private_bathroom, bills_included, poster" in apartment.text
     refused(_room(gush_dan, room_size_sqm=3))
     refused(_room(gush_dan, room_size_sqm=101))
     refused(_room(gush_dan, size_sqm=60, room_size_sqm=61))

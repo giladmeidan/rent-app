@@ -61,6 +61,9 @@ const ROOM: MyListingOut = {
   balcony: null,
   bills_included: null,
   poster: null,
+  safe_room: null, // spec 0014b: the apartment facts
+  air_conditioning: null,
+  condition: null,
   created_at: '2026-11-01T10:00:00Z',
   updated_at: '2026-11-01T10:00:00Z',
   expires_at: '2099-01-01T10:00:00Z',
@@ -69,6 +72,8 @@ const ROOM: MyListingOut = {
   new_applicant_count: 0,
   flatmate_count: 0,
   flatmate_invite_active: false,
+  close_reason: null, // spec 0014b: the owner's closure answer
+  final_rent_ils: null,
 };
 const APARTMENT: MyListingOut = {
   ...ROOM,

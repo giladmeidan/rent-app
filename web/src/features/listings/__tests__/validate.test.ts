@@ -171,6 +171,11 @@ describe('validate', () => {
       flatmates_count: null,
       flatmate_ages: [],
       lifestyle: {},
+      // Spec 0014b: an apartment's facts, not said.
+      balcony: null,
+      safe_room: null,
+      air_conditioning: null,
+      condition: null,
     });
   });
 
@@ -594,7 +599,8 @@ describe('validate', () => {
       validatePreferences({ ...room, listing_type: 'apartment', room_size_sqm: '999' }),
     ).toEqual({});
 
-    // `''` is `null`; a room always sends the five, an apartment never.
+    // `''` is `null`; a room always sends the five, an apartment never sends the four room-only
+    // ones (spec 0014b: it sends `balcony`).
     const facts = {
       room_size_sqm: null,
       private_bathroom: null,
@@ -620,7 +626,15 @@ describe('validate', () => {
     };
     expect(toListingIn(said)).toMatchObject(saidBody);
     const apartment = toListingIn({ ...said, listing_type: 'apartment' });
-    for (const key of Object.keys(facts)) expect(apartment).not.toHaveProperty(key);
+    for (const key of Object.keys(facts).filter((k) => k !== 'balcony')) {
+      expect(apartment).not.toHaveProperty(key);
+    }
+    expect(apartment).toHaveProperty('balcony', false);
+    // A room never sends the apartment facts (spec 0014b).
+    const roomBody = toListingIn({ ...said, safe_room: 'yes', condition: 'good' });
+    for (const key of ['safe_room', 'air_conditioning', 'condition']) {
+      expect(roomBody).not.toHaveProperty(key);
+    }
 
     // The edit form starts from the stored facts, and only a changed one is sent.
     const stored = listing({
@@ -676,5 +690,48 @@ describe('validate', () => {
         expect(patch, `${stored.listing_type} -> ${type}`).toMatchObject({ price_ils: 5100 });
       }
     }
+  });
+
+  it('ac12 apartment facts: body mapping, edit form and changed fields', () => {
+    // Spec 0014b: `''` is `null`; an apartment sends the four, the edit form loads them, and a
+    // cleared one is sent as `null`.
+    expect(toListingIn(valid)).toMatchObject({
+      balcony: null,
+      safe_room: null,
+      air_conditioning: null,
+      condition: null,
+    });
+    const said: ListingForm = {
+      ...valid,
+      balcony: 'yes',
+      safe_room: 'no',
+      air_conditioning: 'yes',
+      condition: 'needs_work',
+    };
+    const saidBody = {
+      balcony: true,
+      safe_room: false,
+      air_conditioning: true,
+      condition: 'needs_work',
+    } as const;
+    expect(toListingIn(said)).toMatchObject(saidBody);
+
+    const stored = listing(saidBody);
+    const form = formFromListing(stored);
+    expect(form).toMatchObject({
+      balcony: 'yes',
+      safe_room: 'no',
+      air_conditioning: 'yes',
+      condition: 'needs_work',
+    });
+    expect(formFromListing(listing())).toMatchObject({
+      safe_room: '',
+      air_conditioning: '',
+      condition: '',
+    });
+    expect(changedFields(stored, toListingIn(form))).toEqual({});
+    expect(
+      changedFields(stored, toListingIn({ ...form, balcony: 'no', condition: '', safe_room: '' })),
+    ).toEqual({ balcony: false, condition: null, safe_room: null });
   });
 });
