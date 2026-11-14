@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
-import { json, mockApi } from '../../auth/__tests__/harness';
-import { gushDan } from './fixtures';
+import { currentPath, json, mockApi, testQueryClient } from '../../auth/__tests__/harness';
+import { gushDan, listing } from './fixtures';
 import {
   areasLoaded,
   change,
@@ -12,9 +12,11 @@ import {
   chooseTypeAndContinue,
   errorFor,
   field,
+  fillValidDetails,
   nextButton,
   progress,
   renderWizard,
+  toPreferences,
 } from './wizard';
 import { FIELD_ORDER } from '../validate';
 
@@ -277,5 +279,88 @@ describe('DetailsStep', () => {
     });
     expect(price).toHaveValue('7200');
     expect(price.selectionStart).toBe(price.selectionEnd);
+  });
+
+  it('ac12 four optional apartment facts, after pets, sent as chosen', async () => {
+    // Spec 0014b AC12.
+    const r = he.listings.room;
+    const facts = [r.balcony, f.safeRoom, f.airConditioning, f.condition];
+    const group = (legend: string) => screen.getByRole('group', { name: legend });
+    const choice = (legend: string, name: string) =>
+      within(group(legend)).getByRole('radio', { name });
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    const view = renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    fillValidDetails();
+
+    // In the amenities card, after pets, in order; every one starts at "not said".
+    const pets = screen.getByRole('switch', { name: f.pets });
+    const card = pets.closest('.divide-y') as HTMLElement;
+    const groups = facts.map(group);
+    [pets, ...groups].forEach((control, i) => {
+      expect(card).toContainElement(control);
+      const next = groups[i];
+      if (next !== undefined) {
+        expect(
+          control.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      }
+    });
+    for (const legend of facts) expect(choice(legend, r.unset)).toBeChecked();
+    for (const legend of [r.balcony, f.safeRoom, f.airConditioning]) {
+      expect(
+        within(group(legend))
+          .getAllByRole('radio')
+          .map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent),
+      ).toEqual([he.common.yes, he.common.no, r.unset]);
+    }
+    const cond = he.listings.condition;
+    expect(
+      within(group(f.condition))
+        .getAllByRole('radio')
+        .map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent),
+    ).toEqual([cond.new, cond.renovated, cond.good, cond.needsWork, r.unset]);
+
+    // Optional: the step moves on with none answered; a balcony and a condition are sent, the
+    // other two as `null`.
+    fireEvent.click(choice(r.balcony, he.common.yes));
+    fireEvent.click(choice(f.condition, cond.renovated));
+    fireEvent.click(choice(f.safeRoom, he.common.no));
+    fireEvent.click(choice(f.safeRoom, r.unset));
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: he.listings.publish }));
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({
+      balcony: true,
+      safe_room: null,
+      air_conditioning: null,
+      condition: 'renovated',
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A room: none of the three on the details step, and its balcony only in `RoomFields`.
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    await toPreferences(testQueryClient(), 'room');
+    for (const legend of [f.safeRoom, f.airConditioning, f.condition]) {
+      expect(screen.queryByRole('group', { name: legend })).toBeNull();
+    }
+    expect(screen.getAllByRole('group', { name: r.balcony })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: r.title })).toContainElement(group(r.balcony));
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    expect(screen.queryByRole('group', { name: r.balcony })).toBeNull();
   });
 });

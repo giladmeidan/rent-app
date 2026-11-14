@@ -91,6 +91,11 @@ const expectedBody = {
   flatmates_count: null,
   flatmate_ages: [] as number[],
   lifestyle: {},
+  // Spec 0014b: an apartment's four facts, not said.
+  balcony: null,
+  safe_room: null,
+  air_conditioning: null,
+  condition: null,
 };
 
 const l = he.listings;

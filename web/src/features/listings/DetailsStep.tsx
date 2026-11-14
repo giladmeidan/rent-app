@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { AreaOut } from '../../api/client';
 import { Card } from '../../components/Card';
-import { ChoiceGroup } from '../../components/ChoiceGroup';
+import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { cx } from '../../components/cx';
 import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
@@ -14,8 +14,11 @@ import { Select } from '../../components/Select';
 import { Switch } from '../../components/Switch';
 import { Textarea } from '../../components/Textarea';
 import { TextInput } from '../../components/TextInput';
+import { CONDITIONS } from './constants';
 import { addDays, formatIls, formatRooms } from './format';
 import { furnishedLabel } from './furnished';
+import { conditionLabel } from './facts';
+import { YES_NO } from './RoomFields';
 import {
   AVAILABLE_FROM_MAX_DAYS,
   LIMITS,
@@ -23,6 +26,7 @@ import {
   type FieldErrors,
   type FieldName,
   type ListingForm,
+  type YesNo,
 } from './validate';
 
 const groupHeading = 'text-h3';
@@ -401,6 +405,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
             checked={form.pets_allowed}
             onChange={(pets_allowed) => onChange({ pets_allowed })}
           />
+          {form.listing_type === 'apartment' && <ApartmentFacts form={form} onChange={onChange} />}
         </Card>
       </div>
 
@@ -425,5 +430,54 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
         />
       </Field>
     </div>
+  );
+}
+
+/** An apartment's four optional facts (0014b), after "pets": balcony, ממ״ד and air conditioning as
+ * yes / no / "לא לציין" (as `RoomFields` asks a room's), then the condition. A room asks its balcony
+ * in `RoomFields`. */
+function ApartmentFacts({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
+  const { t } = useTranslation();
+  const yesNoLabels: Record<YesNo, string> = {
+    yes: t('common.yes'),
+    no: t('common.no'),
+    '': t('listings.room.unset'),
+  };
+  const yesNoOptions: ChoiceOption<YesNo>[] = YES_NO.map((value) => ({
+    value,
+    label: yesNoLabels[value],
+  }));
+  const yesNoFacts = [
+    { name: 'balcony', legend: t('listings.room.balcony') },
+    { name: 'safe_room', legend: t('listings.fields.safeRoom') },
+    { name: 'air_conditioning', legend: t('listings.fields.airConditioning') },
+  ] as const;
+  const conditionOptions: ChoiceOption<ListingForm['condition']>[] = [
+    ...CONDITIONS.map((value) => ({ value, label: conditionLabel(t, value) })),
+    { value: '' as const, label: t('listings.room.unset') },
+  ];
+  return (
+    <>
+      {yesNoFacts.map((fact) => (
+        <div key={fact.name} className="px-4 py-3">
+          <ChoiceGroup
+            legend={fact.legend}
+            name={fact.name}
+            options={yesNoOptions}
+            value={form[fact.name]}
+            onChange={(value) => onChange({ [fact.name]: value })}
+          />
+        </div>
+      ))}
+      <div className="px-4 py-3">
+        <ChoiceGroup
+          legend={t('listings.fields.condition')}
+          name="condition"
+          options={conditionOptions}
+          value={form.condition}
+          onChange={(condition) => onChange({ condition })}
+        />
+      </div>
+    </>
   );
 }

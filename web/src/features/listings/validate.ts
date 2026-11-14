@@ -14,6 +14,8 @@ import type {
   ListingOut,
   ListingPatch,
   ListingType,
+  ApartmentFactKey,
+  Condition,
   Poster,
   RoomFactKey as RoomFact,
 } from './api';
@@ -63,6 +65,10 @@ export type ListingForm = {
   balcony: YesNo;
   bills_included: YesNo;
   poster: Poster | '';
+  /** The apartment facts (0014b), all optional, with `balcony`; `''` = not said. */
+  safe_room: YesNo;
+  air_conditioning: YesNo;
+  condition: Condition | '';
 };
 
 export const emptyForm: ListingForm = {
@@ -96,6 +102,9 @@ export const emptyForm: ListingForm = {
   balcony: '',
   bills_included: '',
   poster: '',
+  safe_room: '',
+  air_conditioning: '',
+  condition: '',
 };
 
 /** The validated fields, in the order they appear on the form (focus goes to the first invalid):
@@ -361,12 +370,13 @@ const yesNoOf = (value: boolean | null): YesNo => (value === null ? '' : value ?
 
 /** The `POST /listings` body for a form that `validate` and `validatePreferences` accept. Every
  * key: an apartment sends the room fields' defaults (the only values the API takes for one), and
- * never the flat facts (0010f), which a room sends with `null` for "not said". */
+ * never the room-only flat facts (0010f), which a room sends with `null` for "not said". An
+ * apartment sends `balcony` and its own facts (0014b) instead, `null` for "not said". */
 export function toListingIn(form: ListingForm): ListingInBody {
   if (form.listing_type === null) throw new Error('toListingIn: no listing type');
   const description = cleanText(form.description, { multiline: true });
   const room = form.listing_type === 'room';
-  const facts: Pick<ListingInBody, RoomFact> = room
+  const facts: Pick<ListingInBody, RoomFact | ApartmentFactKey> = room
     ? {
         room_size_sqm: optionalInt(form.room_size_sqm),
         private_bathroom: yesNoValue(form.private_bathroom),
@@ -374,7 +384,12 @@ export function toListingIn(form: ListingForm): ListingInBody {
         bills_included: yesNoValue(form.bills_included),
         poster: form.poster === '' ? null : form.poster,
       }
-    : {};
+    : {
+        balcony: yesNoValue(form.balcony),
+        safe_room: yesNoValue(form.safe_room),
+        air_conditioning: yesNoValue(form.air_conditioning),
+        condition: form.condition === '' ? null : form.condition,
+      };
   return {
     listing_type: form.listing_type,
     rooms: Number(form.rooms),
@@ -442,6 +457,9 @@ export function formFromListing(listing: ListingOut): ListingForm {
     balcony: yesNoOf(listing.balcony),
     bills_included: yesNoOf(listing.bills_included),
     poster: listing.poster ?? '',
+    safe_room: yesNoOf(listing.safe_room),
+    air_conditioning: yesNoOf(listing.air_conditioning),
+    condition: listing.condition ?? '',
   };
 }
 
@@ -463,7 +481,8 @@ function sameEntries(a: Readonly<Record<string, number>>, b: Readonly<Record<str
   return entries.length === Object.keys(b).length && entries.every(([key, n]) => b[key] === n);
 }
 
-/** The room-only keys of the body (0007a; the flat facts, 0010f). */
+/** The room-only keys of the body (0007a; the flat facts, 0010f, but `balcony`, any type's since
+ * 0014b). */
 const ROOM_FIELDS: ReadonlySet<string> = new Set([
   'gender_preference',
   'flatmates_count',
@@ -471,7 +490,6 @@ const ROOM_FIELDS: ReadonlySet<string> = new Set([
   'lifestyle',
   'room_size_sqm',
   'private_bathroom',
-  'balcony',
   'bills_included',
   'poster',
 ]);

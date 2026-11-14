@@ -7,6 +7,7 @@ import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import {
   deferred,
+  empty,
   json,
   mockApi,
   renderAt,
@@ -16,6 +17,7 @@ import {
 import { formatDate, todayInIsrael } from '../format';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { MyListingsPage } from '../MyListingsPage';
+import type { MyListingOut } from '../api';
 import { listing, withoutCounts } from './fixtures';
 
 afterEach(() => {
@@ -27,6 +29,14 @@ const render = () => renderAt('/me/listings', <MyListingsPage />);
 const renderRooms = () => renderAt('/market/mine', <MyListingsPage type="room" panel />);
 const badge = (card: HTMLElement) => within(card).getByTestId('status-badge');
 const newLink = () => screen.getByRole('link', { name: he.listings.mine.new });
+const c = he.listings.closure;
+/** Pausing an apartment opens the closure dialog (spec 0014b): "לא עכשיו" closes it. */
+const skipClosure = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: c.skip }));
+  await vi.waitFor(() => {
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+};
 
 describe('MyListingsPage', () => {
   it('ac6_states_and_badges', async () => {
@@ -86,8 +96,13 @@ describe('MyListingsPage', () => {
       within(pausedCard)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual([he.listings.actions.resume]);
-    expect(within(expiredCard).queryAllByRole('button')).toHaveLength(0);
+    ).toEqual([he.listings.actions.resume, c.title]);
+    // Spec 0014b: a paused or expired apartment asks what happened.
+    expect(
+      within(expiredCard)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual([c.title]);
     expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
     expect(api.calls('GET /me/listings')[0]?.request.credentials).toBe('include');
   });
@@ -124,6 +139,7 @@ describe('MyListingsPage', () => {
     expect(
       await within(firstCard).findByRole('button', { name: he.listings.actions.resume }),
     ).toBeEnabled();
+    await skipClosure();
     expect(badge(firstCard)).toHaveTextContent(he.listings.status.paused);
     expect(screen.getByText(i18n.t('listings.mine.count', { live: 1, cap: 3 }))).toBeVisible();
 
@@ -187,12 +203,13 @@ describe('MyListingsPage', () => {
         expect(button).toHaveAccessibleDescription(title);
       }
     });
-    // The pause / resume buttons exist on the live and paused cards (and carry the description).
+    // The pause / resume buttons exist on the live and paused cards (and carry the description);
+    // the paused and expired ones also ask what happened (spec 0014b).
     expect(within(cards[0] as HTMLElement).getAllByRole('button')).toHaveLength(1);
-    expect(within(cards[1] as HTMLElement).getAllByRole('button')).toHaveLength(1);
-    // Expired: no button; paused past expiry keeps its resume button (pause / resume unchanged).
-    expect(within(cards[2] as HTMLElement).queryAllByRole('button')).toHaveLength(0);
-    expect(within(cards[3] as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    expect(within(cards[1] as HTMLElement).getAllByRole('button')).toHaveLength(2);
+    // Expired: no pause / resume; paused past expiry keeps its resume button (unchanged).
+    expect(within(cards[2] as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    expect(within(cards[3] as HTMLElement).getAllByRole('button')).toHaveLength(2);
     // (The harness's location probe is an <output>, which is also a status.)
     expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
     view.unmount();
@@ -275,6 +292,7 @@ describe('MyListingsPage', () => {
     await vi.waitFor(() => {
       expect(statusLine()).toHaveTextContent('');
     });
+    await skipClosure();
     fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/edit');
     view.unmount();
@@ -343,6 +361,7 @@ describe('MyListingsPage', () => {
     expect(
       await within(firstCard).findByRole('button', { name: he.listings.actions.resume }),
     ).toBeVisible();
+    await skipClosure();
     const link = linkOf(firstCard, first);
     expect(link.textContent).toContain(i18n.t('applicants.link', { count: 12 }));
     expect(within(link).getByText(badgeText)).toBeVisible();
@@ -500,9 +519,11 @@ describe('MyListingsPage', () => {
     expect(order(cPaused as HTMLElement)).toEqual([
       he.listings.actions.resume,
       he.listings.actions.edit,
+      c.title,
       a(paused.applicant_count, paused.new_applicant_count),
     ]);
     expect(order(cExpired as HTMLElement)).toEqual([
+      c.title,
       a(expired.applicant_count, expired.new_applicant_count),
     ]);
     // Each badge is inside its link.
@@ -750,5 +771,109 @@ describe('MyListingsPage', () => {
     expect(other).toHaveTextContent('בלי תמונות');
     expect(other.querySelector('img')).toBeNull();
     expect(other.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('ac15 pausing an apartment asks what happened', async () => {
+    // Spec 0014b AC15.
+    const flat = listing({ street: 'אחד' });
+    const api = mockApi({
+      'GET /me/listings': [json([flat])],
+      [`PATCH /listings/${flat.id}`]: [
+        json(withoutCounts({ ...flat, status: 'paused' })),
+        json(withoutCounts(flat)),
+        json(withoutCounts({ ...flat, status: 'paused' })),
+      ],
+      [`PUT /listings/${flat.id}/closure`]: [empty()],
+    });
+    render();
+    const card = (await screen.findByRole('article')) as HTMLElement;
+    const statusLine = () => document.querySelector('p[role="status"]') as HTMLElement;
+
+    fireEvent.click(within(card).getByRole('button', { name: he.listings.actions.pause }));
+    const dialog = await screen.findByRole('dialog', { name: c.title });
+    fireEvent.click(within(dialog).getByRole('radio', { name: c.reasons.rentedHere }));
+    fireEvent.change(within(dialog).getByLabelText(c.finalRent), { target: { value: '7100' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: c.save }));
+    await vi.waitFor(() => {
+      expect(statusLine()).toHaveTextContent(c.saved);
+    });
+    expect(api.calls(`PUT /listings/${flat.id}/closure`)[0]?.body).toEqual({
+      reason: 'rented_here',
+      final_rent_ils: 7100,
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(within(card).getByText(c.reasons.rentedHere)).toBeVisible();
+    expect(within(card).getByRole('button', { name: c.change })).toBeVisible();
+
+    // A resume clears the answer (as the API does): a new pause asks afresh, and "לא עכשיו"
+    // sends nothing.
+    fireEvent.click(within(card).getByRole('button', { name: he.listings.actions.resume }));
+    await vi.waitFor(() => {
+      expect(within(card).queryByText(c.reasons.rentedHere)).toBeNull();
+    });
+    expect(statusLine()).toHaveTextContent('');
+    fireEvent.click(await within(card).findByRole('button', { name: he.listings.actions.pause }));
+    const again = await screen.findByRole('dialog', { name: c.title });
+    for (const radio of within(again).getAllByRole('radio')) expect(radio).not.toBeChecked();
+    await skipClosure();
+    expect(api.calls(`PUT /listings/${flat.id}/closure`)).toHaveLength(1);
+    expect(within(card).getByRole('button', { name: c.title })).toBeVisible();
+  });
+
+  it('ac15 pausing a room opens no dialog', async () => {
+    const room = listing({ listing_type: 'room', flatmates_count: 2 });
+    mockApi({
+      'GET /me/listings': [json([room])],
+      [`PATCH /listings/${room.id}`]: [json(withoutCounts({ ...room, status: 'paused' }))],
+    });
+    renderRooms();
+    const card = (await screen.findByRole('article')) as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: he.listings.actions.pause }));
+    expect(
+      await within(card).findByRole('button', { name: he.listings.actions.resume }),
+    ).toBeVisible();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText(c.title)).toBeNull();
+  });
+
+  it('ac16 the closure line on paused and expired apartments only', async () => {
+    const paused = listing({ status: 'paused' });
+    const expired = listing({
+      expires_at: '2020-01-01T00:00:00Z',
+      close_reason: 'rented_elsewhere',
+      final_rent_ils: 6800,
+    });
+    const room = listing({ listing_type: 'room', flatmates_count: 2, status: 'paused' });
+    mockApi({ 'GET /me/listings': [json([paused, expired, room])] });
+    let view = render();
+    const [cPaused, cExpired] = (await screen.findAllByRole('article')) as [
+      HTMLElement,
+      HTMLElement,
+    ];
+    const title = (l: MyListingOut) =>
+      i18n.t('listings.card.title', { count: 3, rooms: '3', street: l.street, city: l.city });
+    const question = within(cPaused).getByRole('button', { name: c.title });
+    expect(question).toHaveAccessibleDescription(title(paused));
+    expect(within(cPaused).queryByRole('button', { name: c.change })).toBeNull();
+    expect(within(cExpired).getByText(c.reasons.rentedElsewhere)).toBeVisible();
+    const change = within(cExpired).getByRole('button', { name: c.change });
+    expect(change).toHaveAccessibleDescription(title(expired));
+    expect(within(cExpired).queryByRole('button', { name: c.title })).toBeNull();
+    // Opening from the card pre-fills the stored answer.
+    fireEvent.click(change);
+    const dialog = await screen.findByRole('dialog', { name: c.title });
+    expect(within(dialog).getByRole('radio', { name: c.reasons.rentedElsewhere })).toBeChecked();
+    expect(within(dialog).getByLabelText(c.finalRent)).toHaveValue('6800');
+    await skipClosure();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The paused room, in the market's "שלי": neither.
+    mockApi({ 'GET /me/listings': [json([paused, expired, room])] });
+    view = renderRooms();
+    const cRoom = (await screen.findByRole('article')) as HTMLElement;
+    expect(within(cRoom).queryByRole('button', { name: c.title })).toBeNull();
+    expect(within(cRoom).queryByRole('button', { name: c.change })).toBeNull();
+    view.unmount();
   });
 });

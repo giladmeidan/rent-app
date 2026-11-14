@@ -51,6 +51,9 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     balcony: null,
     bills_included: null,
     poster: null,
+    safe_room: null, // spec 0014b: the apartment facts
+    air_conditioning: null,
+    condition: null,
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',
@@ -59,18 +62,25 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     new_applicant_count: 0,
     flatmate_count: 0,
     flatmate_invite_active: false,
+    close_reason: null, // spec 0014b: the owner's closure answer
+    final_rent_ils: null,
     ...overrides,
   };
 }
 
 /** `l` as `POST` / `PATCH /listings` answer it: a `ListingOut`, without the applicant and flatmate
- * counts and the invite-link state. */
+ * counts, the invite-link state and the closure answer (spec 0014b). */
 export function withoutCounts(l: MyListingOut): ListingOut {
   const out: ListingOut &
     Partial<
       Pick<
         MyListingOut,
-        'applicant_count' | 'new_applicant_count' | 'flatmate_count' | 'flatmate_invite_active'
+        | 'applicant_count'
+        | 'new_applicant_count'
+        | 'flatmate_count'
+        | 'flatmate_invite_active'
+        | 'close_reason'
+        | 'final_rent_ils'
       >
     > = {
     ...l,
@@ -79,5 +89,7 @@ export function withoutCounts(l: MyListingOut): ListingOut {
   delete out.new_applicant_count;
   delete out.flatmate_count;
   delete out.flatmate_invite_active;
+  delete out.close_reason;
+  delete out.final_rent_ils;
   return out;
 }

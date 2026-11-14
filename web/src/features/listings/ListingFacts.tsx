@@ -4,13 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import type { ListingPublic } from './api';
 import {
+  AirConditioningIcon,
   ArnonaIcon,
+  ConditionIcon,
   ElevatorIcon,
   FurnishedIcon,
   ParkingIcon,
   PetsIcon,
+  SafeRoomIcon,
   VaadIcon,
 } from './factIcons';
+import { conditionLabel } from './facts';
 import { formatIls } from './format';
 import { furnishedLabel } from './furnished';
 
@@ -36,7 +40,9 @@ export function FactCell({
   );
 }
 
-/** Listing.dc.html's facts grid as label/value pairs; arnona and vaad only when given. */
+/** Listing.dc.html's facts grid as label/value pairs; arnona and vaad only when given. An
+ * apartment adds its balcony, ממ״ד, air conditioning and condition (0014b), each only when said
+ * (`ListingPage` renders this grid for a room too, whose facts are `RoomFacts`'). */
 export function ListingFacts({ listing }: { listing: ListingPublic }) {
   const { t } = useTranslation();
   const ils = (amount: number) => `${formatIls(amount)} ${t('listings.units.ils')}`;
@@ -66,6 +72,37 @@ export function ListingFacts({ listing }: { listing: ListingPublic }) {
       icon: <PetsIcon />,
     },
   ];
+  if (listing.listing_type === 'apartment') {
+    const yesNo = (value: boolean) => (value ? t('listing.yes') : t('listing.no'));
+    if (listing.balcony !== null) {
+      rows.push({
+        label: t('listings.room.balcony'),
+        value: yesNo(listing.balcony),
+        icon: <ArnonaIcon />,
+      });
+    }
+    if (listing.safe_room !== null) {
+      rows.push({
+        label: t('listings.fields.safeRoom'),
+        value: yesNo(listing.safe_room),
+        icon: <SafeRoomIcon />,
+      });
+    }
+    if (listing.air_conditioning !== null) {
+      rows.push({
+        label: t('listings.fields.airConditioning'),
+        value: yesNo(listing.air_conditioning),
+        icon: <AirConditioningIcon />,
+      });
+    }
+    if (listing.condition !== null) {
+      rows.push({
+        label: t('listings.fields.condition'),
+        value: conditionLabel(t, listing.condition),
+        icon: <ConditionIcon />,
+      });
+    }
+  }
   if (listing.arnona_ils !== null) {
     rows.push({
       label: t('listings.fields.arnona'),

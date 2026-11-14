@@ -482,7 +482,7 @@ describe('RoomFields', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An apartment never shows them, nor sends the keys.
+    // An apartment never shows them, nor sends the room-only keys.
     api = mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [json(listing(), 201)],
@@ -497,7 +497,11 @@ describe('RoomFields', () => {
       expect(currentPath()).toBe('/me/listings');
     });
     const body = api.calls('POST /listings')[0]?.body as Record<string, unknown>;
-    for (const key of ROOM_FACTS) expect(body).not.toHaveProperty(key);
+    // Spec 0014b: `balcony` is any listing's fact (asked on the details step), not said here.
+    for (const key of ROOM_FACTS.filter((k) => k !== 'balcony')) {
+      expect(body).not.toHaveProperty(key);
+    }
+    expect(body).toHaveProperty('balcony', null);
     view.unmount();
   });
 

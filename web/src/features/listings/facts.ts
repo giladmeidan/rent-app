@@ -1,7 +1,7 @@
 // The three strings the card's facts line and the listing page's facts line both build.
 import type { TFunction } from 'i18next';
 
-import type { ListingOut } from './api';
+import type { Condition, ListingOut } from './api';
 import { formatDate } from './format';
 
 /** "קומה 3 מתוך 5", or "קומה 3" when the building's height is not known. */
@@ -28,4 +28,14 @@ export function entryFact(
   return listing.available_from <= today
     ? t('listings.card.immediate')
     : t('listings.card.availableFrom', { date: formatDate(listing.available_from) });
+}
+
+/** "משופצת" (0014b). A literal map, so `i18n-check` sees every key. */
+export function conditionLabel(t: TFunction, condition: Condition): string {
+  return {
+    new: t('listings.condition.new'),
+    renovated: t('listings.condition.renovated'),
+    good: t('listings.condition.good'),
+    needs_work: t('listings.condition.needsWork'),
+  }[condition];
 }

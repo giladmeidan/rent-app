@@ -47,7 +47,7 @@ type Props = {
 };
 
 /** The flat facts' yes / no / "לא לציין" choices (0010f), in display order. */
-const YES_NO: readonly YesNo[] = ['yes', 'no', ''];
+export const YES_NO: readonly YesNo[] = ['yes', 'no', ''];
 
 /**
  * Step 3's room block (spec 0007e): who the room is for, how many flatmates live there, their ages
