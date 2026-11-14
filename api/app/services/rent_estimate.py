@@ -26,11 +26,13 @@ from app.schemas.rent_estimate import RentEstimateOut, RentEstimateRange, RentEs
 
 Level = Literal["neighbourhood", "city"]
 
-# backtest: quarters averaged, ending at the newest period (defaults until the first run)
-WINDOW_QUARTERS = 4
+# backtest (make rent-backtest, 2026-11-14, source version 20-08-2026): quarters averaged, ending
+# at the newest period; window 3 had the smallest neighbourhood p80 (7.65 %)
+WINDOW_QUARTERS = 3
 MIN_QUARTERS = min(2, WINDOW_QUARTERS)  # policy, spec 0014c: figures needed inside the window
-# backtest: range = baseline × (1 ± half width) (defaults until the first run)
-HALF_WIDTH: dict[Level, float] = {"neighbourhood": 0.08, "city": 0.15}
+# backtest (same run): range = baseline × (1 ± half width), window 3's p80 rounded up
+# (neighbourhood 7.65 %, city 17.78 %)
+HALF_WIDTH: dict[Level, float] = {"neighbourhood": 0.08, "city": 0.18}
 MAX_HALF_WIDTH = 0.20  # policy, spec 0014c: a level wider than this gives no number
 HIGH_MAX_HALF_WIDTH = 0.10  # policy, spec 0014c: at most this, and not capped, is "high"
 

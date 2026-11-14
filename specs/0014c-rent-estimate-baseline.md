@@ -1,7 +1,7 @@
 ---
 id: 0014c
 title: An owner pricing an apartment in the listing wizard sees the average rent for its room count in its neighbourhood (or city) as a range with a confidence level and its source, from the official figures; no number when the figures are too thin
-status: in-progress
+status: in-review
 depends_on: [0014a]   # done (PR #89): reads rent_areas / rent_prices
 reviewers: [code, qa, ux]   # qa: new endpoint + wizard hint; ux: changed wizard screen. No security: signed-in read of public figures, no PII, no write. No perf: a few small queries over ≤349 areas, not search
 estimate: 1 coder run   # coder Opus/high (data + the price the owner sees; Speed rule 6)
