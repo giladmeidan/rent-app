@@ -325,7 +325,7 @@ function Applied({ application }: { application: MyApplicationOut }) {
       )}
       {room && application.status === 'shortlisted' && (
         <Button variant="primary" to={`/chat/${application.id}`} data-chat-link>
-          {t('applications.chat')}
+          {t('applications.room.chat')}
         </Button>
       )}
       <Button variant="ghost" to={room ? '/market/mine' : '/me/applications'}>

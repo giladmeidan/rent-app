@@ -21,6 +21,7 @@ import { listingDetail } from '../../search/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
 import { MY_APPLICATIONS_KEY } from '../useMyApplications';
 import { CONVERSATIONS_KEY } from '../../chat/useConversations';
+import { MY_LIKES_KEY } from '../../likes/useMyLikes';
 import { readDraft, writeDraft } from '../../../app/drafts';
 import { PROFILE_KEY } from '../../profile/useProfile';
 import { application } from './fixtures';
@@ -1175,7 +1176,7 @@ describe('ApplySection', () => {
     expect(api.calls(APPLY)).toHaveLength(1);
     expect(api.calls(APPLY)[0]?.body).toEqual({});
     expect(s.queryByText(he.listings.errors.required)).toBeNull();
-    expect(s.queryByRole('link', { name: he.applications.chat })).toBeNull();
+    expect(s.queryByRole('link', { name: he.applications.room.chat })).toBeNull();
     cleanup();
 
     // Invited (`like.liked_me`): the hint above the button; the answer comes back shortlisted,
@@ -1183,6 +1184,7 @@ describe('ApplySection', () => {
     const shortlisted = application({ status: 'shortlisted', source: 'like', message: null });
     const client = testQueryClient();
     client.setQueryData(CONVERSATIONS_KEY, []);
+    client.setQueryData(MY_LIKES_KEY, { liked_me: [] });
     api = renderSeeker(
       [json([])],
       {
@@ -1204,7 +1206,7 @@ describe('ApplySection', () => {
     expect(button).toHaveAccessibleDescription(he.applications.room.invitedHint);
     fireEvent.click(button);
     send();
-    const chat = await s.findByRole('link', { name: he.applications.chat });
+    const chat = await s.findByRole('link', { name: he.applications.room.chat });
     expect(chat).toHaveAttribute('href', `/chat/${shortlisted.id}`);
     expect(s.getByTestId('application-mutual')).toHaveTextContent(he.applications.mutual);
     await vi.waitFor(() => {
@@ -1212,6 +1214,8 @@ describe('ApplySection', () => {
     });
     expect(api.calls(APPLY)[0]?.body).toEqual({});
     expect(client.getQueryState(CONVERSATIONS_KEY)?.isInvalidated).toBe(true);
+    // The invite is answered: the header's likes badge refetches.
+    expect(client.getQueryState(MY_LIKES_KEY)?.isInvalidated).toBe(true);
     // The hint is gone with the form (`like: null` in the cache), and no listing refetch.
     expect(s.queryByText(he.applications.room.invitedHint)).toBeNull();
     expect(api.calls(LISTING)).toHaveLength(1);

@@ -420,12 +420,13 @@ def test_ac5_room_apply_gate(
     assert "FROM listings" in statements[2], statements
     statements.clear()
     applied(woman_any, fresh)
-    # Plus apply reading the pair's invite under its lock (spec 0010l: the pair's lock before the
-    # application row; no pair here, so no UPDATE), then the upsert.
-    assert len(statements) == 5, statements
-    assert statements[3].lstrip().startswith("SELECT room_pairs.id"), statements
-    assert "FOR UPDATE OF room_pairs" in statements[3], statements
-    assert statements[4].lstrip().startswith("INSERT INTO applications"), statements
+    # Plus apply taking the (listing, seeker) key and reading the pair's invite under its lock
+    # (spec 0010l: both before the application row; no pair here, so no UPDATE), then the upsert.
+    assert len(statements) == 6, statements
+    assert "pg_advisory_xact_lock" in statements[3], statements
+    assert statements[4].lstrip().startswith("SELECT room_pairs.id"), statements
+    assert "FOR UPDATE OF room_pairs" in statements[4], statements
+    assert statements[5].lstrip().startswith("INSERT INTO applications"), statements
 
 
 def test_ac6_listing_type_snapshot_on_apply_and_reapply(

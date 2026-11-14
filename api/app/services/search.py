@@ -237,13 +237,14 @@ def liked_rooms(
 ) -> list[tuple[Listing, MatchOut, dt.datetime, uuid.UUID | None, str | None]]:
     """The public rooms whose lister liked (invited) `seeker_id` (spec 0010l), each with the
     seeker's match, `lister_liked_at` and the cover photo's id and key (spec 0010d; `None`,
-    `None` without photos), newest like first. Only rooms (a room
+    `None` without photos), newest like first. Never a room whose flat the seeker lives in (a
+    flatmate, spec 0008d). Only rooms (a room
     switched to an apartment keeps its pairs; `room_fit` is NULL for it), whose fit is not false,
     that are not the seeker's own and have no non-withdrawn application from them (the
     application took over). Empty while the seeker's profile has no looking part (spec 0010c: no
     budget, no score). Never names the owner. One statement."""
     # Imported here: `services/people.py` imports this module.
-    from app.services.people import open_application
+    from app.services.people import flatmate_of, open_application
 
     query = (
         _with_profile(_public_listings(), seeker_id)
@@ -256,6 +257,9 @@ def liked_rooms(
             room_fit(Listing, SeekerProfile).is_not(False),
             RoomPair.lister_liked_at.is_not(None),
             ~open_application(Listing.id, seeker_id),
+            # A flatmate never answers an invite to their own flat (0008d): it may predate the
+            # join, and stays hidden while they live there.
+            ~flatmate_of(Listing.id, seeker_id),
         )
     )
     matched, _ = _with_match(query)

@@ -31,6 +31,7 @@ from app.services.applications import AlreadyAppliedError
 from tests.conftest import (
     Outbox,
     make_application,
+    make_flatmate,
     make_owner,
     make_pair,
     make_profile,
@@ -926,3 +927,28 @@ def test_ac8_my_likes_invites_only(
 
     _apply(a, second)
     assert _likes(a) == [first]
+
+
+def test_ac8_my_likes_hides_a_flatmates_invite(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """Spec 0010l AC8 (review): an invite that predates the seeker joining the room's flat is not
+    listed on `/me/likes`, and the room's page has no `like` for them (a flatmate cannot apply,
+    0008d); leaving the flat brings the invite back."""
+    room = _room(db_engine, _user_id(owner), gush_dan)
+    a = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
+    a_id = _user_id(a)
+    make_pair(db_engine, uuid.UUID(room), a_id, price_ils_seen=7000, lister_liked=True)
+    assert _likes(a) == [room]
+    assert _ok(a.get(f"/listings/{room}"))["like"] == {"liked_me": True}
+
+    make_flatmate(db_engine, uuid.UUID(room), a_id)
+
+    assert _likes(a) == []
+    assert _ok(a.get(f"/listings/{room}"))["like"] is None
+    _execute(db_engine, "DELETE FROM listing_flatmates WHERE user_id = :u", u=a_id)
+    assert _likes(a) == [room]

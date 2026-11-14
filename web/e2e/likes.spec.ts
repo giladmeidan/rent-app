@@ -178,7 +178,7 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   await expect(actions.getByLabel(he.applications.room.messageOptional)).toBeVisible();
   await actions.getByRole('button', { name: he.applications.form.submit }).click();
   await expect(actions.getByTestId('application-mutual')).toHaveText(he.applications.mutual);
-  const chat = actions.getByRole('link', { name: he.applications.chat });
+  const chat = actions.getByRole('link', { name: he.applications.room.chat });
   await expect(chat).toHaveAttribute('href', /^\/chat\/[0-9a-f-]{36}$/);
   await expect(chat).toBeFocused();
   const chatHref = (await chat.getAttribute('href')) ?? '';

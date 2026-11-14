@@ -23,13 +23,18 @@ input about a pair reads its `price_ils_seen`, frozen when the pair was created 
 so editing a room's price cannot probe a seeker's budget (an invited application's price snapshot
 is that frozen price too).
 
-Concurrency: the like takes the pair row's lock with its one write (a conditional UPDATE), and only
-then runs a **separate** `SELECT EXISTS` for an application: as a new statement under READ
-COMMITTED it sees an apply that committed while this transaction waited for the lock, and the
-like is rolled back with `AlreadyAppliedError`. An apply reads the pair `FOR UPDATE`
-(`consume_invite`) **before** it writes its application, so the lock order is always the pair, then
-`applications`: an apply waiting on a like gets the like's committed `lister_liked_at` and
-shortlists, and a like waiting on an apply sees the committed application in its post-lock EXISTS.
+Concurrency: the like and the apply both take a transaction-scoped advisory lock on the
+(listing, seeker) key (`lock_pair_key`) before they touch the pair row, because the row may not
+exist yet when an apply starts (people browse inserts it, spec 0010l review): a row lock alone
+would let a browse and a like slip in beside an apply that found no row. The like then takes the
+pair row's lock with its one write (a conditional UPDATE), and only then runs a **separate**
+`SELECT EXISTS` for an application: as a new statement under READ COMMITTED it sees an apply
+that committed while this transaction waited, and the like is rolled back with
+`AlreadyAppliedError`. An apply reads the pair `FOR UPDATE` (`consume_invite`) **before** it
+writes its application, so the lock order is always the key, the pair, then `applications`: an
+apply waiting on a like gets the like's committed `lister_liked_at` and shortlists, and a like
+waiting on an apply sees the committed application in its post-lock EXISTS. An invite therefore
+never outlives an application.
 
 Flatmates (spec 0008d): a flatmate join holds the listing row `FOR UPDATE` while it checks for an
 open application and inserts the membership. The like and the apply first take `FOR KEY SHARE` on
@@ -37,7 +42,8 @@ the listing row, folded into their listing SELECT, so they wait for a running jo
 statements then re-test flatmate membership (`_has_application`, and `_fits()` in `like_person`'s
 UPDATE; the apply's INSERT ... SELECT), and a join waiting on an apply sees its committed
 application. The full lock order is the listing, then the pair, then `applications`, so the join
-(listing only) cannot deadlock with them. A caller is never both an applicant and a flatmate."""
+(listing only) cannot deadlock with them; the full order is the listing, the (listing, seeker)
+key, the pair, then `applications`. A caller is never both an applicant and a flatmate."""
 
 import datetime as dt
 import uuid
@@ -51,6 +57,7 @@ from sqlalchemy import (
     and_,
     exists,
     func,
+    literal,
     select,
     update,
 )
@@ -105,6 +112,20 @@ def flatmate_of(listing_id: _Id, user_id: _Id) -> Exists:
     )
 
 
+def lock_pair_key(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> None:
+    """Take the transaction-scoped advisory lock on the (`listing_id`, `seeker_id`) key, held to
+    the commit or rollback. Both writers of a pair's invite state take it (the like and the
+    apply), after the listing's lock and before the pair's row (see the module docstring). The key
+    is a stable 64-bit hash of the two ids. One statement."""
+    db.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                func.hashtextextended(literal(f"room_pair:{listing_id}:{seeker_id}"), 0)
+            )
+        )
+    )
+
+
 def consume_invite(
     db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID
 ) -> Row[tuple[uuid.UUID, dt.datetime | None, int]] | None:
@@ -112,9 +133,12 @@ def consume_invite(
     in the caller's transaction: an application consumes the invite (spec 0010l), so after a
     withdraw the lister has to like again. Returns the pair's `id`, `lister_liked_at` and
     `price_ils_seen` as they were **before** clearing, or None without a pair (an un-invited
-    apply: no lock, nothing to read). `applications._upsert` calls it before its application
-    INSERT (the lock order above). Under READ COMMITTED the `FOR UPDATE` waits for a running like
-    and returns its committed row. One SELECT, plus one UPDATE when there was an invite."""
+    apply). It first takes the (listing, seeker) key (`lock_pair_key`), so a like of a pair that
+    did not exist yet still waits for this apply. `applications._upsert` calls it before its
+    application INSERT (the lock order above). Under READ COMMITTED the `FOR UPDATE` waits for a
+    running like and returns its committed row. Two statements, plus one UPDATE when there was an
+    invite."""
+    lock_pair_key(db, listing_id, seeker_id)
     pair = db.execute(
         select(RoomPair.id, RoomPair.lister_liked_at, RoomPair.price_ils_seen)
         .where(RoomPair.listing_id == listing_id, RoomPair.seeker_id == seeker_id)
@@ -307,13 +331,24 @@ def like_person(
     `ListingNotLiveError`, nothing counted), the limiter (`RateLimitedError`), one conditional
     UPDATE that takes the pair's lock (`ListingNotFoundError` when it is unknown, another
     listing's, or not a candidate any more), the post-lock check (`AlreadyAppliedError`, the like
-    rolled back). A second like keeps the first `lister_liked_at`. The listing SELECT takes
+    rolled back). Before the UPDATE it reads the pair's seeker and takes the (listing, seeker) key
+    (`lock_pair_key`), so it waits for an apply that started before the pair existed. A second
+    like keeps the first `lister_liked_at`. The listing SELECT takes
     `FOR KEY SHARE` before the pair's lock (spec 0008d), and the UPDATE's candidate condition and
     the post-lock check both re-test flatmate membership after it (`ListingNotFoundError`).
     Commits."""
     try:
         listing = _own_room(db, owner, listing_id, lock=True)
         count_like(r, owner)
+        # The pair's seeker, for the (listing, seeker) key; the UPDATE below re-checks the pair.
+        seeker_id = db.scalar(
+            select(RoomPair.seeker_id).where(
+                RoomPair.id == person_id, RoomPair.listing_id == listing.id
+            )
+        )
+        if seeker_id is None:
+            raise ListingNotFoundError
+        lock_pair_key(db, listing.id, seeker_id)
         pair = db.scalar(
             update(RoomPair)
             .where(
@@ -367,15 +402,17 @@ def like_state(db: Session, seeker_id: uuid.UUID, listing_id: uuid.UUID) -> Like
     """Whether room `listing_id`'s lister invited `seeker_id`, for the listing page (the caller
     checks that the caller is signed in, of any role (spec 0010b), and the listing a room not their
     own): None when the seeker has a non-withdrawn application to it (the page shows that
-    instead), else `liked_me`, false without a pair. One one-row SELECT."""
+    instead) or is a flatmate there (0008d: they can never answer an invite to their own flat),
+    else `liked_me`, false without a pair. One one-row SELECT."""
     pair = and_(RoomPair.listing_id == listing_id, RoomPair.seeker_id == seeker_id)
     row = db.execute(
         select(
             open_application(listing_id, seeker_id).label("applied"),
+            flatmate_of(listing_id, seeker_id).label("flatmate"),
             exists().where(pair, RoomPair.lister_liked_at.is_not(None)).label("liked_me"),
         )
     ).one()
-    if row.applied:
+    if row.applied or row.flatmate:
         return None
     return LikeStateOut(liked_me=row.liked_me)
 

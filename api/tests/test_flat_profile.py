@@ -438,7 +438,8 @@ def test_ac4_people_edge_cases_and_statement_count(
         return len(statements), sum("listing_flatmates" in s for s in statements)
 
     one_total, one_flatmates = recorded(seeker, room)
-    assert one_flatmates == 1
+    # The flat's people, and `like_state`'s flatmate check (spec 0010l: a flatmate has no invite).
+    assert one_flatmates == 2
     assert recorded(client, room)[1] == 0
     assert recorded(owner, room)[1] == 0
     assert recorded(seeker, apartment)[1] == 0
@@ -448,7 +449,7 @@ def test_ac4_people_edge_cases_and_statement_count(
         mate = make_seeker(db_engine, f"m{n}@example.com", display_name=f"Mate{n}")
         make_flatmate(db_engine, room, mate, shown=True)
     assert _names(seeker, room) == ["Noa", "Bare", "Mate2", "Mate3"]
-    assert recorded(seeker, room) == (one_total, 1)
+    assert recorded(seeker, room) == (one_total, 2)
 
 
 # --- AC5 ---------------------------------------------------------------------------------------

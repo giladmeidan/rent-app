@@ -20,11 +20,12 @@ Rules (PRODUCT.md "Applications"):
   lister had liked, the application is written `shortlisted` with `source = 'like'` and the pair's
   frozen price as its price snapshot (0008a), and its chat opens in the same transaction (the
   lister's read marker null, the seeker's now()); otherwise it is `submitted`, `source = 'apply'`
-  and the live price. This is the only writer of a like-sourced application. The pair's lock is
-  taken first, the order the like uses (pair, then `applications`), so an apply racing a like
-  cannot deadlock: an apply waiting on a like reads its committed `lister_liked_at` and
-  shortlists, and a like waiting on an apply sees the committed application and rolls back with
-  `AlreadyAppliedError`.
+  and the live price. This is the only writer of a like-sourced application. The (listing,
+  seeker) advisory key and then the pair's lock are taken first, the order the like uses (key,
+  pair, then `applications`; the key also covers a pair that does not exist yet), so an apply
+  racing a like cannot deadlock or leave an invite beside its application: an apply waiting on a
+  like reads its committed `lister_liked_at` and shortlists, and a like waiting on an apply sees
+  the committed application and rolls back with `AlreadyAppliedError`.
 - A flatmate of the listing cannot apply (spec 0008d), even racing their own join: the listing
   SELECT takes `FOR KEY SHARE` (waiting for a join's `FOR UPDATE`), before the pair's lock, and the
   application INSERT ... SELECT re-tests membership (`ListingNotFoundError`). The lock order is the
@@ -159,7 +160,8 @@ def _upsert(
     security B1) and its type (0007b). Two to four statements; the caller holds the listing's
     `FOR KEY SHARE` lock, so all run after any concurrent join committed."""
     # Imported here: `services/people.py` imports this module. The listing's lock (the caller's),
-    # then the pair's, then the application row (the like's order; see the module docstring).
+    # then the (listing, seeker) key and the pair's (`consume_invite`), then the application row
+    # (the like's order; see the module docstring).
     from app.services.people import consume_invite, flatmate_of
 
     pair = consume_invite(db, listing.id, seeker_id)

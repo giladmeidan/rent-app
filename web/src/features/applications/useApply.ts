@@ -5,6 +5,7 @@ import { clearDraft } from '../../app/drafts';
 import type { ListingDetail } from '../listings/api';
 import { clearSession } from '../auth/useLogout';
 import { CONVERSATIONS_KEY } from '../chat/useConversations';
+import { MY_LIKES_KEY } from '../likes/useMyLikes';
 import { PROFILE_KEY } from '../profile/useProfile';
 import { ApiError } from '../listings/api';
 import { applyToListing, hasStatus, type MyApplicationOut } from './api';
@@ -17,8 +18,9 @@ export const loginPath = (listingId: string) =>
 /**
  * Applies to `listingId` (`null`: no message, a room only, spec 0010l). On 201 the new (or
  * reopened) application tops the seeker's list and the listing's count goes up by one in the cache:
- * no refetch, so no extra counted view. A `shortlisted` 201 answered the lister's invite (spec
- * 0010l): its chat just opened, so the chat list is refetched. The 409s:
+ * no refetch, so no extra counted view. A room's 201 ends any invite to it (spec 0010l), so the
+ * likes list (the header's badge) is refetched; a `shortlisted` one answered the invite and its
+ * chat just opened, so the chat list is refetched too. The 409s:
  * - `seeker_profile_required` refetches the profile (the section then shows the profile gate);
  * - `seeker_gender_required` (a women- or men-only room, no room section) refetches the profile and
  *   the listing: the owner may have made an `any` room gendered after the page loaded, and the
@@ -48,6 +50,9 @@ export function useApply(listingId: string) {
         // `like: null`: an open application ends the invite hint (as the API's `like` does).
         (old) => old && { ...old, applicant_count: old.applicant_count + 1, like: null },
       );
+      if (app.listing.listing_type === 'room') {
+        void queryClient.invalidateQueries({ queryKey: MY_LIKES_KEY, exact: true });
+      }
       if (app.status === 'shortlisted') {
         void queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY, exact: true });
       }

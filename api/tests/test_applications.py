@@ -6,8 +6,7 @@ import datetime as dt
 import threading
 import time
 import uuid
-from collections.abc import Iterator
-from functools import partial
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import httpx
@@ -906,6 +905,55 @@ def test_ac4_reapply_after_invite_withdrawn(
     assert published == []  # a submitted apply publishes nothing
 
 
+def _run_named(calls: dict[str, Callable[[], str]]) -> dict[str, str]:
+    """Run each call in its own thread named after its key; return the outcomes by name ("409"
+    for `AlreadyAppliedError`, the exception's repr for anything else)."""
+    outcomes = dict.fromkeys(calls, "")
+
+    def run(name: str, call: Callable[[], str]) -> None:
+        try:
+            outcomes[name] = call()
+        except applications_service.AlreadyAppliedError:
+            outcomes[name] = "409"
+        except Exception as exc:  # pragma: no cover - reported by the assertions
+            outcomes[name] = repr(exc)
+
+    threads = [
+        threading.Thread(target=run, args=(name, call), name=name) for name, call in calls.items()
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=20)
+    return outcomes
+
+
+def _like_call(owner_id: uuid.UUID, room: str, person: uuid.UUID) -> Callable[[], str]:
+    def call() -> str:
+        with get_sessionmaker()() as db:
+            user = db.get(User, owner_id)
+            assert user is not None
+            db.rollback()
+            people_service.like_person(db, get_redis(), user, uuid.UUID(room), person)
+            return "liked"
+
+    return call
+
+
+def _apply_call(seeker_id: uuid.UUID, room: str) -> Callable[[], str]:
+    def call() -> str:
+        with get_sessionmaker()() as db:
+            user = db.get(User, seeker_id)
+            assert user is not None
+            db.rollback()
+            application, _ = applications_service.apply(
+                db, get_redis(), user, uuid.UUID(room), None
+            )
+            return application.status
+
+    return call
+
+
 def test_ac5_apply_racing_lister_like(
     owner_id: uuid.UUID,
     gush_dan: uuid.UUID,
@@ -913,65 +961,118 @@ def test_ac5_apply_racing_lister_like(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Spec 0010l AC5 (replaces 0008a's `test_ac8_apply_racing_a_lister_like`): the lister's like
-    and the seeker's apply on an existing pair at once, in both lock orders, 20 rounds: no
-    deadlock, exactly one application, a shortlisted one has its conversation, and the invite is
-    never left on the pair next to an application."""
+    and the seeker's apply on an existing pair, in both lock orders, 20 rounds: no deadlock,
+    exactly one application, a shortlisted one has its conversation, and the invite is never left
+    on the pair next to an application. The second side starts only once the first holds the
+    pair's lock (an event, not a head start); the first holds it a moment so the second waits."""
     real_has_application = people_service._has_application
     real_consume_invite = people_service.consume_invite
+    held = threading.Event()
 
-    def slow_has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> bool:
-        time.sleep(0.15)  # the lister holds the pair's lock
+    def holding(first: str) -> None:
+        if threading.current_thread().name == first:
+            held.set()
+            time.sleep(0.1)  # still holding the pair's lock: the other side queues behind it
+
+    def has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> bool:
+        holding("lister")  # runs after the like's UPDATE took the pair's lock
         return real_has_application(db, listing_id, seeker_id)
 
-    def slow_consume_invite(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> Any:
+    def consume_invite(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> Any:
         pair = real_consume_invite(db, listing_id, seeker_id)
-        time.sleep(0.15)  # the apply holds the pair's lock, before its application row
+        holding("apply")  # the apply holds the pair's lock, before its application row
         return pair
 
-    monkeypatch.setattr(people_service, "_has_application", slow_has_application)
-    monkeypatch.setattr(people_service, "consume_invite", slow_consume_invite)
+    monkeypatch.setattr(people_service, "_has_application", has_application)
+    monkeypatch.setattr(people_service, "consume_invite", consume_invite)
 
-    def lister(room: str, person: uuid.UUID, start: threading.Barrier, delay: float) -> str:
-        with get_sessionmaker()() as db:
-            user = db.get(User, owner_id)
-            assert user is not None
-            start.wait()
-            time.sleep(delay)
-            people_service.like_person(db, get_redis(), user, uuid.UUID(room), person)
-            return "liked"
+    def after_held(call: Callable[[], str]) -> Callable[[], str]:
+        def second() -> str:
+            assert held.wait(10)
+            return call()
 
-    def applier(room: str, seeker_id: uuid.UUID, start: threading.Barrier, delay: float) -> str:
-        with get_sessionmaker()() as db:
-            user = db.get(User, seeker_id)
-            assert user is not None
-            start.wait()
-            time.sleep(delay)
-            application, _ = applications_service.apply(
-                db, get_redis(), user, uuid.UUID(room), None
-            )
-            return application.status
+        return second
 
-    # (lister delay, apply delay) -> outcomes: the first to take the pair's lock wins.
-    orders = ((0.0, 0.05, ["liked", "shortlisted"]), (0.05, 0.0, ["409", "submitted"]))
+    # first -> the outcomes: the first to take the pair's lock wins.
+    expected = {"lister": {"lister": "liked", "apply": "shortlisted"}}
+    expected["apply"] = {"lister": "409", "apply": "submitted"}
     for n in range(20):
-        lister_delay, apply_delay, expected = orders[n % 2]
+        first = "lister" if n % 2 == 0 else "apply"
+        held.clear()
         get_redis().delete(f"rl:like:user:{owner_id}", f"rl:like:user:day:{owner_id}")
         room = people_tests._room(db_engine, owner_id, gush_dan)
         a = make_seeker(db_engine, f"a{n}@example.com", "Avi")
         people_tests._visible(db_engine, a, gush_dan)
         person = make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=7000)
-        start = threading.Barrier(2, timeout=10)
-        outcomes = people_tests._in_threads(
-            partial(lister, room, person, start, lister_delay),
-            partial(applier, room, a, start, apply_delay),
+        like, applying = _like_call(owner_id, room, person), _apply_call(a, room)
+        outcomes = _run_named(
+            {
+                "lister": like if first == "lister" else after_held(like),
+                "apply": applying if first == "apply" else after_held(applying),
+            }
         )
-        assert outcomes == expected, (n, outcomes)
+        assert outcomes == expected[first], (n, first, outcomes)
         applications = "SELECT count(*) FROM applications WHERE listing_id = :l"
         assert _scalar(db_engine, applications, l=room) == 1
         conversations = (
             "SELECT count(*) FROM conversations c JOIN applications a ON a.id = c.application_id"
             " WHERE a.listing_id = :l"
         )
-        shortlisted = outcomes[1] == "shortlisted"
+        shortlisted = outcomes["apply"] == "shortlisted"
         assert _scalar(db_engine, conversations, l=room) == (1 if shortlisted else 0)
         assert people_tests._pair(db_engine, room, a).lister_liked_at is None
+
+
+def test_ac5_invite_never_outlives_an_apply(
+    client: TestClient,
+    outbox: Outbox,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Spec 0010l AC5 (security review): an apply that started before the pair existed. It finds
+    no pair and stalls before its application row; meanwhile the lister's browse creates the pair
+    and the lister likes it. The like waits on the (listing, seeker) key until the apply commits,
+    then gets 409: never a submitted application beside a live invite (which a later re-apply
+    would turn into a chat without a fresh like)."""
+    lister = signup(client, outbox, "o@example.com", "owner")
+    lister_id = _user_id(lister)
+    room = people_tests._room(db_engine, lister_id, gush_dan)
+    seeker = people_tests._seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
+    seeker_id = _user_id(seeker)
+    assert people_tests._pair(db_engine, room, seeker_id) is None
+
+    real_consume_invite = people_service.consume_invite
+    held, go = threading.Event(), threading.Event()
+
+    def stalled(db: Session, listing_id: uuid.UUID, seeker: uuid.UUID) -> Any:
+        pair = real_consume_invite(db, listing_id, seeker)
+        held.set()
+        assert go.wait(10)
+        return pair
+
+    monkeypatch.setattr(people_service, "consume_invite", stalled)
+    outcomes: dict[str, str] = {}
+    applying = threading.Thread(
+        target=lambda: outcomes.update(_run_named({"apply": _apply_call(seeker_id, room)}))
+    )
+    applying.start()
+    assert held.wait(10)
+
+    # The apply found no pair; the lister's browse creates it now, and the lister likes it.
+    person = people_tests._card(lister, room, "Avi")["id"]
+    liking = threading.Thread(
+        target=lambda: outcomes.update(
+            _run_named({"lister": _like_call(lister_id, room, uuid.UUID(person))})
+        )
+    )
+    liking.start()
+    liking.join(timeout=0.5)
+    assert liking.is_alive(), outcomes  # waits on the (listing, seeker) key the apply holds
+    go.set()
+    applying.join(timeout=20)
+    liking.join(timeout=20)
+
+    assert outcomes == {"apply": "submitted", "lister": "409"}
+    assert people_tests._pair(db_engine, room, seeker_id).lister_liked_at is None
+    assert _count(db_engine) == 1
