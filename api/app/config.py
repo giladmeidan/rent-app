@@ -112,9 +112,11 @@ class Settings(DatabaseSettings):
     @field_validator("nadlan_rent_url")
     @classmethod
     def _nadlan_url_is_a_plain_https_url(cls, value: str) -> str:
-        """Trimmed, an https URL with a host and no query or fragment, without a trailing `/`.
-        The message names the rule only, never the value."""
-        rule = "NADLAN_RENT_URL must be an https URL with a host and no query or fragment"
+        """Trimmed, an https URL with a host and no credentials, query or fragment, without a
+        trailing `/`. The message names the rule only, never the value."""
+        rule = (
+            "NADLAN_RENT_URL must be an https URL with a host and no credentials, query or fragment"
+        )
         value = value.strip().rstrip("/")
         try:
             parts = urlsplit(value)
@@ -124,6 +126,8 @@ class Settings(DatabaseSettings):
         if (
             parts.scheme != "https"
             or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
             or parts.query
             or parts.fragment
             or "?" in value

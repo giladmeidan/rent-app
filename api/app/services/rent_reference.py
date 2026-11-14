@@ -58,6 +58,7 @@ MAX_BODY_BYTES = 2 * 1024 * 1024
 REQUEST_INTERVAL_S = 0.25
 USER_AGENT = "homie-rent-reference"
 MAX_STREETS = 2000
+MAX_NEIGHBOURHOODS = 500  # Tel Aviv, the largest, lists 72
 
 Kind = Literal["settlement", "neighbourhood"]
 _ROOMS: dict[object, int] = {3: 3, 4: 4, 5: 5, "all": 0}  # "all" sizes are stored as 0
@@ -102,6 +103,9 @@ class NadlanFetcher:
             with self.client.stream("GET", path) as response:
                 if response.status_code != 200:
                     raise RentSourceError(f"status {response.status_code}")
+                # httpx inflates a whole compressed chunk before the cap below could see it.
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise RentSourceError("compressed body")
                 for chunk in response.iter_bytes():
                     body += chunk
                     if len(body) > MAX_BODY_BYTES:
@@ -118,7 +122,7 @@ def get_rent_fetcher() -> NadlanFetcher:
     return NadlanFetcher(
         httpx.Client(
             base_url=get_settings().nadlan_rent_url,
-            headers={"User-Agent": USER_AGENT},
+            headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
             timeout=30.0,
             follow_redirects=False,
         )
@@ -237,6 +241,13 @@ def parse_rent_file(data: object, kind: Kind, source_id: int, settlement_code: i
     version = data.get("version")
     if not isinstance(version, str) or not 1 <= len(version) <= 20:
         raise RentFileError("version must be a string of 1-20 characters")
+    try:
+        visible_characters_only(version, require_visible=True)
+    except ValueError:
+        raise RentFileError("version must be visible characters") from None
+    neighbourhood_ids = _neighbourhood_ids(data) if settlement else []
+    if len(neighbourhood_ids) > MAX_NEIGHBOURHOODS:
+        raise RentFileError("too many neighbourhoods")
     return RentFile(
         name=name,
         x=x,
@@ -244,7 +255,7 @@ def parse_rent_file(data: object, kind: Kind, source_id: int, settlement_code: i
         version=version,
         prices=_prices(rooms_list, "settlementPrice" if settlement else "neighborhoodPrice"),
         streets=[] if settlement else _streets(data.get("otherNeighborhoodStreets")),
-        neighbourhood_ids=_neighbourhood_ids(data) if settlement else [],
+        neighbourhood_ids=neighbourhood_ids,
     )
 
 
@@ -255,14 +266,13 @@ def _store(
     (prices new, prices changed)."""
     centre = func.ST_Transform(func.ST_SetSRID(func.ST_MakePoint(file.x, file.y), 2039), 4326)
     values = {
+        "settlement_code": settlement_code,
         "name_he": file.name,
         "centre": centre,
         "streets": file.streets,
         "source_version": file.version,
     }
-    upsert = pg_insert(RentArea).values(
-        kind=kind, source_id=source_id, settlement_code=settlement_code, **values
-    )
+    upsert = pg_insert(RentArea).values(kind=kind, source_id=source_id, **values)
     area_id: uuid.UUID = db.execute(
         upsert.on_conflict_do_update(
             constraint="uq_rent_areas_kind_source", set_={**values, "updated_at": func.now()}

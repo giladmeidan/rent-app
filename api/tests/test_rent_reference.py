@@ -275,6 +275,14 @@ _BAD_FILES: tuple[tuple[str, str, Callable[[Any], Any], tuple[str, int], tuple[s
     ("x_as_string", TEL_AVIV, _set("x", "179706.07"), _TA, _AZ),
     ("no_trends_rooms", TEL_AVIV, _set("trends", {}), _TA, _AZ),
     ("version_21_chars", REVIVIM, _set("version", "v" * 21), _RV, _RH),
+    ("version_control_chars", TEL_AVIV, _set("version", "1\nERROR forged"), _TA, _AZ),
+    (
+        "501_neighbourhoods",
+        TEL_AVIV,
+        _set("otherNeighborhoods", [{"id": 70000000 + i, "title": "x"} for i in range(501)]),
+        _TA,
+        _AZ,
+    ),
 )
 
 
@@ -294,9 +302,12 @@ def test_ac7_bad_file_skipped(
 ) -> None:
     files = _files()
     files[path] = mutate(files[path])
-    counts = import_rent_reference(db, FakeRentFetcher(files))
+    fetcher = FakeRentFetcher(files)
+    counts = import_rent_reference(db, fetcher)
 
     assert counts["files_failed"] == 1
+    if bad_area[0] == "settlement":  # none of its neighbourhoods is requested
+        assert not any(p.startswith("neighborhood/") for p in fetcher.requests)
     assert _area(rent_clean, *bad_area) is None
     assert _prices(rent_clean, *bad_area) == {}
     assert _area(rent_clean, *next_area) is not None
@@ -441,6 +452,8 @@ def test_ac11_fetcher_is_polite(monkeypatch: pytest.MonkeyPatch) -> None:
             return httpx.Response(302, headers={"Location": "https://elsewhere.test/x.json"})
         if name == "big.json":
             return httpx.Response(200, content=b" " * (MAX_BODY_BYTES + 1))
+        if name == "gzip.json":
+            return httpx.Response(200, content=b"\x1f\x8b", headers={"Content-Encoding": "gzip"})
         if name == "fail.json":
             return httpx.Response(500)
         if name == "not-json.json":
@@ -464,13 +477,21 @@ def test_ac11_fetcher_is_polite(monkeypatch: pytest.MonkeyPatch) -> None:
     assert str(first.url) == "https://data.nadlan.gov.il/api/pages/settlement/rent/cookie.json"
     for request in (first, second):
         assert request.headers["User-Agent"] == "homie-rent-reference"
+        assert request.headers["Accept-Encoding"] == "identity"
     assert "cookie" not in second.headers
 
-    for path in ("redirect.json", "big.json", "fail.json", "not-json.json", "timeout.json"):
+    for path in (
+        "redirect.json",
+        "big.json",
+        "gzip.json",
+        "fail.json",
+        "not-json.json",
+        "timeout.json",
+    ):
         with pytest.raises(RentSourceError) as excinfo:
             fetcher.fetch(path)
         assert "nadlan" not in str(excinfo.value)
         assert "html" not in str(excinfo.value)
     assert not any(request.url.host == "elsewhere.test" for request in seen)
-    assert len(seen) == 7
-    assert sleeps == [0.25] * 6
+    assert len(seen) == 8
+    assert sleeps == [0.25] * 7

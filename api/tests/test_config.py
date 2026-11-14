@@ -307,11 +307,13 @@ def test_ac13_rent_reference_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "https://rent.example/api/pages#f",
         "https://",
         "ftp://rent.example",
+        "https://u:secret@rent.example/api/pages",
     ):
         with pytest.raises(
             ValidationError, match="NADLAN_RENT_URL must be an https URL"
         ) as excinfo:
             Settings(**required, nadlan_rent_url=bad_url)
         assert "rent.example" not in str(excinfo.value)
+        assert "secret" not in str(excinfo.value)
     with pytest.raises(ValidationError, match="rent_reference"):
         Settings(**required, rent_reference="on")
