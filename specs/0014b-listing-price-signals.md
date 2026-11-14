@@ -92,7 +92,7 @@ compares them):
 - `ck_listings_close_reason`: `close_reason IS NULL OR close_reason IN ('rented_here', 'rented_elsewhere',
   'not_renting')`
 - `ck_listings_final_rent_ils`: `final_rent_ils IS NULL OR (final_rent_ils BETWEEN 500 AND 100000 AND
-  close_reason IN ('rented_here', 'rented_elsewhere'))`
+  close_reason IS NOT NULL AND close_reason IN ('rented_here', 'rented_elsewhere'))`
 - `ck_listings_closed_at`: `(close_reason IS NULL) = (closed_at IS NULL)`
 - `ck_listing_price_changes_price_ils`: `price_ils BETWEEN 500 AND 100000`
 
@@ -177,7 +177,7 @@ i18n keys added (`web/src/locales/he.json`):
 | `listings.condition.good` | שמורה |
 | `listings.condition.needsWork` | דורשת שיפוץ |
 | `listings.closure.title` | מה קרה עם הדירה? |
-| `listings.closure.intro` | התשובה נשמרת אצלנו בלבד, לא מוצגת באתר, ועוזרת להעריך מחירי שכירות. |
+| `listings.closure.intro` | התשובה פרטית ולא מוצגת באתר. היא עוזרת לנו להעריך מחירי שכירות. |
 | `listings.closure.reason` | בחירת תשובה |
 | `listings.closure.reasons.rentedHere` | הושכרה דרך הומי |
 | `listings.closure.reasons.rentedElsewhere` | הושכרה במקום אחר |
