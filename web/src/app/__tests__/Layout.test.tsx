@@ -115,7 +115,7 @@ describe('Layout', () => {
     expect(document.activeElement).toBe(document.body);
 
     // PUSH by a link click: scrolled to the top, focus on <main>.
-    fireEvent.click(screen.getByRole('link', { name: he.nav.applications }));
+    fireEvent.click(screen.getByRole('link', { name: he.nav.mine }));
     await screen.findByRole('heading', { level: 1, name: he.applications.mine.title });
     expect(currentPath()).toBe('/me/applications');
     expect(scrollTo).toHaveBeenCalledTimes(1);
@@ -307,7 +307,7 @@ describe('Layout', () => {
     let { nav, links } = await tabs();
     expect(links).toEqual([
       [he.nav.search, '/search'],
-      [he.nav.applications, '/me/applications'],
+      [he.nav.mine, '/me/applications'],
       [he.header.chat, '/chat'],
       [he.nav.profile, '/me/profile'],
     ]);
@@ -328,7 +328,8 @@ describe('Layout', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner with two new chats: "המודעות שלי", "צ'אט" (named with the count), "חיפוש".
+    // An owner with two new chats: the seeker's order, "הפעילות שלי" is the owner's listings and
+    // "צ'אט" is named with the count.
     signedIn(owner, {
       'GET /me/conversations': [
         () => json([conversation({ unread_count: 2 }), conversation({ is_new: true })]),
@@ -336,8 +337,13 @@ describe('Layout', () => {
     });
     view = renderRoutes('/search', <AppRoutes />);
     ({ nav, links } = await tabs());
-    expect(links.map(([, href]) => href)).toEqual(['/me/listings', '/chat', '/search']);
-    expect(within(nav).getByRole('link', { name: he.header.myListings })).toBeVisible();
+    expect(links.map(([, href]) => href)).toEqual([
+      '/search',
+      '/me/listings',
+      '/chat',
+      '/me/profile',
+    ]);
+    expect(within(nav).getByRole('link', { name: he.nav.mine })).toBeVisible();
     const chat = await within(nav).findByRole('link', {
       name: `${he.header.chat} ${i18n.t('header.chatNew', { count: 2 })}`,
     });
@@ -351,11 +357,11 @@ describe('Layout', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // A nested path keeps "המודעות שלי" current.
+    // A nested path keeps "הפעילות שלי" current.
     signedIn(owner);
     view = renderRoutes('/me/listings/L/applicants', <AppRoutes />);
     ({ nav } = await tabs());
-    expect(within(nav).getByRole('link', { name: he.header.myListings })).toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: he.nav.mine })).toHaveAttribute(
       'aria-current',
       'page',
     );
@@ -404,10 +410,10 @@ describe('Layout', () => {
         'GET /me/applications': [() => json([])],
         'GET /listings': [() => json(page([]))],
       });
-    // MARKET-PLAN section 7 "Bottom bar per side": the apartments bar by role (spec 0010a), the
-    // market's the same for every account (spec 0010b).
+    // One tab order on both sides; only "הפעילות שלי" on apartments follows the role, and
+    // "לייקים" is the market's.
     const MARKET = [
-      [he.nav.market, '/market'],
+      [he.nav.search, '/market'],
       [he.header.likes, '/me/likes'],
       [he.nav.mine, '/market/mine'],
       [he.header.chat, '/chat'],
@@ -416,16 +422,17 @@ describe('Layout', () => {
     const BARS = {
       owner: {
         apartments: [
-          [he.header.myListings, '/me/listings'],
-          [he.header.chat, '/chat'],
           [he.nav.search, '/search'],
+          [he.nav.mine, '/me/listings'],
+          [he.header.chat, '/chat'],
+          [he.nav.profile, '/me/profile'],
         ],
         market: MARKET,
       },
       seeker: {
         apartments: [
           [he.nav.search, '/search'],
-          [he.nav.applications, '/me/applications'],
+          [he.nav.mine, '/me/applications'],
           [he.header.chat, '/chat'],
           [he.nav.profile, '/me/profile'],
         ],
@@ -454,7 +461,7 @@ describe('Layout', () => {
       window.localStorage.removeItem('homie.side');
     }
 
-    // On "שלי" only "שלי" is current, not "שוק" (`/market` is exact).
+    // On "הפעילות שלי" only it is current, not the market's "חיפוש" (`/market` is exact).
     signedIn(seeker);
     renderRoutes('/market/mine', <AppRoutes />);
     const nav = await within(screen.getByRole('banner')).findByRole('navigation', {
@@ -464,7 +471,7 @@ describe('Layout', () => {
       'aria-current',
       'page',
     );
-    expect(within(nav).getByRole('link', { name: he.nav.market })).not.toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: he.nav.search })).not.toHaveAttribute(
       'aria-current',
     );
   });
@@ -480,7 +487,7 @@ describe('Layout', () => {
     };
     // Spec 0010b: no roles in the market, one bar for an owner and a seeker.
     const market = [
-      [he.nav.market, '/market'],
+      [he.nav.search, '/market'],
       [he.header.likes, '/me/likes'],
       [he.nav.mine, '/market/mine'],
       [he.header.chat, '/chat'],
@@ -499,7 +506,7 @@ describe('Layout', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
-    // The apartments bar keeps the owner's tabs.
+    // The apartments bar: the same order, the owner's listings as "הפעילות שלי".
     mockApi({
       'GET /me': [() => json(owner)],
       'GET /me/conversations': [() => json([])],
@@ -508,9 +515,10 @@ describe('Layout', () => {
     });
     let view = renderRoutes('/search', <AppRoutes />);
     expect(await tabsOf()).toEqual([
-      [he.header.myListings, '/me/listings'],
-      [he.header.chat, '/chat'],
       [he.nav.search, '/search'],
+      [he.nav.mine, '/me/listings'],
+      [he.header.chat, '/chat'],
+      [he.nav.profile, '/me/profile'],
     ]);
     view.unmount();
     vi.unstubAllGlobals();

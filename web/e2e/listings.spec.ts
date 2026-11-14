@@ -37,7 +37,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await codeInput.fill(code ?? '');
   await page.getByRole('button', { name: he.auth.verify }).click();
   await expect(page).toHaveURL('/me/listings');
-  await expect(header.getByRole('link', { name: he.header.myListings })).toBeVisible();
+  await expect(header.getByRole('link', { name: he.nav.mine })).toBeVisible();
 
   // The wizard.
   await page.goto('/listings/new');
@@ -115,7 +115,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await card.getByRole('button', { name: he.listings.actions.pause }).click();
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.paused);
   await expect(card.getByRole('button', { name: he.listings.actions.resume })).toBeVisible();
-  await expect(header.getByRole('link', { name: he.header.myListings })).toBeVisible();
+  await expect(header.getByRole('link', { name: he.nav.mine })).toBeVisible();
 });
 
 test('ac12_owner_edits_listing', async ({ page }) => {

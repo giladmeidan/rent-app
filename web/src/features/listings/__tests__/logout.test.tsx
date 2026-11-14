@@ -36,7 +36,7 @@ describe('AuthMenu for an owner', () => {
     client.setQueryData<ListingOut[]>(MY_LISTINGS_KEY, [listing()]);
     renderRoutes('/', <AuthMenu />, client);
 
-    const link = await screen.findByRole('link', { name: he.header.myListings });
+    const link = await screen.findByRole('link', { name: he.nav.mine });
     expect(link).toHaveAttribute('href', '/me/listings');
 
     // The next person on this device must not see this owner's listings from the cache.
@@ -45,7 +45,7 @@ describe('AuthMenu for an owner', () => {
     expect(client.getQueryData(MY_LISTINGS_KEY)).toBeUndefined();
     // Mutations (and the bodies they sent) are forgotten too.
     expect(client.getMutationCache().getAll()).toHaveLength(0);
-    expect(screen.queryByRole('link', { name: he.header.myListings })).toBeNull();
+    expect(screen.queryByRole('link', { name: he.nav.mine })).toBeNull();
   });
 
   it('ac7_logout_clears_drafts', async () => {

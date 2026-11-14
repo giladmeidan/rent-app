@@ -161,7 +161,7 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   // The market's bar: five tabs.
   const bar = page.getByRole('navigation', { name: he.nav.label });
   await expect(bar.getByRole('link')).toHaveText(
-    [he.nav.market, he.header.likes, he.nav.mine, he.header.chat, he.nav.profile].map(
+    [he.nav.search, he.header.likes, he.nav.mine, he.header.chat, he.nav.profile].map(
       (label) => new RegExp(`^${label}`),
     ),
   );
