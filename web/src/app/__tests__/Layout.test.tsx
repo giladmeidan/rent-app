@@ -328,7 +328,7 @@ describe('Layout', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner with two new chats: "המודעות שלי", "צ'אט" (named with the count), "חיפוש".
+    // An owner with two new chats: "המודעות שלי", "פרסום דירה", "צ'אט" (named with the count), "חיפוש".
     signedIn(owner, {
       'GET /me/conversations': [
         () => json([conversation({ unread_count: 2 }), conversation({ is_new: true })]),
@@ -336,7 +336,12 @@ describe('Layout', () => {
     });
     view = renderRoutes('/search', <AppRoutes />);
     ({ nav, links } = await tabs());
-    expect(links.map(([, href]) => href)).toEqual(['/me/listings', '/chat', '/search']);
+    expect(links.map(([, href]) => href)).toEqual([
+      '/me/listings',
+      '/listings/new?type=apartment',
+      '/chat',
+      '/search',
+    ]);
     expect(within(nav).getByRole('link', { name: he.header.myListings })).toBeVisible();
     const chat = await within(nav).findByRole('link', {
       name: `${he.header.chat} ${i18n.t('header.chatNew', { count: 2 })}`,
@@ -417,6 +422,7 @@ describe('Layout', () => {
       owner: {
         apartments: [
           [he.header.myListings, '/me/listings'],
+          [he.nav.post, '/listings/new?type=apartment'],
           [he.header.chat, '/chat'],
           [he.nav.search, '/search'],
         ],
@@ -509,6 +515,7 @@ describe('Layout', () => {
     let view = renderRoutes('/search', <AppRoutes />);
     expect(await tabsOf()).toEqual([
       [he.header.myListings, '/me/listings'],
+      [he.nav.post, '/listings/new?type=apartment'],
       [he.header.chat, '/chat'],
       [he.nav.search, '/search'],
     ]);

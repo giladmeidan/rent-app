@@ -63,10 +63,12 @@ describe('MarketMinePage', () => {
     // No room: the market's own empty state.
     ({ view } = renderMine('/market/mine', owner, { 'GET /me/listings': [json([flat])] }));
     expect(await main().findByText(he.market.mine.empty)).toBeVisible();
-    expect(main().getByRole('link', { name: he.market.mine.emptyAction })).toHaveAttribute(
-      'href',
-      '/listings/new?type=room',
-    );
+    // One "new" action only: the empty state has no second button.
+    expect(
+      main()
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('href') === '/listings/new?type=room'),
+    ).toHaveLength(1);
     view.unmount();
     vi.unstubAllGlobals();
 

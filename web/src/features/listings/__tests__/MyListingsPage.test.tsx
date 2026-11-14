@@ -596,10 +596,9 @@ describe('MyListingsPage', () => {
     render();
     expect(await screen.findByText(he.listings.mine.empty)).toBeVisible();
     expect(document.querySelectorAll('img[src*="sleep"]')).toHaveLength(1);
-    expect(screen.getByRole('link', { name: he.listings.mine.emptyAction })).toHaveAttribute(
-      'href',
-      '/listings/new?type=apartment',
-    );
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
+    // One "new" action only: the header's; the empty state has no second button.
+    expect(document.querySelectorAll('a[href="/listings/new?type=apartment"]')).toHaveLength(1);
   });
 
   it('ac11_apartments_only', async () => {
@@ -645,14 +644,13 @@ describe('MyListingsPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Each side's empty state, with its own copy and action, while the other side has listings.
+    // Each side's empty state, with its own copy and one action, while the other side has listings.
     mockApi({ 'GET /me/listings': [json([room])] });
     view = render();
     expect(await screen.findByText(he.listings.mine.empty)).toBeVisible();
-    expect(screen.getByRole('link', { name: he.listings.mine.emptyAction })).toHaveAttribute(
-      'href',
-      '/listings/new?type=apartment',
-    );
+    expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
+    // One "new" action only: the header's; the empty state has no second button.
+    expect(document.querySelectorAll('a[href="/listings/new?type=apartment"]')).toHaveLength(1);
     expect(screen.getByText(i18n.t('listings.mine.count', { live: 1, cap: 3 }))).toBeVisible();
     view.unmount();
     vi.unstubAllGlobals();
@@ -660,10 +658,12 @@ describe('MyListingsPage', () => {
     mockApi({ 'GET /me/listings': [json([flat])] });
     renderRooms();
     expect(await screen.findByText(he.market.mine.empty)).toBeVisible();
-    expect(screen.getByRole('link', { name: he.market.mine.emptyAction })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: he.market.mine.newRoom })).toHaveAttribute(
       'href',
       '/listings/new?type=room',
     );
+    // One "new" action only: the header's; the empty state has no second button.
+    expect(document.querySelectorAll('a[href="/listings/new?type=room"]')).toHaveLength(1);
     expect(screen.queryByText(he.listings.mine.empty)).toBeNull();
   });
 

@@ -98,7 +98,7 @@ const STATES: State[] = [
     setup: { mine: [] },
     act: async (page) => {
       await expect(page.getByText(he.listings.mine.empty)).toBeVisible();
-      await expect(page.getByRole('link', { name: he.listings.mine.emptyAction })).toBeVisible();
+      await expect(page.getByRole('link', { name: he.listings.mine.new })).toHaveCount(1);
     },
   },
   {

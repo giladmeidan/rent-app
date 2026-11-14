@@ -250,11 +250,6 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
         message={room ? t('market.mine.empty') : t('listings.mine.empty')}
         // One turtle per screen: the publish line already has the celebrating one.
         pose={published ? undefined : 'sleep'}
-        action={
-          <Button variant="secondary" to={newPath}>
-            {room ? t('market.mine.emptyAction') : t('listings.mine.emptyAction')}
-          </Button>
-        }
       />
     );
   } else {
@@ -278,6 +273,7 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
 
   const count =
     live === undefined ? undefined : t('listings.mine.count', { live, cap: LISTING_CAP });
+  // The only "new" action, empty state included: the empty state has no button of its own.
   const newButton = (
     <Button variant="primary" to={newPath}>
       {room ? t('market.mine.newRoom') : t('listings.mine.new')}
