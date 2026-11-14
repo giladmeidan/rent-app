@@ -7,7 +7,7 @@ import he from '../../src/locales/he.json' with { type: 'json' };
 import type { MyApplicationOut } from '../../src/features/applications/api';
 import type { MyLikesOut } from '../../src/features/likes/api';
 import { API } from '../helpers';
-import { FIVE_APPLICATIONS, LIKED_ME, LIKES, PROFILE, SEEKER } from './fixtures-seeker';
+import { FIVE_APPLICATIONS, LIKES, PROFILE, SEEKER } from './fixtures-seeker';
 import { WEB_ORIGIN } from './origin';
 import { test } from '../fixtures';
 
@@ -18,8 +18,6 @@ type Setup = {
   withdraw?: 'error' | 'ok';
   likes?: Mode;
   likeLists?: MyLikesOut;
-  /** What `PUT /listings/{id}/like` answers. */
-  like?: 'mutual' | 'room_section_required';
 };
 
 const CORS = {
@@ -42,8 +40,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     applicationList = [],
     withdraw = 'ok',
     likes = 'ok',
-    likeLists = { liked_me: [], mine: [] },
-    like = 'mutual',
+    likeLists = { liked_me: [] },
   } = setup;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
@@ -73,14 +70,13 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     if (/^POST \/me\/applications\/[^/]+\/withdraw$/.test(key)) {
       return reply(route, { detail: 'boom' }, withdraw === 'error' ? 500 : 200);
     }
+    // The likes page's people part (spec 0010i) and its area names: empty.
+    if (key === 'GET /me/people-likes')
+      return reply(route, { liked_me: [], mine: [], matches: [] });
+    if (key === 'GET /areas') return reply(route, []);
     if (key === 'GET /me/likes') {
       if (likes === 'pending') return new Promise<void>(() => {});
       return likes === 'error' ? reply(route, { detail: 'boom' }, 500) : reply(route, likeLists);
-    }
-    if (/^PUT \/listings\/[^/]+\/like$/.test(key)) {
-      return like === 'mutual'
-        ? reply(route, { liked: true, application_id: FIVE_APPLICATIONS[1]?.id })
-        : reply(route, { detail: like }, 409);
     }
     unmatched.push(key);
     return route.fulfill({ status: 500, headers: CORS, body: `unmatched ${key}` });
@@ -167,10 +163,10 @@ const STATES: State[] = [
   },
   {
     name: '08-likes-empty',
-    setup: { likeLists: { liked_me: [], mine: [] } },
+    setup: { likeLists: { liked_me: [] } },
     path: LIKES_PATH,
     act: async (page) => {
-      await expect(page.getByText(he.likes.mineEmpty)).toBeVisible();
+      await expect(page.getByText(he.likes.likedMeEmpty)).toBeVisible();
     },
   },
   {
@@ -180,32 +176,6 @@ const STATES: State[] = [
     act: async (page) => {
       await expect(page.getByRole('article')).toHaveCount(6);
       await expect(page.getByTestId('match-badge')).toHaveCount(3);
-    },
-  },
-  {
-    name: '10-likes-mutual',
-    setup: { likeLists: LIKES },
-    path: LIKES_PATH,
-    act: async (page) => {
-      await page
-        .getByRole('article')
-        .filter({ hasText: LIKED_ME.listing.street })
-        .getByRole('button', { name: he.likes.like })
-        .click();
-      await expect(page.getByRole('status')).toContainText(he.likes.mutual);
-    },
-  },
-  {
-    name: '11-likes-card-error',
-    setup: { likeLists: LIKES, like: 'room_section_required' },
-    path: LIKES_PATH,
-    act: async (page) => {
-      await page
-        .getByRole('article')
-        .filter({ hasText: LIKED_ME.listing.street })
-        .getByRole('button', { name: he.likes.like })
-        .click();
-      await expect(page.getByRole('alert')).toBeVisible();
     },
   },
 ];

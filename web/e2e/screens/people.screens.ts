@@ -67,7 +67,6 @@ const ROOM: MyListingOut = {
   photos: [], // spec 0010d
   applicant_count: 0,
   new_applicant_count: 0,
-  liked_me_count: 1,
   flatmate_count: 0,
   flatmate_invite_active: false,
 };
@@ -95,13 +94,11 @@ const person = (id: number, overrides: Partial<PersonOut>): PersonOut => ({
   about_me: null,
   match: { score: 88, agrees: ['budget', 'area'], differs: 'pets' },
   liked_by_me: false,
-  liked_me: false,
   ...overrides,
 });
 
 const P1 = person(1, {
   display_name: 'מיכל אברהם',
-  liked_me: true,
   about_me: ABOUT_300,
   match: { score: 91, agrees: ['budget', 'area', 'lifestyle'], differs: null },
 });
@@ -130,7 +127,8 @@ type Setup = {
   people?: Mode | 404 | 409;
   items?: PersonOut[];
   total?: number;
-  like?: 'mutual' | 'already_applied' | 'rate_limited';
+  // The like's answer: an invite (spec 0010l, the default), or an error.
+  like?: 'invite' | 'already_applied' | 'rate_limited';
 };
 
 const CORS = {
@@ -154,7 +152,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     people = 'ok',
     items = [],
     total = items.length,
-    like = 'mutual',
+    like = 'invite',
   } = setup;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
@@ -190,7 +188,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     if (/^PUT \/listings\/[^/]+\/people\/[^/]+\/like$/.test(key)) {
       if (like === 'rate_limited') return reply(route, { detail: 'rate_limited' }, 429);
       if (like === 'already_applied') return reply(route, { detail: 'already_applied' }, 409);
-      return reply(route, { liked: true, application_id: '00000000-0000-0000-0000-0000000000dd' });
+      return reply(route, { liked: true });
     }
     unmatched.push(key);
     return route.fulfill({ status: 500, headers: CORS, body: `unmatched ${key}` });
@@ -274,15 +272,6 @@ const STATES: State[] = [
         'aria-expanded',
         'true',
       );
-    },
-  },
-  {
-    name: 'mutual-banner',
-    setup: { items: THREE, total: 3, like: 'mutual' },
-    path: PATH,
-    act: async (page) => {
-      await likeButton(page, 0).click();
-      await expect(page.getByRole('link', { name: he.people.toChat })).toBeVisible();
     },
   },
   {

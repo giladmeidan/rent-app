@@ -109,7 +109,7 @@ const ROOM_SEEKER = detail({
   flatmate_ages: [27, 30],
   lifestyle: { cleanliness: 3, kosher: 1, night: 2 },
   room_fit: true,
-  like: { liked_by_me: false, liked_me: true },
+  like: { liked_me: true }, // the lister invited the seeker (spec 0010l)
   applicant_count: 0,
   // Spec 0010f: the flat facts, and "גרים בדירה" (the lister lives there, one flatmate shown).
   room_size_sqm: 12,
@@ -179,7 +179,7 @@ async function mockApi(page: Page, { listing, seeker, applications = [] }: Setup
       return seeker ? reply(route, SEEKER) : reply(route, { detail: 'unauthenticated' }, 401);
     }
     if (key === 'GET /me/conversations') return reply(route, []);
-    if (key === 'GET /me/likes') return reply(route, { liked_me: [], mine: [] });
+    if (key === 'GET /me/likes') return reply(route, { liked_me: [] });
     if (key === 'GET /me/profile') {
       return reply(route, { ...PROFILE, parking_needed: 2, move_in_date: '2027-01-01' });
     }
@@ -262,7 +262,7 @@ const STATES: State[] = [
     name: 'room-seeker',
     setup: { listing: ROOM_SEEKER, seeker: true },
     act: async (page) => {
-      await expect(page.getByText(he.likes.likedYouLine)).toBeVisible();
+      await expect(page.getByText(he.applications.room.invitedHint)).toBeVisible();
       await expect(page.getByTestId('room-lifestyle')).toBeVisible();
       await expect(page.getByRole('region', { name: he.rooms.people.title })).toBeVisible();
       await mapReady(page);

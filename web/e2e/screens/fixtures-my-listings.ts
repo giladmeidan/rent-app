@@ -39,7 +39,6 @@ export const FIVE: MyListingOut[] = [
     flatmates_count: 2,
     applicant_count: 4,
     new_applicant_count: 1,
-    liked_me_count: 2,
     flatmate_count: 1,
     expires_at: '2027-01-05T10:00:00Z',
   }),

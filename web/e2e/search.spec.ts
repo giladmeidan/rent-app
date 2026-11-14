@@ -204,7 +204,8 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   // 0009j AC6, as the same visitor (no sign-up; kept out of applications.spec.ts's long ac9): a
   // visitor's apply region holds the count and the log-in prompt, and the phone bar is offered.
   await test.step('0009j the listing page on a desktop and a phone', async () => {
-    const apply = page.getByRole('region', { name: he.applications.heading });
+    // A room: the section and the bar read "I'm interested" (spec 0010l).
+    const apply = page.getByRole('region', { name: he.applications.room.cta });
     const bar = page.getByTestId('apply-bar');
     const overflow = () =>
       page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -230,8 +231,8 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/listings/${roomId}`);
     await expect(bar).toBeVisible();
-    await bar.getByRole('button', { name: he.applications.apply }).click();
-    const heading = apply.getByRole('heading', { level: 2, name: he.applications.heading });
+    await bar.getByRole('button', { name: he.applications.room.cta }).click();
+    const heading = apply.getByRole('heading', { level: 2, name: he.applications.room.cta });
     await expect(heading).toBeFocused();
     const shown = await apply.boundingBox();
     expect(shown).not.toBeNull();

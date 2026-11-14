@@ -63,7 +63,6 @@ function listing(overrides: Partial<MyListingOut>): MyListingOut {
     photos: [], // spec 0010d
     applicant_count: 5,
     new_applicant_count: 2,
-    liked_me_count: 0,
     flatmate_count: 0,
     flatmate_invite_active: false,
     ...overrides,

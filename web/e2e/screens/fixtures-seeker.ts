@@ -153,10 +153,11 @@ export const LIKED_ME = room({
   match: { score: 82, agrees: ['budget', 'area'], differs: null },
 });
 
-/** Two "liked me" and four "mine" rooms, two of them with a match. */
+/** Six rooms that liked the seeker, three of them with a match (spec 0010l: no "mine"). */
 export const LIKES: MyLikesOut = {
-  liked_me: [LIKED_ME, room({ street: 'ארלוזורוב', city: 'רמת גן', flatmate_ages: [45, 52] })],
-  mine: [
+  liked_me: [
+    LIKED_ME,
+    room({ street: 'ארלוזורוב', city: 'רמת גן', flatmate_ages: [45, 52] }),
     room({
       street: 'הנביאים',
       city: 'גבעתיים',

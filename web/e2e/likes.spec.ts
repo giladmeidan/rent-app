@@ -42,7 +42,10 @@ async function layoutOf(page: Page, locator: Locator) {
   return { box: box as NonNullable<typeof box>, clientWidth, scrollWidth };
 }
 
-test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
+// Spec 0010l AC12/AC13: a lister likes (invites) a seeker in people browse; the seeker opens the
+// room from `/me/likes`, applies without a message, sees "התאמה הדדית", follows the chat link and
+// sends a message the lister receives.
+test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const name = `Liker${suffix}`;
   const street = `חדר ${suffix}`;
@@ -112,7 +115,8 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   await page.getByRole('button', { name: he.profile.save }).click();
   await expect(page.getByText(he.profile.saved)).toBeVisible();
 
-  // An owner (a second browser context) posts a room and likes the seeker through the API.
+  // An owner (a second browser context) posts a room and likes (invites) the seeker through the
+  // API. The context stays open: the owner receives the seeker's message at the end.
   const ownerContext = await newTileContext(browser);
   const ownerPage = await ownerContext.newPage();
   await signUp(ownerPage, 'owner');
@@ -124,8 +128,7 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
     lifestyle: {},
   });
   const personId = await findPerson(ownerPage, roomId, name);
-  expect(await likePerson(ownerPage, roomId, personId)).toBeNull();
-  await ownerContext.close();
+  await likePerson(ownerPage, roomId, personId);
 
   // The seeker's header shows "לייקים" with one room that liked them (a market tab, spec 0010a).
   await page.goto('/market');
@@ -136,9 +139,11 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
   await nav.click();
   await expect(page).toHaveURL('/me/likes');
 
-  // The room is under "אהבו אותך"; liking back opens the chat.
+  // The room is under "אהבו אותך", a plain link to its page: no like button, no "rooms I liked".
   const likedMe = page.getByRole('region', { name: he.likes.likedMe });
-  await expect(likedMe.getByRole('link', { name: new RegExp(street) })).toBeVisible();
+  const roomLink = likedMe.getByRole('link', { name: new RegExp(street) });
+  await expect(roomLink).toBeVisible();
+  await expect(likedMe.getByRole('button')).toHaveCount(0);
   await expectNoAxeViolations(page, '/me/likes');
 
   await test.step('0009qa lists at 1440 and 390', async () => {
@@ -162,12 +167,36 @@ test('ac9_seeker_likes_back_and_chats', async ({ page, browser }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
   });
 
-  await likedMe.getByRole('button', { name: he.likes.like }).click();
-  await expect(page.getByText(he.likes.mutual)).toBeVisible();
-  const chat = page.getByRole('link', { name: he.likes.toChat });
+  // The room page: the invite hint above the one action, "אני מעוניין/ת"; applied without a
+  // message, it comes back as a mutual match with the chat link, which takes focus.
+  await roomLink.click();
+  await expect(page).toHaveURL(`/listings/${roomId}`);
+  const actions = page.getByTestId('listing-actions');
+  await expect(actions.getByText(he.applications.room.invitedHint)).toBeVisible();
+  await expectNoAxeViolations(page, '/listings/:id');
+  await actions.getByRole('button', { name: he.applications.room.cta }).click();
+  await expect(actions.getByLabel(he.applications.room.messageOptional)).toBeVisible();
+  await actions.getByRole('button', { name: he.applications.form.submit }).click();
+  await expect(actions.getByTestId('application-mutual')).toHaveText(he.applications.mutual);
+  const chat = actions.getByRole('link', { name: he.applications.chat });
   await expect(chat).toHaveAttribute('href', /^\/chat\/[0-9a-f-]{36}$/);
+  await expect(chat).toBeFocused();
+  const chatHref = (await chat.getAttribute('href')) ?? '';
   await chat.click();
-  await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(chatHref);
+
+  // The seeker writes; the lister receives it.
+  const hello = `שלום ${suffix}`;
+  await page.getByLabel(he.chat.composer.label).fill(hello);
+  await page.getByRole('button', { name: he.chat.composer.send }).click();
+  await expect(
+    page.getByRole('log', { name: he.chat.thread.log }).getByText(hello, { exact: true }),
+  ).toBeVisible();
+  await ownerPage.goto(chatHref);
+  await expect(
+    ownerPage.getByRole('log', { name: he.chat.thread.log }).getByText(hello, { exact: true }),
+  ).toBeVisible();
+  await ownerContext.close();
 
   // The market's "שלי", its room applications panel (spec 0010a; 0010b: the second of two),
   // shows the room tagged as a mutual match, with no message block.
