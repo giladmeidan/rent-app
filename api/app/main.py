@@ -24,6 +24,7 @@ from app.routers import (
     flatmates,
     health,
     listings,
+    market_people,
     people,
     photos,
     profiles,
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(events.router)
     app.include_router(profiles.router)
     app.include_router(people.router)
+    app.include_router(market_people.router)
     app.include_router(flatmates.router)
     app.include_router(photos.router)
     if settings.photo_backend == "file":

@@ -191,7 +191,10 @@ def _own_room(db: Session, owner: User, listing_id: uuid.UUID, *, lock: bool = F
     return listing
 
 
-def _count_like(r: RedisClient, user: User) -> None:
+def count_like(r: RedisClient, user: User) -> None:
+    """Count one like attempt of `user` against `rl:like:user:*` (`LIKE_RATE_LIMIT_HOUR` /
+    `_DAY`): room likes, lister likes and person likes (spec 0010h) share it. Raises
+    `RateLimitedError`."""
     count_or_raise(
         r,
         (
@@ -203,7 +206,7 @@ def _count_like(r: RedisClient, user: User) -> None:
 
 # The card's profile columns, by name (NF2): never the entity, so `budget_max_ils`, `household`,
 # pets, smoker, contract, parking and `flatmate_gender` are never loaded.
-_CARD_COLUMNS = (
+CARD_COLUMNS = (
     SeekerProfile.gender,
     SeekerProfile.birth_year,
     SeekerProfile.area_ids,
@@ -219,7 +222,7 @@ def list_people(
 ) -> tuple[Sequence[Row[Any]], int]:
     """One page (`PEOPLE_LIMIT`) of the candidates of one of `owner`'s live room listings, and
     their total. Each row has `RoomPair.id`, both like timestamps, `display_name`, `photo_key`, the
-    card columns (`_CARD_COLUMNS`) and the match columns (budget at the pair's frozen price). Order:
+    card columns (`CARD_COLUMNS`) and the match columns (budget at the pair's frozen price). Order:
     those who liked the room first, then score, then the pair's age, then its id.
 
     Three statements after the session lookup: the listing (`_own_room`), the snapshot (every
@@ -273,7 +276,7 @@ def list_people(
             page.add_columns(
                 User.display_name,
                 User.photo_key,
-                *_CARD_COLUMNS,
+                *CARD_COLUMNS,
                 *columns,
                 func.count().over().label("total"),
             )
@@ -387,7 +390,7 @@ def like_person(
     Commits."""
     try:
         listing = _own_room(db, owner, listing_id, lock=True)
-        _count_like(r, owner)
+        count_like(r, owner)
         pair = db.scalar(
             update(RoomPair)
             .where(
@@ -475,7 +478,7 @@ def like_room(
             raise ListingNotFoundError
         if fit is False:
             raise RoomGenderMismatchError
-        _count_like(r, seeker)
+        count_like(r, seeker)
         stmt = insert(RoomPair).values(
             listing_id=listing.id,
             seeker_id=seeker.id,

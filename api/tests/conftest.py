@@ -110,14 +110,14 @@ def migrated_db() -> Iterator[Engine]:
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
     """Per-test engine on clean `listing_photos`, `conversation_reads`, `listing_flatmates`,
-    `room_pairs`, `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`,
-    `sessions`, `users` and `areas` tables."""
+    `room_pairs`, `person_pairs`, `seeker_profiles`, `messages`, `conversations`, `applications`,
+    `listings`, `sessions`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
                 "TRUNCATE TABLE listing_photos, conversation_reads, listing_flatmates, room_pairs,"
-                " seeker_profiles, messages, conversations, applications, listings, sessions,"
-                " users, areas"
+                " person_pairs, seeker_profiles, messages, conversations, applications, listings,"
+                " sessions, users, areas"
             )
         )
     yield migrated_db
@@ -300,6 +300,54 @@ def make_profile(engine: Engine, user_id: uuid.UUID, area_id: uuid.UUID, **overr
     )
     with engine.begin() as conn:
         conn.execute(text(f"INSERT INTO seeker_profiles ({columns}) VALUES ({params})"), values)
+
+
+def make_card(
+    engine: Engine,
+    user_id: uuid.UUID,
+    area_id: uuid.UUID,
+    *,
+    gender: str,
+    flatmate_gender: str = "any",
+    **overrides: Any,
+) -> uuid.UUID:
+    """Show `user_id`'s card in שוק השותפים (spec 0010h): `make_profile` with both parts (`P0`'s
+    looking part, the personal part's `gender`), `flatmate_gender` and `people_visible`. Returns
+    the user's `card_id`. `overrides` may set any other profile column."""
+    make_profile(
+        engine,
+        user_id,
+        area_id,
+        gender=gender,
+        flatmate_gender=flatmate_gender,
+        people_visible=True,
+        **overrides,
+    )
+    with engine.connect() as conn:
+        card_id: uuid.UUID = conn.execute(
+            text("SELECT card_id FROM users WHERE id = :id"), {"id": user_id}
+        ).scalar_one()
+    return card_id
+
+
+def make_person_like(engine: Engine, liker: uuid.UUID, liked: uuid.UUID) -> None:
+    """`liker` likes `liked` (spec 0010h): the ordered `person_pairs` row, written or updated
+    directly with the liker's side set to now() (an earlier like kept). Bypasses the service, its
+    candidate rule, its limiter and the chat a mutual like opens."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO person_pairs (user_low, user_high, low_liked_at, high_liked_at)"
+                " VALUES (least(CAST(:a AS uuid), CAST(:b AS uuid)),"
+                " greatest(CAST(:a AS uuid), CAST(:b AS uuid)),"
+                " CASE WHEN CAST(:a AS uuid) < CAST(:b AS uuid) THEN now() END,"
+                " CASE WHEN CAST(:a AS uuid) > CAST(:b AS uuid) THEN now() END)"
+                " ON CONFLICT (user_low, user_high) DO UPDATE SET"
+                " low_liked_at = coalesce(person_pairs.low_liked_at, excluded.low_liked_at),"
+                " high_liked_at = coalesce(person_pairs.high_liked_at, excluded.high_liked_at)"
+            ),
+            {"a": liker, "b": liked},
+        )
 
 
 def make_application(

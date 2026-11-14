@@ -13,6 +13,10 @@ Room-liker side: `PUT` / `DELETE /listings/{listing_id}/like` and `GET /me/likes
 room, an apartment and a flat they live in are a 404 on the `PUT`. The `DELETE` is always a 204,
 so it reveals nothing about the listing.
 
+Browsing a room's people shares one browse rate limit per user with `GET /people` (spec 0010h,
+`market_people.BROWSE_RATE_LIMIT_HOUR` / `_DAY`; a 429 with `Retry-After`), counted before the
+listing gate, so every attempt counts.
+
 Both like `PUT`s share one rate limit per user (`LIKE_RATE_LIMIT_HOUR` / `_DAY`, a 429 with
 `Retry-After`), counted only once the listing gate passed. A like that makes the pair mutual
 returns the new shortlisted application's id (also its chat's) and, after the commit, publishes a
@@ -44,6 +48,7 @@ from app.schemas.people import (
 from app.schemas.search import ListingPublic
 from app.services import chat as chat_service
 from app.services import chat_events
+from app.services import market_people as market_people_service
 from app.services import people as people_service
 from app.services import photos as photos_service
 from app.services import profiles as profiles_service
@@ -107,6 +112,7 @@ def _person_out(row: Row[Any]) -> PersonOut:
             "model": ErrorOut,
             "description": "listing_not_live: paused, expired, or its area inactive",
         },
+        **_RATE_LIMITED,
     },
 )
 def list_people(
@@ -114,7 +120,13 @@ def list_people(
     params: Annotated[PeopleParams, Query()],
     user: UserDep,
     db: DbDep,
+    r: RedisDep,
 ) -> PeoplePageOut:
+    # Spec 0010h: one browse counter for both people surfaces, counted before anything else.
+    try:
+        market_people_service.count_browse(r, user)
+    except RateLimitedError as exc:
+        raise _rate_limited(exc) from None
     try:
         rows, total = people_service.list_people(db, user, listing_id, params.offset)
     except ListingNotFoundError:
