@@ -117,6 +117,8 @@ describe('LandingPage', () => {
     expect(card.queryByRole('heading')).toBeNull();
   });
 
+  const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   it('ac3_doors', async () => {
     await visitLanding();
     const doors = region(he.landing.doors.title);
@@ -128,26 +130,33 @@ describe('LandingPage', () => {
     const copy = he.landing.doors;
     expect(links).toHaveLength(4);
     const expected = [
-      { title: copy.map.title, href: '/search?view=map', more: copy.map.more },
+      { title: copy.map.title, text: copy.map.text, href: '/search?view=map', more: copy.map.more },
       {
         title: copy.match.title,
+        text: copy.match.text,
         href: '/signup?role=seeker&next=%2Fme%2Fprofile',
         more: copy.match.more,
       },
-      { title: copy.market.title, href: '/market', more: copy.market.more },
-      { title: copy.owner.title, href: OWNER_SIGNUP, more: copy.owner.more },
+      { title: copy.market.title, text: copy.market.text, href: '/market', more: copy.market.more },
+      { title: copy.owner.title, text: copy.owner.text, href: OWNER_SIGNUP, more: copy.owner.more },
     ];
     expected.forEach((door, i) => {
       const link = links[i] as HTMLElement;
-      // Named by its <h3> alone: the "more" label is not part of the name.
-      expect(within(doors).getByRole('link', { name: door.title })).toBe(link);
+      // Label in Name (WCAG 2.5.3): the name is the visible text, title first.
+      const byTitle = (name: string) => name.startsWith(door.title);
+      expect(within(doors).getByRole('link', { name: byTitle })).toBe(link);
+      expect(link).toHaveAccessibleName(
+        expect.stringMatching(new RegExp(`^${escapeRe(door.title)}`)),
+      );
+      expect(link).toHaveAccessibleName(expect.stringContaining(door.text));
+      expect(link).toHaveAccessibleName(expect.stringContaining(door.more));
       expect(link).toHaveAttribute('href', door.href);
       expect(within(link).getByRole('heading', { level: 3, name: door.title })).toBeVisible();
       expect(within(link).getByText(door.more)).toBeVisible();
       // One decorative mini-illustration per door.
       expect(link.querySelectorAll('[aria-hidden="true"] > *').length).toBeGreaterThan(0);
     });
-    // The owner door's "פרסום דירה" never names a link of that name.
+    // The owner door's name ends in its "more" label, "פרסום דירה", but is not that name alone.
     expect(within(doors).queryByRole('link', { name: he.landing.cta.owner })).toBeNull();
 
     // The illustrations' words and numbers are hidden from assistive technology.
@@ -219,6 +228,8 @@ describe('LandingPage', () => {
 
       expect(screen.queryByRole('heading', { name: he.landing.latest.title }), label).toBeNull();
       expect(screen.queryByText(he.landing.latest.subtitle), label).toBeNull();
+      // alert / skeleton / aria-busy guard against a future loading or error UI; the query-state
+      // check and the missing heading carry the test.
       expect(screen.queryByRole('alert'), label).toBeNull();
       expect(screen.queryByTestId('skeleton'), label).toBeNull();
       expect(document.querySelector('main [aria-busy="true"]'), label).toBeNull();

@@ -23,17 +23,14 @@ type DoorProps = {
   wide?: boolean;
 };
 
-/** One door: the whole card is one link, named by its `<h3>` alone. */
+/** One door: the whole card is one link, named by its visible text (WCAG 2.5.3 Label in Name). */
 function Door({ id, to, icon, title, text, more, mini, wide = false }: DoorProps) {
-  const titleId = `landing-door-${id}`;
   const body = (
     <>
       <span className="flex size-11 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
         {icon}
       </span>
-      <h3 id={titleId} className="text-h3">
-        {title}
-      </h3>
+      <h3 className="text-h3">{title}</h3>
       <p className="text-body-sm text-ink-muted">{text}</p>
     </>
   );
@@ -51,7 +48,6 @@ function Door({ id, to, icon, title, text, more, mini, wide = false }: DoorProps
   return (
     <Link
       to={to}
-      aria-labelledby={titleId}
       data-door={id}
       className={cx(
         'landing-door landing-reveal flex flex-col gap-3 overflow-hidden rounded-lg border border-border bg-surface p-5',

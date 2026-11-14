@@ -81,8 +81,8 @@ function content(icon: ReactNode, children: ReactNode, end: ReactNode) {
 
 /**
  * The kit's button: a native `<button type="button">`, or a router `Link` when given `to`.
- * Variants `primary` (ink), `secondary`, `soft`, `ghost`, `danger`, `inverse` (outline on ink); sizes `sm` / `md` (44px) /
- * `lg` (52px); every variant carries the accent focus ring.
+ * Variants `primary` (ink), `secondary`, `soft`, `ghost`, `danger`, `inverse` (outline on ink);
+ * sizes `sm` / `md` (44px) / `lg` (52px); every variant carries the accent focus ring.
  */
 export const Button = forwardRef(function Button(
   props: ButtonProps,
