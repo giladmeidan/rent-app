@@ -1,12 +1,13 @@
 // The visual check for "my listings" (spec 0009o, AC6): one screenshot per state at each project's
-// size, in web/screens/0009o/. Every API request is answered here, so it needs only the vite
-// server: no sign-up, no OTP. An unmatched request fails the run.
+// size, in web/screens/0009o/ (a state's `spec` names another folder: 0011a's renewal). Every API
+// request is answered here, so it needs only the vite server: no sign-up, no OTP. An unmatched
+// request fails the run.
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
 import type { MyListingOut } from '../../src/features/listings/api';
 import { API } from '../helpers';
-import { FIVE, OWNER } from './fixtures-my-listings';
+import { daysFromNow, FIVE, OWNER } from './fixtures-my-listings';
 import { WEB_ORIGIN } from './origin';
 import { test } from '../fixtures';
 
@@ -15,6 +16,8 @@ type Setup = {
   mine?: MyListingOut[] | 'pending' | 'error';
   /** The answer to every PATCH /listings/{id}. */
   patch?: { status: number; body: unknown };
+  /** The answer to every POST /listings/{id}/renew (spec 0011a). */
+  renew?: { status: number; body: unknown };
   /** The router state the page arrives with (as the wizard's navigate would give it). */
   arrive?: { saved?: true; published?: true };
 };
@@ -34,7 +37,11 @@ const reply = (route: Route, body: unknown, status = 200) =>
 
 async function mockApi(page: Page, setup: Setup): Promise<string[]> {
   const unmatched: string[] = [];
-  const { mine = FIVE, patch = { status: 200, body: {} } } = setup;
+  const {
+    mine = FIVE,
+    patch = { status: 200, body: {} },
+    renew = { status: 200, body: {} },
+  } = setup;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -44,7 +51,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
         status: 204,
         headers: {
           ...CORS,
-          'Access-Control-Allow-Methods': 'GET, PATCH',
+          'Access-Control-Allow-Methods': 'GET, PATCH, POST',
           'Access-Control-Allow-Headers': 'content-type',
         },
       });
@@ -58,6 +65,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
       return mine === 'error' ? reply(route, { detail: 'boom' }, 500) : reply(route, mine);
     }
     if (/^PATCH \/listings\/[^/]+$/.test(key)) return reply(route, patch.body, patch.status);
+    if (/^POST \/listings\/[^/]+\/renew$/.test(key)) return reply(route, renew.body, renew.status);
     unmatched.push(key);
     return route.fulfill({ status: 500, headers: CORS, body: `unmatched ${key}` });
   });
@@ -72,6 +80,8 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
 }
 
 type State = {
+  /** The screenshot folder (web/screens/<spec>/); default 0009o. */
+  spec?: string;
   name: string;
   setup: Setup;
   /** What to wait for, and do, before the shot. */
@@ -105,14 +115,15 @@ const STATES: State[] = [
     name: 'five-cards',
     setup: {},
     act: async (page) => {
-      await expect(page.getByRole('article')).toHaveCount(5);
+      // The apartments only (spec 0010a): the rooms are the market's.
+      await expect(page.getByRole('article')).toHaveCount(3);
     },
   },
   {
     name: 'saved',
     setup: { arrive: { saved: true } },
     act: async (page) => {
-      await expect(page.getByRole('article')).toHaveCount(5);
+      await expect(page.getByRole('article')).toHaveCount(3);
       await expect(page.getByText(he.listings.edit.saved)).toBeVisible();
     },
   },
@@ -136,6 +147,27 @@ const STATES: State[] = [
       await expect(page.getByText(he.listings.mine.published)).toBeVisible();
     },
   },
+  {
+    spec: '0011a',
+    name: 'renewed',
+    setup: {
+      renew: {
+        status: 200,
+        body: { ...(FIVE[2] as MyListingOut), status: 'active', expires_at: daysFromNow(90) },
+      },
+    },
+    act: async (page) => {
+      // Card 3: the expired apartment.
+      await page
+        .getByRole('article')
+        .nth(2)
+        .getByRole('button', { name: he.listings.actions.renew })
+        .click();
+      await expect(
+        page.getByText(he.listings.renew.done.split('{{date}}')[0] as string),
+      ).toBeVisible();
+    },
+  },
 ];
 
 for (const state of STATES) {
@@ -147,7 +179,7 @@ for (const state of STATES) {
     await page.screenshot({
       fullPage: true,
       animations: 'disabled',
-      path: `screens/0009o/${state.name}-${testInfo.project.name}.png`,
+      path: `screens/${state.spec ?? '0009o'}/${state.name}-${testInfo.project.name}.png`,
     });
     expect(unmatched, 'unmatched API requests').toEqual([]);
   });

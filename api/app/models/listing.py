@@ -17,8 +17,8 @@ them and is a fact of any listing since 0020.
 
 Price signals (spec 0014b, migration 0020): `safe_room`, `air_conditioning` and `condition`,
 optional and public, on any listing. The closure answer `close_reason`, `final_rent_ils` and
-`closed_at` is private: only the owner's `GET /me/listings` returns the first two; a resume clears
-all three. Every price a listing had is a `listing_price_changes` row
+`closed_at` is private: only the owner's `GET /me/listings` returns the first two; a resume or a
+renewal clears all three. Every price a listing had is a `listing_price_changes` row
 (`models/listing_price_change.py`).
 
 Location (spec 0003c): `location` is the **approximate** point (`services/geocoding.py`
@@ -228,7 +228,7 @@ class Listing(Base):
     air_conditioning: Mapped[bool | None] = mapped_column(Boolean)
     condition: Mapped[str | None] = mapped_column(Text)
     # The closure answer (spec 0014b): private to the owner, set only while not live, cleared by a
-    # resume (`services/listings.py`).
+    # resume or a renewal (`services/listings.py`).
     close_reason: Mapped[str | None] = mapped_column(Text)
     final_rent_ils: Mapped[int | None] = mapped_column(Integer)  # monthly
     closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

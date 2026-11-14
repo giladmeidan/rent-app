@@ -52,6 +52,7 @@ LIMITED: list[tuple[str, str, str, Any]] = [
     ("POST", "/listings", "CREATE", _apartment),
     ("PATCH", "/listings/{listing_id}", "WRITE", {"price_ils": 7000}),
     ("PUT", "/listings/{listing_id}/closure", "WRITE", {"reason": "not_renting"}),
+    ("POST", "/listings/{listing_id}/renew", "WRITE", None),
     ("POST", "/me/applications/{application_id}/withdraw", "WRITE", None),
     (
         "PATCH",
@@ -136,7 +137,7 @@ def test_ac1_every_write_route_has_a_limit() -> None:
         for method in (route.methods or set()) & WRITES
     }
     limited = {(method, path) for method, path, _, _ in LIMITED if method in WRITES}
-    assert len(limited) == 17
+    assert len(limited) == 18
     assert not (limited & OWN) and not (limited & EXEMPT) and not (OWN & EXEMPT)
     assert routes == limited | OWN | EXEMPT
 

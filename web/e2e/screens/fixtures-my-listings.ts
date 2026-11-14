@@ -7,6 +7,10 @@ export { OWNER };
 
 const PAST = '2026-10-01T10:00:00Z';
 
+/** An ISO timestamp `n` days from now: the live cards stay outside the renewal window (spec 0011a). */
+export const daysFromNow = (n: number): string =>
+  new Date(Date.now() + n * 86_400_000).toISOString();
+
 const card = (id: number, overrides: Partial<MyListingOut>): MyListingOut =>
   base({ id: `00000000-0000-0000-0000-00000000000${String(id)}`, ...overrides });
 
@@ -15,7 +19,7 @@ export const FIVE: MyListingOut[] = [
   card(1, {
     applicant_count: 12,
     new_applicant_count: 5,
-    expires_at: '2026-12-12T10:00:00Z',
+    expires_at: daysFromNow(28),
   }),
   card(2, {
     status: 'paused',
@@ -23,7 +27,7 @@ export const FIVE: MyListingOut[] = [
     city: 'רמת גן',
     price_ils: 6400,
     applicant_count: 3,
-    expires_at: '2027-01-20T10:00:00Z',
+    expires_at: daysFromNow(67),
   }),
   card(3, {
     street: 'הרצל',
@@ -40,7 +44,7 @@ export const FIVE: MyListingOut[] = [
     applicant_count: 4,
     new_applicant_count: 1,
     flatmate_count: 1,
-    expires_at: '2027-01-05T10:00:00Z',
+    expires_at: daysFromNow(52),
   }),
   card(5, {
     listing_type: 'room',

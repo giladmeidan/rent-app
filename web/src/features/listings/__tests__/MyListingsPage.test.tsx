@@ -18,6 +18,7 @@ import {
   empty,
   json,
   mockApi,
+  networkError,
   renderAt,
   renderRoutes,
   testQueryClient,
@@ -30,6 +31,7 @@ import type { MyListingOut } from '../api';
 import { listing, withoutCounts } from './fixtures';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -39,6 +41,24 @@ const renderRooms = () => renderAt('/market/mine', <MyListingsPage type="room" p
 const badge = (card: HTMLElement) => within(card).getByTestId('status-badge');
 const newLink = () => screen.getByRole('link', { name: he.listings.mine.new });
 const c = he.listings.closure;
+const act0011a = he.listings.actions;
+/** An ISO timestamp `n` days from now (window tests, spec 0011a). */
+const days = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
+const dateOf = (iso: string) => formatDate(todayInIsrael(new Date(iso)));
+/** A card's links and buttons in document order, by text. */
+const controls = (card: HTMLElement) =>
+  within(card)
+    .queryAllByRole('link')
+    .concat(within(card).queryAllByRole('button'))
+    .sort((x, y) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+    .map((el) => el.textContent ?? '');
+/** The actions row only: pause / resume, renew, edit. */
+const actionsRow = (card: HTMLElement) =>
+  controls(card).filter((text) =>
+    [act0011a.pause, act0011a.resume, act0011a.renew, act0011a.edit].includes(text),
+  );
+const cardTitle = (l: MyListingOut) =>
+  i18n.t('listings.card.title', { count: 3, rooms: '3', street: l.street, city: l.city });
 /** Pausing an apartment opens the closure dialog (spec 0014b): "לא עכשיו" closes it. */
 const skipClosure = async () => {
   fireEvent.click(await screen.findByRole('button', { name: c.skip }));
@@ -106,12 +126,12 @@ describe('MyListingsPage', () => {
         .getAllByRole('button')
         .map((b) => b.textContent),
     ).toEqual([he.listings.actions.resume, c.title]);
-    // Spec 0014b: a paused or expired apartment asks what happened.
+    // Spec 0014b: a paused or expired apartment asks what happened; 0011a: an expired one renews.
     expect(
       within(expiredCard)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual([c.title]);
+    ).toEqual([he.listings.actions.renew, c.title]);
     expect(newLink()).toHaveAttribute('href', '/listings/new?type=apartment');
     expect(api.calls('GET /me/listings')[0]?.request.credentials).toBe('include');
   });
@@ -216,8 +236,8 @@ describe('MyListingsPage', () => {
     // the paused and expired ones also ask what happened (spec 0014b).
     expect(within(cards[0] as HTMLElement).getAllByRole('button')).toHaveLength(1);
     expect(within(cards[1] as HTMLElement).getAllByRole('button')).toHaveLength(2);
-    // Expired: no pause / resume; paused past expiry keeps its resume button (unchanged).
-    expect(within(cards[2] as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    // Past expiry, active or paused: no pause / resume, renew and the closure question (0011a).
+    expect(within(cards[2] as HTMLElement).getAllByRole('button')).toHaveLength(2);
     expect(within(cards[3] as HTMLElement).getAllByRole('button')).toHaveLength(2);
     // (The harness's location probe is an <output>, which is also a status.)
     expect(screen.queryByText(he.listings.edit.saved)).toBeNull();
@@ -532,6 +552,7 @@ describe('MyListingsPage', () => {
       a(paused.applicant_count, paused.new_applicant_count),
     ]);
     expect(order(cExpired as HTMLElement)).toEqual([
+      he.listings.actions.renew,
       c.title,
       a(expired.applicant_count, expired.new_applicant_count),
     ]);
@@ -562,7 +583,7 @@ describe('MyListingsPage', () => {
       i18n.t('listings.mine.flatmates', { count: 1 }),
     ]);
     expect(order(cPausedPast as HTMLElement)).toEqual([
-      he.listings.actions.resume,
+      he.listings.actions.renew,
       a(pausedPast.applicant_count, pausedPast.new_applicant_count),
       i18n.t('listings.mine.flatmates', { count: pausedPast.flatmate_count }),
     ]);
@@ -907,5 +928,190 @@ describe('MyListingsPage', () => {
     const [resumed, kept] = client.getQueryData<MyListingOut[]>(MY_LISTINGS_KEY) ?? [];
     expect(resumed).toMatchObject({ status: 'active', close_reason: null, final_rent_ils: null });
     expect(kept).toMatchObject(answer);
+  });
+
+  it('ac10_renew_button_in_window', async () => {
+    const soon = listing({ street: 'אחד', expires_at: days(3) });
+    const later = listing({ street: 'שתיים', expires_at: days(8) });
+    const pausedSoon = listing({ street: 'שלוש', status: 'paused', expires_at: days(3) });
+    const expired = listing({ street: 'ארבע', expires_at: days(-1) });
+    const pausedPast = listing({ street: 'חמש', status: 'paused', expires_at: days(-1) });
+    const expiredRoom = listing({
+      street: 'שש',
+      listing_type: 'room',
+      flatmates_count: 2,
+      expires_at: days(-1),
+    });
+    const all = [soon, later, pausedSoon, expired, pausedPast, expiredRoom];
+    mockApi({ 'GET /me/listings': [json(all)] });
+    let view = render();
+    const cards = (await screen.findAllByRole('article')) as HTMLElement[];
+    expect(cards.map(actionsRow)).toEqual([
+      [act0011a.pause, act0011a.renew, act0011a.edit],
+      [act0011a.pause, act0011a.edit],
+      [act0011a.resume, act0011a.renew, act0011a.edit],
+      [act0011a.renew],
+      [act0011a.renew],
+    ]);
+    [soon, later, pausedSoon, expired, pausedPast].forEach((l, i) => {
+      const renew = within(cards[i] as HTMLElement).queryByRole('button', {
+        name: act0011a.renew,
+      });
+      if (renew !== null) expect(renew).toHaveAccessibleDescription(cardTitle(l));
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The expired room, in the market's "שלי": renew, then its applicants and flatmates links.
+    mockApi({ 'GET /me/listings': [json(all)] });
+    view = renderRooms();
+    const room = (await screen.findByRole('article')) as HTMLElement;
+    expect(controls(room)).toEqual([
+      act0011a.renew,
+      i18n.t('applicants.link', { count: 0 }),
+      i18n.t('listings.mine.flatmates', { count: 0 }),
+    ]);
+    expect(within(room).getByRole('button', { name: act0011a.renew })).toHaveAccessibleDescription(
+      within(room).getByRole('heading').textContent ?? '',
+    );
+    view.unmount();
+  });
+
+  it('ac11_renew_success', async () => {
+    const expired = listing({
+      street: 'אחד',
+      expires_at: days(-1),
+      close_reason: 'rented_elsewhere',
+      final_rent_ils: 6800,
+    });
+    const live = listing({ street: 'שתיים' });
+    const renewedAt = days(90);
+    const answer = deferred();
+    const api = mockApi({
+      'GET /me/listings': [json([expired, live])],
+      [`POST /listings/${expired.id}/renew`]: [answer.promise],
+    });
+    render();
+    await screen.findByText(i18n.t('listings.mine.count', { live: 1, cap: 3 }));
+    const card = screen.getAllByRole('article')[0] as HTMLElement;
+    expect(within(card).getByText(c.reasons.rentedElsewhere)).toBeVisible();
+
+    const renew = within(card).getByRole('button', { name: act0011a.renew });
+    fireEvent.click(renew);
+    await vi.waitFor(() => {
+      expect(renew).toHaveAttribute('aria-busy', 'true');
+    });
+    fireEvent.click(renew); // busy: blocked
+    const calls = api.calls(`POST /listings/${expired.id}/renew`);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.body).toBeUndefined();
+    expect(calls[0]?.request.credentials).toBe('include');
+
+    answer.resolve(
+      json(
+        withoutCounts({
+          ...expired,
+          status: 'active',
+          expires_at: renewedAt,
+          close_reason: null,
+          final_rent_ils: null,
+        }),
+      ),
+    );
+    const pause = await within(card).findByRole('button', { name: act0011a.pause });
+    await vi.waitFor(() => {
+      expect(pause).toHaveFocus();
+    });
+    expect(badge(card)).toHaveTextContent(he.listings.status.live);
+    expect(
+      within(card).getByText(i18n.t('listings.mine.expiresOn', { date: dateOf(renewedAt) })),
+    ).toBeVisible();
+    expect(within(card).queryByText(c.reasons.rentedElsewhere)).toBeNull();
+    expect(within(card).queryByRole('button', { name: c.change })).toBeNull();
+    expect(within(card).queryByRole('button', { name: c.title })).toBeNull();
+    expect(within(card).queryByRole('button', { name: act0011a.renew })).toBeNull();
+    expect(screen.getByText(i18n.t('listings.mine.count', { live: 2, cap: 3 }))).toBeVisible();
+    expect(document.querySelector('p[role="status"]')).toHaveTextContent(
+      i18n.t('listings.renew.done', { date: dateOf(renewedAt) }),
+    );
+  });
+
+  it('ac12_renew_errors', async () => {
+    const expired = listing({ street: 'אחד', expires_at: days(-1) });
+    const soon = listing({ street: 'שתיים', expires_at: days(3) });
+    const other = listing({ street: 'שלוש' });
+    mockApi({
+      'GET /me/listings': [json([expired, soon, other])],
+      [`POST /listings/${expired.id}/renew`]: [
+        json({ detail: 'listing_cap_reached' }, 409),
+        json({ detail: 'renewal_not_open' }, 409),
+        json({ detail: 'boom' }, 500),
+        networkError,
+      ],
+      [`PATCH /listings/${other.id}`]: [json({ detail: 'boom' }, 500)],
+      [`PATCH /listings/${soon.id}`]: [json({ detail: 'invalid_transition' }, 409)],
+      [`POST /listings/${soon.id}/renew`]: [json({ detail: 'renewal_not_open' }, 409)],
+    });
+    let view = render();
+    const [cExpired, cSoon, cOther] = (await screen.findAllByRole('article')) as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    const renewOn = (card: HTMLElement) =>
+      fireEvent.click(within(card).getByRole('button', { name: act0011a.renew }));
+    const alertOf = async (card: HTMLElement, text: string) => {
+      await vi.waitFor(() => {
+        expect(
+          within(card)
+            .getAllByRole('alert')
+            .map((el) => el.textContent),
+        ).toEqual([text]);
+      });
+    };
+
+    renewOn(cExpired);
+    await alertOf(cExpired, i18n.t('listings.errors.capReached', { cap: 3 }));
+    expect(badge(cExpired)).toHaveTextContent(he.listings.status.expired);
+    renewOn(cExpired);
+    await alertOf(cExpired, he.listings.renew.notOpen);
+    renewOn(cExpired);
+    await alertOf(cExpired, he.common.error);
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    renewOn(cExpired);
+    await alertOf(cExpired, he.common.offline);
+    onLine.mockRestore();
+    expect(badge(cExpired)).toHaveTextContent(he.listings.status.expired);
+
+    // Another card's pause shows its own answer only.
+    fireEvent.click(within(cOther).getByRole('button', { name: act0011a.pause }));
+    await alertOf(cOther, he.common.error);
+    await alertOf(cExpired, he.common.offline);
+
+    // A pause 409 that is not the cap is not the cap text; a renewal then replaces that line.
+    fireEvent.click(within(cSoon).getByRole('button', { name: act0011a.pause }));
+    await alertOf(cSoon, he.common.error);
+    renewOn(cSoon);
+    await alertOf(cSoon, he.listings.renew.notOpen);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The clock passes `expires_at` while the page is open: the pause answers 409
+    // listing_expired, and the card re-renders as expired with renew only.
+    const lapsing = listing({ street: 'ארבע', expires_at: days(10) });
+    mockApi({
+      'GET /me/listings': [json([lapsing])],
+      [`PATCH /listings/${lapsing.id}`]: [json({ detail: 'listing_expired' }, 409)],
+    });
+    view = render();
+    const card = (await screen.findByRole('article')) as HTMLElement;
+    expect(actionsRow(card)).toEqual([act0011a.pause, act0011a.edit]);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 11 * 86_400_000);
+    fireEvent.click(within(card).getByRole('button', { name: act0011a.pause }));
+    await alertOf(card, he.listings.errors.expired);
+    expect(badge(card)).toHaveTextContent(he.listings.status.expired);
+    expect(actionsRow(card)).toEqual([act0011a.renew]);
+    view.unmount();
   });
 });

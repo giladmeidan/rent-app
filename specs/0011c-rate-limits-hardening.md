@@ -124,6 +124,7 @@ Bucket("estimate", 300, 1500)`.
 | POST /listings | signed in; apartment: owner | **NEW `create`**: 5 / h, 10 / day | Gilad 2026-11-14 (PRODUCT.md "Trust (MVP)"); at most 3 live listings, so nobody real posts more in a day even re-posting after pauses |
 | PATCH /listings/{id} | own listing | **NEW `write`**; plus **`address`** 10 / h, 30 / day when `city`, `street` or `area_id` is sent | each new address is a Nominatim lookup by the worker (~30 rows a minute); fixing a typo takes 1–3 tries. The web sends changed fields only (`validate.ts::changedFields`) |
 | PUT /listings/{id}/closure | own, not live | **NEW `write`** | one answer per pause or expiry |
+| POST /listings/{id}/renew | own listing | **NEW `write`** | one renew per expiry |
 | POST /listings/{id}/applications | signed in | 10 / h, 30 / day (0004a) | unchanged |
 | POST /me/applications/{id}/withdraw | own application | **NEW `write`** | also bounded by apply (re-apply costs apply budget) |
 | PATCH /listings/{id}/applications/{aid} | own listing | **NEW `status`**: 200 / h, 1000 / day; a no-op writes and publishes nothing | a busy apartment draws ~100 applicants; reviewing each twice in an hour is 200 |
@@ -174,7 +175,7 @@ Only behaviour changes are listed; request and response bodies are unchanged exc
 | PATCH | /listings/{id}/applications/{aid} | signed in, own listing (unchanged) | `ApplicantStatusIn` | 200 `ApplicantOut`; a same-status request writes nothing and publishes nothing | + 429 (`status`) |
 | GET | /me/people-likes | signed in + own visible card (403 `card_required`, unchanged) | — | 200 `MyPeopleLikesOut` | + 429 (browse, shared) |
 | GET | /rent-estimate | signed in (unchanged) | query (unchanged) | 200 `RentEstimateOut` | + 429 (`estimate`) |
-| * | the 13 other **NEW `write`** routes of the inventory | each its existing rule (inventory column) | unchanged | unchanged | + 429 (`write`) |
+| * | the 14 other **NEW `write`** routes of the inventory | each its existing rule (inventory column) | unchanged | unchanged | + 429 (`write`) |
 | * | every route | its own rule | body ≤ 65,536 bytes (the two upload routes: 8 MB, unchanged) | — | 413 `{"detail":"body_too_large"}` (with CORS headers); a 422 `detail` list holds at most 50 entries |
 | GET | /me/events | signed in (unchanged) | — | first event `retry: N`, 2000 ≤ N ≤ 10000 per stream | unchanged |
 
@@ -198,11 +199,12 @@ Copy (`web/src/locales/he.json`, 0009f's voice, as `applications.errors.rateLimi
 API tests are in a new `api/tests/test_hardening.py` unless named otherwise. Its parametrised table of limited
 routes (`LIMITED`: method, path, bucket, a minimal schema-valid body, e.g. `{"price_ils": 7000}`, `{"reason":
 "not_renting"}`, `{"status": "shortlisted"}`, `{"shown": true}`, `{"photo_ids": [<uuid>]}`, a full apartment
-body with a random `area_id`, a full profile body; random UUIDs in paths, since the count comes first) is the 17
-NEW write routes plus `GET /rent-estimate` (18 rows; a query string for the GET); `GET /me/people-likes` is
+body with a random `area_id`, a full profile body; random UUIDs in paths, since the count comes first) is the 18
+NEW write routes plus `GET /rent-estimate` (19 rows, plus a second `PATCH /listings/{id}` row with an address
+key for the `address` bucket; a query string for the GET); `GET /me/people-likes` is
 covered by AC14 only.
 - [ ] AC1 Given `create_app()`, Then its POST / PUT / PATCH / DELETE routes are exactly the union of the writes in
-  `LIMITED`, `OWN` (the 9 routes with their own limit: otp request, apply, message send, both like PUTs, flatmate
+  `LIMITED` (the 18 NEW write routes), `OWN` (the 9 routes with their own limit: otp request, apply, message send, both like PUTs, flatmate
   preview and join, both uploads) and `EXEMPT` (otp verify, logout); a new write route without a bucket fails —
   `test_hardening.py::test_ac1_every_write_route_has_a_limit`
 - [ ] AC2 For each `LIMITED` route (parametrised), Given a signed-in user (an owner for `POST /listings`) whose

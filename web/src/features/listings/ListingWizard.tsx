@@ -48,7 +48,7 @@ function outcome(error: Error): Outcome {
   if (error.status === 401) return 'unauthenticated';
   if (error.status === 403) return 'forbidden';
   if (error.status === 404) return 'notFound';
-  if (error.status === 409) return 'capReached';
+  if (error.status === 409) return error.detail === 'listing_expired' ? 'expired' : 'capReached';
   if (error.status === 422) return error.detail === 'unknown_area' ? 'areaInactive' : 'invalid';
   return 'failed';
 }
