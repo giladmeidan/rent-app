@@ -1,8 +1,10 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { usePageTitle } from '../../app/usePageTitle';
+import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -11,7 +13,12 @@ import { Loading } from '../../components/Loading';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { fetchAreas } from '../areas/api';
+import type { LifestyleAnswers } from '../lifestyle/keys';
 import { ListingCard } from '../listings/ListingCard';
+import { ApiError } from '../listings/api';
+import { MarketPersonCard } from '../people/MarketPersonCard';
+import { useMyPeopleLikes } from '../people/useMarketPeople';
 import { todayInIsrael } from '../listings/format';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
@@ -23,7 +30,7 @@ import { LikeRoomButton } from './LikeRoomButton';
 import { MutualBanner } from './MutualBanner';
 import { useMyLikes } from './useMyLikes';
 
-type GoneReason = 'gone' | 'alreadyApplied';
+type GoneReason = 'gone' | 'alreadyApplied' | 'personGone';
 
 function RoomList({
   items,
@@ -80,6 +87,119 @@ function RoomList({
         </li>
       ))}
     </ul>
+  );
+}
+
+const cardGrid = 'grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3';
+const h2Class = 'text-start font-display text-h2';
+
+/**
+ * The people part of the likes page (spec 0010i), from `GET /me/people-likes`: the people who liked
+ * the caller, the people they liked and their matches, each with its own empty state. Without a card
+ * (403 `card_required`) the three give way to one nudge. The lists are edited in place by a like
+ * (`useLikeCard`), so a card that moves does not take the page's focus with it.
+ */
+function PeopleSections({
+  viewerLifestyle,
+  onMutual,
+  onGone,
+}: {
+  viewerLifestyle: LifestyleAnswers;
+  onMutual: (conversationId: string) => void;
+  onGone: () => void;
+}) {
+  const { t } = useTranslation();
+  const people = useMyPeopleLikes();
+  const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
+  const areaName = new Map((areas.data ?? []).map((a) => [a.id, a.name_he]));
+
+  if (people.data === undefined) {
+    if (people.isPending) {
+      return (
+        <Loading>
+          <Skeleton className="h-40 w-full rounded-lg" />
+        </Loading>
+      );
+    }
+    if (people.error instanceof ApiError && people.error.status === 403) {
+      return (
+        <EmptyState
+          message={t('likes.people.cardRequired')}
+          action={
+            <Button variant="primary" to={profileHref('/me/likes', 'about', 'looking')}>
+              {t('market.people.toProfile')}
+            </Button>
+          }
+        />
+      );
+    }
+    return <ErrorState onRetry={() => void people.refetch()} />;
+  }
+
+  const { liked_me: likedMe, mine, matches } = people.data;
+  const cards = (list: typeof likedMe) => (
+    <ul className={cardGrid}>
+      {list.map((card) => (
+        <MarketPersonCard
+          key={card.card_id}
+          card={card}
+          areaNames={card.area_ids.flatMap((id) => areaName.get(id) ?? [])}
+          viewerLifestyle={viewerLifestyle}
+          next="/me/likes"
+          titleAs="h3"
+          onMutual={(_card, conversationId) => onMutual(conversationId)}
+          onGone={onGone}
+        />
+      ))}
+    </ul>
+  );
+  return (
+    <>
+      <section className="flex flex-col gap-4" aria-labelledby="likes-people-liked-me">
+        <h2 id="likes-people-liked-me" className={h2Class}>
+          {t('likes.people.likedMe')}
+        </h2>
+        {likedMe.length === 0 ? (
+          <EmptyState message={t('likes.people.likedMeEmpty')} />
+        ) : (
+          cards(likedMe)
+        )}
+      </section>
+      <section className="flex flex-col gap-4" aria-labelledby="likes-people-mine">
+        <h2 id="likes-people-mine" className={h2Class}>
+          {t('likes.people.mine')}
+        </h2>
+        {mine.length === 0 ? <EmptyState message={t('likes.people.mineEmpty')} /> : cards(mine)}
+      </section>
+      <section className="flex flex-col gap-4" aria-labelledby="likes-people-matches">
+        <h2 id="likes-people-matches" className={h2Class}>
+          {t('likes.people.matches')}
+        </h2>
+        {matches.length === 0 ? (
+          <EmptyState message={t('likes.people.matchesEmpty')} />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {matches.map((match) => (
+              <li
+                key={match.conversation_id}
+                className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3"
+              >
+                <Avatar name={match.display_name} photoUrl={match.photo_url} size="sm" />
+                <span
+                  dir="auto"
+                  className="min-w-0 flex-1 [overflow-wrap:anywhere] text-start text-body"
+                >
+                  {match.display_name}
+                </span>
+                <Button variant="secondary" size="sm" to={`/chat/${match.conversation_id}`}>
+                  {t('likes.toChat')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -208,6 +328,7 @@ export function MyLikesPage() {
         }
       >
         {gone?.reason === 'gone' && <span>{t('likes.errors.gone')}</span>}
+        {gone?.reason === 'personGone' && <span>{t('market.people.gone')}</span>}
         {gone?.reason === 'alreadyApplied' && (
           <>
             <span>{t('likes.errors.alreadyApplied')}</span>
@@ -226,6 +347,11 @@ export function MyLikesPage() {
         </div>
       )}
       {body}
+      <PeopleSections
+        viewerLifestyle={stored?.lifestyle ?? {}}
+        onMutual={onMutual}
+        onGone={() => onGone('personGone')}
+      />
     </PageContainer>
   );
 }
