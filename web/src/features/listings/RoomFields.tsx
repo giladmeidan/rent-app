@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -46,8 +47,18 @@ type Props = {
   fieldId: (name: FieldName) => string;
 };
 
-/** The flat facts' yes / no / "לא לציין" choices (0010f), in display order. */
-export const YES_NO: readonly YesNo[] = ['yes', 'no', ''];
+/** The flat facts' yes / no / "לא לציין" choices (0010f), in display order; an apartment's facts
+ * (0014b) use them too. */
+const YES_NO: readonly YesNo[] = ['yes', 'no', ''];
+
+export function yesNoOptions(t: TFunction): ChoiceOption<YesNo>[] {
+  const labels: Record<YesNo, string> = {
+    yes: t('common.yes'),
+    no: t('common.no'),
+    '': t('listings.room.unset'),
+  };
+  return YES_NO.map((value) => ({ value, label: labels[value] }));
+}
 
 /**
  * Step 3's room block (spec 0007e): who the room is for, how many flatmates live there, their ages
@@ -77,15 +88,7 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
     value,
     label: genders[value],
   }));
-  const yesNoLabels: Record<YesNo, string> = {
-    yes: t('common.yes'),
-    no: t('common.no'),
-    '': t('listings.room.unset'),
-  };
-  const yesNoOptions: ChoiceOption<YesNo>[] = YES_NO.map((value) => ({
-    value,
-    label: yesNoLabels[value],
-  }));
+  const yesNo = yesNoOptions(t);
   const posterOptions: ChoiceOption<Poster | ''>[] = [
     // `i18n-check` does not see these dynamic keys; `rooms/__tests__/poster.test.ts` covers them.
     ...POSTERS.map((value) => ({ value, label: t(`listings.room.poster.${value}`) })),
@@ -229,7 +232,7 @@ export function RoomFields({ form, onChange, errors, fieldId }: Props) {
           key={fact.name}
           legend={fact.legend}
           name={fact.name}
-          options={yesNoOptions}
+          options={yesNo}
           value={form[fact.name]}
           onChange={(value) => onChange({ [fact.name]: value })}
         />

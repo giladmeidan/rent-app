@@ -18,7 +18,7 @@ import { CONDITIONS } from './constants';
 import { addDays, formatIls, formatRooms } from './format';
 import { furnishedLabel } from './furnished';
 import { conditionLabel } from './facts';
-import { YES_NO } from './RoomFields';
+import { yesNoOptions } from './RoomFields';
 import {
   AVAILABLE_FROM_MAX_DAYS,
   LIMITS,
@@ -26,7 +26,6 @@ import {
   type FieldErrors,
   type FieldName,
   type ListingForm,
-  type YesNo,
 } from './validate';
 
 const groupHeading = 'text-h3';
@@ -438,15 +437,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
  * in `RoomFields`. */
 function ApartmentFacts({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
   const { t } = useTranslation();
-  const yesNoLabels: Record<YesNo, string> = {
-    yes: t('common.yes'),
-    no: t('common.no'),
-    '': t('listings.room.unset'),
-  };
-  const yesNoOptions: ChoiceOption<YesNo>[] = YES_NO.map((value) => ({
-    value,
-    label: yesNoLabels[value],
-  }));
+  const yesNo = yesNoOptions(t);
   const yesNoFacts = [
     { name: 'balcony', legend: t('listings.room.balcony') },
     { name: 'safe_room', legend: t('listings.fields.safeRoom') },
@@ -463,7 +454,7 @@ function ApartmentFacts({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
           <ChoiceGroup
             legend={fact.legend}
             name={fact.name}
-            options={yesNoOptions}
+            options={yesNo}
             value={form[fact.name]}
             onChange={(value) => onChange({ [fact.name]: value })}
           />
@@ -474,6 +465,7 @@ function ApartmentFacts({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
           legend={t('listings.fields.condition')}
           name="condition"
           options={conditionOptions}
+          wrap
           value={form.condition}
           onChange={(condition) => onChange({ condition })}
         />
