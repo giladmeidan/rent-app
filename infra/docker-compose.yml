@@ -81,6 +81,9 @@ services:
       GEOCODER: ${GEOCODER:-fake}
       NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
       NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-rent-app-dev/0.0.1}
+      # Official rent figures (spec 0014a): `off` (no request) unless a deployment sets `nadlan`.
+      RENT_REFERENCE: ${RENT_REFERENCE:-off}
+      NADLAN_RENT_URL: ${NADLAN_RENT_URL:-https://data.nadlan.gov.il/api/pages}
     volumes:
       - ../api:/app
     depends_on:

@@ -36,8 +36,7 @@ async def test_ac13_worker_sweeps_every_10_seconds(
     from app import worker
 
     importlib.reload(worker)
-    (job,) = worker.WorkerSettings.cron_jobs
-    assert job.coroutine is worker.geocode_listings
+    (job,) = (j for j in worker.WorkerSettings.cron_jobs if j.coroutine is worker.geocode_listings)
     assert job.second == {0, 10, 20, 30, 40, 50}
     assert job.unique is True
     assert logging.getLogger("httpx").level == logging.WARNING
@@ -59,6 +58,22 @@ async def test_ac13_worker_sweeps_every_10_seconds(
             text("SELECT geocode_status FROM listings WHERE id = :id"), {"id": listing_id}
         ).scalar_one()
     assert status == "ok"
+
+
+@pytest.mark.usefixtures("httpx_log_level")
+def test_ac12_rent_import_cron_registered() -> None:
+    # Spec 0014a: the monthly import of the official rent figures, past arq's 300 s default.
+    from app import worker
+
+    importlib.reload(worker)
+    (job,) = (
+        j
+        for j in worker.WorkerSettings.cron_jobs
+        if j.coroutine is worker.import_rent_reference_job
+    )
+    assert (job.day, job.hour, job.minute) == (5, 3, 10)
+    assert job.unique is True
+    assert job.timeout_s == 1800
 
 
 @pytest.mark.asyncio

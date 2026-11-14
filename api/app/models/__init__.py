@@ -14,6 +14,8 @@ from app.models.flatmate import ConversationRead, ListingFlatmate  # noqa: E402
 from app.models.listing import Listing  # noqa: E402
 from app.models.person_pair import PersonPair  # noqa: E402
 from app.models.photo import ListingPhoto  # noqa: E402
+from app.models.rent_area import RentArea  # noqa: E402
+from app.models.rent_price import RentPrice  # noqa: E402
 from app.models.room_pair import RoomPair  # noqa: E402
 from app.models.seeker_profile import SeekerProfile  # noqa: E402
 from app.models.session import Session  # noqa: E402
@@ -30,6 +32,8 @@ __all__ = [
     "ListingPhoto",
     "Message",
     "PersonPair",
+    "RentArea",
+    "RentPrice",
     "RoomPair",
     "SeekerProfile",
     "Session",

@@ -1,7 +1,7 @@
 ---
 id: 0014a
 title: homie keeps the official rent figures for Gush Dan (per city and neighbourhood, by room count, per quarter) in its own database, refreshed every month by the worker
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security]   # security: outbound HTTP to a third party and parsing its untrusted JSON, new config (as 0003c). No qa / ux: no endpoint and no screen
 estimate: 1 coder run   # coder Opus/high (migration + data import; Speed rule 6)
@@ -288,6 +288,10 @@ Three real files are left **untracked** in this spec's worktree under
   file). Neighbourhood ids are unique across the 19 settlements (checked on the 330 files, 2026-11-14).
 - Verification: round 1 rejected with 9 findings, all applied above by the orchestrator; second round waived
   (one verifier round).
+- Review round 1 (security) added two rule-2 skips, both in code and tests: a settlement file listing more than
+  500 neighbourhood ids, and a `version` that fails `visible_characters_only`; and the fetcher asks for and
+  accepts only an uncompressed body (`Accept-Encoding: identity`), so the 2 MB cap cannot be bypassed by
+  compression.
 
 ## Blast radius
 Run on 2026-11-14 against `main`'s graph (`graphify affected`).
@@ -318,3 +322,19 @@ Run on 2026-11-14 against `main`'s graph (`graphify affected`).
       logged as a launch-readiness follow-up.
     Reviewers: code, security   Estimated: 1 coder run (Opus/high), 1 review round
     Links: specs/0014a-rent-reference-data.md · PRODUCT.md "Rent price estimate" · no artboard (no screen)
+
+Built 2026-11-14 (merged shape; PR open, not merged — the orchestrator merges with `make merge PR=N`):
+
+    Spec 0014a — homie keeps the official rent figures for Gush Dan in its own database   IN REVIEW (PR open, ready-to-merge)
+    Shipped: two tables for the government's rent figures (19 cities and their neighbourhoods, by room count,
+      per quarter) and a monthly worker import that is off by default. Nothing changes on screen.
+    Demo: 1. `make dev`, then `make rent-import` prints `{'skipped': 1}` (the import is off)  2. production
+      sets `RENT_REFERENCE=nadlan` (Slice 13) and the same command fills `rent_areas` and `rent_prices`
+      3. there is no screen yet: the estimate engine reads these rows in a later spec.
+    Tests: +3 unit, +30 integration, +0 e2e (pytest 615 green, vitest 685 green)   CI: on the PR
+    Findings: 0 blockers; 2 majors fixed (a compressed response could get past the 2 MB limit; a source file
+      could list unlimited neighbourhoods and keep the worker requesting for hours, now capped at 500);
+      3 one-line minors fixed; 0 waived; 7 follow-ups logged (5 review minors, 2 from this spec's Risks).
+    Changed in PRODUCT.md: nothing.
+    Next spec I propose: 0014b — listing price signals (verified, building in parallel; its migration 0020
+      follows this one).

@@ -1,0 +1,149 @@
+{
+ "settlementID": 565,
+ "settlementName": "אזור",
+ "x": 182049.5905812721,
+ "y": 658965.4217499997,
+ "otherNeighborhoods": [],
+ "otherSettlmentStreets": [
+  {
+   "id": 5650111,
+   "title": "אחד העם"
+  },
+  {
+   "id": 5650168,
+   "title": "ירושלים"
+  },
+  {
+   "id": 5650127,
+   "title": "העלייה השנייה"
+  }
+ ],
+ "trends": {
+  "rooms": [
+   {
+    "graphData": [
+     {
+      "settlementPrice": 4300,
+      "countryPrice": 3875,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 4400,
+      "countryPrice": 3700,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": null,
+      "countryPrice": 3700,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 4200,
+      "countryPrice": 3850,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": 3,
+    "hasDeals": 1
+   },
+   {
+    "graphData": [
+     {
+      "settlementPrice": 5800,
+      "countryPrice": 4825,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 5500,
+      "countryPrice": 4725,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 5650,
+      "countryPrice": 4900,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 6100,
+      "countryPrice": 4900,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": 4,
+    "hasDeals": 1
+   },
+   {
+    "graphData": [
+     {
+      "settlementPrice": null,
+      "countryPrice": 6300,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 6650,
+      "countryPrice": 6200,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 6650,
+      "countryPrice": 6450,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 6650,
+      "countryPrice": 6350,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": 5,
+    "hasDeals": 1
+   },
+   {
+    "graphData": [
+     {
+      "settlementPrice": 4700,
+      "countryPrice": 5125,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 4500,
+      "countryPrice": 5000,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 4700,
+      "countryPrice": 4900,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 4300,
+      "countryPrice": 5000,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": "all",
+    "hasDeals": 1
+   }
+  ]
+ },
+ "version": "20-08-2026",
+ "settlementPrice": 4600,
+ "neighborhoodsPrices": [],
+ "countryPrice": 5349
+}

@@ -288,3 +288,32 @@ def test_ac13_photo_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     production = Settings(**https, **{k: v for k, v in _PHOTO_ENV.items() if k != "photo_backend"})
     assert production.photo_backend == "r2"
     assert production.photo_public_base_url == "https://photos.rent.example"
+
+
+def test_ac13_rent_reference_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("RENT_REFERENCE", "NADLAN_RENT_URL"):
+        monkeypatch.delenv(name, raising=False)
+    required: dict[str, Any] = {"database_url": _DSN, "redis_url": _REDIS, "secret_key": _SECRET}
+
+    settings = Settings(**required)
+    assert settings.rent_reference == "off"
+    assert settings.nadlan_rent_url == "https://data.nadlan.gov.il/api/pages"
+    assert Settings(**required, rent_reference="nadlan").rent_reference == "nadlan"
+    trimmed = Settings(**required, nadlan_rent_url=" https://rent.example/api/pages/ ")
+    assert trimmed.nadlan_rent_url == "https://rent.example/api/pages"
+    for bad_url in (
+        "http://rent.example/api/pages",
+        "https://rent.example/api/pages?a=1",
+        "https://rent.example/api/pages#f",
+        "https://",
+        "ftp://rent.example",
+        "https://u:secret@rent.example/api/pages",
+    ):
+        with pytest.raises(
+            ValidationError, match="NADLAN_RENT_URL must be an https URL"
+        ) as excinfo:
+            Settings(**required, nadlan_rent_url=bad_url)
+        assert "rent.example" not in str(excinfo.value)
+        assert "secret" not in str(excinfo.value)
+    with pytest.raises(ValidationError, match="rent_reference"):
+        Settings(**required, rent_reference="on")
