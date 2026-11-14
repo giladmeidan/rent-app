@@ -206,7 +206,7 @@ def count_like(r: RedisClient, user: User) -> None:
 
 # The card's profile columns, by name (NF2): never the entity, so `budget_max_ils`, `household`,
 # pets, smoker, contract, parking and `flatmate_gender` are never loaded.
-_CARD_COLUMNS = (
+CARD_COLUMNS = (
     SeekerProfile.gender,
     SeekerProfile.birth_year,
     SeekerProfile.area_ids,
@@ -222,7 +222,7 @@ def list_people(
 ) -> tuple[Sequence[Row[Any]], int]:
     """One page (`PEOPLE_LIMIT`) of the candidates of one of `owner`'s live room listings, and
     their total. Each row has `RoomPair.id`, both like timestamps, `display_name`, `photo_key`, the
-    card columns (`_CARD_COLUMNS`) and the match columns (budget at the pair's frozen price). Order:
+    card columns (`CARD_COLUMNS`) and the match columns (budget at the pair's frozen price). Order:
     those who liked the room first, then score, then the pair's age, then its id.
 
     Three statements after the session lookup: the listing (`_own_room`), the snapshot (every
@@ -276,7 +276,7 @@ def list_people(
             page.add_columns(
                 User.display_name,
                 User.photo_key,
-                *_CARD_COLUMNS,
+                *CARD_COLUMNS,
                 *columns,
                 func.count().over().label("total"),
             )

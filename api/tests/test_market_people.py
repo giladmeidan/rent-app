@@ -16,6 +16,7 @@ from typing import Any
 
 import httpx
 import pytest
+import redis.exceptions
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 from sqlalchemy.orm import Session
@@ -610,7 +611,9 @@ def test_ac8_remove_match_and_rematch(
     assert "Bat" in _names(a.caller)
     assert "Avi" in _names(b.caller)
     assert _like_names(a.caller) == {"liked_me": [], "mine": [], "matches": []}
+    published.calls.clear()
     assert _remove(b.caller, conversation_id).status_code == 204  # again
+    assert published.calls == []  # nothing was removed, nothing published
 
     # A one-sided re-like never reopens the chat.
     assert _ok(_like(a.caller, b.card)) == {"liked": True, "conversation_id": None}
@@ -809,6 +812,26 @@ def test_ac12b_listing_page_people_share_browse_limit(
     }
     assert views() == before + 1  # the view is still recorded
     assert _browse(seeker.caller).status_code == 429  # the same counter
+
+
+def test_ac12b_listing_page_people_fail_closed_without_redis(
+    client: TestClient,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner_id = make_owner(db_engine, "owner@example.com")
+    room = _live_room(db_engine, owner_id, gush_dan, gender_preference="any")
+    mate = make_seeker(db_engine, "mate@example.com", "Fay")
+    make_profile(db_engine, mate, gush_dan, gender="woman")
+    make_flatmate(db_engine, room, mate, shown=True)
+    seeker = _person(client, db_engine, gush_dan, "Sek", card=False)
+
+    def down(*_: Any, **__: Any) -> None:
+        raise redis.exceptions.ConnectionError("redis is down")
+
+    monkeypatch.setattr(market_service, "count_browse", down)
+    assert _ok(seeker.caller.get(f"/listings/{room}"))["people"] == []
 
 
 # --- AC13 --------------------------------------------------------------------------------------

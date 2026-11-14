@@ -26,6 +26,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from app.auth import COOKIE_NAME, optional_user
@@ -104,10 +105,11 @@ def search_listings(
 
 
 def _browse_allowed(r: RedisClient, user: User) -> bool:
-    """Count one people-browse page for `user`; False when they are over the limit."""
+    """Count one people-browse page for `user`; False when they are over the limit or Redis is
+    unavailable (fail closed: the page is served without people, never a 503)."""
     try:
         market_people_service.count_browse(r, user)
-    except RateLimitedError:
+    except (RateLimitedError, RedisError):
         return False
     return True
 
@@ -139,8 +141,8 @@ def get_listing(
     The flat's people count one page against the caller's people-browse limit (spec 0010h,
     `market_people.count_browse`, shared with `GET /people` and `GET /listings/{id}/people`), only
     when they are computed: visitors, owners, apartments and non-seekers count nothing. Over the
-    limit the page is not refused: it is served with `people = []` (the view is still recorded,
-    everything else unchanged)."""
+    limit or with Redis unavailable the page is not refused: it is served with `people = []`
+    (the view is still recorded, everything else unchanged)."""
     profile_user_id = profiles_service.profile_user_id(db, user)
     try:
         listing, match, room_fit = search_service.get_public_listing_with_match(

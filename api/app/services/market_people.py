@@ -24,7 +24,7 @@ This module is the only writer of `person_pairs` and the only caller of `chat.op
   two reappear in each other's browse, and a new mutual like reopens the same chat with its history
   (Q-A, Gilad 2026-11-13). A one-sided like never reopens it.
 
-Privacy (NF2): the card is read by column name (`_CARD_COLUMNS`), never the profile entity, so
+Privacy (NF2): the card is read by column name (`CARD_COLUMNS`), never the profile entity, so
 `budget_max_ils` is never loaded; a person is their `card_id`, never their user id.
 
 Concurrency: a like is one INSERT ... SELECT ... ON CONFLICT DO UPDATE that checks the target in
@@ -63,7 +63,7 @@ from app.schemas.people import PEOPLE_LIMIT
 from app.services import chat as chat_service
 from app.services import chat_events
 from app.services import search as search_service
-from app.services.people import count_like
+from app.services.people import CARD_COLUMNS, count_like
 from app.services.rate_limit import count_or_raise
 
 # Per user, `GET /people` and the room side's `GET /listings/{id}/people` together, counted in
@@ -109,18 +109,6 @@ class Viewer:
     def ticket(self) -> bool:
         return self.people_visible or self.has_live_room
 
-
-# The card's profile columns, by name (NF2): never the entity, so `budget_max_ils`, `household`,
-# pets, smoker, contract, parking and `flatmate_gender` are never loaded.
-_CARD_COLUMNS = (
-    SeekerProfile.gender,
-    SeekerProfile.birth_year,
-    SeekerProfile.area_ids,
-    SeekerProfile.move_in_date,
-    SeekerProfile.move_in_flexible,
-    SeekerProfile.lifestyle,
-    SeekerProfile.about_me,
-)
 
 # The pair `_candidate` reads to exclude a match (its own alias, apart from any pair the statement
 # joins).
@@ -220,7 +208,7 @@ def browse_statement(viewer: Viewer, offset: int) -> Select[Any]:
             User.card_id,
             User.display_name,
             User.photo_key,
-            *_CARD_COLUMNS,
+            *CARD_COLUMNS,
             mine.is_not(None).label("liked_by_me"),
             theirs.is_not(None).label("liked_me"),
             func.count().over().label("total"),
@@ -272,6 +260,7 @@ def like(db: Session, r: RedisClient, me: User, card_id: uuid.UUID) -> uuid.UUID
     Mutual: `open_direct` in the same transaction. One commit, then a `status` event to both. Two
     statements, three when mutual."""
     conversation_id: uuid.UUID | None = None
+    other: uuid.UUID | None = None
     try:
         count_like(r, me)
         viewer = _viewer(db, me)
@@ -313,14 +302,14 @@ def like(db: Session, r: RedisClient, me: User, card_id: uuid.UUID) -> uuid.UUID
         ).one_or_none()
         if row is None:
             raise NotFoundError
-        other: uuid.UUID = row.other_id
+        other = row.other_id
         if row.low_liked_at is not None and row.high_liked_at is not None:
             conversation_id = chat_service.open_direct(db, me.id, other)
         db.commit()
     except Exception:
         db.rollback()
         raise
-    if conversation_id is not None:
+    if conversation_id is not None and other is not None:
         chat_events.publish(r, [me.id, other], conversation_id, "status")
     return conversation_id
 
@@ -362,7 +351,8 @@ def remove_match(db: Session, r: RedisClient, me: User, conversation_id: uuid.UU
     cleared (only where both are set, so a repeated removal never wipes a newer one-sided like),
     and the chat closes (readable, sending closed). Idempotent. In order: one SELECT of the direct
     chat with `me` in it (`NotFoundError`), the pair UPDATE, then `chat.close_direct` (the pair is
-    locked before the conversation, as in `like`); one commit, then a `status` event to both."""
+    locked before the conversation, as in `like`); one commit, then a `status` event to both
+    when this call removed the match (a repeated removal publishes nothing)."""
     try:
         chat = db.execute(
             select(Conversation.owner_id, Conversation.seeker_id).where(
@@ -374,7 +364,7 @@ def remove_match(db: Session, r: RedisClient, me: User, conversation_id: uuid.UU
         if chat is None:
             raise NotFoundError
         # A direct chat stores its two people ordered, as the pair does.
-        db.execute(
+        removed = db.execute(
             update(PersonPair)
             .where(
                 PersonPair.user_low == chat.owner_id,
@@ -382,14 +372,16 @@ def remove_match(db: Session, r: RedisClient, me: User, conversation_id: uuid.UU
                 _mutual(PersonPair),
             )
             .values(low_liked_at=None, high_liked_at=None)
+            .returning(PersonPair.user_low)
             .execution_options(synchronize_session=False)
-        )
+        ).first()
         chat_service.close_direct(db, chat.owner_id, chat.seeker_id)
         db.commit()
     except Exception:
         db.rollback()
         raise
-    chat_events.publish(r, [chat.owner_id, chat.seeker_id], conversation_id, "status")
+    if removed is not None:  # a repeated removal changed nothing: nothing to tell
+        chat_events.publish(r, [chat.owner_id, chat.seeker_id], conversation_id, "status")
 
 
 def likes_statement(viewer: Viewer) -> Select[Any]:
@@ -422,7 +414,7 @@ def likes_statement(viewer: Viewer) -> Select[Any]:
             User.card_id,
             User.display_name,
             User.photo_key,
-            *_CARD_COLUMNS,
+            *CARD_COLUMNS,
             mine.is_not(None).label("liked_by_me"),
             theirs.is_not(None).label("liked_me"),
             Conversation.id.label("conversation_id"),
