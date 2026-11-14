@@ -350,6 +350,21 @@ def list_statement(me: User) -> Select[Any]:
     )
 
 
+def other_member(db: Session, me: User, conversation_id: uuid.UUID) -> uuid.UUID | None:
+    """The user id of `me`'s other side in conversation `conversation_id` (`_is_other`: the owner
+    for the seeker, the seeker for the owner and a flatmate, the other person in a direct chat)
+    when `me` is a member (`get_thread`'s rule, any application status, a closed direct chat
+    too), else None. One SELECT. A report's lookup (spec 0011b)."""
+    return db.scalar(
+        select(User.id)
+        .select_from(Conversation)
+        .outerjoin(Application, Application.id == Conversation.application_id)
+        .outerjoin(_F, _flatmate_join(me))
+        .join(User, _is_other(me))
+        .where(Conversation.id == conversation_id, _is_member(me))
+    )
+
+
 def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
     """One of `me`'s conversations with its members and its newest `THREAD_LIMIT` visible messages
     (any application status), marking it read for `me`. Raises `ConversationNotFoundError`. Two

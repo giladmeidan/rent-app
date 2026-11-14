@@ -65,4 +65,31 @@ describe('ChoiceGroup', () => {
     }
     expect(screen.getByRole('radio', { name: options[1].label })).toBeChecked();
   });
+
+  it('ac14_stacked', () => {
+    const props = {
+      legend: he.profile.fields.household,
+      name: 'household',
+      options,
+      value: null,
+      onChange: vi.fn(),
+    };
+    const { rerender } = render(<ChoiceGroup {...props} stacked />);
+    const label = screen.getByText(options[0].label);
+    const option = label.parentElement as HTMLElement;
+    const row = option.parentElement as HTMLElement;
+    expect(classesOf(row)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'gap-2']));
+    expect(classesOf(option)).toEqual(['flex']);
+    expect(classesOf(label)).toEqual(expect.arrayContaining(['justify-start', 'text-start']));
+    expect(classesOf(label)).not.toContain('justify-center');
+    expect(classesOf(label)).not.toContain('text-center');
+
+    // Without it, every class is as before.
+    rerender(<ChoiceGroup {...props} />);
+    const plain = screen.getByText(options[0].label);
+    expect(plain.className).toBe(choiceSegment);
+    expect(classesOf(plain)).toEqual(expect.arrayContaining(['justify-center', 'text-center']));
+    expect(plain.parentElement?.className).toBe('flex flex-1');
+    expect(plain.parentElement?.parentElement?.className).toBe('flex gap-2');
+  });
 });
