@@ -2,7 +2,8 @@ import type { HTMLAttributes, ReactNode } from 'react';
 
 import { cx } from './cx';
 
-export type BadgeTone = 'accent' | 'neutral' | 'solid' | 'inverse' | 'warning' | 'success';
+export type BadgeTone =
+  'accent' | 'neutral' | 'solid' | 'inverse' | 'warning' | 'success' | 'danger';
 export type BadgeSize = 'sm' | 'md';
 
 export type BadgeProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children' | 'className'> & {
@@ -25,6 +26,8 @@ const TONES: Record<BadgeTone, string> = {
   warning: 'bg-surface-subtle text-warning',
   // A positive status: success text on a bordered surface, always with its check icon and words.
   success: 'gap-1 border border-border bg-surface text-success',
+  // A negative status, the success tone's anatomy: danger on surface is 4.8:1 (on surface-subtle it fails).
+  danger: 'border border-border bg-surface text-danger',
 };
 
 const SIZES: Record<BadgeSize, string> = {

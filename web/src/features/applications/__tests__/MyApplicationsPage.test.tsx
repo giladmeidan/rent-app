@@ -83,6 +83,8 @@ const appliedText = (app: MyApplicationOut) =>
   });
 
 const cards = () => screen.getAllByRole('article');
+const pastToggle = (count: number) =>
+  screen.getByRole('button', { name: i18n.t('applications.mine.past', { count }) });
 
 describe('MyApplicationsPage', () => {
   it('ac3_page_title', async () => {
@@ -152,6 +154,7 @@ describe('MyApplicationsPage', () => {
     ];
     renderPage([json(apps)]);
     await screen.findAllByRole('article');
+    fireEvent.click(pastToggle(2));
     expect(cards()).toHaveLength(3);
     apps.forEach((app, i) => {
       const card = within(cards()[i] as HTMLElement);
@@ -435,15 +438,18 @@ describe('MyApplicationsPage', () => {
     const declined = to('L3', { status: 'declined' });
     const withdrawn = to('L4', { status: 'withdrawn' });
     const mutual = to('L5', { source: 'like', message: null, status: 'shortlisted' });
-    const apps = [submitted, shortlisted, declined, withdrawn, mutual];
+    // Active ones first, then the past ones (opened).
+    const apps = [submitted, shortlisted, mutual, declined, withdrawn];
     renderPage([json(apps)]);
     await screen.findAllByRole('article');
+    fireEvent.click(pastToggle(2));
     expect(cards()).toHaveLength(5);
 
+    // Traffic light: waiting amber, shortlisted green, declined red, withdrawn grey.
     const tones = {
-      submitted: ['bg-surface-subtle', 'text-ink-muted'],
-      shortlisted: ['bg-accent-soft', 'text-accent-strong'],
-      declined: ['bg-surface-subtle', 'text-ink-muted'],
+      submitted: ['bg-surface-subtle', 'text-warning'],
+      shortlisted: ['border', 'bg-surface', 'text-success'],
+      declined: ['border', 'bg-surface', 'text-danger'],
       withdrawn: ['bg-surface-subtle', 'text-ink-muted'],
     } as const;
     apps.forEach((app, i) => {
@@ -475,9 +481,9 @@ describe('MyApplicationsPage', () => {
     expect(body).toHaveClass('whitespace-pre-line', 'bg-surface-subtle');
     expect(body.children).toHaveLength(0);
     // The mutual card shows its tag and no message.
-    const last = within(cards()[4] as HTMLElement);
-    expect(last.getByTestId('application-mutual')).toHaveTextContent(he.applications.mutual);
-    expect(last.queryByTestId('application-message')).toBeNull();
+    const mutualCard = within(cards()[2] as HTMLElement);
+    expect(mutualCard.getByTestId('application-mutual')).toHaveTextContent(he.applications.mutual);
+    expect(mutualCard.queryByTestId('application-message')).toBeNull();
     // Only the shortlisted cards have a chat link.
     expect(screen.getAllByRole('link', { name: he.applications.chat })).toHaveLength(2);
   });
@@ -528,6 +534,56 @@ describe('MyApplicationsPage', () => {
       expect(badge).not.toHaveClass('tabular-nums');
     }
     view.unmount();
+  });
+
+  it('active_first_past_collapsed', async () => {
+    // API order mixes them; active ones come first, declined and withdrawn sit behind a closed toggle.
+    const declined = to('L1', { status: 'declined' });
+    const submitted = to('L2', { status: 'submitted' });
+    const withdrawn = to('L3', { status: 'withdrawn' });
+    const shortlisted = to('L4', { status: 'shortlisted' });
+    let { view } = renderPage([json([declined, submitted, withdrawn, shortlisted])]);
+    await screen.findAllByRole('article');
+    expect(cards().map((c) => within(c).getByRole('heading', { level: 2 }).textContent)).toEqual([
+      titleOf(submitted),
+      titleOf(shortlisted),
+    ]);
+    const toggle = pastToggle(2);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const past = screen.getByTestId('past-applications');
+    expect(toggle).toHaveAttribute('aria-controls', past.id);
+    expect(past).not.toBeVisible();
+    expect(screen.queryByText(he.applications.mine.noActive)).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(past).toBeVisible();
+    expect(within(past).getAllByRole('article')).toHaveLength(2);
+    expect(within(past).getByText(titleOf(declined))).toBeVisible();
+    expect(within(past).getByText(titleOf(withdrawn))).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Only past ones: a line saying so, then the toggle.
+    ({ view } = renderPage([json([declined])]));
+    expect(await screen.findByText(he.applications.mine.noActive)).toBeVisible();
+    expect(pastToggle(1)).toBeVisible();
+    expect(screen.queryByText(he.applications.mine.empty)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A card withdrawn on this visit stays in the active list (no toggle appears for it).
+    renderPage([json([submitted])], {
+      [withdrawRoute(submitted)]: [json({ ...submitted, status: 'withdrawn' })],
+    });
+    fireEvent.click(await screen.findByRole('button', { name: he.applications.withdraw }));
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('application-status')).toHaveTextContent(
+        he.applications.status.withdrawn,
+      );
+    });
+    expect(cards()).toHaveLength(1);
+    expect(screen.queryByTestId('past-applications')).toBeNull();
   });
 
   it('ac11_apartments_only', async () => {

@@ -7,21 +7,20 @@ import type { ApplicationStatus } from './api';
 type Props =
   { viewer?: 'seeker'; status: ApplicationStatus } | { viewer: 'owner'; status: ApplicantStatus };
 
-// The seeker's badges. The brand allows one accent-filled element per screen, so none is solid;
-// the words carry each status.
+// Traffic-light tones, the same on both sides: waiting is amber, shortlisted green, declined red,
+// withdrawn grey. The words still carry each status; none is solid (one accent fill per screen).
 const seekerTone: Record<ApplicationStatus, BadgeTone> = {
-  submitted: 'neutral',
-  shortlisted: 'accent',
-  declined: 'neutral',
+  submitted: 'warning',
+  shortlisted: 'success',
+  declined: 'danger',
   withdrawn: 'neutral',
 };
 
-// The owner's badges (brand: colour only repeats the words). "New" draws the eye, as the artboard's
-// amber did; a shortlisted one is the positive status; a declined one is quiet.
-const ownerTone: Record<ApplicantStatus, BadgeTone> = {
-  submitted: 'accent',
+/** The owner's tones (also the desktop pane's, `ApplicantPane`). */
+export const ownerTone: Record<ApplicantStatus, BadgeTone> = {
+  submitted: 'warning',
   shortlisted: 'success',
-  declined: 'neutral',
+  declined: 'danger',
 };
 
 /** One pill per application status (`StatusBadge`'s anatomy), in the seeker's or the owner's words.
