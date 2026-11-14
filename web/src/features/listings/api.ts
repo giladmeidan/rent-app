@@ -77,6 +77,16 @@ export async function patchListing(id: string, body: ListingPatch): Promise<List
   return data;
 }
 
+/** Renew a listing (0011a): live again for 90 days. 409 `renewal_not_open` or `listing_cap_reached`. */
+export async function renewListing(id: string): Promise<ListingOut> {
+  const { data, error, response } = await api.POST('/listings/{listing_id}/renew', {
+    params: { path: { listing_id: id } },
+  });
+  if (data === undefined)
+    throw new ApiError('POST', '/listings/{id}/renew', response.status, error);
+  return data;
+}
+
 /** The owner's closure answer (0014b). 204 on success; 409 while the listing is live. */
 export async function putClosure(id: string, body: ClosureIn): Promise<void> {
   const { error, response } = await api.PUT('/listings/{listing_id}/closure', {

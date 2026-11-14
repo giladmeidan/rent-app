@@ -9,7 +9,7 @@ import { OwnerPreferences } from './OwnerPreferences';
 import { RoomPreview } from './RoomPreview';
 
 /** What a failed publish shows above the button (401 and 403 redirect instead). */
-export type PublishError = 'capReached' | 'areaInactive' | 'invalid' | 'failed';
+export type PublishError = 'capReached' | 'expired' | 'areaInactive' | 'invalid' | 'failed';
 
 type Props = {
   body: ListingInBody;
@@ -36,6 +36,11 @@ export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDet
       {error === 'capReached' && (
         <p role="alert" className={alertText}>
           {t('listings.errors.capReached', { cap: LISTING_CAP })}
+        </p>
+      )}
+      {error === 'expired' && (
+        <p role="alert" className={alertText}>
+          {t('listings.errors.expired')}
         </p>
       )}
       {error === 'areaInactive' && (

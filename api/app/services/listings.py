@@ -1,5 +1,5 @@
 """Owner listings: create, list own (with applicant counts, 0004c), edit / pause / resume (spec
-0002a).
+0002a), renew (spec 0011a).
 
 Cap (PRODUCT.md "Owner cap: 3 active listings per account, admin may raise"): an owner may have at
 most `users.listing_cap` **live** listings (`status = 'active' AND expires_at > now()`). Creating
@@ -9,7 +9,9 @@ transaction, so two concurrent creates serialise and the cap holds (AC9).
 Ownership: every query by listing id also carries `owner_id = :owner` in its `WHERE`, so another
 owner's listing is indistinguishable from an unknown id (`ListingNotFoundError`, a 404).
 
-Timestamps (`updated_at`, `expires_at`) come from the database's `now()`, never from Python.
+Timestamps (`updated_at`, `expires_at`) come from the database's `now()`, never from Python. A PATCH
+never moves `expires_at`; only `renew_listing` does, and a PATCH of a listing past `expires_at` is
+refused (`ListingExpiredError`, spec 0011a).
 
 Room fields (spec 0007a): `gender_preference`, `flatmates_count`, `flatmate_ages` and `lifestyle`.
 `ListingIn` checks them on create and on a PATCH's merged row: an apartment holds
@@ -21,7 +23,7 @@ must send `flatmates_count`.
 Price signals (spec 0014b): every price a listing has is a `listing_price_changes` row, written in
 the listing's own transaction (on create, and on a PATCH that changes `price_ils`). The closure
 answer (`set_closure`) is set only while the listing is not live and does not move `updated_at`;
-only a real resume (a paused listing PATCHed to `active`) clears it.
+a resume (a paused listing PATCHed to `active`) or a renewal clears it.
 """
 
 import datetime as dt
@@ -38,6 +40,8 @@ from app.models import Application, Area, Listing, ListingFlatmate, ListingPrice
 from app.schemas.listing import ClosureIn, ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
+# Policy (PRODUCT.md "Trust (MVP)"): a listing renews from this many days before `expires_at`.
+RENEWAL_WINDOW_DAYS = 7
 # Changing any of these resets the listing's map location to `pending` (spec 0003c).
 _ADDRESS_FIELDS = ("city", "street", "area_id")
 
@@ -52,6 +56,14 @@ class UnknownAreaError(Exception):
 
 class ListingNotFoundError(Exception):
     """No listing with this id belongs to the caller (unknown id or another owner's listing)."""
+
+
+class RenewalNotOpenError(Exception):
+    """More than `RENEWAL_WINDOW_DAYS` before `expires_at`: too early to renew."""
+
+
+class ListingExpiredError(Exception):
+    """Past `expires_at`: not patchable; renew it."""
 
 
 class ListingLiveError(Exception):
@@ -161,19 +173,23 @@ def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:
 
 def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: ListingPatch) -> Listing:
     """Apply the sent fields of `patch` to the caller's listing and refresh `updated_at`. Resuming
-    a paused listing re-applies the cap; `expires_at` never moves. Raises `ListingNotFoundError`,
+    a paused listing re-applies the cap; a PATCH never moves `expires_at`; only `renew_listing`
+    does. Raises `ListingNotFoundError`, `ListingExpiredError` (past `expires_at`, checked first),
     `UnknownAreaError`, `ListingCapReachedError` or `RequestValidationError` (nothing written).
     Commits."""
     try:
         # Row lock: a concurrent PATCH of the same listing waits and then merges onto this one's
         # result, so two individually valid patches can never combine into a CHECK failure.
-        listing = db.scalar(
-            select(Listing)
+        row = db.execute(
+            select(Listing, Listing.expires_at <= func.now())
             .where(Listing.id == listing_id, Listing.owner_id == owner.id)
             .with_for_update()
-        )
-        if listing is None:
+        ).one_or_none()
+        if row is None:
             raise ListingNotFoundError
+        listing, expired = row
+        if expired:
+            raise ListingExpiredError
         data = _merged(listing, patch)
         if "area_id" in patch.model_fields_set:
             _check_area(db, data.area_id)
@@ -209,6 +225,50 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         db.rollback()
         raise
     return updated
+
+
+def renew_listing(db: Session, owner: User, listing_id: uuid.UUID) -> Listing:
+    """Make the caller's listing live for `LISTING_TTL_DAYS` from now and clear its closure answer.
+    Opens `RENEWAL_WINDOW_DAYS` before `expires_at` and stays open after it. A listing that is not
+    live takes a cap slot; a live one already holds its own. Raises `ListingNotFoundError`,
+    `RenewalNotOpenError` or `ListingCapReachedError` (nothing written). Commits."""
+    try:
+        # Lock order as `update_listing`: the listing row, then the owner row (`_enforce_cap`).
+        row = db.execute(
+            select(
+                Listing.expires_at > func.now() + dt.timedelta(days=RENEWAL_WINDOW_DAYS),
+                and_(Listing.status == "active", Listing.expires_at > func.now()),
+            )
+            .where(Listing.id == listing_id, Listing.owner_id == owner.id)
+            .with_for_update()
+        ).one_or_none()
+        if row is None:
+            raise ListingNotFoundError
+        too_early, live = row
+        if too_early:
+            raise RenewalNotOpenError
+        if not live:
+            # Not live, so the count is of the others only, as a resume.
+            _enforce_cap(db, owner.id)
+        renewed = db.scalars(
+            update(Listing)
+            .where(Listing.id == listing_id, Listing.owner_id == owner.id)
+            .values(
+                status="active",
+                expires_at=func.now() + dt.timedelta(days=LISTING_TTL_DAYS),
+                close_reason=None,
+                final_rent_ils=None,
+                closed_at=None,
+                updated_at=func.now(),
+            )
+            .returning(Listing),
+            execution_options={"populate_existing": True},
+        ).one()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return renewed
 
 
 def set_closure(db: Session, owner: User, listing_id: uuid.UUID, data: ClosureIn) -> None:
