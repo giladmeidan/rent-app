@@ -288,6 +288,10 @@ Three real files are left **untracked** in this spec's worktree under
   file). Neighbourhood ids are unique across the 19 settlements (checked on the 330 files, 2026-11-14).
 - Verification: round 1 rejected with 9 findings, all applied above by the orchestrator; second round waived
   (one verifier round).
+- Review round 1 (security) added two rule-2 skips, both in code and tests: a settlement file listing more than
+  500 neighbourhood ids, and a `version` that fails `visible_characters_only`; and the fetcher asks for and
+  accepts only an uncompressed body (`Accept-Encoding: identity`), so the 2 MB cap cannot be bypassed by
+  compression.
 
 ## Blast radius
 Run on 2026-11-14 against `main`'s graph (`graphify affected`).
