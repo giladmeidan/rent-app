@@ -17,6 +17,8 @@ type Setup = {
   areas?: typeof AREAS;
   /** What `PUT /me/profile` answers; `'pending'` is held, so the page stays on "saving". */
   put?: 'ok' | 'error' | 'pending';
+  /** The account's photo (spec 0010k), an address the browser can load; none by default. */
+  photoUrl?: string;
 };
 
 const CORS = {
@@ -34,7 +36,7 @@ const reply = (route: Route, body: unknown, status = 200) =>
 
 async function mockApi(page: Page, setup: Setup): Promise<string[]> {
   const unmatched: string[] = [];
-  const { profile = PROFILE, areas = AREAS, put = 'ok' } = setup;
+  const { profile = PROFILE, areas = AREAS, put = 'ok', photoUrl = null } = setup;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -51,7 +53,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
       });
     }
     if (pathname === '/me/events') return route.abort();
-    if (key === 'GET /me') return reply(route, SEEKER);
+    if (key === 'GET /me') return reply(route, { ...SEEKER, photo_url: photoUrl });
     if (key === 'GET /me/conversations') return reply(route, []);
     if (key === 'GET /me/likes') return reply(route, { liked_me: [], mine: [] });
     if (key === 'GET /areas') return reply(route, areas);
@@ -179,6 +181,18 @@ const STATES: State[] = [
       await expect(
         page.getByRole('heading', { level: 2, name: he.profile.about.title }),
       ).toBeFocused();
+    },
+  },
+  {
+    name: 'p11-photo',
+    setup: {
+      profile: 'none',
+      photoUrl: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="100%" height="100%" fill="#B8AC9E"/></svg>')}`,
+    },
+    path: PROFILE_PATH,
+    act: async (page) => {
+      await expect(page.getByRole('button', { name: he.profile.photo.replace })).toBeVisible();
+      await expect(page.getByRole('button', { name: he.profile.photo.remove })).toBeVisible();
     },
   },
 ];

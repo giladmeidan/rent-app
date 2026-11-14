@@ -35,6 +35,7 @@ import type {
   SeekerProfileIn,
   SeekerProfileOut,
 } from './api';
+import { PersonPhoto } from './PersonPhoto';
 import { useProfile } from './useProfile';
 import { useSaveProfile } from './useSaveProfile';
 import {
@@ -363,6 +364,8 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
             </h2>
             <p className={mutedNote}>{t('profile.about.hint')}</p>
           </div>
+          {/* Saved on its own (not with the form), so it shows with the switch off too. */}
+          <PersonPhoto />
           <Card padding="none" className={switchCard}>
             <Switch
               label={t('profile.about.switch')}
