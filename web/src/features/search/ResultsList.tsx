@@ -118,6 +118,7 @@ export function ResultsList({ search, hasFilters, onClear, profile, countRef, si
                   to={`/listings/${listing.id}`}
                   seekerBirthYear={profile?.birth_year}
                   layout="row"
+                  coverUrl={listing.cover?.small_url}
                   badge={listing.match && <MatchBadge score={listing.match.score} />}
                 >
                   {listing.match && (

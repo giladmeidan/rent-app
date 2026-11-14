@@ -352,4 +352,21 @@ describe('MyLikesPage', () => {
     });
     expect(screen.getByRole('alert')).toBeEmptyDOMElement();
   });
+
+  it('ac2_cover', async () => {
+    const withCover = likedRoom({
+      cover: { id: 'p1', small_url: 'https://media.test/a-s.webp', large_url: 'x-l.webp' },
+    });
+    const without = likedRoom({ cover: null });
+    render({ [LIKES]: [json(myLikes([], [withCover, without]))] });
+
+    const mine = await screen.findByRole('region', { name: he.likes.mine });
+    const [first, second] = within(mine).getAllByRole('article');
+    // The cover's small address, decorative; and the placeholder without one.
+    const img = (first as HTMLElement).querySelector('img');
+    expect(img).toHaveAttribute('src', 'https://media.test/a-s.webp');
+    expect(img).toHaveAttribute('alt', '');
+    expect((second as HTMLElement).querySelector('img')).toBeNull();
+    expect((second as HTMLElement).querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
 });
