@@ -774,10 +774,6 @@ def test_ac12b_listing_page_people_share_browse_limit(
     make_flatmate(db_engine, room, mate, shown=True)
     seeker = _person(client, db_engine, gush_dan, "Sek", card=False)  # the seeker role
 
-    def views() -> int:
-        count: int = _scalar(db_engine, "SELECT view_count FROM listings WHERE id = :id", id=room)
-        return count
-
     def browse_keys() -> int:
         return len(list(get_redis().scan_iter(match="rl:browse:*")))
 
@@ -795,13 +791,11 @@ def test_ac12b_listing_page_people_share_browse_limit(
     assert _browse_count(owner_id) == 0
 
     get_redis().set(f"rl:browse:user:{seeker.id}", market_service.BROWSE_RATE_LIMIT_HOUR, ex=3600)
-    before = views()
     limited = _ok(seeker.caller.get(f"/listings/{room}"))
     assert limited["people"] == []
     assert {k: v for k, v in limited.items() if k != "people"} == {
         k: v for k, v in body.items() if k != "people"
     }
-    assert views() == before + 1  # the view is still recorded
     assert _browse(seeker.caller).status_code == 429  # the same counter
 
 

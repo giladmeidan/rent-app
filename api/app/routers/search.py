@@ -1,5 +1,6 @@
 """Public search endpoints (spec 0003a). Thin: all logic is in `services/search.py`; the listing
-page's view counter and applicant count (spec 0004a) are in `services/applications.py`.
+page's applicant count (spec 0004a) is in `services/applications.py` and its view counter in
+`services/listing_views.py` (spec 0011e): the listing page is read-only, a view goes to Redis.
 
 Both are **public** (`optional_user`): without a cookie no session query runs; an unknown or expired
 cookie is a visitor, never a 401. A cookie adds the caller's match score (spec 0006b): any account
@@ -43,6 +44,7 @@ from app.schemas.search import (
 )
 from app.services import applications as applications_service
 from app.services import flatmates as flatmates_service
+from app.services import listing_views
 from app.services import market_people as market_people_service
 from app.services import people as people_service
 from app.services import photos as photos_service
@@ -135,8 +137,9 @@ def get_listing(
 ) -> ListingDetail:
     """A public listing with its applicant count, the caller's match, room fit and like state
     (spec 0008a; 0010b: any signed-in account on a room, not their own), `is_mine` and, for a
-    seeker on a room that fits them, the flat's people (spec 0010f); counts one view
-    (`listings.view_count`). A 404 counts nothing.
+    seeker on a room that fits them, the flat's people (spec 0010f). Read-only: a view is counted
+    in Redis, once per viewer per listing per hour, and the worker flushes the counts into
+    `listings.view_count` every minute (spec 0011e). A 404 counts nothing.
 
     The flat's people count one page against the caller's people-browse limit (spec 0010h,
     `market_people.count_browse`, shared with `GET /people` and `GET /listings/{id}/people`), only
@@ -150,7 +153,9 @@ def get_listing(
         )
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
-    count = applications_service.record_view(db, listing.id)
+    count = applications_service.applicant_count(db, listing.id)
+    host = request.client.host if request.client else "unknown"
+    listing_views.count_view(r, listing.id, f"u:{user.id}" if user else f"ip:{host}")
     mine = _is_mine(user, listing)
     like = None
     if user is not None and listing.listing_type == "room" and listing.owner_id != user.id:
@@ -177,12 +182,11 @@ def get_listing(
             )
             for row in flatmates_service.shown_people(db, listing, user.id)
         ]
-    # The last statement (spec 0010d), after `record_view`.
+    # The last statement (spec 0010d).
     photos = photos_service.photos_out(
         photos_service.photos_by_listing(db, [listing.id])[listing.id]
     )
     _private_if_cookie(request, response)
-    # `expire_on_commit=False` (db.py): the loaded `lat` / `lng` survive `record_view`'s commit.
     return ListingDetail.from_listing(
         listing,
         seeker=seeker,
