@@ -1,7 +1,7 @@
 ---
 id: 0014b
 title: A listing remembers every price it had and, once it is paused or expired, what happened to it (optional and private); an apartment listing can say four more facts (ממ״ד, balcony, condition, air conditioning)
-status: in-review
+status: done
 depends_on: []   # no code dependency on 0014a; only the migration chain (0014a's 0019 merges first, see Data)
 reviewers: [code, qa, ux]   # qa: wizard, edit, listing page and my-listings end to end; ux: new fields in the wizard and a new dialog. No security: the one new endpoint copies PATCH /listings/{id}'s owner rule, and AC6 proves the private fields never reach a public response
 estimate: 1 coder run, large   # coder Opus/high (migration + money data; Speed rule 6); about 40 files, half of them tests and fixtures
