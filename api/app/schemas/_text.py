@@ -92,3 +92,11 @@ def lf_newlines(value: Any) -> Any:
     """`\\r\\n` -> `\\n` on a string (a `BeforeValidator`); anything else unchanged. Here, not in
     `schemas/listing.py`, so `schemas/profile.py` can use it too (listing imports profile)."""
     return value.replace("\r\n", "\n") if isinstance(value, str) else value
+
+
+def blank_to_none(value: Any) -> Any:
+    """A blank-after-strip string is None (a `BeforeValidator` on an optional text field: an
+    application's message, spec 0010l; a report's note, 0011b), not a 422 from `min_length`."""
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value

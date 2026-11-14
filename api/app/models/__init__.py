@@ -17,6 +17,7 @@ from app.models.person_pair import PersonPair  # noqa: E402
 from app.models.photo import ListingPhoto  # noqa: E402
 from app.models.rent_area import RentArea  # noqa: E402
 from app.models.rent_price import RentPrice  # noqa: E402
+from app.models.report import Report  # noqa: E402
 from app.models.room_pair import RoomPair  # noqa: E402
 from app.models.seeker_profile import SeekerProfile  # noqa: E402
 from app.models.session import Session  # noqa: E402
@@ -36,6 +37,7 @@ __all__ = [
     "PersonPair",
     "RentArea",
     "RentPrice",
+    "Report",
     "RoomPair",
     "SeekerProfile",
     "Session",

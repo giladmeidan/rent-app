@@ -35,7 +35,7 @@ from pydantic import (
     PlainSerializer,
 )
 
-from app.schemas._text import visible_characters_only
+from app.schemas._text import blank_to_none, visible_characters_only
 from app.schemas.listing import ListingType, _lf_newlines
 from app.schemas.match import MatchOut
 from app.schemas.profile import ContractMonths, Household, Lifestyle, SeekerGender
@@ -64,13 +64,6 @@ Message = Annotated[
 ]
 
 
-def _blank_to_none(value: object) -> object:
-    """A blank-after-strip string is no message (spec 0010l), not a 422 from `min_length`."""
-    if isinstance(value, str) and not value.strip():
-        return None
-    return value
-
-
 class ApplicationIn(BaseModel):
     """A seeker's application: an optional short message (PRODUCT.md "Applications", 1-500).
     Absent, null or blank is no message; a non-blank one keeps every `Message` rule. The service
@@ -78,7 +71,7 @@ class ApplicationIn(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
-    message: Annotated[Message | None, BeforeValidator(_blank_to_none)] = None
+    message: Annotated[Message | None, BeforeValidator(blank_to_none)] = None
 
 
 class ApplicationListingOut(BaseModel):
