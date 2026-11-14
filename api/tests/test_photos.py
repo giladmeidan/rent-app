@@ -649,8 +649,8 @@ def test_ac10_listing_read_surfaces(
     page = client.get(f"/listings/{listing}").json()
     sent = list(statements)
     assert (page["photos"], page["cover"]) == ([p0, p1], p0)
-    assert len(sent) == 4, sent
-    assert "FROM listing_photos" in sent[3]
+    assert len(sent) == 3, sent  # spec 0011e: no view UPDATE
+    assert "FROM listing_photos" in sent[2]
     assert client.get(f"/listings/{bare}").json()["photos"] == []
 
     owner.get("/me/listings")  # warm-up

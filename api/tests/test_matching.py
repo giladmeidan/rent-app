@@ -373,18 +373,9 @@ def test_ac7_listing_page_match(
     closed = _l0(db_engine, owner, _area(db_engine, "closed-area", active=False))
     seeker = _seeker(client, outbox, db_engine, gush_dan)
 
-    def views() -> int:
-        with db_engine.connect() as conn:
-            count: int = conn.execute(
-                text("SELECT view_count FROM listings WHERE id = :id"), {"id": public}
-            ).scalar_one()
-        return count
-
-    before = views()
     page = seeker.get(f"/listings/{public}")
     assert page.status_code == 200
     assert page.json()["match"] == _match(100, TOP3, None)
-    assert views() == before + 1
 
     anonymous = client.get(f"/listings/{public}")
     assert anonymous.status_code == 200

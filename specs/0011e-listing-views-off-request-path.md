@@ -1,7 +1,7 @@
 ---
 id: 0011e
 title: The public listing page no longer writes to the database on every visit; views are counted in Redis once per viewer per listing per hour and added to listings.view_count by the worker every minute
-status: verified
+status: in-review
 depends_on: []   # split from 0011c (verifier finding 1); uses none of 0011c's code (no `limits.py`); both edit `services/applications.py` in different functions, the second to merge merges `origin/main`
 reviewers: [code, security, perf, qa]   # security: HMAC'd viewer keys (which IP or user viewed which listing); perf: the listing page read path and the flush; qa: API behaviour change on GET /listings/{id}. No ux: no screen
 estimate: 1 coder run (small)   # coder Opus/high (data write path, Speed rule 6)
