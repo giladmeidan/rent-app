@@ -7,7 +7,9 @@ import { test } from './fixtures';
 // The title's line break (whitespace-pre-line) reads as a space.
 const TITLE = he.landing.title.replace('\n', ' ');
 
-async function box(locator: Locator) {
+type Box = { x: number; y: number; width: number; height: number };
+
+async function box(locator: Locator): Promise<Box> {
   const b = await locator.boundingBox();
   expect(b).not.toBeNull();
   return b ?? { x: 0, y: 0, width: 0, height: 0 };
@@ -16,8 +18,11 @@ async function box(locator: Locator) {
 const noHorizontalScroll = () =>
   document.documentElement.scrollWidth <= document.documentElement.clientWidth;
 
-// Spec 0009a AC8: the landing for a visitor, with no sign-up. Replaces 0000's smoke check.
+// Spec 0009a AC8: the landing for a visitor, with no sign-up. Replaces 0000's smoke check. Spec
+// 0009z: reduced motion first, so axe never catches a card mid-fade (opacity counts in contrast);
+// the CTA clicks are scoped to the hero, since their names repeat further down the page.
 test('ac8_landing_smoke', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.locator('html[dir=rtl][lang=he]')).toHaveCount(1);
@@ -68,15 +73,97 @@ test('ac8_landing_smoke', async ({ page }) => {
   await expectNoAxeViolations(page, '/ at 1280');
 
   // The owner CTA opens signup with the owner role chosen (not submitted).
-  const main = page.getByRole('main');
-  await main.getByRole('link', { name: he.landing.cta.owner, exact: true }).click();
+  const hero = page.getByRole('main').getByRole('region', { name: TITLE });
+  await hero.getByRole('link', { name: he.landing.cta.owner, exact: true }).click();
   await expect(page).toHaveURL('/signup?role=owner&next=%2Flistings%2Fnew');
   await expect(page.getByRole('radio', { name: he.auth.role.owner })).toBeChecked();
 
   // Back on `/`, the seeker CTA opens the public search.
   await page.goBack();
   await expect(page).toHaveURL('/');
-  await main.getByRole('link', { name: he.landing.cta.seeker, exact: true }).click();
+  await hero.getByRole('link', { name: he.landing.cta.seeker, exact: true }).click();
   await expect(page).toHaveURL('/search');
   await expect(page.getByRole('heading', { level: 1, name: he.search.title })).toBeVisible();
+});
+
+/** A card's motion state: its opacity and any transform or translate on it. */
+const motion = (locator: Locator) =>
+  locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { opacity: style.opacity, transform: style.transform, translate: style.translate };
+  });
+
+const still = { opacity: '1', transform: 'none', translate: 'none' };
+
+// Spec 0009z AC10: a phone never scrolls sideways (the listings row scrolls inside itself), and the
+// static sections are one column: the doors and both "how" sides stack, full width.
+test('ac10_phone_no_overflow', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('heading', { level: 1 })).toBeVisible();
+  expect(await page.evaluate(noHorizontalScroll)).toBe(true);
+
+  // The five static sections, top to bottom, each as wide as the first.
+  const names = [
+    TITLE,
+    he.landing.doors.title,
+    he.landing.how.title,
+    he.landing.faq.title,
+    he.landing.closing.title,
+  ];
+  const sections: Box[] = [];
+  for (const name of names) sections.push(await box(main.getByRole('region', { name })));
+  const first = sections[0] ?? { x: 0, y: 0, width: 0, height: 0 };
+  sections.forEach((section, i) => {
+    expect(Math.abs(section.x - first.x)).toBeLessThan(1);
+    expect(Math.abs(section.width - first.width)).toBeLessThan(1);
+    const before = sections[i - 1];
+    if (before !== undefined)
+      expect(section.y).toBeGreaterThanOrEqual(before.y + before.height - 1);
+  });
+
+  // Inside them, one column: each door and each side sits under the one before, at the same x.
+  const stacked = async (cards: Locator) => {
+    const boxes: Box[] = [];
+    for (const card of await cards.all()) boxes.push(await box(card));
+    expect(boxes.length).toBeGreaterThan(1);
+    const top = boxes[0] ?? { x: 0, y: 0, width: 0, height: 0 };
+    boxes.forEach((b, i) => {
+      expect(Math.abs(b.x - top.x)).toBeLessThan(1);
+      expect(Math.abs(b.width - top.width)).toBeLessThan(1);
+      const before = boxes[i - 1];
+      if (before !== undefined) expect(b.y).toBeGreaterThanOrEqual(before.y + before.height - 1);
+    });
+  };
+  await stacked(main.locator('[data-door]'));
+  await stacked(main.locator('[data-side]'));
+
+  // Still no sideways scroll at the end of the page.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await page.evaluate(noHorizontalScroll)).toBe(true);
+});
+
+// Spec 0009z AC11: with reduced motion, a door and a step card never fade or move: not on load,
+// not after scrolling them into view, and the door does not lift on hover.
+test('ac11_reduced_motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const door = page.locator('[data-door="map"]');
+  const step = page.locator('[data-side="seeker"]');
+
+  expect(await motion(door)).toEqual(still);
+  expect(await motion(step)).toEqual(still);
+
+  await door.scrollIntoViewIfNeeded();
+  await door.hover();
+  expect(await motion(door)).toEqual(still);
+  await step.scrollIntoViewIfNeeded();
+  expect(await motion(step)).toEqual(still);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await motion(door)).toEqual(still);
+  expect(await motion(step)).toEqual(still);
 });
