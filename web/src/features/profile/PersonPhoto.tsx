@@ -31,13 +31,20 @@ export function PersonPhoto() {
   const addButton = useRef<HTMLButtonElement>(null);
   // Set by a removal: the "add" button replaces "replace", so focus moves there once it is shown.
   const [focusAdd, setFocusAdd] = useState(false);
+  // Set by a first upload (from the "add" state): "replace" replaces "add", so focus moves there.
+  const replaceButton = useRef<HTMLButtonElement>(null);
+  const [focusReplace, setFocusReplace] = useState(false);
   const hasPhoto = me?.photo_url != null;
   useEffect(() => {
     if (focusAdd && !hasPhoto && addButton.current !== null) {
       addButton.current.focus();
       setFocusAdd(false);
     }
-  }, [focusAdd, hasPhoto]);
+    if (focusReplace && hasPhoto && replaceButton.current !== null) {
+      replaceButton.current.focus();
+      setFocusReplace(false);
+    }
+  }, [focusAdd, focusReplace, hasPhoto]);
 
   if (me == null) return null;
 
@@ -60,6 +67,7 @@ export function PersonPhoto() {
       const user = await uploadMyPhoto(file);
       queryClient.setQueryData<UserOut | null>(ME_KEY, user);
       setDone('saved');
+      if (!hasPhoto) setFocusReplace(true);
     } catch (failure) {
       setError(photoErrorText(t, failure));
     } finally {
@@ -99,13 +107,21 @@ export function PersonPhoto() {
           <div className="flex flex-wrap gap-2">
             {hasPhoto ? (
               <>
-                <Button variant="secondary" size="md" busy={busy === 'upload'} onClick={pick}>
+                <Button
+                  ref={replaceButton}
+                  variant="secondary"
+                  size="md"
+                  busy={busy === 'upload'}
+                  disabled={busy === 'remove'}
+                  onClick={pick}
+                >
                   {t('profile.photo.replace')}
                 </Button>
                 <Button
                   variant="ghost"
                   size="md"
                   busy={busy === 'remove'}
+                  disabled={busy === 'upload'}
                   onClick={() => void onRemove()}
                 >
                   {t('profile.photo.remove')}
@@ -123,7 +139,7 @@ export function PersonPhoto() {
               </Button>
             )}
           </div>
-          <p role="status" className="text-body-sm font-medium text-success empty:hidden">
+          <p role="status" className="text-body-sm font-medium text-success empty:sr-only">
             {done === null
               ? ''
               : t(done === 'saved' ? 'profile.photo.saved' : 'profile.photo.removed')}

@@ -64,11 +64,17 @@ describe('PersonPhoto', () => {
     expect(puts[0]?.request.headers.get('Content-Type')).toBe('image/jpeg');
     expect(shown()).toHaveAttribute('src', URL_S);
     expect(screen.getByRole('button', { name: he.profile.photo.replace })).toBeVisible();
+    // Focus follows the pressed button: "העלאת תמונה" is gone, so "החלפת תמונה" has it.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: he.profile.photo.replace })).toHaveFocus();
+    });
     expect(screen.queryByRole('button', { name: he.profile.photo.add })).toBeNull();
     expect(fileInput().value).toBe('');
 
     // "הסרת תמונה": the DELETE, back to the initial, "התמונה הוסרה", focus on "העלאת תמונה".
     fireEvent.click(screen.getByRole('button', { name: he.profile.photo.remove }));
+    // While it is in flight the other button is disabled (a pick would be dropped).
+    expect(screen.getByRole('button', { name: he.profile.photo.replace })).toBeDisabled();
     expect(await screen.findByText(he.profile.photo.removed)).toBeVisible();
     expect(api.calls(DELETE)).toHaveLength(1);
     expect(shown()).toBeNull();
