@@ -76,6 +76,18 @@ Gilad merges, or delegates merging to the orchestrator for a slice (he has for e
     ../rent-app-NNNN` and deletes the local and remote `spec/NNNN-…` branch; a worktree is kept only while a
     dependent web half is still branched from it. Never leave a stack running "in case": it burns CPU and ports and confuses `docker ps`.
 
+11. **The orchestrator always keeps watch (Gilad, 2026-11-14).** While any build session it started is working, or
+    any spec PR is open, the orchestrator watches it without being asked, and acts on each change at once:
+    - **Sessions:** their turn-end notes are the main signal. A session waiting on a question gets an answer, or the
+      question goes to Gilad; a session that stops short of its report gets one line asking where it stands.
+    - **PRs:** one background watcher for all open spec PRs (a shell `until` loop over `gh pr view`, polling every
+      5 minutes or more), which ends on a finished `ci` run, a merge conflict, or a PR head missing `origin/main`. Then
+      the orchestrator acts and starts the watcher again: green → `make merge PR=N` when merging is delegated, else tell
+      Gilad; red → read only the failing step's summary, then send the spec session or Gilad one line with the cause
+      (a loaded Mac is not a code bug, rule 8); behind `main` → the spec session merges `origin/main` and pushes.
+    - **Not excessively:** no polling under 5 minutes, no "are you done?" messages, no reading diffs or transcripts
+      (rule 1), and no second watcher for the same thing.
+
 Subagents are defined in `.claude/agents/`. Slash commands in `.claude/commands/`:
 `/spec <slice-title>`, `/build <spec-id>`, `/review <spec-id>`, `/digest <spec-id>`.
 
