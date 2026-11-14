@@ -58,6 +58,7 @@ function RoomList({
             today={today}
             to={`/listings/${listing.id}`}
             titleAs="h3"
+            coverUrl={listing.cover?.small_url}
             seekerBirthYear={profile?.birth_year}
             badge={listing.match && <MatchBadge score={listing.match.score} />}
           >
