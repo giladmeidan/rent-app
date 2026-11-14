@@ -1,7 +1,7 @@
 ---
 id: 0010l
 title: On a room a seeker has one way to say "I'm interested", the application; the seeker's room-like is removed, and a lister's like becomes an invite that the seeker's application answers with an open chat
-status: verified
+status: in-review
 depends_on: []   # 0008a/0008c/0010b/0010h done; #82 (my applications active/past) merged
 reviewers: [code, qa, security]   # security: the apply path now opens a chat (shortlist without the lister's click) and the lock order changes; qa: the room page, /me/likes and the inbox end to end
 estimate: 1 coder run, large   # coder Opus/high (migration, apply concurrency; Speed rule 6). ~45 files, most of it deletion; cannot split (see Risks)
