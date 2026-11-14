@@ -1,10 +1,14 @@
-"""The rent price estimate, step 1: the baseline (spec 0014c).
+"""The rent price estimate, step 1: the baseline (spec 0014c), and small flats (spec 0014d).
 
 An apartment's facts (city, street, rooms; never a listing id) → the official average rent for its
 room count in its neighbourhood, or in its city when the street does not place it in exactly one
 neighbourhood, as a range with a confidence level. Reads `rent_areas` / `rent_prices` (spec 0014a)
 in at most four queries. `backtest` sets `WINDOW_QUARTERS` and `HALF_WIDTH` from the official
 history, with the same window and mean code as the estimate.
+
+A 1, 1.5 or 2 room apartment gets the 3-room baseline × the CBS ratio of 1-2 to 2.5-3 room rent
+(`cbs_rent_prices`, its city's or its district's) in one more query; `backtest_ratio` sets
+`RATIO_WINDOW_QUARTERS` and `RATIO_HALF_WIDTH`.
 """
 
 import datetime as dt
@@ -18,13 +22,14 @@ from decimal import Decimal
 from fractions import Fraction
 from typing import Literal, NamedTuple
 
-from sqlalchemy import Row, func, select
+from sqlalchemy import Row, func, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.models import RentArea, RentPrice
+from app.models import CbsRentPrice, RentArea, RentPrice
 from app.schemas.rent_estimate import RentEstimateOut, RentEstimateRange, RentEstimateReason
 
 Level = Literal["neighbourhood", "city"]
+RatioLevel = Literal["city", "district"]
 
 # backtest (make rent-backtest, 2026-11-14, source version 20-08-2026): quarters averaged, ending
 # at the newest period; window 3 had the smallest neighbourhood p80 (7.65 %)
@@ -35,6 +40,25 @@ MIN_QUARTERS = min(2, WINDOW_QUARTERS)  # policy, spec 0014c: figures needed ins
 HALF_WIDTH: dict[Level, float] = {"neighbourhood": 0.08, "city": 0.18}
 MAX_HALF_WIDTH = 0.20  # policy, spec 0014c: a level wider than this gives no number
 HIGH_MAX_HALF_WIDTH = 0.10  # policy, spec 0014c: at most this, and not capped, is "high"
+
+SMALL_ROOMS = {Decimal("1"), Decimal("1.5"), Decimal("2")}  # policy (Gilad 2026-11-14)
+# backtest (make rent-backtest, 2026-11-14, CBS bulletins 7/2025, 1/2026, 4/2026, 7/2026; 10/2025
+# rejected): newest CBS quarters averaged per geography; window 1 had the smallest city p80 (1.25 %)
+RATIO_WINDOW_QUARTERS = 1
+RATIO_MIN_QUARTERS = min(2, RATIO_WINDOW_QUARTERS)  # policy, spec 0014d
+# backtest (same run): ratio p80 error at window 1, rounded up (city 1.25 %: a city's own ratio;
+# district 6.27 %: a launch-box city's ratio predicted from its district's)
+RATIO_HALF_WIDTH: dict[RatioLevel, float] = {"city": 0.02, "district": 0.07}
+# policy, spec 0014d: CBS district of each launch-box settlement (RENT_SETTLEMENT_CODES, 0014a),
+# from CBS's settlement list on data.gov.il (district = subdistrict code // 10), checked 2026-11-14
+SETTLEMENT_DISTRICT: dict[int, int] = {
+    # Tel Aviv District (5): Tel Aviv-Yafo, Ramat Gan, Givatayim, Bnei Brak, Holon, Bat Yam,
+    # Herzliya, Ramat HaSharon, Kiryat Ono, Or Yehuda, Azor
+    **dict.fromkeys((5000, 8600, 6300, 6100, 6600, 6200, 6400, 2650, 2620, 2400, 565), 5),
+    # Center District (4): Petah Tikva, Rishon LeZion, Givat Shmuel, Yehud-Monosson, Ganei Tikva,
+    # Savyon, Hod HaSharon, Beit Dagan
+    **dict.fromkeys((7900, 8300, 681, 9400, 229, 587, 9700, 466), 4),
+}
 
 # Normalised alias → settlement code (the source's own names match without an alias).
 CITY_ALIASES: dict[str, int] = {
@@ -85,8 +109,8 @@ def window(end: dt.date, quarters: int) -> tuple[dt.date, dt.date]:
     return quarters_back(end, quarters - 1), end
 
 
-def mean_if_enough(prices: Sequence[int], minimum: int) -> Fraction | None:
-    """The exact mean of `prices`, or None with fewer than `minimum` of them."""
+def mean_if_enough(prices: Sequence[int | Fraction], minimum: int) -> Fraction | None:
+    """The exact mean of `prices` (or ratios), or None with fewer than `minimum` of them."""
     if not prices or len(prices) < minimum:
         return None
     return Fraction(sum(prices), len(prices))
@@ -132,10 +156,59 @@ def _no(reason: RentEstimateReason) -> RentEstimateOut:
     return RentEstimateOut(estimate=None, reason=reason)
 
 
+def ratios[G](
+    prices: Iterable[tuple[G, str, dt.date, Decimal]],
+) -> dict[G, dict[dt.date, Fraction]]:
+    """(geography, room group, period, price) → per geography, per period holding both groups,
+    the exact ratio price(1-2) / price(2.5-3)."""
+    groups: dict[tuple[G, dt.date], dict[str, Decimal]] = defaultdict(dict)
+    for geo, group, period, price in prices:
+        groups[(geo, period)][group] = price
+    out: dict[G, dict[dt.date, Fraction]] = defaultdict(dict)
+    for (geo, period), by_group in groups.items():
+        if "1-2" in by_group and "2.5-3" in by_group:
+            out[geo][period] = Fraction(by_group["1-2"]) / Fraction(by_group["2.5-3"])
+    return out
+
+
+def _small_flat_ratio(db: Session, settlement_code: int) -> tuple[RatioLevel, Fraction] | None:
+    """Step 5b: the mean CBS ratio over the CBS window, the city's when it has enough periods,
+    else its district's; None when neither has. One query."""
+    geos: list[tuple[RatioLevel, int]] = [("city", settlement_code)]
+    district = SETTLEMENT_DISTRICT.get(settlement_code)
+    if district is not None:
+        geos.append(("district", district))
+    newest = select(func.max(CbsRentPrice.period)).scalar_subquery()
+    rows = db.execute(
+        select(
+            CbsRentPrice.geo_kind,
+            CbsRentPrice.geo_code,
+            CbsRentPrice.room_group,
+            CbsRentPrice.period,
+            CbsRentPrice.price_ils,
+            newest,
+        ).where(tuple_(CbsRentPrice.geo_kind, CbsRentPrice.geo_code).in_(geos))
+    ).all()
+    if not rows:
+        return None
+    first, last = window(rows[0][5], RATIO_WINDOW_QUARTERS)
+    by_geo = ratios(
+        ((kind, code), group, period, price)
+        for kind, code, group, period, price, _ in rows
+        if first <= period <= last
+    )
+    for geo in geos:
+        mean = mean_if_enough(list(by_geo.get(geo, {}).values()), RATIO_MIN_QUARTERS)
+        if mean is not None:
+            return geo[0], mean
+    return None
+
+
 def estimate_rent(db: Session, *, city: str, street: str, rooms: Decimal) -> RentEstimateOut:
-    """Evaluation order: rooms → newest period → city → street → figures → width; the first that
-    fails is the answer's `reason`."""
-    keys = figure_keys(rooms)
+    """Evaluation order: rooms → newest period → city → street → figures → small-flat ratio →
+    width; the first that fails is the answer's `reason`."""
+    small = rooms in SMALL_ROOMS
+    keys = [3] if small else figure_keys(rooms)
     if keys is None:
         return _no("rooms_not_covered")
     latest = db.scalar(select(func.max(RentPrice.period)))
@@ -167,17 +240,26 @@ def estimate_rent(db: Session, *, city: str, street: str, rooms: Decimal) -> Ren
             continue
         baseline = sum(m for m in means if m is not None) / len(means)
         half = HALF_WIDTH[level]
+        small_flat_ratio: RatioLevel | None = None
+        if small:
+            ratio = _small_flat_ratio(db, settlement.settlement_code)
+            if ratio is None:
+                return _no("no_figures")
+            small_flat_ratio, mean_ratio = ratio
+            baseline *= mean_ratio
+            half = math.hypot(half, RATIO_HALF_WIDTH[small_flat_ratio])
         if half > MAX_HALF_WIDTH:
             return _no("too_uncertain")
         exact_half = Fraction(str(half))
-        capped = len(keys) != 1 or rooms != keys[0]
+        capped = small or len(keys) != 1 or rooms != keys[0]
         estimate = RentEstimateRange(
             low_ils=math.floor(baseline * (1 - exact_half) / 50) * 50,
             high_ils=math.ceil(baseline * (1 + exact_half) / 50) * 50,
             confidence="high" if half <= HIGH_MAX_HALF_WIDTH and not capped else "medium",
             level=level,
             area_name=area_name,
-            figure_rooms=keys,
+            figure_rooms=[1, 2] if small else keys,
+            small_flat_ratio=small_flat_ratio,
             quarters=min(len(prices[(area_id, key)]) for key in keys),
             latest_period=latest,
         )
@@ -194,9 +276,17 @@ class Figure(NamedTuple):
     price_ils: int
 
 
+class CbsFigure(NamedTuple):
+    geo_kind: str  # "city" or "district"
+    geo_code: int
+    room_group: str  # "1-2" or "2.5-3"
+    period: dt.date
+    price_ils: Decimal
+
+
 class BacktestRow(NamedTuple):
     window: int
-    level: Level
+    level: Literal["neighbourhood", "city", "district"]
     n: int
     median: float
     p80: float
@@ -230,9 +320,48 @@ def backtest(
                 prediction = mean_if_enough(prices, min(2, size))
                 if prediction is not None:
                     errors[level].append(float(abs(prediction - f.price_ils) / f.price_ils))
-        for level, errs in errors.items():
-            if errs:
-                ranked = sorted(errs)
-                p80 = ranked[math.ceil(0.8 * len(ranked)) - 1]
-                rows.append(BacktestRow(size, level, len(errs), statistics.median(errs), p80))
+        rows += _summaries(size, errors)
+    return rows
+
+
+def _summaries(
+    size: int, errors: dict[Level, list[float]] | dict[RatioLevel, list[float]]
+) -> list[BacktestRow]:
+    """One row per level with errors: n, median and the nearest-rank p80."""
+    rows: list[BacktestRow] = []
+    for level, errs in errors.items():
+        if errs:
+            ranked = sorted(errs)
+            p80 = ranked[math.ceil(0.8 * len(ranked)) - 1]
+            rows.append(BacktestRow(size, level, len(errs), statistics.median(errs), p80))
+    return rows
+
+
+def backtest_ratio(
+    figures: Sequence[CbsFigure], *, windows: Iterable[int] = range(1, 7), targets: int = 4
+) -> list[BacktestRow]:
+    """Predict each launch-box city's ratio at its newest `targets` periods from the `window`
+    quarters strictly before it: from the city's own ratios and from its district's; the relative
+    errors per (window, level)."""
+    by_geo = ratios(
+        ((f.geo_kind, f.geo_code), f.room_group, f.period, f.price_ils) for f in figures
+    )
+    cities = [geo for geo in by_geo if geo[0] == "city" and geo[1] in SETTLEMENT_DISTRICT]
+    rows: list[BacktestRow] = []
+    for size in windows:
+        errors: dict[RatioLevel, list[float]] = {"city": [], "district": []}
+        for city in cities:
+            own = by_geo[city]
+            sources: dict[RatioLevel, dict[dt.date, Fraction]] = {
+                "city": own,
+                "district": by_geo.get(("district", SETTLEMENT_DISTRICT[city[1]]), {}),
+            }
+            for target in sorted(own, reverse=True)[:targets]:
+                first, last = window(quarters_back(target, 1), size)
+                for level, source in sources.items():
+                    prior = [r for period, r in source.items() if first <= period <= last]
+                    prediction = mean_if_enough(prior, min(2, size))
+                    if prediction is not None:
+                        errors[level].append(float(abs(prediction - own[target]) / own[target]))
+        rows += _summaries(size, errors)
     return rows

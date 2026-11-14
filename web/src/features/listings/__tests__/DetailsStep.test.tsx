@@ -483,6 +483,61 @@ describe('rent estimate hint (0014c)', () => {
     expect(hint()).toBeNull();
   });
 
+  it('ac11 small flat hint', async () => {
+    // Spec 0014d: one, two and several quarters, the rooms pair and both sources.
+    const small = {
+      ...estimate,
+      low_ils: 3150,
+      high_ils: 3800,
+      confidence: 'medium',
+      figure_rooms: [1, 2],
+      small_flat_ratio: 'city',
+    };
+    const tail = {
+      1: 'רבעון אחד: רבעון 2 2026',
+      2: '2 רבעונים עד רבעון 2 2026',
+      4: '4 רבעונים עד רבעון 2 2026',
+    };
+    for (const [quarters, ending] of Object.entries(tail)) {
+      mockApi({
+        'GET /areas': [json([gushDan])],
+        'GET /rent-estimate': [
+          json({ estimate: { ...small, quarters: Number(quarters) }, reason: null }),
+        ],
+      });
+      const view = renderWizard();
+      chooseApartmentAndContinue();
+      await areasLoaded();
+      change(f.city, 'תל אביב');
+      change(f.street, 'תירוש');
+      change(f.rooms, '2');
+      await vi.waitFor(() => {
+        expect(hint()).not.toBeNull();
+      });
+      expect(hint()).toHaveTextContent(
+        `שכר דירה ממוצע ל־1–2 חדרים בהצפון הישן: 3,150–3,800 ₪ · ודאות בינונית · לפי nadlan.gov.il והלמ״ס, ${ending}`,
+      );
+      const hintId = (hint() as HTMLElement).id;
+      expect(field(f.price).getAttribute('aria-describedby')?.split(' ')).toContain(hintId);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // A 2.5+ answer (`small_flat_ratio: null`) keeps 0014c's copy, without the CBS.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'GET /rent-estimate': [
+        json({ estimate: { ...estimate, small_flat_ratio: null }, reason: null }),
+      ],
+    });
+    await fillAddress();
+    await vi.waitFor(() => {
+      expect(hint()).not.toBeNull();
+    });
+    expect(hint()).toHaveTextContent('לפי nadlan.gov.il, 4 רבעונים');
+    expect(hint()?.textContent).not.toContain('הלמ״ס');
+  });
+
   it('ac12 estimate request is debounced', async () => {
     const api = mockApi({
       'GET /areas': [json([gushDan])],

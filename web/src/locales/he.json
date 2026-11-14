@@ -159,6 +159,9 @@
       "hint_one": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il, רבעון אחד: {{period}}",
       "hint_two": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il, 2 רבעונים עד {{period}}",
       "hint_other": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il, {{count}} רבעונים עד {{period}}",
+      "hintSmall_one": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il והלמ״ס, רבעון אחד: {{period}}",
+      "hintSmall_two": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il והלמ״ס, 2 רבעונים עד {{period}}",
+      "hintSmall_other": "שכר דירה ממוצע ל־{{rooms}} חדרים ב{{area}}: {{range}} · {{confidence}} · לפי nadlan.gov.il והלמ״ס, {{count}} רבעונים עד {{period}}",
       "range": "{{low}}–{{high}} ₪",
       "roomsPair": "{{low}}–{{high}}",
       "confidence": {
