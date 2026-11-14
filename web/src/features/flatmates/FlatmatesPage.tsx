@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { Avatar } from '../../components/Avatar';
 import { PageContainer } from '../../components/PageContainer';
 import { usePageTitle } from '../../app/usePageTitle';
 import { Button } from '../../components/Button';
@@ -259,12 +260,7 @@ function FlatmateRow({
 
   return (
     <li className="flex flex-wrap items-center gap-3 border-t border-border pt-3 first:border-t-0 first:pt-0">
-      <span
-        aria-hidden="true"
-        className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-accent-soft text-body font-semibold text-accent-strong"
-      >
-        {Array.from(name)[0] ?? ''}
-      </span>
+      <Avatar name={name} photoUrl={flatmate.photo_url} size="sm" tone="accent" />
       <div className="flex min-w-0 flex-1 flex-col">
         <span id={nameId} dir="auto" className="text-h3 [overflow-wrap:anywhere]">
           {name}
