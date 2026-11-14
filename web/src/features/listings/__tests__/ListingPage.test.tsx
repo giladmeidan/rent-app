@@ -1333,4 +1333,83 @@ describe('ListingPage', () => {
       '/market',
     );
   });
+
+  it('ac1_gallery', async () => {
+    const photo = (n: number) => ({
+      id: `p${String(n)}`,
+      small_url: `https://media.test/${String(n)}-s.webp`,
+      large_url: `https://media.test/${String(n)}-l.webp`,
+    });
+    const unauthenticated = () => json({ detail: 'unauthenticated' }, 401);
+    const show = (listing: ReturnType<typeof listingDetail>) => {
+      mockApi({ 'GET /me': [unauthenticated], [`GET /listings/${listing.id}`]: [json(listing)] });
+      return render(listing.id);
+    };
+    const alt = (n: number, total: number) =>
+      he.listing.photos.alt
+        .replace('{{title}}', cardTitle(i18n.t.bind(i18n), listing3))
+        .replace('{{n}}', String(n))
+        .replace('{{total}}', String(total));
+    const counter = (n: number, total: number) =>
+      he.listing.photos.counter.replace('{{n}}', String(n)).replace('{{total}}', String(total));
+    const thumb = (n: number, total: number) =>
+      screen.getByRole('button', {
+        name: he.listing.photos.show
+          .replace('{{n}}', String(n))
+          .replace('{{total}}', String(total)),
+      });
+
+    // Three photos: the first large image with its alt, the counter and three thumbnails.
+    const listing3 = listingDetail({ photos: [photo(1), photo(2), photo(3)] });
+    let view = show(listing3);
+    const main = await screen.findByRole('img', { name: alt(1, 3) });
+    expect(main).toHaveAttribute('src', photo(1).large_url);
+    expect(screen.getByText(counter(1, 3))).toBeVisible();
+    expect(screen.getByText(counter(1, 3))).toHaveAttribute('aria-hidden', 'true');
+    const thumbs = [1, 2, 3].map((n) => thumb(n, 3));
+    expect(thumbs).toHaveLength(3);
+    expect(thumbs[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(thumbs[0]).toHaveClass('border-accent');
+    expect(thumbs[1]).toHaveAttribute('aria-pressed', 'false');
+    expect(within(thumbs[1] as HTMLElement).getByRole('presentation')).toHaveAttribute(
+      'src',
+      photo(2).small_url,
+    );
+
+    // The third thumbnail: its large image, the pressed state and the counter move; focus stays.
+    (thumbs[2] as HTMLElement).focus();
+    fireEvent.click(thumbs[2] as HTMLElement);
+    expect(screen.getByRole('img', { name: alt(3, 3) })).toHaveAttribute('src', photo(3).large_url);
+    expect(screen.getByText(counter(3, 3))).toBeVisible();
+    expect(screen.queryByText(counter(1, 3))).toBeNull();
+    expect(thumb(3, 3)).toHaveAttribute('aria-pressed', 'true');
+    expect(thumb(1, 3)).toHaveAttribute('aria-pressed', 'false');
+    expect(thumb(3, 3)).toHaveFocus();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // One photo: the image, no counter, no thumbnails.
+    const one = listingDetail({ photos: [photo(1)] });
+    view = show(one);
+    const only = await screen.findByRole('img', {
+      name: he.listing.photos.alt
+        .replace('{{title}}', cardTitle(i18n.t.bind(i18n), one))
+        .replace('{{n}}', '1')
+        .replace('{{total}}', '1'),
+    });
+    expect(only).toHaveAttribute('src', photo(1).large_url);
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^הצגת תמונה/ })).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // None: today's band (the placeholder icon, no image).
+    const none = listingDetail({ photos: [] });
+    show(none);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getByRole('article').querySelector('img')).toBeNull();
+    expect(
+      screen.getByRole('article').querySelector('div.bg-surface-subtle > svg[aria-hidden="true"]'),
+    ).not.toBeNull();
+  });
 });

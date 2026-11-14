@@ -27,6 +27,7 @@ import { ApplyBar } from './ApplyBar';
 import { cardTitle } from './cardTitle';
 import { entryFact, floorFact, sizeFact } from './facts';
 import { formatIls, todayInIsrael } from './format';
+import { Gallery, GALLERY_SKELETON } from './Gallery';
 import { ListingFacts } from './ListingFacts';
 import { OwnerPreferences } from './OwnerPreferences';
 import { markSeen } from './seen';
@@ -79,7 +80,7 @@ export function ListingPage() {
     body = (
       <Loading>
         <div className={`flex flex-col gap-3 ${TWO_COLUMNS}`}>
-          <Skeleton className="-mx-4 h-40 md:-mx-6 lg:col-span-2 lg:mx-0 lg:h-64 lg:rounded-lg" />
+          <Skeleton className={GALLERY_SKELETON} />
           <div className="flex flex-col gap-3">
             <Skeleton className="h-8 w-32" />
             <Skeleton className="h-6 w-3/4" />
@@ -107,25 +108,7 @@ export function ListingPage() {
 
     body = (
       <article className={`flex flex-col gap-5 lg:gap-y-6 ${TWO_COLUMNS}`}>
-        {/* The neutral photo placeholder of the card, edge to edge on a phone (photos are 0002c). */}
-        <div className="-mx-4 flex h-40 items-center justify-center bg-surface-subtle md:-mx-6 lg:col-span-2 lg:mx-0 lg:h-64 lg:rounded-lg">
-          <svg
-            aria-hidden="true"
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            className="text-ink-muted"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="9" cy="10" r="1.6" />
-            <path d="M21 16l-5-5-8 8" />
-          </svg>
-        </div>
+        <Gallery key={l.id} photos={l.photos} title={cardTitle(t, l)} />
 
         <div data-testid="listing-main" className="flex min-w-0 flex-col gap-5">
           <div className="flex flex-col gap-2">

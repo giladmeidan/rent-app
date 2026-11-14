@@ -413,7 +413,12 @@
     },
     "toSearch": "לחיפוש דירות",
     "showOnMap": "הצגה במפת החיפוש",
-    "backToMarket": "חזרה לשוק השותפים"
+    "backToMarket": "חזרה לשוק השותפים",
+    "photos": {
+      "alt": "{{title}}, תמונה {{n}} מתוך {{total}}",
+      "counter": "{{n}} / {{total}}",
+      "show": "הצגת תמונה {{n}} מתוך {{total}}"
+    }
   },
   "map": {
     "title": "מפה",
