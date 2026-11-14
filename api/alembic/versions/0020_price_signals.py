@@ -59,7 +59,7 @@ _CHECKS = (
     (
         "ck_listings_final_rent_ils",
         "final_rent_ils IS NULL OR (final_rent_ils BETWEEN 500 AND 100000"
-        " AND close_reason IN ('rented_here', 'rented_elsewhere'))",
+        " AND close_reason IS NOT NULL AND close_reason IN ('rented_here', 'rented_elsewhere'))",
     ),
     ("ck_listings_closed_at", "(close_reason IS NULL) = (closed_at IS NULL)"),
 )

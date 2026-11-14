@@ -2733,6 +2733,10 @@ def test_ac3_price_signals_backfill_and_downgrade(migration_db_url: str) -> None
             "UPDATE listings SET close_reason = 'rented_here', closed_at = now(),"
             " final_rent_ils = 499 WHERE id = :id",
         )
+        # No reason, a rent: `close_reason IN (…)` alone would be NULL and let it through.
+        refused(
+            "ck_listings_final_rent_ils", "UPDATE listings SET final_rent_ils = 6000 WHERE id = :id"
+        )
         refused("ck_listings_closed_at", "UPDATE listings SET closed_at = now() WHERE id = :id")
         refused(
             "ck_listings_closed_at",

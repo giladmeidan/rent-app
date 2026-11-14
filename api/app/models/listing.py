@@ -144,6 +144,7 @@ class Listing(Base):
         ),
         CheckConstraint(
             "final_rent_ils IS NULL OR (final_rent_ils BETWEEN 500 AND 100000"
+            " AND close_reason IS NOT NULL"
             " AND close_reason IN ('rented_here', 'rented_elsewhere'))",
             name="ck_listings_final_rent_ils",
         ),
