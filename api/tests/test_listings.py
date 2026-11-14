@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.db import get_sessionmaker
 from app.models import User
 from app.schemas.listing import ListingIn
@@ -181,8 +182,10 @@ def test_ac2_rooms_for_any_account_apartments_for_owners(
 
 
 def test_ac3_cap_counts_live_listings_only(
-    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The create limit is not under test here (spec 0011c).
+    monkeypatch.setattr(limits, "CREATE", limits.Bucket("create", 100, 100))
     listings = [_create(owner, gush_dan) for _ in range(3)]
 
     response = owner.post("/listings", json=_body(gush_dan))
@@ -947,8 +950,9 @@ def test_ac5_legacy_room_fills_count_on_next_edit(
 
 
 def _many_unknown_keys() -> dict[str, int]:
-    """20,000 unknown questionnaire keys, one of them a sensitive sentence."""
-    keys = {f"k{n}": 2 for n in range(19_999)}
+    """4,000 unknown questionnaire keys, one of them a sensitive sentence (spec 0011c: 20,000 is
+    now a 413 `body_too_large`, `test_hardening.py::test_ac12_body_size_cap`)."""
+    keys = {f"k{n}": 2 for n in range(3_999)}
     return {**keys, "I am pregnant": 2}
 
 

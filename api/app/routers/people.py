@@ -19,7 +19,8 @@ listing gate, so every attempt counts.
 The lister's like shares one rate limit per user with person likes (`LIKE_RATE_LIMIT_HOUR` /
 `_DAY`, a 429 with `Retry-After`), counted only once the listing gate passed. It is an invite
 (spec 0010l): it never creates an application and notifies no one; the seeker's application
-answers it (`routers/applications.py` publishes that chat event)."""
+answers it (`routers/applications.py` publishes that chat event). The unlike counts the shared
+`write` budget (spec 0011c, `app/limits.py`)."""
 
 import uuid
 from typing import Annotated, Any
@@ -28,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import current_user
 from app.db import get_session
 from app.matching.score import explain_row
@@ -174,11 +176,13 @@ def like_person(
             "model": ErrorOut,
             "description": "not_found: unknown person, or one of another listing or account",
         },
+        **limits.RATE_LIMITED,
     },
 )
 def unlike_person(
-    listing_id: uuid.UUID, person_id: uuid.UUID, user: UserDep, db: DbDep
+    listing_id: uuid.UUID, person_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep
 ) -> Response:
+    limits.check(r, user.id, limits.WRITE)
     try:
         people_service.unlike_person(db, user, listing_id, person_id)
     except ListingNotFoundError:

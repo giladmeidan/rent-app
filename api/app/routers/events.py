@@ -7,10 +7,12 @@ creates the generator: once the generator runs, the `200 text/event-stream` star
 and an error can no longer be a JSON response. Errors: 401 `unauthenticated`, 429 `rate_limited`
 (+ `Retry-After`), 429 `too_many_streams`, 503 (DB or Redis down at connect).
 
-Wire format: `retry: 3000` first, then `event: chat` with `data: {"conversation_id", "kind"}`,
-`event: resync` with `data: {}` (events were dropped: refetch everything) and FastAPI's own `: ping`
-comments every 15 s. The stream ends after `STREAM_MAX_S` plus up to `STREAM_JITTER_S` (the browser
-reconnects and re-authenticates) or when the hub fails. Nothing is replayed: no `id:`."""
+Wire format: `retry: N` first (N drawn per stream from `RETRY_MIN_MS`..`RETRY_MAX_MS`, spec 0011c,
+so clients dropped together do not reconnect together), then `event: chat` with
+`data: {"conversation_id", "kind"}`, `event: resync` with `data: {}` (events were dropped: refetch
+everything) and FastAPI's own `: ping` comments every 15 s. The stream ends after `STREAM_MAX_S`
+plus up to `STREAM_JITTER_S` (the browser reconnects and re-authenticates) or when the hub fails.
+Nothing is replayed: no `id:`."""
 
 import asyncio
 import random
@@ -36,7 +38,8 @@ EVENTS_OPEN_LIMIT_MINUTE = 30
 EVENTS_OPEN_WINDOW_S = 60
 STREAM_MAX_S = 900.0
 STREAM_JITTER_S = 60.0
-RETRY_MS = 3000
+RETRY_MIN_MS = 2000
+RETRY_MAX_MS = 10_000
 
 _ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorOut, "description": "unauthenticated"},
@@ -98,7 +101,7 @@ async def stream_subscription(
 async def events(
     sub: Annotated[chat_events.Subscription, Depends(stream_subscription)],
 ) -> AsyncIterator[ServerSentEvent]:
-    yield ServerSentEvent(retry=RETRY_MS)
+    yield ServerSentEvent(retry=random.randint(RETRY_MIN_MS, RETRY_MAX_MS))
     loop = asyncio.get_running_loop()
     deadline = loop.time() + STREAM_MAX_S + random.uniform(0, STREAM_JITTER_S)
     while True:

@@ -436,9 +436,12 @@ def likes_statement(viewer: Viewer) -> Select[Any]:
     )
 
 
-def my_people_likes(db: Session, me: User) -> Sequence[Row[Any]]:
-    """`me`'s people likes (`likes_statement`'s rows). The viewer (`CardRequiredError` without a
-    visible card), then the list: two statements after the session lookup."""
+def my_people_likes(db: Session, r: RedisClient, me: User) -> Sequence[Row[Any]]:
+    """`me`'s people likes (`likes_statement`'s rows). The browse limiter counts first, as in
+    `browse` (spec 0011c: every authenticated attempt counts, `RateLimitedError`); then the viewer
+    (`CardRequiredError` without a visible card), then the list: two statements after the session
+    lookup."""
+    count_browse(r, me)
     viewer = _viewer(db, me)
     if not viewer.people_visible:
         raise CardRequiredError

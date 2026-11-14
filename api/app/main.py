@@ -3,16 +3,19 @@
 import logging
 import math
 import mimetypes
+import re
 from typing import Any
 
 import redis
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import get_settings
 from app.routers import (
@@ -37,6 +40,51 @@ log = logging.getLogger(__name__)
 
 # The slim image's `mimetypes` may not know WebP; `/media` must serve `image/webp` (spec 0010d).
 mimetypes.add_type("image/webp", ".webp")
+
+# Spec 0011c: bodies over 64 KB are refused before parsing (~5x the largest real body). The two
+# photo uploads keep their own 8 MB cap (`routers/photos.py::read_capped`).
+MAX_BODY_BYTES = 65_536
+MAX_VALIDATION_ERRORS = 50
+_LISTING_PHOTO_UPLOAD = re.compile(r"^/listings/[^/]+/photos$")
+
+
+def _is_upload(scope: Scope) -> bool:
+    method, path = scope["method"], scope["path"]
+    return (method == "POST" and bool(_LISTING_PHOTO_UPLOAD.match(path))) or (
+        method == "PUT" and path == "/me/photo"
+    )
+
+
+class BodySizeLimit:
+    """413 `body_too_large` for a request body over `MAX_BODY_BYTES`. Pure ASGI, not
+    `BaseHTTPMiddleware`, so the SSE stream is never buffered. A declared `Content-Length` over the
+    cap is refused without calling the app; a chunked body raises once its running total passes
+    the cap (FastAPI re-raises an `HTTPException` from the body read, so its handler answers)."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or _is_upload(scope):
+            await self.app(scope, receive, send)
+            return
+        length = Headers(scope=scope).get("content-length", "")
+        if length.isascii() and length.isdigit() and int(length) > MAX_BODY_BYTES:
+            response = JSONResponse(status_code=413, content={"detail": "body_too_large"})
+            await response(scope, receive, send)
+            return
+        total = 0
+
+        async def capped_receive() -> Message:
+            nonlocal total
+            message = await receive()
+            if message["type"] == "http.request":
+                total += len(message.get("body", b""))
+                if total > MAX_BODY_BYTES:
+                    raise HTTPException(status_code=413, detail="body_too_large")
+            return message
+
+        await self.app(scope, capped_receive, send)
 
 
 async def _database_unavailable(request: Request, exc: Exception) -> JSONResponse:
@@ -80,10 +128,11 @@ def _json_safe(value: Any) -> bool:
 
 async def _request_invalid(request: Request, exc: Exception) -> JSONResponse:
     """422 with `type`, `loc`, `msg` (and a JSON-safe `ctx`); never `input`: it may be PII, and
-    non-finite numbers or lone surrogates in it would make the response itself fail (a 500)."""
+    non-finite numbers or lone surrogates in it would make the response itself fail (a 500). At
+    most the first `MAX_VALIDATION_ERRORS` entries (spec 0011c)."""
     assert isinstance(exc, RequestValidationError)
     detail: list[dict[str, Any]] = []
-    for error in exc.errors():
+    for error in exc.errors()[:MAX_VALIDATION_ERRORS]:
         entry: dict[str, Any] = {
             "type": str(error.get("type", "")),
             "loc": [p if isinstance(p, int) else str(p) for p in error.get("loc", ())],
@@ -103,6 +152,8 @@ async def _request_invalid(request: Request, exc: Exception) -> JSONResponse:
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Rent App API", version="0.0.1")
+    # Added before CORS: the last added is outermost, so the 413 carries the CORS headers.
+    app.add_middleware(BodySizeLimit)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.web_origin],
