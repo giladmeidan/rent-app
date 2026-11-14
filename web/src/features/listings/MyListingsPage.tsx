@@ -13,14 +13,16 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
-import { ApiError, type ListingType, type MyListingOut } from './api';
+import { useOnline } from '../../components/useOnline';
+import type { ListingType, MyListingOut } from './api';
 import { ClosureDialog, closeReasonLabel } from './ClosureDialog';
 import { LISTING_CAP } from './constants';
 import { formatDate, todayInIsrael } from './format';
 import { ListingCard } from './ListingCard';
-import { isPastExpiry, listingState, StatusBadge } from './StatusBadge';
+import { inRenewalWindow, isPastExpiry, listingState, StatusBadge } from './StatusBadge';
 import { useMyListings } from './useMyListings';
 import { usePatchListing } from './usePatchListing';
+import { actionErrorText, useRenewListing } from './useRenewListing';
 
 /** Set by the edit wizard's save (`navigate(…, { state: { saved: true, photosFailed } })`). */
 function isSaved(state: unknown): boolean {
@@ -34,6 +36,12 @@ function isPublished(state: unknown): boolean {
   );
 }
 
+/** Set by the edit page's renewal (`navigate(…, { state: { renewed: expires_at } })`, 0011a). */
+function renewedOn(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('renewed' in state)) return null;
+  return typeof state.renewed === 'string' ? state.renewed : null;
+}
+
 /** How many photos the wizard's publish or save could not upload (spec 0010e); 0 when none. */
 function photosFailed(state: unknown): number {
   if (typeof state !== 'object' || state === null || !('photosFailed' in state)) return 0;
@@ -43,21 +51,27 @@ function photosFailed(state: unknown): number {
 
 function ListingRow({
   listing,
-  now,
   today,
   onChanged,
   onClosureSaved,
+  onRenewed,
 }: {
   listing: MyListingOut;
-  now: Date;
   today: string;
   /** A pause or resume succeeded. */
   onChanged: () => void;
   /** The closure answer was stored (0014b). */
   onClosureSaved: () => void;
+  /** The listing was renewed (0011a); its new `expires_at`. */
+  onRenewed: (expiresAt: string) => void;
 }) {
   const { t } = useTranslation();
   const patch = usePatchListing(listing.id);
+  const renew = useRenewListing(listing.id);
+  const online = useOnline();
+  // The row's own clock: a failed pause or renewal re-renders the row alone, and a listing that
+  // expired meanwhile must then read expired (0011a).
+  const now = new Date();
   const state = listingState(listing, now);
   const titleId = useId();
   const past = isPastExpiry(listing, now);
@@ -75,10 +89,20 @@ function ListingRow({
       toggleRef.current?.focus();
     }
   }, [closure]);
+  // After a renewal the renew button is gone (90 days out): focus goes to the pause button, which
+  // the merged row now shows.
+  const focusToggle = useRef(false);
+  useEffect(() => {
+    if (focusToggle.current && toggleRef.current !== null) {
+      focusToggle.current = false;
+      toggleRef.current.focus();
+    }
+  });
 
-  // Expired listings cannot be paused or resumed (renewal is Slice 10); a listing past its expiry cannot be edited either (0002f).
-  const next = state === 'live' ? 'paused' : state === 'paused' ? 'active' : null;
-  const capReached = patch.error instanceof ApiError && patch.error.status === 409;
+  // A listing past its expiry cannot be paused, resumed (0011a) or edited (0002f): only renewed.
+  const next = state === 'live' ? 'paused' : state === 'paused' && !past ? 'active' : null;
+  const canRenew = inRenewalWindow(listing, now);
+  const failed = patch.isError ? patch.error : renew.isError ? renew.error : null;
 
   return (
     <li>
@@ -95,14 +119,15 @@ function ListingRow({
               date: formatDate(todayInIsrael(new Date(listing.expires_at))),
             })}
           </p>
-          {(next !== null || !past) && (
+          {(next !== null || canRenew || !past) && (
             <div className="flex flex-wrap gap-2">
               {next !== null && (
                 <Button
                   ref={toggleRef}
                   variant="ghost"
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
+                    renew.reset();
                     patch.mutate(
                       { status: next },
                       {
@@ -111,13 +136,34 @@ function ListingRow({
                           if (asksClosure && next === 'paused') openClosure();
                         },
                       },
-                    )
-                  }
-                  disabled={patch.isPending}
+                    );
+                  }}
+                  disabled={patch.isPending || renew.isPending}
                   aria-busy={patch.isPending}
                   aria-describedby={titleId}
                 >
                   {next === 'paused' ? t('listings.actions.pause') : t('listings.actions.resume')}
+                </Button>
+              )}
+              {canRenew && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  busy={renew.isPending}
+                  // One action at a time: each click resets the other mutation, which would drop its result.
+                  disabled={patch.isPending}
+                  onClick={() => {
+                    patch.reset();
+                    renew.mutate(undefined, {
+                      onSuccess: (updated) => {
+                        focusToggle.current = true;
+                        onRenewed(updated.expires_at);
+                      },
+                    });
+                  }}
+                  aria-describedby={titleId}
+                >
+                  {t('listings.actions.renew')}
                 </Button>
               )}
               {!past && (
@@ -189,11 +235,9 @@ function ListingRow({
               </Button>
             )}
           </div>
-          {patch.isError && (
+          {failed !== null && (
             <p role="alert" className="text-label text-danger">
-              {capReached
-                ? t('listings.errors.capReached', { cap: LISTING_CAP })
-                : t('common.error')}
+              {actionErrorText(t, failed, online)}
             </p>
           )}
         </div>
@@ -261,26 +305,29 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   const [savedOnArrival] = useState(() => isSaved(location.state));
   const [publishedOnArrival] = useState(() => isPublished(location.state));
   const [failedOnArrival] = useState(() => photosFailed(location.state));
-  // The status line: an edit's "saved" or the closure answer's (0014b).
-  const [saved, setSaved] = useState<'saved' | 'closureSaved' | null>(null);
+  const [renewedOnArrival] = useState(() => renewedOn(location.state));
+  // The status line: an edit's "saved", the closure answer's (0014b) or a renewal's new expiry
+  // (0011a).
+  const [saved, setSaved] = useState<'saved' | 'closureSaved' | { renewed: string } | null>(null);
   const [published, setPublished] = useState(false);
   const [failed, setFailed] = useState(0);
 
   useEffect(() => {
-    if (isSaved(location.state) || isPublished(location.state)) {
+    if (isSaved(location.state) || isPublished(location.state) || renewedOn(location.state)) {
       void navigate(location.pathname + location.search, { replace: true, state: null });
     }
   }, [location.state, location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    if (!savedOnArrival && !publishedOnArrival) return;
+    if (!savedOnArrival && !publishedOnArrival && renewedOnArrival === null) return;
     const frame = requestAnimationFrame(() => {
       if (savedOnArrival) setSaved('saved');
+      if (renewedOnArrival !== null) setSaved({ renewed: renewedOnArrival });
       if (publishedOnArrival) setPublished(true);
       setFailed(failedOnArrival);
     });
     return () => cancelAnimationFrame(frame);
-  }, [savedOnArrival, publishedOnArrival, failedOnArrival]);
+  }, [savedOnArrival, publishedOnArrival, failedOnArrival, renewedOnArrival]);
 
   const now = new Date();
   const today = todayInIsrael(now);
@@ -316,10 +363,10 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
           <ListingRow
             key={listing.id}
             listing={listing}
-            now={now}
             today={today}
             onChanged={() => setSaved(null)}
             onClosureSaved={() => setSaved('closureSaved')}
+            onRenewed={(expiresAt) => setSaved({ renewed: expiresAt })}
           />
         ))}
       </ul>
@@ -364,6 +411,11 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
       >
         {saved === 'saved' && t('listings.edit.saved')}
         {saved === 'closureSaved' && t('listings.closure.saved')}
+        {typeof saved === 'object' &&
+          saved !== null &&
+          t('listings.renew.done', {
+            date: formatDate(todayInIsrael(new Date(saved.renewed))),
+          })}
       </p>
       <div role="status" className={published ? undefined : 'sr-only'}>
         {published && (

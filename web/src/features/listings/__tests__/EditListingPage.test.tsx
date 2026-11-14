@@ -17,7 +17,8 @@ import {
 import type { LifestyleKey } from '../../lifestyle/keys';
 import type { ListingOut } from '../api';
 import { EditListingPage } from '../EditListingPage';
-import { formatIls } from '../format';
+import { formatDate, formatIls, todayInIsrael } from '../format';
+import { MyListingsPage } from '../MyListingsPage';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { gushDan, listing, owner } from './fixtures';
 import {
@@ -891,5 +892,106 @@ describe('EditListingPage', () => {
     fireEvent.click(fact(f.condition, r.unset));
     detailsToPreferences();
     expect(await saveFromPreferences(api, a)).toEqual([{ balcony: null, condition: null }]);
+  });
+
+  it('ac13_expired_page_renews', async () => {
+    const past = '2020-01-01T00:00:00Z';
+    const renewedAt = new Date(Date.now() + 90 * 86_400_000).toISOString();
+    const done = i18n.t('listings.renew.done', {
+      date: formatDate(todayInIsrael(new Date(renewedAt))),
+    });
+    // "My listings" of both sides, where a renewal lands.
+    const pageRoutes = (
+      <Routes>
+        <Route path="/me/listings" element={<MyListingsPage />} />
+        <Route path="/market/mine" element={<MyListingsPage type="room" panel />} />
+        <Route path="/me/listings/:id/edit" element={<EditListingPage />} />
+      </Routes>
+    );
+    const openExpired = async (
+      a: ListingOut,
+      renewReplies: Parameters<typeof mockApi>[0][string],
+    ) => {
+      const api = mockApi({
+        'GET /me': [() => json(owner)],
+        'GET /me/listings': [() => json([a]), never],
+        'GET /areas': [() => json([gushDan])],
+        [`POST /listings/${a.id}/renew`]: renewReplies,
+      });
+      const view = renderRoutes(editPath(a.id), pageRoutes, testQueryClient());
+      const heading = await screen.findByRole('heading', {
+        level: 1,
+        name: he.listings.edit.expiredTitle,
+      });
+      await vi.waitFor(() => {
+        expect(heading).toHaveFocus();
+      });
+      return { api, view };
+    };
+
+    const cases = [
+      [stored({ expires_at: past }), '/me/listings'],
+      [stored({ status: 'paused', expires_at: past }), '/me/listings'],
+      [stored({ listing_type: 'room', flatmates_count: 2, expires_at: past }), '/market/mine'],
+    ] as const;
+    for (const [a, landing] of cases) {
+      const { api, view } = await openExpired(a, [
+        () => json({ ...a, status: 'active', expires_at: renewedAt }),
+      ]);
+      expect(screen.getByText(he.listings.edit.expiredBody)).toBeVisible();
+      fireEvent.click(screen.getByRole('button', { name: he.listings.actions.renew }));
+      await vi.waitFor(() => {
+        expect(currentPath()).toBe(landing);
+      });
+      expect(await screen.findByText(done)).toHaveAttribute('role', 'status');
+      const card = screen.getByRole('article');
+      expect(within(card).getByRole('link', { name: he.listings.actions.edit })).toHaveAttribute(
+        'href',
+        editPath(a.id),
+      );
+      expect(api.calls(`POST /listings/${a.id}/renew`)).toHaveLength(1);
+      expect(api.calls(`PATCH /listings/${a.id}`)).toHaveLength(0);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // Refused: the reason under the button, and the page stays.
+    const a = stored({ expires_at: past });
+    let { view } = await openExpired(a, [json({ detail: 'listing_cap_reached' }, 409)]);
+    fireEvent.click(screen.getByRole('button', { name: he.listings.actions.renew }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      i18n.t('listings.errors.capReached', { cap: 3 }),
+    );
+    expect(currentPath()).toBe(editPath(a.id));
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Offline.
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    ({ view } = await openExpired(a, [networkError]));
+    fireEvent.click(screen.getByRole('button', { name: he.listings.actions.renew }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.offline);
+    expect(currentPath()).toBe(editPath(a.id));
+    view.unmount();
+  });
+
+  it('ac14_save_on_expired_listing', async () => {
+    // The listing expired while the wizard was open: the save's PATCH answers listing_expired.
+    let a = stored();
+    let opened = await changePriceAndSave(a, [json({ detail: 'listing_expired' }, 409)]);
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.listings.errors.expired);
+    expect(screen.queryByText(i18n.t('listings.errors.capReached', { cap: 3 }))).toBeNull();
+    expect(progress()).toHaveAttribute('aria-valuenow', '4');
+    expect(currentPath()).toBe(editPath(a.id));
+    expect(opened.client.getQueryData<ListingOut[]>(MY_LISTINGS_KEY)).toEqual([a]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    a = stored();
+    opened = await changePriceAndSave(a, [json({ detail: 'listing_cap_reached' }, 409)]);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      i18n.t('listings.errors.capReached', { cap: 3 }),
+    );
+    opened.view.unmount();
   });
 });

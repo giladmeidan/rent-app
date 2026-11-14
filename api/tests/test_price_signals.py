@@ -258,8 +258,10 @@ def test_ac11_resume_clears_closure(
     mine = _mine(owner, listing_id)
     assert (mine["close_reason"], mine["final_rent_ils"]) == (None, None)
 
-    # `{"status": "active"}` on an active listing past `expires_at` keeps the answer.
+    # `{"status": "active"}` on an active listing past `expires_at` is refused (spec 0011a), and
+    # the answer stays.
     _expire(db_engine, listing_id)
     assert _put(owner, listing_id, answer).status_code == 204
-    _patched(owner, listing_id, {"status": "active"})
+    response = _patch(owner, listing_id, {"status": "active"})
+    assert (response.status_code, response.json()) == (409, {"detail": "listing_expired"})
     assert _closure(db_engine, listing_id) == ("rented_elsewhere", 6800, True)
