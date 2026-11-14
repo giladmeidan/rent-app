@@ -15,9 +15,7 @@ as `general-purpose` agents told to read their definition file first.
 ## Current Status
 Overall: MVP feature work done through Slice 10. Slice 14 "Rent price estimate": data specs and engine v1 built.
 
-- **Engine v1 = spec `0014c`, PR #91** (head `978bd04`, `ready-to-merge`; one review round, 0 blockers / 0 majors;
-  local pytest 657 + vitest 697 green). Its `ci` run was still going when this was written; the orchestrator merges
-  it with `make merge PR=91` on green, then archives the spec (Speed rule 10). Check `gh pr view 91` first.
+- **Engine v1 = spec `0014c`, merged (PR #91, 2026-11-14)**; archived with its digest in `specs/archive/`.
 - What v1 does: an owner filling in an apartment in the listing wizard (new or edit) sees under the price the
   official average rent for its room count in its neighbourhood (or city), as a range + confidence + source; nothing
   for under 2.5 rooms, unknown cities, thin figures or a range wider than ±20%. `GET /rent-estimate` (signed in;
@@ -32,35 +30,30 @@ Overall: MVP feature work done through Slice 10. Slice 14 "Rent price estimate":
 - Main checkout `../rent-app` is on `main`, **26 commits behind `origin/main`**, with uncommitted `Makefile` and
   `.gitignore` edits and untracked seed/promo work (`api/scripts/seed_demo.py`, `seed_promo.py`, `promo/`,
   `promo-video/`, `web/e2e/promo/`). Needs a `git pull` (which also rebuilds the graph).
-- `../rent-app-orch` is the docs worktree (detached on `origin/main` between uses). `../rent-app-0014c` exists until
-  PR #91 merges.
+- `../rent-app-orch` is the docs worktree (detached on `origin/main` between uses).
 
-Last updated: 2026-11-14 (0014c specced, verified, built; PR #91 waiting on CI).
+Last updated: 2026-11-14 (0014c merged, PR #91).
 
 ## Next Steps
-1. **PR #91**: merge on green `ci` with `make merge PR=91` (GitGuardian incident 40007526 is the known fake fixture
-   token; merge anyway). Then in `../rent-app-orch`: `status: done`, move the spec to `specs/archive/`, add the merged
-   digest (backtest numbers above), push `HEAD:main`; `git worktree remove ../rent-app-0014c`; delete the local and
-   remote branch `spec/0014c-rent-estimate-baseline`.
-2. **Small flats (Gilad wants this next, 2026-11-14; not specced, source not researched yet).** v1 gives 1–2 room
+1. **Small flats (Gilad wants this next, 2026-11-14; not specced, source not researched yet).** v1 gives 1–2 room
    flats no number (a large share of Tel Aviv). Plan: spec `0014d` = import CBS (הלמ״ס) average-rent tables for small
    flats and let the engine use them for rooms < 2.5. Open: find the CBS table and its format (believed city-level
    for big cities only, district-level elsewhere), how often it updates, and how it lines up with the nadlan
    neighbourhood figures (likely city level only, medium confidence). Research the source first, as 0014a did.
-3. Rest of the estimate, waiting for homie's own listings after launch: adjustments (size, floor, parking,
+2. Rest of the estimate, waiting for homie's own listings after launch: adjustments (size, floor, parking,
    furnishing, ממ״ד, balcony, condition, AC), averaging a street's several neighbourhoods, comparable listings (earns
    the "דירות דומות" wording), a learned model; each kept only if the backtest says it is better. The open estimate
    tab (possibly paid) and the seekers' "fair price" badge wait for Gilad.
-4. Choose the next slice with Gilad after Slice 14: 11 Trust basics (report button, renewal, rate limits; renewal must
+3. Choose the next slice with Gilad after Slice 14: 11 Trust basics (report button, renewal, rate limits; renewal must
    clear the closure answer, see FOLLOWUPS 0014b), 12 Admin minimal, 13 Launch readiness (deploy, domain, SMS; read
    nadlan.gov.il's terms of use before `RENT_REFERENCE=nadlan` in production — until then the estimate shows nothing
    in production).
-5. Pull the main checkout; commit or drop its uncommitted seed/promo work (ask Gilad).
-6. Digests still owed to Gilad: Slice 9, 9c, 10.
-7. FOLLOWUPS worth a sweep before launch: `make screens` failures (24 states red, not re-run on `main`), 0014a/b/c
-   review minors (incl. 0014c's Hebrew "ב"+"ה" prefix and truncated source neighbourhood names), flaky e2e from PR #89,
+4. Pull the main checkout; commit or drop its uncommitted seed/promo work (ask Gilad).
+5. Digests still owed to Gilad: Slice 9, 9c, 10.
+6. FOLLOWUPS worth a sweep before launch: `make screens` failures (24 states red, not re-run on `main`), 0014a/b/c
+   review minors (incl. 0014c's Hebrew "ב"+"ה" prefix and truncated source neighbourhood names), flaky e2e from PR #89 and the map test from PR #91,
    flaky `test_ac5_apply_racing_lister_like`, Slice 12 deploy items.
-8. Housekeeping: Gilad to mark GitGuardian incident 40007526 a false positive; Gilad's open decisions in FOLLOWUPS
+7. Housekeeping: Gilad to mark GitGuardian incident 40007526 a false positive; Gilad's open decisions in FOLLOWUPS
    (person-card score inference, re-apply after decline, 0010l invite expiry).
 
 ## Architecture

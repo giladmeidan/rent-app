@@ -272,3 +272,4 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0014c · web/src/features/listings/__tests__/DetailsStep.test.tsx `ac11` · the `hint_two` plural form (2 quarters) is never rendered; add a `quarters: 2` case · review round 1 qa minor
 - [ ] 0014c · api/tests/test_rent_estimate_api.py `test_ac8_auth_and_validation` · the 200 case runs on empty tables, so the exactly-one-of check never sees `estimate` set; insert one area and price and assert `estimate` set, `reason` null · review round 1 qa minor
 - [ ] 0014c · api/tests/test_rent_estimate.py `rent_clean` · a copy of `test_rent_reference.py`'s; move one to `tests/conftest.py` · review round 1 code minor
+- [ ] 0014c · web/e2e/map.spec.ts `ac8_visitor_finds_a_listing_on_the_map` › `ac10_bubble_zooms_in` · zoom-out stayed enabled after 20 clicks, failed in a run and its shard retry (run 43631807758), passed on a hand re-run; unrelated to 0014c · flaky e2e

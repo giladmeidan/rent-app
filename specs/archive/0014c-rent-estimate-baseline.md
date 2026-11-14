@@ -1,7 +1,7 @@
 ---
 id: 0014c
 title: An owner pricing an apartment in the listing wizard sees the average rent for its room count in its neighbourhood (or city) as a range with a confidence level and its source, from the official figures; no number when the figures are too thin
-status: in-review
+status: done
 depends_on: [0014a]   # done (PR #89): reads rent_areas / rent_prices
 reviewers: [code, qa, ux]   # qa: new endpoint + wizard hint; ux: changed wizard screen. No security: signed-in read of public figures, no PII, no write. No perf: a few small queries over ≤349 areas, not search
 estimate: 1 coder run   # coder Opus/high (data + the price the owner sees; Speed rule 6)
@@ -320,3 +320,20 @@ hook and a hint.
       check) to feed it; the monthly import stays off until the Slice 13 terms check.
     Reviewers: code, qa, ux   Estimated: 1 coder run (Opus/high), 1 review round
     Links: specs/0014c-rent-estimate-baseline.md · PRODUCT.md "Rent price estimate" · no artboard (hint on an existing field)
+
+Merged 2026-11-14 (PR #91, merge commit 259c031):
+
+    Spec 0014c — the owner sees the area's average rent while pricing an apartment   DONE (PR #91 merged)
+    Shipped: under the price in the listing wizard (new and edit), an apartment shows the official average rent
+      for its room count in its neighbourhood (or city): range, high/medium certainty, nadlan.gov.il and the
+      quarters behind it. Nothing for under 2.5 rooms, unknown cities, thin figures. `GET /rent-estimate`
+      (signed in, facts only) and `make rent-backtest`.
+    Backtest (one real import, 349 files, source version 20-08-2026): window 3 quarters; p80 error 7.65%
+      neighbourhood, 17.78% city → half widths ±8% / ±18%, so city-level answers are always "medium".
+      Spot check: Tel Aviv "נורדאו" 4 rooms → 9,950–11,700 ₪, high.
+    Tests: pytest 657, vitest 697 green locally; CI green on the head (one hand re-run after a map e2e
+      failure unrelated to this spec, logged in FOLLOWUPS).
+    Findings: 0 blockers, 0 majors; minors to FOLLOWUPS (copy "ב"+"ה" prefix, truncated source names, a debounce
+      nit, two test gaps, a duplicated fixture). Deviation: an extra `hint_two` plural key (i18n-check needs it).
+    Changed in PRODUCT.md: the engine order and v1 decisions (2026-11-14).
+    Next spec I propose: 0014d — CBS small-flat figures (1–2 rooms), Gilad's pick; source not researched yet.
