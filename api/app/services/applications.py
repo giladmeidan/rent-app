@@ -525,7 +525,11 @@ def set_applicant_status(
             if current != status:
                 raise InvalidTransitionError
             query, _ = _applicants(listing_id)
-            return db.execute(query.where(Application.id == application_id)).one(), False
+            # A withdraw may land between the two statements.
+            row = db.execute(query.where(Application.id == application_id)).one_or_none()
+            if row is None:
+                raise ApplicationNotFoundError
+            return row, False
         if status == "shortlisted":
             # Opens the chat (spec 0005a), once per application ever: a re-shortlist finds the
             # row and inserts nothing; an un-shortlist or a decline never touches it.

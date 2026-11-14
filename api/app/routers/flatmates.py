@@ -9,7 +9,8 @@ Invitee and flatmate side: preview, join and `/me/flats` require a session of an
 (`current_user`): 401 `unauthenticated`. The invite token travels **only in a POST body**, never in
 a path or query (uvicorn's access log records full paths). Preview and join share one rate limit
 per user (429 `rate_limited` with `Retry-After`), counted on every authenticated attempt, found or
-not. Leaving (`DELETE /me/flats/{listing_id}`) is always a 204, so it reveals nothing.
+not. Leaving (`DELETE /me/flats/{listing_id}`) is a 204 (or a 429 at the write limit), so it
+reveals nothing.
 `PATCH /me/flats/{listing_id}` (spec 0010f) sets the caller's own `shown` choice and requires a
 session (`current_user`, 401) and membership of that flat: anything else is a 404 `not_found`.
 

@@ -23,6 +23,7 @@ from app import limits
 from app.config import get_settings
 from app.main import MAX_BODY_BYTES, _request_invalid, create_app
 from app.redis_client import get_redis
+from app.services import chat as chat_service
 from app.services import chat_events
 from app.services.market_people import BROWSE_RATE_LIMIT_HOUR
 from app.services.photo_store import FilePhotoStore
@@ -51,6 +52,7 @@ def _profile() -> dict[str, Any]:
 LIMITED: list[tuple[str, str, str, Any]] = [
     ("POST", "/listings", "CREATE", _apartment),
     ("PATCH", "/listings/{listing_id}", "WRITE", {"price_ils": 7000}),
+    ("PATCH", "/listings/{listing_id}", "ADDRESS", {"street": "הרצל"}),
     ("PUT", "/listings/{listing_id}/closure", "WRITE", {"reason": "not_renting"}),
     ("POST", "/listings/{listing_id}/renew", "WRITE", None),
     ("POST", "/me/applications/{application_id}/withdraw", "WRITE", None),
@@ -209,7 +211,7 @@ def test_ac4_address_changes_have_their_own_limit(
     assert (response.status_code, response.json()) == (429, RATE_LIMITED)
     with db_engine.connect() as conn:
         assert conn.execute(text(sql), {"id": created.json()["id"]}).one() == before
-    assert _count(write) == 2
+    assert (_count(write), _count(address)) == (2, limits.ADDRESS.per_hour)
     assert owner.patch(url, json={"price_ils": 7200}).status_code == 200
     assert _count(write) == 3
 
@@ -240,6 +242,14 @@ def test_ac6_status_noop_and_limit_publish_nothing(
 ) -> None:
     published: list[tuple[Any, ...]] = []
     monkeypatch.setattr(chat_events, "publish", lambda *args: published.append(args))
+    members: list[tuple[Any, ...]] = []
+    real_members = chat_service.event_members
+
+    def record_members(*args: Any) -> Any:
+        members.append(args)
+        return real_members(*args)
+
+    monkeypatch.setattr(chat_service, "event_members", record_members)
     owner_id = _user_id(owner)
     listing = make_listing(db_engine, owner_id, gush_dan)
     shortlisted = make_application(
@@ -266,19 +276,20 @@ def test_ac6_status_noop_and_limit_publish_nothing(
         assert response.status_code == 200, response.text
         assert response.json()["status"] == status
         assert row(application) == before
-    assert published == []
+    assert published == [] and members == []
 
     assert patch(shortlisted, "submitted").status_code == 200
-    assert len(published) == 1
+    assert len(published) == 1 and len(members) == 1
     assert row(shortlisted).status == "submitted"
 
     published.clear()
+    members.clear()
     hour, _ = _keys(limits.STATUS, owner_id)
     get_redis().set(hour, limits.STATUS.per_hour, ex=3600)
     response = patch(shortlisted, "shortlisted")
     assert (response.status_code, response.json()) == (429, RATE_LIMITED)
     assert row(shortlisted).status == "submitted"
-    assert published == []
+    assert published == [] and members == []
 
 
 def _padded(body: dict[str, Any], size: int) -> bytes:

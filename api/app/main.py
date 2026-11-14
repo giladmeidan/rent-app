@@ -73,6 +73,10 @@ class BodySizeLimit:
             response = JSONResponse(status_code=413, content={"detail": "body_too_large"})
             await response(scope, receive, send)
             return
+        if scope["method"] in ("GET", "HEAD"):
+            # No GET/HEAD route reads a body, and SSE's disconnect listener reads `receive`.
+            await self.app(scope, receive, send)
+            return
         total = 0
 
         async def capped_receive() -> Message:
