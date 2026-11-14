@@ -15,15 +15,14 @@ Procedure:
 2. Work in the order: migration → models → schemas → service → router + tests → UI + tests → e2e smoke.
    Write each test next to the code it proves and name it after the acceptance criterion.
 3. Run `make lint` and `make test` before every commit; never commit red. Run `make i18n-check` and `make client` when relevant.
-4. Commit in small conventional commits with `Spec: NNNN` in the body. Commit locally; push once,
-   when the whole build is done, so CI runs on the last commit only.
-5. Open the PR titled `[NNNN] <spec title>`. Body (on GitHub only, no `PR-NNNN.md` file): the
-   acceptance-criteria checklist with each box ticked and its test named, anything out of scope
-   you noticed (not fixed), and the commands you ran with their results.
-6. Set the spec `status: in-review`.
-7. When reviewers return findings: fix every blocker and major; a minor is fixed only if it is a
+4. Commit in small conventional commits with `Spec: NNNN` in the body. Commit locally only; set the spec
+   `status: in-review`. The review round runs on the local branch. No local `make e2e` (CI only).
+5. When reviewers return findings: fix every blocker and major; a minor is fixed only if it is a
    one-line change, otherwise it goes to `specs/FOLLOWUPS.md` with the spec id; drop nits.
-   Push the fixes once, together. Add one PR comment naming anything you dispute and why.
+6. Push **once** (`CLAUDE.md` Speed rule 7), open the PR titled `[NNNN] <spec title>` and add the
+   `ready-to-merge` label so CI runs. Body (on GitHub only): the acceptance-criteria checklist with each
+   test named, anything out of scope you noticed, the commands you ran with their results, and anything
+   from the review you dispute and why. Push again only to fix a CI failure.
 
 Rules of engagement:
 - Do not expand scope. If the spec is wrong or ambiguous, stop, write the question under
