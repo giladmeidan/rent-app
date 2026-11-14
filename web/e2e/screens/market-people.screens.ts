@@ -7,6 +7,7 @@ import he from '../../src/locales/he.json' with { type: 'json' };
 import type { ThreadOut } from '../../src/features/chat/api';
 import type { MyPeopleLikesOut, PersonCardOut } from '../../src/features/people/api';
 import { API } from '../helpers';
+import { listing } from './fixtures-listings';
 import { WEB_ORIGIN } from './origin';
 import { test } from '../fixtures';
 
@@ -145,6 +146,8 @@ type Setup = {
   likes?: Answer;
   /** The PUT like's answer. */
   like?: Answer;
+  /** `GET /me/listings` (spec 0010m: asked only by the card-required nudge). */
+  listings?: Answer;
 };
 
 const CORS = {
@@ -171,7 +174,12 @@ function answer(route: Route, a: Answer) {
 
 async function mockApi(page: Page, setup: Setup): Promise<string[]> {
   const unmatched: string[] = [];
-  const { people = ok({ items: [], total: 0 }), likes = ok(LIKES_EMPTY), like } = setup;
+  const {
+    people = ok({ items: [], total: 0 }),
+    likes = ok(LIKES_EMPTY),
+    like,
+    listings = ok([]),
+  } = setup;
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -192,7 +200,8 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     if (key === 'GET /me/profile') return reply(route, PROFILE);
     if (key === 'GET /me/flats') return reply(route, []);
     if (key === 'GET /areas') return reply(route, AREAS);
-    if (key === 'GET /me/likes') return reply(route, { liked_me: [], mine: [] });
+    if (key === 'GET /me/likes') return reply(route, { liked_me: [] });
+    if (key === 'GET /me/listings') return answer(route, listings);
     if (key === 'GET /people') return answer(route, people);
     if (key === 'GET /me/people-likes') return answer(route, likes);
     if (/^PUT \/people\/[^/]+\/like$/.test(key) && like !== undefined) return answer(route, like);
@@ -246,6 +255,23 @@ const STATES: State[] = [
     act: async (page) => {
       await expect(page.getByText(he.market.people.cardRequired)).toBeVisible();
       await expect(page.getByRole('link', { name: he.market.people.toProfile })).toBeVisible();
+    },
+  },
+  {
+    // One live room: the nudge also points to that room's people page (spec 0010m).
+    name: 'people-card-required-room',
+    setup: {
+      people: { status: 403, body: { detail: 'card_required' } },
+      listings: ok([listing({ listing_type: 'room' })]),
+    },
+    path: '/market/people',
+    act: async (page) => {
+      await expect(page.getByText(he.market.people.cardRequired)).toBeVisible();
+      await expect(page.getByText(he.market.people.roomHint)).toBeVisible();
+      await expect(page.getByRole('link', { name: he.market.people.toRoomPeople })).toHaveAttribute(
+        'href',
+        `/me/listings/${listing().id}/people`,
+      );
     },
   },
   {

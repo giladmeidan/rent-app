@@ -75,6 +75,7 @@ test('ac19_people_like_match_chat_remove', async ({ page, browser }) => {
   const cardOfA = likedMe.getByRole('article', { name: A_NAME });
   await expect(cardOfA).toBeVisible();
   await expect(cardOfA.getByText(he.market.people.likedMe)).toBeVisible();
+  await expectNoAxeViolations(b, '/me/likes');
   await cardOfA.getByRole('button', { name: he.market.people.like }).click();
 
   // The mutual banner leads to the direct chat.
