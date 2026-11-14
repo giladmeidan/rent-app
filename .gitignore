@@ -15,3 +15,5 @@ web/playwright-report/
 .media/
 web/screens/
 graphify-out/
+# Untracked originals the rent reference fixtures are trimmed from (spec 0014a).
+api/tests/fixtures/rent_reference/raw/

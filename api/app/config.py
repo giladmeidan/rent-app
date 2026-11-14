@@ -80,6 +80,10 @@ class Settings(DatabaseSettings):
     r2_access_key_id: SecretStr | None = None
     r2_secret_access_key: SecretStr | None = None
     r2_bucket: str | None = None
+    # Official rent figures (spec 0014a), worker only. `off` = no request (dev, tests, CI);
+    # `nadlan` = the monthly import from `nadlan_rent_url` (https, never with a trailing `/`).
+    rent_reference: Literal["off", "nadlan"] = "off"
+    nadlan_rent_url: str = "https://data.nadlan.gov.il/api/pages"
 
     @field_validator("photo_public_base_url")
     @classmethod
@@ -103,6 +107,33 @@ class Settings(DatabaseSettings):
             raise ValueError(
                 "PHOTO_PUBLIC_BASE_URL must be an http(s) URL with a host and no query or fragment"
             )
+        return value
+
+    @field_validator("nadlan_rent_url")
+    @classmethod
+    def _nadlan_url_is_a_plain_https_url(cls, value: str) -> str:
+        """Trimmed, an https URL with a host and no credentials, query or fragment, without a
+        trailing `/`. The message names the rule only, never the value."""
+        rule = (
+            "NADLAN_RENT_URL must be an https URL with a host and no credentials, query or fragment"
+        )
+        value = value.strip().rstrip("/")
+        try:
+            parts = urlsplit(value)
+            parts.port  # noqa: B018  (raises ValueError on a malformed port)
+        except ValueError:
+            raise ValueError(rule) from None
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+            or parts.query
+            or parts.fragment
+            or "?" in value
+            or "#" in value
+        ):
+            raise ValueError(rule)
         return value
 
     @field_validator("nominatim_user_agent")

@@ -1,0 +1,169 @@
+{
+ "settlementID": 5000,
+ "settlementName": "תל אביב -יפו",
+ "x": 179706.06739829888,
+ "y": 666156.9322499996,
+ "otherNeighborhoods": [
+  {
+   "title": "רביבים",
+   "id": 65210029
+  },
+  {
+   "title": "רמת החייל",
+   "id": 65210036
+  }
+ ],
+ "otherSettlmentStreets": [
+  {
+   "id": 50000711,
+   "title": "י\"ל גורדון"
+  },
+  {
+   "id": 50001439,
+   "title": "יחזקאל קויפמן"
+  },
+  {
+   "id": 50001103,
+   "title": "רוטשילד"
+  }
+ ],
+ "trends": {
+  "rooms": [
+   {
+    "graphData": [
+     {
+      "settlementPrice": 8250,
+      "countryPrice": 3875,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 8200,
+      "countryPrice": 3700,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 8250,
+      "countryPrice": 3700,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 8000,
+      "countryPrice": 3850,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": 3,
+    "hasDeals": 1
+   },
+   {
+    "graphData": [
+     {
+      "settlementPrice": 10500,
+      "countryPrice": 4825,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 10000,
+      "countryPrice": 4725,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 9900,
+      "countryPrice": 4900,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 9900,
+      "countryPrice": 4900,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": 4,
+    "hasDeals": 1
+   },
+   {
+    "graphData": [
+     {
+      "settlementPrice": 14500,
+      "countryPrice": 6300,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 13250,
+      "countryPrice": 6200,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 12200,
+      "countryPrice": 6450,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 13500,
+      "countryPrice": 6350,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": 5,
+    "hasDeals": 1
+   },
+   {
+    "graphData": [
+     {
+      "settlementPrice": 8300,
+      "countryPrice": 5125,
+      "year": 2026,
+      "month": 6
+     },
+     {
+      "settlementPrice": 8000,
+      "countryPrice": 5000,
+      "year": 2026,
+      "month": 3
+     },
+     {
+      "settlementPrice": 8000,
+      "countryPrice": 4900,
+      "year": 2025,
+      "month": 12
+     },
+     {
+      "settlementPrice": 7900,
+      "countryPrice": 5000,
+      "year": 2025,
+      "month": 9
+     }
+    ],
+    "numRooms": "all",
+    "hasDeals": 1
+   }
+  ]
+ },
+ "version": "20-08-2026",
+ "settlementPrice": 8000,
+ "neighborhoodsPrices": [
+  {
+   "id": "65210029",
+   "price": 10500.0,
+   "title": "רביבים"
+  },
+  {
+   "id": "65210036",
+   "price": 8775.0,
+   "title": "רמת החייל"
+  }
+ ],
+ "countryPrice": 5349
+}
