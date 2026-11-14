@@ -3,12 +3,12 @@
 
 Every endpoint requires a session of any role (`current_user`): 401 `unauthenticated` without one.
 
-- `GET /people` and `GET /me/people-likes` need the **entry ticket**, the caller's own visible card
-  or a live room of theirs: 403 `card_required` without it. Browse is rate limited per user
+- `GET /people` and `GET /me/people-likes` need the caller's own **visible card** (a live room is
+  not enough, spec 0010m): 403 `card_required` without it. Browse is rate limited per user
   (`BROWSE_RATE_LIMIT_HOUR` / `_DAY`, shared with the room side's `GET /listings/{id}/people`;
   a 429 with `Retry-After`), and every attempt counts, a 403 included.
-- `PUT /people/{card_id}/like` needs the caller's own **visible card** (403 `card_required`; a live
-  room alone is not enough). An unknown card, the caller's own and one that is not a candidate
+- `PUT /people/{card_id}/like` needs the caller's own **visible card** (403 `card_required`). An
+  unknown card, the caller's own and one that is not a candidate
   for the caller are one 404 `not_found`. It shares the like limit with room likes
   (`rl:like:user:*`), and every attempt counts. A like that makes the pair mutual opens the direct
   chat and returns its id; a `status` chat event goes to both.
@@ -55,7 +55,7 @@ RedisDep = Annotated[RedisClient, Depends(get_redis)]
 _CARD_REQUIRED: dict[int | str, dict[str, Any]] = {
     403: {
         "model": ErrorOut,
-        "description": "card_required: no visible card of the caller's own and no live room",
+        "description": "card_required: the caller shows no card",
     },
 }
 _RATE_LIMITED: dict[int | str, dict[str, Any]] = {

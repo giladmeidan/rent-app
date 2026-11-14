@@ -249,16 +249,14 @@ def test_ac1_entry_ticket(client: TestClient, db_engine: Engine, gush_dan: uuid.
         assert response.status_code == 403, path
         assert response.json() == CARD_REQUIRED
 
-    # A live room, no card: browse sees only people whose preference is `any`.
-    room = _live_room(db_engine, a.id, gush_dan)
-    assert _names(a.caller) == ["Bat"]
-    assert _likes(a.caller) == {"liked_me": [], "mine": [], "matches": []}
+    # A live room is not a ticket (spec 0010m): still 403 on both paths.
+    _live_room(db_engine, a.id, gush_dan)
+    for path in ("/people", "/me/people-likes"):
+        response = a.caller.get(path)
+        assert response.status_code == 403, path
+        assert response.json() == CARD_REQUIRED
 
-    _execute(db_engine, "UPDATE listings SET status = 'paused' WHERE id = :id", id=room)
-    assert _browse(a.caller).json() == CARD_REQUIRED
-    assert a.caller.get("/me/people-likes").json() == CARD_REQUIRED
-
-    # Instead, a man's card: Dor (wants men) shows now, Cam (wants women) does not.
+    # A man's card: Dor (wants men) shows now, Cam (wants women) does not.
     make_card(db_engine, a.id, gush_dan, gender="man")
     assert sorted(_names(a.caller)) == ["Bat", "Dor"]
     _likes(a.caller)
@@ -284,10 +282,6 @@ def test_ac2_browse_applies_gender_rule(
         ((gender, pref), _person(client, db_engine, gush_dan, f"V{n}", gender=gender, pref=pref))
         for n, (gender, pref) in enumerate(NINE)
     ]
-    # No profile at all: browses with a live room, as (`None`, `'any'`).
-    nobody = _person(client, db_engine, gush_dan, "Vnone", card=False)
-    _live_room(db_engine, nobody.id, gush_dan)
-    viewers.append(((None, "any"), nobody))
 
     for viewer, person in viewers:
         shown = {name for name in _names(person.caller) if name in people}
@@ -297,11 +291,6 @@ def test_ac2_browse_applies_gender_rule(
     assert "P-man-any" not in _names(by_gender[("woman", "women")].caller)
     assert "P-woman-women" not in _names(by_gender[("man", "any")].caller)
     assert "P-woman-women" not in _names(by_gender[("other", "any")].caller)
-    assert {name for name in _names(nobody.caller) if name in people} == {
-        "P-woman-any",
-        "P-man-any",
-        "P-other-any",
-    }
 
 
 # --- AC3 ---------------------------------------------------------------------------------------
@@ -673,7 +662,7 @@ def test_ac9_like_guards(client: TestClient, db_engine: Engine, gush_dan: uuid.U
     b = _person(client, db_engine, gush_dan, "Bat")
     lister = _person(client, db_engine, gush_dan, "Lis", card=False)
     _live_room(db_engine, lister.id, gush_dan)
-    assert _ok(_browse(lister.caller))["total"] == 1  # browsing is fine
+    assert _browse(lister.caller).json() == CARD_REQUIRED  # a live room is no ticket
     response = _like(lister.caller, b.card)
     assert response.status_code == 403
     assert response.json() == CARD_REQUIRED
@@ -742,9 +731,9 @@ def test_ac10_hidden_card(
     assert chat.closed_at is None
     _ok(_send(a.caller, conversation_id), 201)
     _ok(_send(m.caller, conversation_id), 201)
-    # A live room gives B the ticket back (to browse, not to like).
+    # A live room does not give B the ticket back (spec 0010m): no browse, no like.
     _live_room(db_engine, b.id, gush_dan)
-    assert _names(b.caller) == ["Avi"]
+    assert _browse(b.caller).json() == CARD_REQUIRED
     assert _like(b.caller, a.card).json() == CARD_REQUIRED
 
 

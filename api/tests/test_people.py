@@ -838,8 +838,7 @@ def test_ac12_room_people_browse_rate_limited(
     for n in range(limit // 2 - 1):
         assert _names(_page(owner, room)) == ["Avi"], n
     for n in range(limit - limit // 2):
-        # The live room is the owner's ticket to people browse (no card needed to browse).
-        assert owner.get("/people").status_code == 200, n
+        assert owner.get("/people").status_code == 403, n  # no card; the limiter counts first
     assert int(get_redis().get(f"rl:browse:user:{_user_id(owner)}") or 0) == limit
     limited = _people(owner, room)
     assert limited.status_code == 429

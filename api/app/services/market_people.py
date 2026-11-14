@@ -7,13 +7,12 @@ This module is the only writer of `person_pairs` and the only caller of `chat.op
 
 - The **viewer** (`_viewer`, one SELECT): the caller's `gender`, `flatmate_gender`,
   `people_visible` and `area_ids` (an outer join from `users` to `seeker_profiles`: NULL, `'any'`,
-  false and `[]` without a row) and `has_live_room`, an EXISTS over `search._public_listings()` (the
-  one visibility rule) of the caller's own rooms.
-  - The **ticket** to browse and to list one's likes: one's own visible card (`people_visible`,
-    which since 0010c implies both profile parts, so `gender` is set) or a live room
-    (`CardRequiredError` without either).
-  - Liking needs the **card** itself: a live room alone lets you browse but not like, since the
-    other person could never see your card to like back (Q-B, Gilad 2026-11-13).
+  false and `[]` without a row).
+  - One rule for browsing, listing one's likes and liking: one's own visible card
+    (`people_visible`, which since 0010c implies both profile parts; `CardRequiredError` without
+    it). A live room is not a ticket (spec 0010m): a liked person must be able to see the liker's
+    card to like back (Q-B, Gilad 2026-11-13), and a room's lister invites from the room's own
+    people page instead.
 - A **candidate** of the viewer (`_candidate`, written once): a `seeker_profiles` row `P` joined to
   its `users` row that is visible (`people_visible`), not the viewer, fits the viewer both ways
   (`matching.fit.person_fit`), and has no **mutual** pair with the viewer (a match lives in
@@ -57,12 +56,11 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.util import AliasedClass
 
 from app.matching.fit import person_fit
-from app.models import Conversation, Listing, PersonPair, SeekerProfile, User
+from app.models import Conversation, PersonPair, SeekerProfile, User
 from app.redis_client import RedisClient
 from app.schemas.people import PEOPLE_LIMIT
 from app.services import chat as chat_service
 from app.services import chat_events
-from app.services import search as search_service
 from app.services.people import CARD_COLUMNS, count_like
 from app.services.rate_limit import count_or_raise
 
@@ -79,8 +77,8 @@ LIKES_LIST_CAP = 100
 
 
 class CardRequiredError(Exception):
-    """The caller has no ticket (no visible card and no live room) to browse, or no visible card
-    to like (`card_required`)."""
+    """The caller shows no card: no visible card of their own to browse, list likes or like
+    (`card_required`)."""
 
 
 class MutualMatchError(Exception):
@@ -103,11 +101,6 @@ class Viewer:
     flatmate_gender: str
     people_visible: bool
     area_ids: list[uuid.UUID]
-    has_live_room: bool
-
-    @property
-    def ticket(self) -> bool:
-        return self.people_visible or self.has_live_room
 
 
 # The pair `_candidate` reads to exclude a match (its own alias, apart from any pair the statement
@@ -157,19 +150,14 @@ def _sides(me: uuid.UUID) -> tuple[ColumnElement[Any], ColumnElement[Any]]:
 
 
 def _viewer(db: Session, me: User) -> Viewer:
-    """The caller's profile facts and whether they have a live room. One SELECT."""
-    live_room = (
-        search_service._public_listings()
-        .where(Listing.owner_id == me.id, Listing.listing_type == "room")
-        .exists()
-    )
+    """The caller's profile facts. One SELECT. `gender` is always set for a carded viewer
+    (`people_visible` implies both profile parts since 0010c)."""
     row = db.execute(
         select(
             SeekerProfile.gender,
             SeekerProfile.flatmate_gender,
             SeekerProfile.people_visible,
             SeekerProfile.area_ids,
-            live_room.label("has_live_room"),
         )
         .select_from(User)
         .outerjoin(SeekerProfile, SeekerProfile.user_id == User.id)
@@ -181,7 +169,6 @@ def _viewer(db: Session, me: User) -> Viewer:
         flatmate_gender=row.flatmate_gender or "any",
         people_visible=bool(row.people_visible),
         area_ids=list(row.area_ids or []),
-        has_live_room=bool(row.has_live_room),
     )
 
 
@@ -231,12 +218,12 @@ def browse_statement(viewer: Viewer, offset: int) -> Select[Any]:
 def browse(db: Session, r: RedisClient, me: User, offset: int) -> tuple[Sequence[Row[Any]], int]:
     """One page (`PEOPLE_LIMIT`) of `me`'s candidates and their total (`browse_statement`). The
     limiter counts first, so every authenticated attempt counts, a refused one included
-    (`RateLimitedError`); then the viewer (`CardRequiredError` without a ticket), then the page:
-    two statements after the session lookup. An empty page past the start (`offset > 0`) needs one
-    more, the count. A read: no commit."""
+    (`RateLimitedError`); then the viewer (`CardRequiredError` without a visible card), then the
+    page: two statements after the session lookup. An empty page past the start (`offset > 0`)
+    needs one more, the count. A read: no commit."""
     count_browse(r, me)
     viewer = _viewer(db, me)
-    if not viewer.ticket:
+    if not viewer.people_visible:
         raise CardRequiredError
     statement = browse_statement(viewer, offset)
     rows = db.execute(statement).all()
@@ -451,8 +438,8 @@ def likes_statement(viewer: Viewer) -> Select[Any]:
 
 def my_people_likes(db: Session, me: User) -> Sequence[Row[Any]]:
     """`me`'s people likes (`likes_statement`'s rows). The viewer (`CardRequiredError` without a
-    ticket), then the list: two statements after the session lookup."""
+    visible card), then the list: two statements after the session lookup."""
     viewer = _viewer(db, me)
-    if not viewer.ticket:
+    if not viewer.people_visible:
         raise CardRequiredError
     return db.execute(likes_statement(viewer)).all()
