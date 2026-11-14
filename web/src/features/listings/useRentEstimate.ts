@@ -35,8 +35,7 @@ export function useRentEstimate(form: ListingForm): RentEstimateRange | undefine
     form.listing_type === 'apartment' &&
     city !== '' &&
     street !== '' &&
-    rooms !== '' &&
-    Number.isFinite(Number(rooms));
+    /^\d+(\.\d+)?$/.test(rooms);
   const settled = live[0] === city && live[1] === street && live[2] === rooms;
   const { data } = useQuery({
     queryKey: ['rent-estimate', city, street, rooms],
