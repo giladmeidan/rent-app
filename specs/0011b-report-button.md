@@ -47,7 +47,7 @@ button everywhere"; decided 2026-11-14).
 
 ## Scope
 **In:**
-- Migration `api/alembic/versions/0021_reports.py` (revision `"0021"`, down `"0020"`; see Data and Risks for
+- Migration `api/alembic/versions/0022_reports.py` (revision `"0022"`, down `"0021"`; see Data and Risks for
   the renumber rule), model `api/app/models/report.py` (`Report`), imported and listed in `__all__` in
   `api/app/models/__init__.py`.
 - `api/app/schemas/report.py` (new): `ReportTargetType`, `ReportReason`, `NOTE_MAX_LENGTH = 500`,
@@ -87,7 +87,7 @@ button everywhere"; decided 2026-11-14).
 **New dependencies:** none.
 
 ## Data
-`reports` (migration `0021_reports`, revision `"0021"`, down `"0020"`; downgrade drops the table: **every
+`reports` (migration `0022_reports`, revision `"0022"`, down `"0021"`; downgrade drops the table: **every
 report is lost**):
 
 | Column | Type | Notes |
@@ -292,10 +292,10 @@ API (`api/tests/test_reports.py` unless named):
 - [ ] AC9 (rate limit) The 11th POST in an hour gets 429 `rate_limited` with a `Retry-After` header and stores
   nothing; earlier 404s and repeats counted toward it; after the hour window (counter deleted), the day limit
   of 30 applies the same way — `test_ac9_rate_limit`
-- [ ] AC10 (migration) Upgrade from `"0020"` creates `reports` with the columns, FKs, `uq_reports_reporter_target`,
+- [ ] AC10 (migration) Upgrade from `"0021"` creates `reports` with the columns, FKs, `uq_reports_reporter_target`,
   `ix_reports_reported_user_id` and the four CHECKs (their texts equal the model's, as `_check_definition`); a
   row breaking each CHECK (target type, reason, empty note, 501-character note, reporter = reported) is refused;
-  downgrade to `"0020"` drops it; `head` then `alembic check` shows no diff —
+  downgrade to `"0021"` drops it; `head` then `alembic check` shows no diff —
   `api/tests/test_migrations.py::test_ac10_reports_upgrade_downgrade`
 - [ ] NF1 A report is at most three statements after the session lookup (`person`: viewer + candidate + INSERT;
   every other type: lookup + INSERT), counted with a `statements` recorder as in `test_chat.py` —

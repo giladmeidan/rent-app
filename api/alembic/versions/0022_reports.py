@@ -7,8 +7,8 @@ five tables); both user FKs cascade.
 
 Downgrade drops the table: **every report is lost**.
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-11-14
 """
 
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision: str = "0021"
-down_revision: str | None = "0020"
+revision: str = "0022"
+down_revision: str | None = "0021"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

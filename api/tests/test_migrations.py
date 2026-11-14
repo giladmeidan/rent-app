@@ -2,6 +2,7 @@
 the tables the other integration tests use."""
 
 from collections.abc import Iterator
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -2898,11 +2899,90 @@ def test_ac3_price_signals_backfill_and_downgrade(migration_db_url: str) -> None
         engine.dispose()
 
 
-def test_ac10_reports_upgrade_downgrade(migration_db_url: str) -> None:
-    # Spec 0011b: 0021 adds `reports` (two user FKs, the unique (reporter, target) rule, an index
-    # on the reported user, four CHECKs whose texts equal the model's). Downgrade drops it.
+_CBS_CHECKS = (
+    "ck_cbs_rent_period",
+    "ck_cbs_rent_price_ils",
+    "ck_cbs_rent_geo_kind",
+    "ck_cbs_rent_room_group",
+    "ck_cbs_rent_bulletin",
+)
+
+
+def test_ac13_cbs_rent_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0014d: 0021 adds `cbs_rent_prices` and touches nothing else.
     cfg = alembic_config(migration_db_url)
     command.upgrade(cfg, "0020")
+    engine = create_engine(migration_db_url)
+    insert = (
+        "INSERT INTO cbs_rent_prices (geo_code, geo_kind, room_group, period, price_ils,"
+        " sampling_error, bulletin)"
+        " VALUES (:code, :kind, :group, :period, :price, 71.67, :bulletin)"
+    )
+    good = {
+        "code": 5000,
+        "kind": "city",
+        "group": "1-2",
+        "period": "2026-06-01",
+        "price": 5486.7,
+        "bulletin": "2026-07-01",
+    }
+    try:
+        with engine.connect() as conn:
+            tables_0020 = set(inspect(conn).get_table_names())
+            assert "cbs_rent_prices" not in tables_0020
+
+        command.upgrade(cfg, "0021")
+        with engine.begin() as conn:
+            assert set(inspect(conn).get_table_names()) == tables_0020 | {"cbs_rent_prices"}
+            assert _columns(conn, "cbs_rent_prices") == {
+                "geo_code": False,
+                "geo_kind": False,
+                "room_group": False,
+                "period": False,
+                "price_ils": False,
+                "sampling_error": True,
+                "bulletin": False,
+                "imported_at": False,
+            }
+            for name in _CBS_CHECKS:
+                assert _check_definition(conn, name) is not None, name
+            assert inspect(conn).get_pk_constraint("cbs_rent_prices")["constrained_columns"] == [
+                "geo_kind",
+                "geo_code",
+                "room_group",
+                "period",
+            ]
+            conn.execute(text(insert), good)
+            assert conn.execute(
+                text("SELECT price_ils, imported_at IS NOT NULL FROM cbs_rent_prices")
+            ).one() == (Decimal("5486.7"), True)
+
+        bad_rows: tuple[tuple[str, dict[str, Any]], ...] = (
+            ("ck_cbs_rent_period", {"period": "2026-05-01"}),
+            ("ck_cbs_rent_period", {"period": "2026-06-02"}),
+            ("ck_cbs_rent_price_ils", {"price": 499.9}),
+            ("ck_cbs_rent_price_ils", {"price": 100000.1}),
+            ("ck_cbs_rent_geo_kind", {"kind": "settlement"}),
+            ("ck_cbs_rent_room_group", {"group": "3.5-4"}),
+            ("ck_cbs_rent_bulletin", {"bulletin": "2026-07-02"}),
+            ("cbs_rent_prices_pkey", {}),
+        )
+        for constraint, params in bad_rows:
+            with pytest.raises(IntegrityError, match=constraint), engine.begin() as conn:
+                conn.execute(text(insert), {**good, **params})
+
+        command.downgrade(cfg, "0020")
+        with engine.connect() as conn:
+            assert set(inspect(conn).get_table_names()) == tables_0020
+    finally:
+        engine.dispose()
+
+
+def test_ac10_reports_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0011b: 0022 adds `reports` (two user FKs, the unique (reporter, target) rule, an index
+    # on the reported user, four CHECKs whose texts equal the model's). Downgrade drops it.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0021")
     engine = create_engine(migration_db_url)
     checks = {
         "ck_reports_target_type": report_model.TARGET_TYPE_CHECK,
@@ -2923,7 +3003,7 @@ def test_ac10_reports_upgrade_downgrade(migration_db_url: str) -> None:
                 for email in ("a@example.com", "b@example.com")
             )
 
-        command.upgrade(cfg, "0021")
+        command.upgrade(cfg, "0022")
         with engine.begin() as conn:
             assert _columns(conn, "reports") == {
                 "id": False,
@@ -2983,7 +3063,7 @@ def test_ac10_reports_upgrade_downgrade(migration_db_url: str) -> None:
         with engine.begin() as conn:
             conn.execute(text(insert), {**good, "note": "x" * 500})
 
-        command.downgrade(cfg, "0020")
+        command.downgrade(cfg, "0021")
         with engine.connect() as conn:
             assert "reports" not in inspect(conn).get_table_names()
     finally:

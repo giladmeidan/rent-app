@@ -18,6 +18,7 @@ dependencies = [
   "httpx==0.28.1",         # the Nominatim client (spec 0003c)
   "pillow==13.0.0",       # photo decode, orient, resize, WebP re-encode (spec 0010d)
   "boto3==1.44.2",        # the R2 photo store over the S3 API (spec 0010d)
+  "openpyxl==3.1.5",      # the CBS rent table xlsx (spec 0014d)
 ]
 
 [dependency-groups]
@@ -28,6 +29,7 @@ dev = [
   "mypy==2.4.1",
   "types-redis==4.6.0.20241004",
   "boto3-stubs[s3]==1.44.2",  # mypy types for the R2 store
+  "types-openpyxl==3.1.5.20261017",  # mypy types for the CBS xlsx parser
 ]
 
 [tool.uv]

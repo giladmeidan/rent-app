@@ -1,7 +1,7 @@
 """`reports` table (spec 0011b): one row per report a signed-in user made, stored for Slice 12's
 admin. Nothing reads it in the running app.
 
-Every CHECK, the unique constraint, the FKs and the index match migration 0021 exactly
+Every CHECK, the unique constraint, the FKs and the index match migration 0022 exactly
 (autogenerate must see no diff). `services/reports.py` is the only writer. `target_id` has no FK:
 it points into five tables (`target_type` says which) and a report outlives its target's row."""
 
