@@ -1,7 +1,7 @@
 ---
 id: 0011c
 title: Every write has a per-account rate limit (listing create, edit and address change, the owner's status decision, and one shared budget for the small writes), oversized request bodies are refused with 413, and the join-flat and like rate-limit messages say when to try again
-status: verified
+status: in-review
 depends_on: []   # 0011a (renewal), 0011b (reports) and 0011e (listing views) build in parallel; see Scope 12 and Risks for the overlap
 reviewers: [code, security, perf, qa]   # security: rate limits, body cap; perf: SSE reconnect jitter; qa: API changes on ~20 routes + two UI copy states. No ux: two existing alerts gain a time, no layout change
 estimate: 1 coder run   # coder Opus/high (security, Speed rule 6); cross-cutting: one helper wired into many routes, not many features
