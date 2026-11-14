@@ -148,3 +148,14 @@ Risks: viewer keys tie an IP or user to listings viewed (HMAC'd, expiring; secur
 `services/applications.py` (different functions; second to merge merges `origin/main`).
 Reviewers: code, security, perf, qa   Estimated: 1 small coder run (Opus/high), 1 review round
 Links: `specs/0011e-listing-views-off-request-path.md` · `specs/0011c-rate-limits-hardening.md`
+
+Spec 0011e — Listing views off the request path   MERGED 25b7c6f (PR #96, 2026-11-15)
+Shipped: `GET /listings/{id}` no longer writes to the database; a view is counted in Redis once per viewer per
+listing per hour (HMAC'd key, no IP or user id stored) and the worker adds the counts to `listings.view_count` every
+minute at second 30; the anonymous listing GET drops from 4 statements to 3, none a write.
+Demo: make dev → GET a listing twice anonymously and once signed in → `HGETALL views:pending` shows 2 → after the
+next :30 tick view_count grew by 2 and the hash is empty.
+Tests: +5 API, 5 test files updated, +0 e2e   CI: green. Measured GET p50 4.9 ms / p95 8.8 ms; a 2000-listing flush
+holds row locks ~70 ms.
+Findings: 0 blockers, 0 majors, 1 minor fixed, 4 minors to FOLLOWUPS, 1 waived (accepted in Risks), 7 nits dropped.
+Changed in PRODUCT.md: nothing.
