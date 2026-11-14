@@ -1,7 +1,7 @@
 ---
 id: 0011a
 title: An owner renews a listing (apartment or room) from 7 days before it expires, or any time after, for 90 more days from the renewal, and it is live again; the API stops accepting edits, pauses and resumes of a listing past its expiry
-status: verified
+status: in-review
 depends_on: []   # no code dependency. 0011c (rate limits) also edits api/app/routers/listings.py: the second to merge merges origin/main
 reviewers: [code, qa, ux]   # qa: one new endpoint, a PATCH rule, two screens; ux: a new card button on both sides, the expired edit page's button, one status line. No security: the endpoint copies PATCH /listings/{id}'s owner rule (404 for anyone else) and the existing cap lock, no PII. No perf: one row lock + the existing cap count
 estimate: 1 coder run   # coder Opus/high (the owner rule and the cap's row locks: Speed rule 6, data); no migration; about 16 files, half of them tests
@@ -427,3 +427,13 @@ Risks: 0011c also edits `routers/listings.py` (second to merge merges `origin/ma
 fixtures were calendar-dependent, now relative to today.
 Reviewers: code, qa, ux   Estimated: 1 coder run (Opus/high), 1 review round
 Links: `specs/0011a-listing-renewal.md` · PRODUCT.md "Trust (MVP)", "Listing edit"
+
+Spec 0011a — Listing renewal   MERGED fdc209b (PR #93, 2026-11-14)
+Shipped: an owner renews an apartment or room from 7 days before it expires or any time after; it is live again for
+90 days from the renewal (a slot in the cap of 3 unless already live), its closure answer cleared; a PATCH (edit,
+pause, resume) of a past-expiry listing gets 409 `listing_expired`.
+Demo: make dev → /me/listings, set a listing's expires_at in the past by SQL → its card shows only "חידוש" → click:
+live badge, "המודעה חודשה, והיא בתוקף עד …"; the expired edit page's "חידוש" lands on my listings (rooms: /market/mine).
+Tests: +11 API integration, +5 vitest (3 updated), +0 e2e (none feasible), +1 screens state   CI: green
+Findings: 0 blockers, 0 majors, 1 minor fixed, 2 minors waived (accepted in Risks), 4 nits dropped
+Changed in PRODUCT.md: nothing. Follow-up: renew gets its rate limit from 0011c (Scope 12).
