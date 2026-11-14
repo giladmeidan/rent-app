@@ -21,6 +21,7 @@ import { ListingPage } from '../features/listings/ListingPage';
 import { MyListingsPage } from '../features/listings/MyListingsPage';
 import { MarketMinePage } from '../features/market/MarketMinePage';
 import { NewListingPage } from '../features/listings/NewListingPage';
+import { MarketPeoplePage } from '../features/people/MarketPeoplePage';
 import { PeoplePage } from '../features/people/PeoplePage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { SearchPage } from '../features/search/SearchPage';
@@ -85,6 +86,7 @@ export function AppRoutes() {
           </Route>
           <Route path="me/flats" element={<MyFlatsPage />} />
           <Route path="market/mine" element={<MarketMinePage />} />
+          <Route path="market/people" element={<MarketPeoplePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

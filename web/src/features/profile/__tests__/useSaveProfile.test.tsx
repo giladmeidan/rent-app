@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { json, mockApi } from '../../auth/__tests__/harness';
+import { MARKET_PEOPLE_KEY, PEOPLE_LIKES_KEY } from '../../people/useMarketPeople';
 import { useSaveProfile } from '../useSaveProfile';
 import { profile } from './fixtures';
 
@@ -25,5 +26,25 @@ describe('useSaveProfile', () => {
     result.current.mutate(body);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(queryClient.getQueryData(['listing', 'A'])).toBeUndefined();
+  });
+
+  it('ac15_save_marks_the_people_lists_stale', async () => {
+    // A save can change the gender rule and the ticket: the likes are invalidated, and browse is
+    // reset (one counted page on the next visit, not every loaded page).
+    mockApi({ 'PUT /me/profile': [json(profile())] });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(MARKET_PEOPLE_KEY, {
+      pages: [{ items: [], total: 0 }],
+      pageParams: [0],
+    });
+    queryClient.setQueryData(PEOPLE_LIKES_KEY, { liked_me: [], mine: [], matches: [] });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSaveProfile(), { wrapper });
+    result.current.mutate(profile());
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(MARKET_PEOPLE_KEY)).toBeUndefined();
+    expect(queryClient.getQueryState(PEOPLE_LIKES_KEY)?.isInvalidated).toBe(true);
   });
 });

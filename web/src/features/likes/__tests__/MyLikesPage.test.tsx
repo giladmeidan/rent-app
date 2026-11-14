@@ -8,6 +8,7 @@ import { RequireSeeker } from '../../auth/RequireSeeker';
 import { seeker } from '../../listings/__tests__/fixtures';
 import { profile } from '../../profile/__tests__/fixtures';
 import { MyLikesPage } from '../MyLikesPage';
+import { personCard } from '../../people/__tests__/fixtures';
 import { likedRoom, myLikes } from './fixtures';
 
 afterEach(() => {
@@ -24,9 +25,17 @@ const routes = (
     </Route>
   </Routes>
 );
+const PEOPLE_LIKES = 'GET /me/people-likes';
+const noPeople = { liked_me: [], mine: [], matches: [] };
 const render = (replies: Parameters<typeof mockApi>[0]) => {
-  // The seeker's profile words the match chips; none by default (a 404 would also do).
-  const api = mockApi({ 'GET /me': [json(seeker)], [PROFILE]: [() => json(null)], ...replies });
+  // The seeker's profile words the match chips; none by default (a 404 would also do). The people
+  // sections (spec 0010i) are empty unless a test says otherwise.
+  const api = mockApi({
+    'GET /me': [json(seeker)],
+    [PROFILE]: [() => json(null)],
+    [PEOPLE_LIKES]: [json(noPeople)],
+    ...replies,
+  });
   renderRoutes('/me/likes', routes);
   return api;
 };
@@ -368,5 +377,114 @@ describe('MyLikesPage', () => {
     expect(img).toHaveAttribute('alt', '');
     expect((second as HTMLElement).querySelector('img')).toBeNull();
     expect((second as HTMLElement).querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('ac17_people_sections_cards_and_matches', async () => {
+    const a = personCard({ display_name: 'Ada', liked_me: true });
+    const b = personCard({ display_name: 'Bo', liked_by_me: true });
+    const match = {
+      conversation_id: '00000000-0000-0000-0000-00000000ccc1',
+      display_name: 'Cy',
+      photo_url: null,
+      matched_at: '2026-11-12T09:00:00Z',
+    };
+    const newChat = '00000000-0000-0000-0000-00000000ccc2';
+    const api = render({
+      [LIKES]: [json(myLikes([], []))],
+      [PEOPLE_LIKES]: [json({ liked_me: [a], mine: [b], matches: [match] })],
+      [`PUT /people/${a.card_id}/like`]: [json({ liked: true, conversation_id: newChat })],
+      [`DELETE /people/${b.card_id}/like`]: [empty()],
+      'GET /conversations': [json([])],
+    });
+    const likedMe = within(await screen.findByRole('region', { name: he.likes.people.likedMe }));
+    const mine = within(section(he.likes.people.mine));
+    const matches = within(section(he.likes.people.matches));
+    // The room sections keep their own names (`likes.spec.ts` selects "אהבו אותך").
+    expect(section(he.likes.likedMe)).toBeVisible();
+    expect(likedMe.getByRole('heading', { level: 3, name: 'Ada' })).toBeVisible();
+    expect(likedMe.getByText(he.market.people.likedMe)).toBeVisible();
+    expect(mine.getByRole('heading', { level: 3, name: 'Bo' })).toBeVisible();
+    expect(mine.getByRole('button', { name: he.market.people.like })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // A match: a compact row, avatar, name and a "לצ'אט" link.
+    expect(matches.getByText('Cy')).toBeVisible();
+    expect(matches.getByRole('link', { name: he.likes.toChat })).toHaveAttribute(
+      'href',
+      `/chat/${match.conversation_id}`,
+    );
+    expect(matches.queryByRole('article')).toBeNull();
+
+    // Unlike from "mine": the DELETE, the card stays (the button shows the new state).
+    fireEvent.click(mine.getByRole('button', { name: he.market.people.like }));
+    await vi.waitFor(() => {
+      expect(mine.getByRole('button', { name: he.market.people.like })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+    expect(api.calls(`DELETE /people/${b.card_id}/like`)).toHaveLength(1);
+
+    // Like back from "liked me": the banner, and the card becomes a match row.
+    fireEvent.click(likedMe.getByRole('button', { name: he.market.people.like }));
+    // The banner above the lists, then the new match (newest first), then the old one.
+    await vi.waitFor(() => {
+      const chat = screen.getAllByRole('link', { name: he.likes.toChat });
+      expect(chat.map((l) => l.getAttribute('href'))).toEqual([
+        `/chat/${newChat}`,
+        `/chat/${newChat}`,
+        `/chat/${match.conversation_id}`,
+      ]);
+    });
+    expect(screen.getByText(he.likes.mutual)).toBeVisible();
+    expect(await screen.findByText(he.likes.people.likedMeEmpty)).toBeVisible();
+    expect(matches.getByText('Ada')).toBeVisible();
+    // Edited in place: no refetch of either list.
+    expect(api.calls(PEOPLE_LIKES)).toHaveLength(1);
+    expect(api.calls(LIKES)).toHaveLength(1);
+  });
+
+  it('ac17_people_empty_states', async () => {
+    render({ [LIKES]: [json(myLikes([], []))] });
+    expect(await screen.findByText(he.likes.people.likedMeEmpty)).toBeVisible();
+    expect(screen.getByText(he.likes.people.mineEmpty)).toBeVisible();
+    expect(screen.getByText(he.likes.people.matchesEmpty)).toBeVisible();
+    for (const name of [he.likes.people.likedMe, he.likes.people.mine, he.likes.people.matches]) {
+      expect(screen.getByRole('heading', { level: 2, name })).toBeVisible();
+    }
+    // The page's one mascot stays in the room section.
+    expect(document.querySelectorAll('img[src*="homie-turtle"]')).toHaveLength(1);
+  });
+
+  it('ac17_people_card_required_is_one_nudge', async () => {
+    const a = likedRoom();
+    render({
+      [LIKES]: [json(myLikes([a], []))],
+      [PEOPLE_LIKES]: [json({ detail: 'card_required' }, 403)],
+    });
+    expect(await screen.findByText(he.likes.people.cardRequired)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.market.people.toProfile })).toHaveAttribute(
+      'href',
+      '/me/profile?section=about&section=looking&next=%2Fme%2Flikes',
+    );
+    // In place of the three sections; the room sections are unchanged.
+    for (const name of [he.likes.people.likedMe, he.likes.people.mine, he.likes.people.matches]) {
+      expect(screen.queryByRole('heading', { name })).toBeNull();
+    }
+    expect(within(section(he.likes.likedMe)).getAllByRole('article')).toHaveLength(1);
+    expect(section(he.likes.mine)).toBeVisible();
+  });
+
+  it('ac17_people_error_has_its_own_retry', async () => {
+    const api = render({
+      [LIKES]: [json(myLikes([], []))],
+      [PEOPLE_LIKES]: [json({ detail: 'boom' }, 500), json(noPeople)],
+    });
+    fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
+    expect(await screen.findByText(he.likes.people.matchesEmpty)).toBeVisible();
+    expect(api.calls(PEOPLE_LIKES)).toHaveLength(2);
+    // The room lists were not asked again.
+    expect(api.calls(LIKES)).toHaveLength(1);
   });
 });

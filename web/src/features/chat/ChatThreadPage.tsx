@@ -6,6 +6,7 @@ import { Navigate, useParams } from 'react-router';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ClampedText } from '../../components/ClampedText';
+import { useConfirm } from '../../components/Dialog';
 import { Mascot } from '../../components/Mascot';
 import { BackLink, PageHeader } from '../../components/PageHeader';
 import { usePageTitle } from '../../app/usePageTitle';
@@ -18,6 +19,7 @@ import { Skeleton } from '../../components/Skeleton';
 import { formatDay } from '../flatmates/format';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
+import { useRemoveMatch } from '../people/useMarketPeople';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
 import { formatMessageTime } from './format';
@@ -132,12 +134,37 @@ function Thread({
   const composerHadFocus = useRef(false);
   const closedRef = useRef<HTMLParagraphElement>(null);
   const couldSend = useRef(thread.can_send);
+  // "Remove the match" (a direct chat, spec 0010i): set when the person confirms, cleared on a
+  // failure. The chat closing under it is theirs: the closed note takes focus, as the composer
+  // that held it is gone.
+  const removing = useRef(false);
+  const [removeFailed, setRemoveFailed] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+  const removeMatch = useRemoveMatch();
   // A closed chat shows the text its composer held (spec 0009g), read on every render: the draft
   // is written after the mount, until the send's 409. "Discard" hides it until the chat reopens,
   // when the composer restores whatever is still stored.
   const [discarded, setDiscarded] = useState(false);
   if (thread.can_send && discarded) setDiscarded(false);
   const unsent = thread.can_send || discarded ? '' : readDraft('chat', id, userId);
+
+  async function onRemoveMatch() {
+    setRemoveFailed(false);
+    const ok = await confirm({
+      title: t('chat.thread.removeMatchTitle'),
+      body: t('chat.thread.removeMatchBody'),
+      confirmLabel: t('chat.thread.removeMatchConfirm'),
+      tone: 'danger',
+    });
+    if (!ok) return;
+    removing.current = true;
+    try {
+      await removeMatch.mutateAsync(id);
+    } catch {
+      removing.current = false;
+      setRemoveFailed(true);
+    }
+  }
 
   function discard() {
     clearDraft('chat', id);
@@ -152,6 +179,12 @@ function Thread({
   useEffect(() => {
     const closed = couldSend.current && !thread.can_send;
     couldSend.current = thread.can_send;
+    if (closed && removing.current) {
+      removing.current = false;
+      composerHadFocus.current = false;
+      closedRef.current?.focus();
+      return;
+    }
     if (!closed || !composerHadFocus.current) return;
     composerHadFocus.current = false;
     const active = document.activeElement;
@@ -208,8 +241,28 @@ function Thread({
           </Button>
         </p>
       ) : (
-        // A direct chat (spec 0010g): no listing, one caption line and no button.
-        <p className="text-caption text-ink-muted">{t('chat.thread.direct')}</p>
+        // A direct chat (spec 0010g): no listing, one caption line. While it can send, the line
+        // also carries "remove the match" (spec 0010i).
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-caption text-ink-muted">{t('chat.thread.direct')}</p>
+            {thread.can_send && (
+              <Button
+                variant="ghost"
+                size="sm"
+                busy={removeMatch.isPending}
+                onClick={() => void onRemoveMatch()}
+              >
+                {t('chat.thread.removeMatch')}
+              </Button>
+            )}
+          </div>
+          {removeFailed && (
+            <p role="alert" className="text-body-sm font-semibold text-danger">
+              {t('chat.thread.removeMatchFailed')}
+            </p>
+          )}
+        </div>
       )}
       <p
         role="note"
@@ -323,6 +376,7 @@ function Thread({
           )}
         </>
       )}
+      {confirmDialog}
     </>
   );
 }

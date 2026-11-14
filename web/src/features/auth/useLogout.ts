@@ -39,7 +39,7 @@ export function clearSession(
   queryClient.getMutationCache().clear();
   // Search results and listing pages carry the caller's match scores (0006b): reset, not remove,
   // so an open page refetches as the new viewer instead of keeping the last person's scores.
-  for (const queryKey of [['search'], ['search-map'], ['listing']]) {
+  for (const queryKey of [['search'], ['search-map'], ['listing'], ['market-people']]) {
     void queryClient.resetQueries({ queryKey });
   }
 }

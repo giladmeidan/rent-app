@@ -104,7 +104,12 @@ export function PeoplePage() {
     if (people.isError) {
       if (hasStatus(people.error, 404)) return notice(t('people.notFound'));
       if (hasStatus(people.error, 409)) return notice(t('people.notLive'));
-      body = <ErrorState onRetry={() => people.refetch()} />;
+      // The browse limit (0010h): a retry would only make more counted calls.
+      body = hasStatus(people.error, 429) ? (
+        <EmptyState message={t('people.browseRateLimited')} />
+      ) : (
+        <ErrorState onRetry={() => people.refetch()} />
+      );
     } else {
       body = (
         <Loading>

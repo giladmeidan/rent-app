@@ -1038,4 +1038,83 @@ describe('ChatThreadPage', () => {
     expect(screen.getByText(he.chat.thread.closed)).toHaveAttribute('role', 'status');
     expect(screen.queryByText(he.chat.thread.closedDirect)).toBeNull();
   });
+
+  it('ac18_remove_match_confirm_cancel_and_confirm', async () => {
+    const D = directThread({ other_name: NAME, messages: [message({ body: 'hi' })] });
+    const closed = { ...D, can_send: false };
+    const deleteRoute = `DELETE /me/matches/${D.id}`;
+    const removeButton = () => screen.getByRole('button', { name: he.chat.thread.removeMatch });
+    const { api } = renderThread(D, [() => json(D), () => json(closed)], {
+      extra: { [deleteRoute]: [() => new Response(null, { status: 204 })] },
+    });
+    expect(await h1(NAME)).toBeVisible();
+
+    // A ghost button in the caption line, beside the direct caption.
+    const caption = screen.getByText(he.chat.thread.direct);
+    expect(caption.parentElement).toContainElement(removeButton());
+
+    // Cancel: the confirm closes, nothing is sent, focus returns to the button.
+    act(() => removeButton().focus());
+    fireEvent.click(removeButton());
+    const box = await screen.findByRole('dialog', { name: he.chat.thread.removeMatchTitle });
+    expect(within(box).getByText(he.chat.thread.removeMatchBody)).toBeVisible();
+    fireEvent.click(within(box).getByRole('button', { name: he.common.cancel }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(api.calls(deleteRoute)).toHaveLength(0);
+    expect(removeButton()).toHaveFocus();
+    expect(textarea()).toBeVisible();
+
+    // Confirm: the DELETE, then the closed note replaces the composer and takes focus.
+    fireEvent.click(removeButton());
+    const again = await screen.findByRole('dialog', { name: he.chat.thread.removeMatchTitle });
+    fireEvent.click(within(again).getByRole('button', { name: he.chat.thread.removeMatchConfirm }));
+    const note = await screen.findByText(he.chat.thread.closedDirect);
+    await waitFor(() => {
+      expect(note).toHaveFocus();
+    });
+    expect(api.calls(deleteRoute)).toHaveLength(1);
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: he.chat.thread.removeMatch })).toBeNull();
+    expect(screen.queryByText(he.chat.thread.removeMatchFailed)).toBeNull();
+    // The chat list and the thread were asked again.
+    expect(api.calls(threadRoute(D)).length).toBeGreaterThanOrEqual(2);
+    expect(api.calls(LIST).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('ac18_remove_match_failure_is_inline_and_keeps_the_chat_open', async () => {
+    const D = directThread({ other_name: NAME, messages: [message({ body: 'hi' })] });
+    const { api } = renderThread(D, [() => json(D)], {
+      extra: { [`DELETE /me/matches/${D.id}`]: [() => json({ detail: 'boom' }, 500)] },
+    });
+    expect(await h1(NAME)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: he.chat.thread.removeMatch }));
+    const box = await screen.findByRole('dialog', { name: he.chat.thread.removeMatchTitle });
+    fireEvent.click(within(box).getByRole('button', { name: he.chat.thread.removeMatchConfirm }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.chat.thread.removeMatchFailed);
+    expect(textarea()).toBeVisible();
+    expect(screen.queryByText(he.chat.thread.closedDirect)).toBeNull();
+    expect(screen.getByRole('button', { name: he.chat.thread.removeMatch })).toBeVisible();
+    expect(api.calls(`DELETE /me/matches/${D.id}`)).toHaveLength(1);
+  });
+
+  it('ac18_no_remove_match_in_an_application_chat_or_a_closed_direct_chat', async () => {
+    const name = he.chat.thread.removeMatch;
+    // An application chat (it has a listing), open: no button.
+    const T = thread({ other_name: NAME });
+    let { view } = renderThread(T, [json(T)]);
+    expect(await h1(NAME)).toBeVisible();
+    expect(textarea()).toBeVisible();
+    expect(screen.queryByRole('button', { name })).toBeNull();
+    reset(view);
+
+    // A closed direct chat: the closed note, no button.
+    const closed = directThread({ other_name: NAME, can_send: false });
+    ({ view } = renderThread(closed, [json(closed)]));
+    expect(await h1(NAME)).toBeVisible();
+    expect(screen.getByText(he.chat.thread.closedDirect)).toBeVisible();
+    expect(screen.queryByRole('button', { name })).toBeNull();
+    reset(view);
+  });
 });

@@ -440,6 +440,16 @@ describe('PeoplePage', () => {
     }
   });
 
+  it('ac20_browse_rate_limit_shows_its_text_and_no_retry', async () => {
+    // 0010h's browse limit on the room side: a retry would only make more counted calls.
+    const { api } = renderPage([json({ detail: 'rate_limited' }, 429)]);
+    expect(await screen.findByText(he.people.browseRateLimited)).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: he.people.title })).toBeVisible();
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    expect(screen.queryByText(he.common.error)).toBeNull();
+    expect(api.calls(PEOPLE)).toHaveLength(1);
+  });
+
   it('ac4_h1_while_loading_and_on_error', async () => {
     const title = () => screen.getByRole('heading', { level: 1, name: he.people.title });
     // "My listings" loading: the page's <h1> above the busy block.

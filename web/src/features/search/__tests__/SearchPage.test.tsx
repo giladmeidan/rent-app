@@ -1303,4 +1303,26 @@ describe('SearchPage', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('ac16_market_view_switch_only_on_the_rooms_search', async () => {
+    // /market: the inner חדרים / אנשים switch, rooms current. /search (apartments): none.
+    mockApi({ [SEARCH]: [json(page([publicListing({ listing_type: 'room' })]))] });
+    let view = render('/market');
+    const nav = await screen.findByRole('navigation', { name: he.market.view.label });
+    expect(within(nav).getByRole('link', { name: he.market.view.rooms })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(nav).getByRole('link', { name: he.market.view.people })).toHaveAttribute(
+      'href',
+      '/market/people',
+    );
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    view = render('/search');
+    await screen.findAllByRole('article');
+    expect(screen.queryByRole('navigation', { name: he.market.view.label })).toBeNull();
+  });
 });

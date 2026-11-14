@@ -45,3 +45,54 @@ export async function unlikePerson(listingId: string, personId: string): Promise
     throw new ApiError('DELETE', '/listings/{id}/people/{id}/like', response.status, error);
   }
 }
+
+/** A person's card in people browse and on `/me/people-likes` (0010h): `card_id` is the only id. */
+export type PersonCardOut = components['schemas']['PersonCardOut'];
+export type PeopleBrowseOut = components['schemas']['PeopleBrowseOut'];
+/** The result of a person like: `conversation_id` is set only when it made the pair mutual. */
+export type PersonLikeOut = components['schemas']['PersonLikeOut'];
+export type PersonMatchOut = components['schemas']['PersonMatchOut'];
+export type MyPeopleLikesOut = components['schemas']['MyPeopleLikesOut'];
+
+/** One page (20) of the people shown in שוק השותפים. 403 `card_required` (no card and no live
+ * room) and 429 `rate_limited` throw. */
+export async function fetchPeopleBrowse(offset: number): Promise<PeopleBrowseOut> {
+  const { data, error, response } = await api.GET('/people', {
+    params: { query: { offset } },
+  });
+  if (data === undefined) throw new ApiError('GET', '/people', response.status, error);
+  return data;
+}
+
+/** Likes a person's card (idempotent). 403 `card_required`, 404 (gone) and 429 throw. */
+export async function likePersonCard(cardId: string): Promise<PersonLikeOut> {
+  const { data, error, response } = await api.PUT('/people/{card_id}/like', {
+    params: { path: { card_id: cardId } },
+  });
+  if (data === undefined) throw new ApiError('PUT', '/people/{id}/like', response.status, error);
+  return data;
+}
+
+/** Takes the like back (204). 409 `mutual_match` throws (the pair is a match: remove it). */
+export async function unlikePersonCard(cardId: string): Promise<void> {
+  const { error, response } = await api.DELETE('/people/{card_id}/like', {
+    params: { path: { card_id: cardId } },
+  });
+  if (!response.ok) throw new ApiError('DELETE', '/people/{id}/like', response.status, error);
+}
+
+/** The people who liked the caller, the people the caller liked, and the matches. 403
+ * `card_required` throws. */
+export async function fetchMyPeopleLikes(): Promise<MyPeopleLikesOut> {
+  const { data, error, response } = await api.GET('/me/people-likes');
+  if (data === undefined) throw new ApiError('GET', '/me/people-likes', response.status, error);
+  return data;
+}
+
+/** Ends a match: the direct chat stays readable and closes (204, idempotent). 404 throws. */
+export async function removeMatch(conversationId: string): Promise<void> {
+  const { error, response } = await api.DELETE('/me/matches/{conversation_id}', {
+    params: { path: { conversation_id: conversationId } },
+  });
+  if (!response.ok) throw new ApiError('DELETE', '/me/matches/{id}', response.status, error);
+}

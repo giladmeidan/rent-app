@@ -6,6 +6,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { MarketViewSwitch } from '../people/MarketViewSwitch';
 import { useIsDesktop } from '../../components/useMediaQuery';
 import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
@@ -159,6 +160,7 @@ function SearchView({ type }: Props) {
   return (
     <PageContainer as="section" width="wide" className="flex flex-col gap-4">
       <PageHeader title={title} actions={isDesktop ? undefined : toggle} />
+      {type === 'room' && <MarketViewSwitch current="rooms" />}
 
       {/* The side panel: the artboard's 280px (18rem). */}
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
