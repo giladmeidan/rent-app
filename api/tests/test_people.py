@@ -1,6 +1,6 @@
 """People browse and likes (spec 0008a): AC1-AC12 (AC13 is in `test_profiles.py`, AC14 in
 `test_migrations.py`, AC15 the amended asserts in `test_inbox.py`, `test_applications.py` and
-`test_listings.py`).
+`test_listings.py`). Spec 0010h AC12 (the room side's browse limit) is here too.
 
 `R` is `test_matching`'s `L0` as a women-only room for two flatmates, owned by the signed-up owner
 `O`. A seeker profile is `make_profile`'s `P0` (which scores 100 against `L0`) plus a room section
@@ -28,6 +28,7 @@ from app.redis_client import get_redis
 from app.schemas.people import PersonOut
 from app.services import applications as applications_service
 from app.services import chat_events
+from app.services import market_people as market_people_service
 from app.services import people as people_service
 from app.services.applications import AlreadyAppliedError
 from tests.conftest import (
@@ -1242,3 +1243,26 @@ def test_ac6b_my_likes_without_looking_part(
     [item] = _ok(flat_owner.get("/me/likes"))["mine"]
     assert (item["listing"]["flatmate_ages"], item["listing"]["lifestyle"]) == (ages, answers)
     assert item["listing"]["match"] is not None
+
+
+def test_ac12_room_people_browse_rate_limited(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    """Spec 0010h AC12: the room page's people share the people-browse counter with `GET /people`
+    (`rl:browse:user:*`); every attempt counts, a 404 included."""
+    room = _room(db_engine, _user_id(owner), gush_dan)
+    a = make_seeker(db_engine, "a@example.com", "Avi")
+    _visible(db_engine, a, gush_dan)
+    limit = market_people_service.BROWSE_RATE_LIMIT_HOUR
+    assert _people(owner, uuid.uuid4()).status_code == 404
+    for n in range(limit // 2 - 1):
+        assert _names(_page(owner, room)) == ["Avi"], n
+    for n in range(limit - limit // 2):
+        # The live room is the owner's ticket to people browse (no card needed to browse).
+        assert owner.get("/people").status_code == 200, n
+    assert int(get_redis().get(f"rl:browse:user:{_user_id(owner)}") or 0) == limit
+    limited = _people(owner, room)
+    assert limited.status_code == 429
+    assert limited.json() == {"detail": "rate_limited"}
+    assert int(limited.headers["Retry-After"]) > 0
+    assert owner.get("/people").status_code == 429

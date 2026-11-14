@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.auth import COOKIE_NAME, optional_user
 from app.db import get_session
 from app.models import Listing, User
+from app.redis_client import RedisClient, get_redis
 from app.schemas.error import ErrorOut
 from app.schemas.search import (
     FlatPersonOut,
@@ -41,15 +42,18 @@ from app.schemas.search import (
 )
 from app.services import applications as applications_service
 from app.services import flatmates as flatmates_service
+from app.services import market_people as market_people_service
 from app.services import people as people_service
 from app.services import photos as photos_service
 from app.services import profiles as profiles_service
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
+from app.services.rate_limit import RateLimitedError
 
 router = APIRouter(tags=["search"])
 
 DbDep = Annotated[Session, Depends(get_session)]
+RedisDep = Annotated[RedisClient, Depends(get_redis)]
 OptionalUserDep = Annotated[User | None, Depends(optional_user)]
 
 _DB_DOWN: dict[int | str, dict[str, Any]] = {
@@ -99,6 +103,15 @@ def search_listings(
     return ListingSearchOut(items=items, total=total, sort=sort)
 
 
+def _browse_allowed(r: RedisClient, user: User) -> bool:
+    """Count one people-browse page for `user`; False when they are over the limit."""
+    try:
+        market_people_service.count_browse(r, user)
+    except RateLimitedError:
+        return False
+    return True
+
+
 @router.get(
     "/listings/{listing_id}",
     response_model=ListingDetail,
@@ -114,13 +127,20 @@ def get_listing(
     listing_id: uuid.UUID,
     db: DbDep,
     user: OptionalUserDep,
+    r: RedisDep,
     request: Request,
     response: Response,
 ) -> ListingDetail:
     """A public listing with its applicant count, the caller's match, room fit and like state
     (spec 0008a; 0010b: any signed-in account on a room, not their own), `is_mine` and, for a
     seeker on a room that fits them, the flat's people (spec 0010f); counts one view
-    (`listings.view_count`). A 404 counts nothing."""
+    (`listings.view_count`). A 404 counts nothing.
+
+    The flat's people count one page against the caller's people-browse limit (spec 0010h,
+    `market_people.count_browse`, shared with `GET /people` and `GET /listings/{id}/people`), only
+    when they are computed: visitors, owners, apartments and non-seekers count nothing. Over the
+    limit the page is not refused: it is served with `people = []` (the view is still recorded,
+    everything else unchanged)."""
     profile_user_id = profiles_service.profile_user_id(db, user)
     try:
         listing, match, room_fit = search_service.get_public_listing_with_match(
@@ -136,7 +156,13 @@ def get_listing(
     # Decision 13, read once: the room privacy fields and the flat's people (spec 0010f).
     seeker = profiles_service.sees_room_privacy(user, profile_user_id)
     people: list[FlatPersonOut] = []
-    if user is not None and seeker and listing.listing_type == "room" and room_fit is not False:
+    if (
+        user is not None
+        and seeker
+        and listing.listing_type == "room"
+        and room_fit is not False
+        and _browse_allowed(r, user)
+    ):
         people = [
             FlatPersonOut(
                 display_name=row.display_name,

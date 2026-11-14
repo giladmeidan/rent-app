@@ -191,7 +191,10 @@ def _own_room(db: Session, owner: User, listing_id: uuid.UUID, *, lock: bool = F
     return listing
 
 
-def _count_like(r: RedisClient, user: User) -> None:
+def count_like(r: RedisClient, user: User) -> None:
+    """Count one like attempt of `user` against `rl:like:user:*` (`LIKE_RATE_LIMIT_HOUR` /
+    `_DAY`): room likes, lister likes and person likes (spec 0010h) share it. Raises
+    `RateLimitedError`."""
     count_or_raise(
         r,
         (
@@ -387,7 +390,7 @@ def like_person(
     Commits."""
     try:
         listing = _own_room(db, owner, listing_id, lock=True)
-        _count_like(r, owner)
+        count_like(r, owner)
         pair = db.scalar(
             update(RoomPair)
             .where(
@@ -475,7 +478,7 @@ def like_room(
             raise ListingNotFoundError
         if fit is False:
             raise RoomGenderMismatchError
-        _count_like(r, seeker)
+        count_like(r, seeker)
         stmt = insert(RoomPair).values(
             listing_id=listing.id,
             seeker_id=seeker.id,
