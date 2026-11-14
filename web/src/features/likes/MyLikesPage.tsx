@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePageTitle } from '../../app/usePageTitle';
@@ -13,58 +13,12 @@ import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { fetchAreas } from '../areas/api';
 import type { LifestyleAnswers } from '../lifestyle/keys';
-import { ListingCard } from '../listings/ListingCard';
 import { ApiError } from '../listings/api';
 import { MarketPersonCard } from '../people/MarketPersonCard';
 import { useMyPeopleLikes } from '../people/useMarketPeople';
-import { todayInIsrael } from '../listings/format';
-import { MatchBadge } from '../match/MatchBadge';
-import { MatchChips } from '../match/MatchChips';
-import { hasLooking, type LookingProfile } from '../profile/api';
 import { profileHref } from '../profile/links';
 import { useProfile } from '../profile/useProfile';
-import type { LikedRoomOut } from './api';
 import { MutualBanner } from './MutualBanner';
-import { useMyLikes } from './useMyLikes';
-
-/** The rooms that invited the caller (spec 0010l): each card is a plain link to the room's page,
- * where the caller applies (no like button: a seeker has no room-like). */
-function RoomList({
-  items,
-  profile,
-  empty,
-}: {
-  items: LikedRoomOut[];
-  /** The seeker's profile, which words the match chips (`undefined`: none, no looking part, or not
-   * loaded). */
-  profile: LookingProfile | undefined;
-  empty: ReactNode;
-}) {
-  const today = todayInIsrael();
-  if (items.length === 0) return empty;
-  return (
-    <ul className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {items.map(({ listing }) => (
-        <li key={listing.id}>
-          {/* `h3`: the cards sit under the section `<h2>`s. */}
-          <ListingCard
-            listing={listing}
-            today={today}
-            to={`/listings/${listing.id}`}
-            titleAs="h3"
-            coverUrl={listing.cover?.small_url}
-            seekerBirthYear={profile?.birth_year}
-            badge={listing.match && <MatchBadge score={listing.match.score} />}
-          >
-            {listing.match && (
-              <MatchChips match={listing.match} listing={listing} profile={profile} />
-            )}
-          </ListingCard>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 const cardGrid = 'grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3';
 const h2Class = 'text-start font-display text-h2';
@@ -179,14 +133,13 @@ function PeopleSections({
   );
 }
 
-/** `/me/likes`, any account (`RequireUser`, spec 0010b): the rooms that invited the caller (spec
- * 0010l), then the people part (spec 0010i). */
+/** `/me/likes`, any account (`RequireUser`, spec 0010b): people only (spec 0010i, 0010m): the people
+ * who liked the caller, the ones they liked and their matches. The rooms that invited the caller
+ * moved to the room applications of `/market/mine`. */
 export function MyLikesPage() {
   const { t } = useTranslation();
   usePageTitle(t('likes.title'));
-  const likes = useMyLikes();
   const stored = useProfile().data;
-  const profile = hasLooking(stored) ? stored : undefined;
   // A person match (spec 0010i): kept here, not in the lists, since the card that made the match
   // leaves them on the refetch.
   const [mutualId, setMutualId] = useState<string | null>(null);
@@ -207,44 +160,6 @@ export function MyLikesPage() {
     setGone(null);
     setMutualId(conversationId);
   };
-
-  let body;
-  if (likes.isPending) {
-    body = (
-      <Loading>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-64 w-full rounded-lg" />
-          ))}
-        </div>
-      </Loading>
-    );
-  } else if (likes.isError && likes.data === undefined) {
-    body = <ErrorState onRetry={() => likes.refetch()} />;
-  } else {
-    body = (
-      <section className="flex flex-col gap-4" aria-labelledby="likes-liked-me">
-        <h2 id="likes-liked-me" className="text-start font-display text-h2">
-          {t('likes.likedMe')}
-        </h2>
-        <RoomList
-          items={likes.data.liked_me}
-          profile={profile}
-          empty={
-            <EmptyState
-              pose="sleep"
-              message={t('likes.likedMeEmpty')}
-              action={
-                <Button variant="ghost" to={profileHref('/me/likes', 'about', 'looking')}>
-                  {t('likes.toProfile')}
-                </Button>
-              }
-            />
-          }
-        />
-      </section>
-    );
-  }
 
   return (
     <PageContainer width="wide" className="flex flex-col gap-6">
@@ -268,7 +183,6 @@ export function MyLikesPage() {
           <MutualBanner key={mutualId} applicationId={mutualId} />
         </div>
       )}
-      {body}
       <PeopleSections
         viewerLifestyle={stored?.lifestyle ?? {}}
         onMutual={onMutual}

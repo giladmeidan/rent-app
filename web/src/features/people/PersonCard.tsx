@@ -192,13 +192,13 @@ export function PersonCard({ person, listing, areaNames, onAlert }: Props) {
             busy={pending}
             onClick={() => void toggle()}
           >
-            {t('people.like')}
+            {t('people.invite')}
             {person.liked_by_me && <span aria-hidden="true">✓</span>}
           </Button>
           {error !== null && (
             <p role="alert" className="text-body-sm font-semibold text-danger">
               {error === 'notLive' && t('people.notLive')}
-              {error === 'rateLimited' && t('people.errors.rateLimited')}
+              {error === 'rateLimited' && t('people.errors.inviteRateLimited')}
               {error === 'failed' && t('common.error')}
             </p>
           )}

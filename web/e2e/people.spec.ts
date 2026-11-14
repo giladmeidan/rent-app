@@ -57,7 +57,7 @@ test('ac10_owner_likes_seeker_applies_and_chats', async ({ page, browser }) => {
   );
 
   // The like is an invite: the button flips, and nothing else happens on the page.
-  const like = person.getByRole('button', { name: he.people.like, exact: true });
+  const like = person.getByRole('button', { name: he.people.invite, exact: true });
   await like.click();
   await expect(like).toHaveAttribute('aria-pressed', 'true');
 

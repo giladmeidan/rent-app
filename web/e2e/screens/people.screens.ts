@@ -200,7 +200,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
 
 const PATH = `/me/listings/${ROOM.id}/people`;
 const likeButton = (page: Page, index: number) =>
-  page.getByRole('article').nth(index).getByRole('button', { name: he.people.like, exact: true });
+  page.getByRole('article').nth(index).getByRole('button', { name: he.people.invite, exact: true });
 
 type State = {
   name: string;
@@ -290,7 +290,7 @@ const STATES: State[] = [
     act: async (page) => {
       await likeButton(page, 0).click();
       await expect(
-        page.getByRole('alert').filter({ hasText: he.people.errors.rateLimited }),
+        page.getByRole('alert').filter({ hasText: he.people.errors.inviteRateLimited }),
       ).toBeVisible();
     },
   },

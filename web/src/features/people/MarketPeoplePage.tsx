@@ -18,6 +18,7 @@ import { profileHref } from '../profile/links';
 import { useProfile } from '../profile/useProfile';
 import { MarketPersonCard } from './MarketPersonCard';
 import { MarketViewSwitch } from './MarketViewSwitch';
+import { RoomInviteHint } from './RoomInviteHint';
 import { flattenCards, useMarketPeople } from './useMarketPeople';
 
 const PATH = '/market/people';
@@ -25,7 +26,9 @@ const grid = 'grid grid-cols-1 items-start gap-3 md:grid-cols-2 lg:grid-cols-3';
 
 /**
  * `/market/people`, any account (`RequireUser`): the other people of שוק השותפים, their cards
- * beside the viewer's own answers (no score), with a like toggle (spec 0010i). The like edits the
+ * beside the viewer's own answers (no score), with a like toggle (spec 0010i). Only an account
+ * showing its own card sees them (spec 0010m); without one a nudge to show it, plus a link to the
+ * room's invite page for an account with a live room. The like edits the
  * loaded pages in place and never refetches them: the API counts every page against the browse
  * limit. A mutual like is page state, so its banner survives the card leaving the list.
  */
@@ -79,15 +82,18 @@ export function MarketPeoplePage() {
       );
     } else if (people.error instanceof ApiError && people.error.status === 403) {
       body = (
-        <EmptyState
-          pose="sleep"
-          message={t('market.people.cardRequired')}
-          action={
-            <Button variant="primary" to={profileHref(PATH, 'about', 'looking')}>
-              {t('market.people.toProfile')}
-            </Button>
-          }
-        />
+        <>
+          <EmptyState
+            pose="sleep"
+            message={t('market.people.cardRequired')}
+            action={
+              <Button variant="primary" to={profileHref(PATH, 'about', 'looking')}>
+                {t('market.people.toProfile')}
+              </Button>
+            }
+          />
+          <RoomInviteHint />
+        </>
       );
     } else if (hasStatus(people.error, 429)) {
       // No retry: it would only make more counted calls.

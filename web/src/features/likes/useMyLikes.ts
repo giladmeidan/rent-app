@@ -9,9 +9,9 @@ import { fetchMyLikes } from './api';
 export const MY_LIKES_KEY = ['me', 'likes'] as const;
 
 /**
- * The caller's room likes (any account, spec 0010b). Pass `enabled = false` for whoever must not
- * request it (the search map, spec 0009v); the market's bottom bar and the page under
- * `RequireUser` pass nothing. A 401 forgets the cached person.
+ * The rooms that invited the caller (any account, spec 0010b; `GET /me/likes` keeps its name, spec
+ * 0010m). Pass `enabled = false` for whoever must not request it (the search map, spec 0009v); the
+ * market's "הפעילות שלי" tab and the invites section of the room applications pass nothing. A 401 forgets the cached person.
  */
 export function useMyLikes(enabled = true) {
   const queryClient = useQueryClient();

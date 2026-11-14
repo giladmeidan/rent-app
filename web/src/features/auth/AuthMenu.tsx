@@ -8,7 +8,7 @@ import { NavIcon, NavTab } from '../../components/NavTab';
 import { Skeleton } from '../../components/Skeleton';
 import { useSide } from '../../app/side';
 import { ChatNavLink } from '../chat/ChatNavLink';
-import { LikesNavLink } from '../likes/LikesNavLink';
+import { MarketMineNavLink } from '../likes/MarketMineNavLink';
 import { useLogout } from './useLogout';
 import { useMe } from './useMe';
 
@@ -39,6 +39,12 @@ const houseIcon = (
   <NavIcon>
     <path d="M3 11l9-8 9 8" />
     <path d="M5 10v10h14V10" />
+  </NavIcon>
+);
+
+const likesIcon = (
+  <NavIcon>
+    <path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z" />
   </NavIcon>
 );
 
@@ -96,9 +102,8 @@ export function AuthMenu() {
   // One skeleton on both sides: חיפוש · (לייקים, market only) · הפעילות שלי · צ'אט · פרופיל.
   // Posting lives inside הפעילות שלי (the my-listings "new" button).
   const market = side === 'market';
-  let mineTo = '/me/applications';
-  if (market) mineTo = '/market/mine';
-  else if (user.role === 'owner') mineTo = '/me/listings';
+  // The market's tab is `MarketMineNavLink` (it carries the invite count).
+  const mineTo = user.role === 'owner' ? '/me/listings' : '/me/applications';
   const tabs = (
     <>
       <NavTab
@@ -107,8 +112,12 @@ export function AuthMenu() {
         icon={searchIcon}
         label={t('nav.search')}
       />
-      {market && <LikesNavLink />}
-      <NavTab to={mineTo} icon={houseIcon} label={t('nav.mine')} />
+      {market && <NavTab to="/me/likes" icon={likesIcon} label={t('header.likes')} />}
+      {market ? (
+        <MarketMineNavLink />
+      ) : (
+        <NavTab to={mineTo} icon={houseIcon} label={t('nav.mine')} />
+      )}
       <ChatNavLink />
       <NavTab to="/me/profile" icon={profileIcon} label={t('nav.profile')} />
     </>

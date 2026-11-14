@@ -80,7 +80,8 @@ const page = (items: ReturnType<typeof person>[], total = items.length) => json(
 const alerts = () => screen.queryAllByRole('alert').filter((el) => el.textContent !== '');
 const cards = () => screen.getAllByRole('article');
 const cardOf = (name: string) => screen.getByRole('article', { name });
-const likeButton = (name: string) => within(cardOf(name)).getByRole('button', { name: /^אהבתי/ });
+const likeButton = (name: string) =>
+  within(cardOf(name)).getByRole('button', { name: new RegExp(`^${he.people.invite}`) });
 const offsets = (api: ReturnType<typeof mockApi>) =>
   api.calls(PEOPLE).map((c) => new URL(c.request.url).searchParams.get('offset'));
 
@@ -227,9 +228,10 @@ describe('PeoplePage', () => {
       },
     });
     await screen.findAllByRole('article');
-    const button = () => within(cardOf('P2')).getByRole('button', { name: /^אהבתי/ });
+    const button = () =>
+      within(cardOf('P2')).getByRole('button', { name: new RegExp(`^${he.people.invite}`) });
     expect(button()).toHaveAttribute('aria-pressed', 'false');
-    expect(button()).toHaveAccessibleName(he.people.like);
+    expect(button()).toHaveAccessibleName(he.people.invite);
     button().focus();
     fireEvent.click(button());
     // In flight: aria-disabled (still focusable), a second click is a no-op.
@@ -245,7 +247,7 @@ describe('PeoplePage', () => {
       expect(button()).toHaveAttribute('aria-pressed', 'true');
     });
     // The name stays "אהבתי" (the tick is decoration); aria-pressed carries the state.
-    expect(button()).toHaveAccessibleName(he.people.like);
+    expect(button()).toHaveAccessibleName(he.people.invite);
     expect(button()).not.toHaveAttribute('aria-disabled', 'true');
     // An invite (spec 0010l): no banner, no chat; nothing about "my listings" changes.
     expect(screen.queryByText(new RegExp(he.applications.mutual))).toBeNull();
@@ -301,7 +303,7 @@ describe('PeoplePage', () => {
 
     // The card survives these: the alert is inline.
     const inline: { reply: Response; text: string }[] = [
-      { reply: json({ detail: 'rate_limited' }, 429), text: he.people.errors.rateLimited },
+      { reply: json({ detail: 'rate_limited' }, 429), text: he.people.errors.inviteRateLimited },
       { reply: json({ detail: 'listing_not_live' }, 409), text: he.people.notLive },
       { reply: json({ detail: 'boom' }, 500), text: he.common.error },
     ];

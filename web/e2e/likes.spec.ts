@@ -42,9 +42,10 @@ async function layoutOf(page: Page, locator: Locator) {
   return { box: box as NonNullable<typeof box>, clientWidth, scrollWidth };
 }
 
-// Spec 0010l AC12/AC13: a lister likes (invites) a seeker in people browse; the seeker opens the
-// room from `/me/likes`, applies without a message, sees "התאמה הדדית", follows the chat link and
-// sends a message the lister receives.
+// Spec 0010l AC12/AC13, 0010m AC10: a lister invites a seeker from the room's people page; the
+// seeker sees the count on "הפעילות שלי", opens the room from "הזמנות לחדרים" on the market's room
+// applications, applies without a message, sees "התאמה הדדית", follows the chat link and sends a
+// message the lister receives.
 test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const name = `Liker${suffix}`;
@@ -130,32 +131,33 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   const personId = await findPerson(ownerPage, roomId, name);
   await likePerson(ownerPage, roomId, personId);
 
-  // The seeker's header shows "לייקים" with one room that liked them (a market tab, spec 0010a).
+  // The seeker's "הפעילות שלי" tab shows the one room that invited them (a market tab) and opens
+  // the room applications; "לייקים" has no count.
   await page.goto('/market');
-  const nav = page
-    .getByRole('navigation', { name: he.nav.label })
-    .getByRole('link', { name: new RegExp(he.header.likes) });
-  await expect(nav).toContainText(he.likes.badgeLabel_one);
+  const bottomNav = page.getByRole('navigation', { name: he.nav.label });
+  const nav = bottomNav.getByRole('link', { name: new RegExp(he.nav.mine) });
+  await expect(nav).toContainText(he.market.mine.invitesBadge_one);
+  await expect(bottomNav.getByRole('link', { name: he.header.likes, exact: true })).toBeVisible();
   await nav.click();
-  await expect(page).toHaveURL('/me/likes');
+  await expect(page).toHaveURL('/market/mine?tab=applications');
 
-  // The room is under "אהבו אותך", a plain link to its page: no like button, no "rooms I liked".
-  const likedMe = page.getByRole('region', { name: he.likes.likedMe });
-  const roomLink = likedMe.getByRole('link', { name: new RegExp(street) });
+  // The room is under "הזמנות לחדרים", a plain link to its page: no button.
+  const invites = page.getByRole('region', { name: he.applications.invites.title });
+  const roomLink = invites.getByRole('link', { name: new RegExp(street) });
   await expect(roomLink).toBeVisible();
-  await expect(likedMe.getByRole('button')).toHaveCount(0);
-  await expectNoAxeViolations(page, '/me/likes');
+  await expect(invites.getByRole('button')).toHaveCount(0);
+  await expectNoAxeViolations(page, '/market/mine?tab=applications');
 
   await test.step('0009qa lists at 1440 and 390', async () => {
-    // Before liking back, the room is still under "אהבו אותך". Desktop: the section spans the wide
-    // column, the card is one grid cell of three.
-    const roomCard = page.getByRole('article').filter({ hasText: street });
+    // Before applying, the room is still under "הזמנות לחדרים". Desktop: inside the 720px reading
+    // column the card is at most half of it (two columns, never three).
+    const roomCard = invites.getByRole('article').filter({ hasText: street });
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(async () => {
-      const section = await layoutOf(page, likedMe);
-      expect(section.box.width).toBeGreaterThanOrEqual(1200);
+      const section = await layoutOf(page, invites);
+      expect(section.box.width).toBeLessThanOrEqual(720);
       const card = await layoutOf(page, roomCard);
-      expect(card.box.width).toBeLessThanOrEqual(460);
+      expect(card.box.width).toBeLessThanOrEqual(360);
     }).toPass();
     // Phone: the card fills the column between the 16px gutters, with no horizontal scroll.
     await page.setViewportSize({ width: 390, height: 844 });

@@ -15,7 +15,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { RequireUser } from '../../auth/RequireUser';
 import { clearSession } from '../../auth/useLogout';
-import { gushDan, seeker } from '../../listings/__tests__/fixtures';
+import { gushDan, listing, seeker } from '../../listings/__tests__/fixtures';
 import { profile } from '../../profile/__tests__/fixtures';
 import { MarketPeoplePage } from '../MarketPeoplePage';
 import { MARKET_PEOPLE_KEY, PEOPLE_LIKES_KEY } from '../useMarketPeople';
@@ -186,16 +186,88 @@ describe('MarketPeoplePage', () => {
     // Empty.
     run = renderPage([page([])]);
     expect(await screen.findByText(he.market.people.empty)).toBeVisible();
+    // A 200 never asks for the viewer's rooms (the unmocked route would answer 599).
+    expect(run.api.calls('GET /me/listings')).toHaveLength(0);
     run.view.unmount();
     vi.unstubAllGlobals();
 
-    // 403 card_required: the nudge, with the profile link opening both parts.
-    run = renderPage([json({ detail: 'card_required' }, 403)]);
+    // 403 card_required: the nudge, with the profile link opening both parts; no room, no room
+    // line.
+    run = renderPage([json({ detail: 'card_required' }, 403)], {
+      extra: { 'GET /me/listings': [json([])] },
+    });
     expect(await screen.findByText(he.market.people.cardRequired)).toBeVisible();
     expect(screen.getByRole('link', { name: he.market.people.toProfile })).toHaveAttribute(
       'href',
       '/me/profile?section=about&section=looking&next=%2Fmarket%2Fpeople',
     );
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    await waitFor(() => {
+      expect(run.api.calls('GET /me/listings')).toHaveLength(1);
+    });
+    expect(screen.queryByText(he.market.people.roomHint)).toBeNull();
+    expect(screen.queryByRole('link', { name: he.market.people.toRoomPeople })).toBeNull();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // 403 with one live room: its room line links to that room's people page. A paused and an
+    // apartment do not count.
+    const live = listing({ listing_type: 'room' });
+    const reply = (rooms: ReturnType<typeof listing>[]) => ({
+      extra: { 'GET /me/listings': [json(rooms)] },
+    });
+    run = renderPage(
+      [json({ detail: 'card_required' }, 403)],
+      reply([
+        live,
+        listing({ listing_type: 'room', status: 'paused' }),
+        listing({ listing_type: 'apartment' }),
+      ]),
+    );
+    expect(await screen.findByText(he.market.people.roomHint)).toBeVisible();
+    expect(screen.getByRole('link', { name: he.market.people.toRoomPeople })).toHaveAttribute(
+      'href',
+      `/me/listings/${live.id}/people`,
+    );
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Two live rooms: the link goes to "הפעילות שלי".
+    run = renderPage(
+      [json({ detail: 'card_required' }, 403)],
+      reply([listing({ listing_type: 'room' }), listing({ listing_type: 'room' })]),
+    );
+    expect(
+      await screen.findByRole('link', { name: he.market.people.toRoomPeople }),
+    ).toHaveAttribute('href', '/market/mine');
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Only paused or expired rooms: no room line.
+    run = renderPage(
+      [json({ detail: 'card_required' }, 403)],
+      reply([
+        listing({ listing_type: 'room', status: 'paused' }),
+        listing({ listing_type: 'room', expires_at: '2020-01-01T10:00:00Z' }),
+      ]),
+    );
+    await screen.findByText(he.market.people.cardRequired);
+    await waitFor(() => {
+      expect(run.api.calls('GET /me/listings')).toHaveLength(1);
+    });
+    expect(screen.queryByText(he.market.people.roomHint)).toBeNull();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // my-listings failed: the nudge stays, no room line, no error.
+    run = renderPage([json({ detail: 'card_required' }, 403)], {
+      extra: { 'GET /me/listings': [json({ detail: 'boom' }, 500)] },
+    });
+    await screen.findByText(he.market.people.cardRequired);
+    await waitFor(() => {
+      expect(run.api.calls('GET /me/listings').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(he.market.people.roomHint)).toBeNull();
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     run.view.unmount();
     vi.unstubAllGlobals();

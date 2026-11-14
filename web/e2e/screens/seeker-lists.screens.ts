@@ -16,7 +16,6 @@ type Setup = {
   applications?: Mode;
   applicationList?: MyApplicationOut[];
   withdraw?: 'error' | 'ok';
-  likes?: Mode;
   likeLists?: MyLikesOut;
 };
 
@@ -39,7 +38,6 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     applications = 'ok',
     applicationList = [],
     withdraw = 'ok',
-    likes = 'ok',
     likeLists = { liked_me: [] },
   } = setup;
   await page.route(`${API}/**`, async (route) => {
@@ -70,14 +68,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     if (/^POST \/me\/applications\/[^/]+\/withdraw$/.test(key)) {
       return reply(route, { detail: 'boom' }, withdraw === 'error' ? 500 : 200);
     }
-    // The likes page's people part (spec 0010i) and its area names: empty.
-    if (key === 'GET /me/people-likes')
-      return reply(route, { liked_me: [], mine: [], matches: [] });
-    if (key === 'GET /areas') return reply(route, []);
-    if (key === 'GET /me/likes') {
-      if (likes === 'pending') return new Promise<void>(() => {});
-      return likes === 'error' ? reply(route, { detail: 'boom' }, 500) : reply(route, likeLists);
-    }
+    if (key === 'GET /me/likes') return reply(route, likeLists);
     unmatched.push(key);
     return route.fulfill({ status: 500, headers: CORS, body: `unmatched ${key}` });
   });
@@ -93,7 +84,12 @@ type State = {
 };
 
 const APPLICATIONS = '/me/applications';
-const LIKES_PATH = '/me/likes';
+const INVITES_PATH = '/market/mine?tab=applications';
+// The room applications the invites sit above.
+const ROOM_APPLICATIONS: MyApplicationOut[] = FIVE_APPLICATIONS.map((a) => ({
+  ...a,
+  listing: { ...a.listing, listing_type: 'room' },
+}));
 
 const STATES: State[] = [
   {
@@ -145,37 +141,14 @@ const STATES: State[] = [
     },
   },
   {
-    name: '06-likes-loading',
-    setup: { likes: 'pending' },
-    path: LIKES_PATH,
+    // Spec 0010m: the invites sit above the room applications of the market's "הפעילות שלי".
+    name: '09-invites-six',
+    setup: { likeLists: LIKES, applicationList: ROOM_APPLICATIONS },
+    path: INVITES_PATH,
     act: async (page) => {
-      await expect(page.getByRole('heading', { level: 1, name: he.likes.title })).toBeVisible();
-      await expect(page.getByTestId('skeleton')).toHaveCount(3);
-    },
-  },
-  {
-    name: '07-likes-error',
-    setup: { likes: 'error' },
-    path: LIKES_PATH,
-    act: async (page) => {
-      await expect(page.getByRole('button', { name: he.common.retry })).toBeVisible();
-    },
-  },
-  {
-    name: '08-likes-empty',
-    setup: { likeLists: { liked_me: [] } },
-    path: LIKES_PATH,
-    act: async (page) => {
-      await expect(page.getByText(he.likes.likedMeEmpty)).toBeVisible();
-    },
-  },
-  {
-    name: '09-likes-six',
-    setup: { likeLists: LIKES },
-    path: LIKES_PATH,
-    act: async (page) => {
-      await expect(page.getByRole('article')).toHaveCount(6);
-      await expect(page.getByTestId('match-badge')).toHaveCount(3);
+      const invites = page.getByRole('region', { name: he.applications.invites.title });
+      await expect(invites.getByRole('article')).toHaveCount(6);
+      await expect(invites.getByTestId('match-badge')).toHaveCount(3);
     },
   },
 ];

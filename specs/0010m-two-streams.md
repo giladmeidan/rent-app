@@ -1,7 +1,7 @@
 ---
 id: 0010m
 title: שוק השותפים has two separate streams — people like people to search together (your own card needed to see anyone), and a room's lister invites seekers who answer by applying; invites live with room applications, not with likes
-status: verified
+status: in-review
 depends_on: []   # 0010h/0010i/0010l done (PR #84), #87 merged
 reviewers: [code, qa, ux]   # qa: market people tab, likes page and "my activity" end to end; ux: two screens change content and the nav badge moves. No security: the API change only narrows who may browse (a live room alone no longer opens GET /people or /me/people-likes), adds no endpoint, field or data path, and the invites move shows the caller's own GET /me/likes rows in a new place
 estimate: 1 coder run, medium   # coder Sonnet/high: one API access rule narrows (no migration, no new endpoint); the rest is web copy and moving one list. ~30 files, most of them tests and mocks

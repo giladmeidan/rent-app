@@ -14,7 +14,9 @@ import {
   testQueryClient,
 } from '../../auth/__tests__/harness';
 import { RequireSeeker } from '../../auth/RequireSeeker';
+import { likedRoom, myLikes } from '../../likes/__tests__/fixtures';
 import { seeker } from '../../listings/__tests__/fixtures';
+import { profile } from '../../profile/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
 import { MyApplicationsPage } from '../MyApplicationsPage';
 import { application } from './fixtures';
@@ -52,9 +54,17 @@ function renderPage(
   return { api, view };
 }
 
-/** The same seeker's room applications panel. */
-function renderRooms(mine: Reply[]) {
-  const api = mockApi({ 'GET /me': [json(seeker)], [MINE]: mine });
+const LIKES = 'GET /me/likes';
+
+/** The same seeker's room applications panel; `GET /me/likes` (the invites, spec 0010m) answers no
+ * invites unless `extra` says otherwise. */
+function renderRooms(mine: Reply[], extra: Record<string, Reply[]> = {}) {
+  const api = mockApi({
+    'GET /me': [json(seeker)],
+    [MINE]: mine,
+    [LIKES]: [json(myLikes([]))],
+    ...extra,
+  });
   const view = renderRoutes('/market/mine', routes);
   return { api, view };
 }
@@ -612,9 +622,11 @@ describe('MyApplicationsPage', () => {
       ...roomApp,
       listing: { ...roomApp.listing, id: 'R1', listing_type: 'room' as const },
     };
-    let { view } = renderPage([json([flat, room])]);
+    let { api, view } = renderPage([json([flat, room])]);
     expect(await screen.findByRole('link', { name: titleOf(flat) })).toBeVisible();
     expect(cards()).toHaveLength(1);
+    // Apartments have no invites: the page never asks for them (spec 0010m AC7).
+    expect(api.calls(LIKES)).toHaveLength(0);
     expect(
       screen.getByRole('heading', { level: 1, name: he.applications.mine.title }),
     ).toBeVisible();
@@ -622,7 +634,7 @@ describe('MyApplicationsPage', () => {
     vi.unstubAllGlobals();
 
     // The rooms panel: no page title or heading of its own, the room only.
-    ({ view } = renderRooms([json([flat, room])]));
+    ({ api, view } = renderRooms([json([flat, room])]));
     await vi.waitFor(() => {
       expect(cards()).toHaveLength(1);
     });
@@ -652,5 +664,122 @@ describe('MyApplicationsPage', () => {
       'href',
       '/market',
     );
+  });
+
+  it('ac7_invites_above_the_room_applications', async () => {
+    // Spec 0010m AC7: the rooms whose lister invited the seeker, above the applications.
+    const a = likedRoom();
+    const b = likedRoom();
+    const app = application();
+    const room = {
+      ...app,
+      listing: { ...app.listing, id: 'R1', listing_type: 'room' as const },
+    };
+    const { api } = renderRooms([json([room])], { [LIKES]: [json(myLikes([a, b]))] });
+
+    const invites = within(
+      await screen.findByRole('region', { name: he.applications.invites.title }),
+    );
+    // An `h2` (the panel has no `h1`), the hint, and the cards' titles one level below.
+    expect(invites.getByRole('heading', { level: 2 })).toHaveTextContent(
+      he.applications.invites.title,
+    );
+    expect(invites.getByText(he.applications.invites.hint)).toBeVisible();
+    expect(invites.getAllByRole('article')).toHaveLength(2);
+    expect(invites.getAllByRole('heading', { level: 3 })).toHaveLength(2);
+    expect(invites.queryAllByRole('button')).toHaveLength(0);
+    const links = invites.getAllByRole('link').map((l) => l.getAttribute('href'));
+    expect(links).toEqual([a, b].map((r) => `/listings/${r.listing.id}`));
+    // A 720px reading column: one column, two from md, never three across.
+    const list = invites.getByRole('list');
+    expect(list).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2');
+    expect(list).not.toHaveClass('xl:grid-cols-3');
+    // Above the applications, which still render.
+    const application_ = await screen.findByRole('link', { name: new RegExp(room.listing.street) });
+    expect(
+      invites.getByRole('heading', { level: 2 }).compareDocumentPosition(application_) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(api.calls(LIKES)).toHaveLength(1);
+  });
+
+  it('ac7_invite_cards_cover_and_match', async () => {
+    const year = new Date().getUTCFullYear();
+    const scored = likedRoom({
+      flatmate_ages: [27, 29],
+      match: { score: 82, agrees: ['budget', 'area'], differs: null },
+      cover: { id: 'p1', small_url: 'https://media.test/a-s.webp', large_url: 'x-l.webp' },
+    });
+    const plain = likedRoom({ flatmate_ages: [60], cover: null });
+    const { api } = renderRooms([json([])], {
+      [LIKES]: [json(myLikes([scored, plain]))],
+      'GET /me/profile': [json(profile({ birth_year: year - 28 }))],
+    });
+
+    const invites = within(
+      await screen.findByRole('region', { name: he.applications.invites.title }),
+    );
+    const [first, second] = invites.getAllByRole('article') as [HTMLElement, HTMLElement];
+    expect(await within(first).findByTestId('match-badge')).toHaveTextContent('82');
+    expect(within(first).getByTestId('match-chips')).toBeVisible();
+    expect(within(first).getByText(he.rooms.card.similarAge)).toBeVisible();
+    expect(within(second).queryByTestId('match-badge')).toBeNull();
+    expect(within(second).queryByTestId('match-chips')).toBeNull();
+    // The cover's small address, decorative; the placeholder without one.
+    expect(first.querySelector('img')).toHaveAttribute('src', 'https://media.test/a-s.webp');
+    expect(first.querySelector('img')).toHaveAttribute('alt', '');
+    expect(second.querySelector('img')).toBeNull();
+    await vi.waitFor(() => {
+      expect(api.calls('GET /me/profile')).toHaveLength(1);
+    });
+  });
+
+  it('ac7_no_invites_renders_nothing', async () => {
+    const app = application();
+    const room = {
+      ...app,
+      listing: { ...app.listing, id: 'R1', listing_type: 'room' as const },
+    };
+    const invitesTitle = () =>
+      screen.queryByRole('heading', { name: he.applications.invites.title });
+
+    // None: the applications show, no section, no profile request.
+    let run = renderRooms([json([room])]);
+    expect(
+      await screen.findByRole('link', { name: new RegExp(room.listing.street) }),
+    ).toBeVisible();
+    await vi.waitFor(() => {
+      expect(run.api.calls(LIKES)).toHaveLength(1);
+    });
+    expect(invitesTitle()).toBeNull();
+    expect(run.api.calls('GET /me/profile')).toHaveLength(0);
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Failed: no section, no retry, no error; the applications still render.
+    run = renderRooms([json([room])], { [LIKES]: [json({ detail: 'boom' }, 500)] });
+    expect(
+      await screen.findByRole('link', { name: new RegExp(room.listing.street) }),
+    ).toBeVisible();
+    await vi.waitFor(() => {
+      expect(run.api.calls(LIKES).length).toBeGreaterThan(0);
+    });
+    expect(invitesTitle()).toBeNull();
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    run.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Pending: no section, no skeleton of its own, the applications are not blocked.
+    const pending = deferred();
+    run = renderRooms([json([room])], { [LIKES]: [pending.promise] });
+    expect(
+      await screen.findByRole('link', { name: new RegExp(room.listing.street) }),
+    ).toBeVisible();
+    expect(invitesTitle()).toBeNull();
+    expect(screen.queryAllByTestId('skeleton')).toHaveLength(0);
+    pending.resolve(json(myLikes([likedRoom()])));
+    expect(
+      await screen.findByRole('heading', { name: he.applications.invites.title }),
+    ).toBeVisible();
   });
 });

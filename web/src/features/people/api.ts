@@ -54,8 +54,8 @@ export type PersonLikeOut = components['schemas']['PersonLikeOut'];
 export type PersonMatchOut = components['schemas']['PersonMatchOut'];
 export type MyPeopleLikesOut = components['schemas']['MyPeopleLikesOut'];
 
-/** One page (20) of the people shown in שוק השותפים. 403 `card_required` (no card and no live
- * room) and 429 `rate_limited` throw. */
+/** One page (20) of the people shown in שוק השותפים. 403 `card_required` (no visible card of the
+ * caller's own, spec 0010m) and 429 `rate_limited` throw. */
 export async function fetchPeopleBrowse(offset: number): Promise<PeopleBrowseOut> {
   const { data, error, response } = await api.GET('/people', {
     params: { query: { offset } },
