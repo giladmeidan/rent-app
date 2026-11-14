@@ -1,7 +1,7 @@
 ---
 id: 0014d
 title: An owner pricing a 1, 1.5 or 2 room apartment in the listing wizard sees the average rent for 1–2 rooms in its neighbourhood (or city), from nadlan's 3-room figure scaled by the CBS small-flat ratio, always at medium confidence
-status: in-progress
+status: in-review
 depends_on: [0014c]   # done (PR #91 merged): the engine this extends
 reviewers: [code, security, qa]   # security: a new outbound fetch + parsing an untrusted xlsx with a new dependency (as 0014a); qa: engine + hint change. No ux: one more copy line in the existing hint slot. No perf: one more small query
 estimate: 1 coder run   # coder Opus/high (migration + data import + the price the owner sees; Speed rule 6)
@@ -362,6 +362,17 @@ none new (tables empty in CI, so the wizard shows no hint as today).
   `test_ac4_city_resolution_unknown_and_order`, `test_ac10_backtest_script_empty`); fixtures move to
   `conftest.py` for the API test; `types-openpyxl` for mypy strict; the model file follows one-model-per-file;
   the 0014c screens state needs `small_flat_ratio: null` (required in the generated type).
+- **Build notes (coder, 2026-11-14).** (1) The real run (`CBS_RENT=cbs make cbs-rent-history`, then
+  `make rent-backtest`): 4 of 5 bulletins stored (506 rows, 2023-Q4 … 2026-Q2); **10/2025 rejected** by rule 4
+  (CBS labels 2024 `VII-IX` twice; and its `B4` year 2023 stands over an annual-average column, so "the first
+  quarter column takes `B4`" would reject October layouts anyway: FOLLOWUPS). Its quarters are all in 1/2026 and
+  7/2026. Suggestion `RATIO_WINDOW_QUARTERS = 1; RATIO_HALF_WIDTH = {'city': 0.02, 'district': 0.07}` (city p80
+  1.25 %, district 6.27 %), set as the constants; so `RATIO_MIN_QUARTERS = 1`. Widths: neighbourhood + city
+  ratio 0.0825, city + city ratio 0.181, neighbourhood + district 0.106, city + district 0.193, all within
+  `MAX_HALF_WIDTH` 0.20. (2) Rule 4: a row-4 year over a column that is not a quarter column rejects the file
+  (the text checks years against "the quarter column it stands on"). (3) A file with more than one sheet is
+  rejected ("the one sheet"). (4) `import_cbs_rent(db, client, *, today, history)` holds the job's work (as
+  0014a's `import_rent_reference`), so tests inject `today`; `run_cbs_import` only gates and builds it.
 
 ## Blast radius
 `graphify affected` on main's graph (2026-11-14). The graph was last built at 0010m (before 0014a–c), so it
