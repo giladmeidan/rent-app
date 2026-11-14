@@ -10,7 +10,6 @@ Rows are upserted by bulletin, never deleted. Nothing here logs a URL or a file'
 import datetime as dt
 import io
 import logging
-import math
 import re
 import time
 import zipfile
@@ -54,9 +53,9 @@ _GROUPS: dict[str, RoomGroup] = {"1-2": "1-2", "2.5-3": "2.5-3"}
 _OTHER_GROUPS = {"3.5-4", "4.5+"}
 _SECTIONS: dict[str, GeoKind] = {"residentialdistricts": "district", "bigcities": "city"}
 _QUARTERS = {"I-III": 3, "IV-VI": 6, "VII-IX": 9, "X-XII": 12}
-_BULLETIN = re.compile(r"No\. (\d{1,2})/(\d{4})")
+_BULLETIN = re.compile(r"No\. (\d{1,2})/(20\d{2})")
 _HEADER = re.compile(r"^(.*[A-Za-z].*?)\s*-\s*(\d{1,5})\s*$")
-_YEAR = re.compile(r"\d{4}")
+_YEAR = re.compile(r"20\d{2}")
 
 
 class CbsFileError(ValueError):
@@ -87,46 +86,70 @@ def _squeeze(value: object) -> str:
 
 
 def _number(value: object, low: float, high: float, places: str) -> Decimal | None:
-    """A finite int / float (never a bool) within [low, high], rounded to `places`; else None."""
+    """An int / float (never a bool) within [low, high], rounded to `places`; else None. The range
+    test comes first: NaN and infinities fail it, and a huge int compares exactly."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    if not math.isfinite(value) or not low <= value <= high:
+    if not low <= value <= high:
         return None
     return Decimal(str(value)).quantize(Decimal(places), rounding=ROUND_HALF_UP)
 
 
 def _columns(row4: tuple[object, ...], row5: tuple[object, ...]) -> dict[int, dt.date]:
-    """Rule 4: quarter column index → period, years derived from the quarter sequence and checked
-    against row 4."""
+    """Rule 4: quarter column index → period. The first row-4 year anchors the sequence: over a
+    quarter column it is that quarter's year; over an "Annual average" column (October layouts) the
+    next quarter column must be I-III of the year after. Each next quarter column is the quarter
+    right after the previous one, and every row-4 year must agree with the column it stands on."""
+    labels = {i: _squeeze(row5[i]) for i in range(1, len(row5)) if _squeeze(row5[i])}
+    if any(label not in _QUARTERS and label != "Annualaverage" for label in labels.values()):
+        raise CbsFileError("an unknown quarter label in row 5")
+    quarters = [i for i, label in labels.items() if label in _QUARTERS]
+    if not quarters:
+        raise CbsFileError("no quarter column")
+    years: dict[int, int] = {}
+    for i in range(1, len(row4)):
+        text = _squeeze(row4[i])
+        if text:
+            if not _YEAR.fullmatch(text):
+                raise CbsFileError("a row-4 cell is not a year")
+            years[i] = int(text)
+    first = quarters[0]
+    anchor = min(years, default=None)
+    if anchor == first:
+        start = dt.date(years[first], _QUARTERS[labels[first]], 1)
+    elif (
+        anchor is not None
+        and anchor < first
+        and labels.get(anchor) == "Annualaverage"
+        and labels[first] == "I-III"
+    ):
+        start = dt.date(years[anchor] + 1, 3, 1)
+    else:
+        raise CbsFileError("no year above the first quarter column")
+
     columns: dict[int, dt.date] = {}
     previous: dt.date | None = None
-    for i in range(1, len(row5)):
-        label = _squeeze(row5[i])
-        if not label or label == "Annualaverage":
-            continue
-        month = _QUARTERS.get(label)
-        if month is None:
-            raise CbsFileError("an unknown quarter label in row 5")
+    for i in quarters:
+        month = _QUARTERS[labels[i]]
         if previous is None:
-            year_cell = row4[1] if len(row4) > 1 else None
-            if not _YEAR.fullmatch(_squeeze(year_cell)):
-                raise CbsFileError("no year above the first quarter column")
-            period = dt.date(int(_squeeze(year_cell)), month, 1)
+            period = start
         else:
-            year = previous.year + (1 if month == 3 else 0)
-            period = dt.date(year, month, 1)
+            period = dt.date(previous.year + (1 if month == 3 else 0), month, 1)
             if (period.year * 12 + period.month) - (previous.year * 12 + previous.month) != 3:
                 raise CbsFileError("quarter columns out of sequence")
         columns[i] = previous = period
-    if not columns:
-        raise CbsFileError("no quarter column")
-    for i in range(1, len(row4)):
-        text = _squeeze(row4[i])
-        if not text:
-            continue
-        if not _YEAR.fullmatch(text) or i not in columns or columns[i].year != int(text):
-            raise CbsFileError("a row-4 year disagrees with its quarter column")
-    if min(columns.values()).year < 2015:
+
+    for i, year in years.items():
+        if i in columns:
+            agrees = columns[i].year == year
+        elif labels.get(i) == "Annualaverage":
+            before = [q for q in quarters if q < i]
+            agrees = year == (columns[before[-1]].year if before else start.year - 1)
+        else:
+            agrees = False
+        if not agrees:
+            raise CbsFileError("a row-4 year disagrees with its column")
+    if start.year < 2015:
         raise CbsFileError("the first year is before 2015")
     return columns
 
@@ -160,6 +183,15 @@ def _read_rows(content: bytes) -> list[tuple[object, ...]]:
 def parse_table(content: bytes, *, today: dt.date) -> CbsTable:
     """Check a bulletin's Table 4.9 against the import rules (spec 0014d, rules 2-7) and return
     its 1-2 and 2.5-3 rows; raises `CbsFileError` for a file that is rejected whole."""
+    try:
+        return _parse_table(content, today=today)
+    except CbsFileError:
+        raise
+    except (ValueError, OverflowError):  # a value the rules missed: a rejection, never a crash
+        raise CbsFileError("a malformed value") from None
+
+
+def _parse_table(content: bytes, *, today: dt.date) -> CbsTable:
     rows = _read_rows(content)
     if len(rows) < 6:
         raise CbsFileError("too few rows")
@@ -175,6 +207,7 @@ def parse_table(content: bytes, *, today: dt.date) -> CbsTable:
 
     out: list[CbsRow] = []
     seen: set[tuple[GeoKind, int]] = set()
+    seen_rows: set[tuple[GeoKind, int, RoomGroup]] = set()
     sections: set[GeoKind] = set()
     section: GeoKind | None = None
     block: tuple[GeoKind, int] | None = None
@@ -185,6 +218,9 @@ def parse_table(content: bytes, *, today: dt.date) -> CbsTable:
             group = _GROUPS.get(label)
             if group is None or block is None:
                 continue
+            if (*block, group) in seen_rows:
+                raise CbsFileError("a room row appears twice in a block")
+            seen_rows.add((*block, group))
             for i, period in columns.items():
                 price = _number(row[i] if i < len(row) else None, 500, 100000, "0.1")
                 if price is None:

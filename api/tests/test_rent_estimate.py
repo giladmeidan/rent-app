@@ -252,7 +252,7 @@ def test_ac5_small_flat_city_ratio(
 ) -> None:
     statements.clear()
     out = estimate_rent(db, city="תל אביב", street="תירוש", rooms=Decimal(rooms))
-    assert 0 < len(statements) <= 5  # NF1
+    assert len(statements) == 5  # NF1: 0014c's four + the ratio
     assert out.reason is None and out.estimate is not None
     est = out.estimate
     assert (est.level, est.area_name, est.figure_rooms) == ("neighbourhood", HOOD_A, [1, 2])
@@ -282,7 +282,7 @@ def test_ac6_small_flat_fallbacks(
     if case == "unknown_city":
         assert (out.estimate, out.reason) == (None, "unknown_city")
         return
-    assert 0 < len(statements) <= 5  # NF1
+    assert len(statements) == 5  # NF1: 0014c's four + the ratio
     assert out.estimate is not None
     assert (out.estimate.small_flat_ratio, out.estimate.level) == ("district", "neighbourhood")
     baseline = Fraction(SMALL_BASELINE) * Fraction("0.85")  # 3697.5

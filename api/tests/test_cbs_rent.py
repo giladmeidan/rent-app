@@ -125,6 +125,19 @@ def _layout() -> list[list[Any]]:
     ]
 
 
+def _october(trailing_year: str | None) -> list[list[Any]]:
+    """`_layout` as October bulletins lay it out: an "Annual average" column first, its year
+    (2025) in `B4`, the quarters after it; and a trailing annual-average column with
+    `trailing_year` over it."""
+    rows = _layout()
+    rows[3] = ["Districts", "2025", None, "2026", None, None, None, trailing_year]
+    rows[4] = [None, "Annual average", None, "I-III", None, "IV-VI", None, "Annual average"]
+    for row in rows[6:]:
+        if len(row) > 1:
+            row[1:1] = [8000, 80]
+    return rows
+
+
 def _xlsx(rows: list[list[Any]]) -> bytes:
     book = openpyxl.Workbook()
     sheet = book.active
@@ -133,6 +146,18 @@ def _xlsx(rows: list[list[Any]]) -> bytes:
         sheet.append(row)
     out = io.BytesIO()
     book.save(out)
+    return out.getvalue()
+
+
+def _swap_sheet_xml(content: bytes, old: bytes, new: bytes) -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(content)) as src, zipfile.ZipFile(out, "w") as dst:
+        for item in src.infolist():
+            data = src.read(item)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                assert old in data
+                data = data.replace(old, new)
+            dst.writestr(item, data)
     return out.getvalue()
 
 
@@ -184,6 +209,11 @@ BAD_FILES: dict[str, Callable[[], bytes]] = {
     "no_city_5000": lambda: _with(_set(20, 0, "Tel Aviv - 5001")),
     "no_district_4": lambda: _with(_set(9, 0, "center District - 7")),
     "two_sheets": lambda: _two_sheets(),
+    "room_row_twice": lambda: _with(_insert(22, ["1-2", 5600, 40, 5700, 41])),
+    "a1_year_0000": lambda: _with(_set(0, 0, "Monthly No. 7/0000, CBS")),
+    "b4_0000": lambda: _with(_set(3, 1, "0000")),
+    "b4_9999": lambda: _with(_set(3, 1, 9999)),
+    "annual_year_disagrees": lambda: _xlsx(_october("2025")),
 }
 
 
@@ -199,8 +229,8 @@ RULES = {
     "bulletin_month_13": "A1 does not name the bulletin",
     "unknown_label": "an unknown quarter label in row 5",
     "out_of_sequence": "quarter columns out of sequence",
-    "row4_year_disagrees": "a row-4 year disagrees with its quarter column",
-    "row4_year_off_quarter": "a row-4 year disagrees with its quarter column",
+    "row4_year_disagrees": "a row-4 year disagrees with its column",
+    "row4_year_off_quarter": "a row-4 year disagrees with its column",
     "first_year_before_2015": "the first year is before 2015",
     "newest_not_before_bulletin": "the newest quarter does not end before the bulletin",
     "no_quarter_column": "no quarter column",
@@ -209,6 +239,11 @@ RULES = {
     "no_city_5000": "no 1-2 row for city 5000 or districts 4 and 5",
     "no_district_4": "no 1-2 row for city 5000 or districts 4 and 5",
     "two_sheets": "not exactly one sheet",
+    "room_row_twice": "a room row appears twice in a block",
+    "a1_year_0000": "A1 does not name the bulletin",
+    "b4_0000": "a row-4 cell is not a year",
+    "b4_9999": "a row-4 cell is not a year",
+    "annual_year_disagrees": "a row-4 year disagrees with its column",
 }
 
 
@@ -250,18 +285,32 @@ def test_ac2_bad_files_and_cells(name: str, cbs_clean: Engine, db: Session) -> N
     assert _stored(cbs_clean) == []
 
 
-@pytest.mark.parametrize("value", ["-", "n/a", True, 99, 1_000_000, None, float("nan")])
+@pytest.mark.parametrize("value", ["-", "n/a", True, 99, 1_000_000, None, float("nan"), 10**400])
 def test_ac2_bad_cell_skipped_alone(value: object) -> None:
     rows = _layout()
     assert rows[20][0] == "Tel Aviv - 5000"
-    rows[21][3] = value  # Tel Aviv 5000, 1-2, IV-VI 2026
+    huge = value == 10**400  # openpyxl cannot write it: a placeholder, swapped in the sheet XML
+    rows[21][3] = 987654 if huge else value  # Tel Aviv 5000, 1-2, IV-VI 2026
     rows[21][2] = "x"  # its I-III error: text, so NULL
-    table = parse_table(_xlsx(rows), today=TODAY)
+    content = _xlsx(rows)
+    if huge:
+        content = _swap_sheet_xml(content, b"<v>987654</v>", b"<v>1" + b"0" * 400 + b"</v>")
+    table = parse_table(content, today=TODAY)
     keys = {(r.geo_kind, r.geo_code, r.room_group, r.period): r for r in table.rows}
     assert len(table.rows) == 11
     assert ("city", 5000, "1-2", dt.date(2026, 6, 1)) not in keys
     kept = keys[("city", 5000, "1-2", dt.date(2026, 3, 1))]
     assert (kept.price_ils, kept.sampling_error) == (Decimal("5500.0"), None)
+
+
+@pytest.mark.parametrize("trailing_year", [None, "2026"])
+def test_ac2_october_layout(trailing_year: str | None) -> None:
+    # Amended in review: a first "Annual average" column anchors the next I-III to the year after.
+    table = parse_table(_xlsx(_october(trailing_year)), today=TODAY)
+    assert len(table.rows) == 12
+    assert sorted({r.period for r in table.rows}) == [dt.date(2026, 3, 1), dt.date(2026, 6, 1)]
+    keys = {(r.geo_kind, r.geo_code, r.room_group, r.period): r for r in table.rows}
+    assert keys[("city", 5000, "1-2", dt.date(2026, 3, 1))].price_ils == Decimal("5500.0")
 
 
 def _row(period: dt.date, price: str, code: int = 5000) -> CbsRow:
