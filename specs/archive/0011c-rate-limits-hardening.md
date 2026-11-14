@@ -394,3 +394,18 @@ Risks: cross-spec rule (Scope 12): whichever of 0011a / 0011b merges after 0011c
 `POST /reports` into `OWN`; conflicts in `routers/listings.py` / `main.py` are mechanical.
 Reviewers: code, security, perf, qa   Estimated: 1 coder run (Opus/high), 1 review round
 Links: `specs/0011c-rate-limits-hardening.md` · `specs/0011e-listing-views-off-request-path.md` · PRODUCT.md "Trust (MVP)"
+
+Spec 0011c — Rate limits + request hardening   MERGED e9efdae (PR #95, 2026-11-15)
+Shipped: every write route has a per-account limit: listings 5/hour and 10/day, address changes 10/hour and 30/day,
+the owner's status decision 200/hour and 1000/day, every other small write one shared `write` budget (0011a's renew
+included), rent estimate 300/hour and 1500/day; `GET /me/people-likes` counts toward browse; bodies over 64 KB get
+413 (photo uploads keep 8 MB); a 422 lists at most 50 entries; a same-status PATCH writes and publishes nothing; SSE
+`retry` jittered 2–10 s; the join-flat page and the person card say when to retry. AC1 keeps every write route in
+`LIMITED` or `OWN` (`api/tests/test_hardening.py`; `POST /reports` is in `OWN`).
+Demo: make dev → a 70 KB body to `PUT /me/profile` → 413 `body_too_large` with CORS headers; set an applicant to
+its current status → 200, no chat event; set `rl:like:user:<id>` to its limit in Redis, like a card → "אפשר לנסות
+שוב בעוד שעה".
+Tests: +9 api (AC2 parametrised over every limited route), 3 api edited, +2 vitest, +0 e2e   CI: green
+Findings: 0 blockers, 0 majors, 7 of 9 minors fixed, 2 waived, 7 nits dropped; FOLLOWUPS: 9 lines closed, 2
+reworded, 3 added.
+Changed in PRODUCT.md: nothing (Q1 (a) and Q2 (a) folded in before the build).
