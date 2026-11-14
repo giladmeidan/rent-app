@@ -10,6 +10,7 @@ from arq.connections import RedisSettings
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.redis_client import get_redis
+from app.services.cbs_rent import run_cbs_import
 from app.services.geocoding import geocode_pending, get_geocoder
 from app.services.listing_views import flush_views
 from app.services.rent_reference import run_rent_import
@@ -62,6 +63,12 @@ async def flush_listing_views(ctx: dict[str, Any]) -> int:
     return added
 
 
+async def import_cbs_rent_job(ctx: dict[str, Any]) -> dict[str, int]:
+    """The monthly import of the CBS small-flat rent figures (spec 0014d), off the event loop. With
+    `CBS_RENT=off` it makes no request and returns `{"skipped": 1}`."""
+    return await asyncio.to_thread(run_cbs_import)
+
+
 class WorkerSettings:
     functions = [ping]
     cron_jobs = [
@@ -69,5 +76,7 @@ class WorkerSettings:
         cron(flush_listing_views, second={30}, unique=True),
         # About 350 requests, 3-4 minutes: past arq's 300 s default timeout.
         cron(import_rent_reference_job, day=5, hour=3, minute=10, unique=True, timeout=1800),
+        # At most six requests: arq's default timeout is enough.
+        cron(import_cbs_rent_job, day=16, hour=3, minute=40, unique=True),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url.get_secret_value())

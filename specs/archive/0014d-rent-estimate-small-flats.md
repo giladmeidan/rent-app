@@ -1,7 +1,7 @@
 ---
 id: 0014d
 title: An owner pricing a 1, 1.5 or 2 room apartment in the listing wizard sees the average rent for 1–2 rooms in its neighbourhood (or city), from nadlan's 3-room figure scaled by the CBS small-flat ratio, always at medium confidence
-status: verified
+status: done
 depends_on: [0014c]   # done (PR #91 merged): the engine this extends
 reviewers: [code, security, qa]   # security: a new outbound fetch + parsing an untrusted xlsx with a new dependency (as 0014a); qa: engine + hint change. No ux: one more copy line in the existing hint slot. No perf: one more small query
 estimate: 1 coder run   # coder Opus/high (migration + data import + the price the owner sees; Speed rule 6)
@@ -147,14 +147,21 @@ URL, as 0014a's `RentFileError`); the job logs the rule, stores nothing and retu
    not after `today`'s month; else rejected. The bulletin is A1's, not the URL's (the June 2026 URL serves
    `4/2026`).
 4. **Columns.** Row 5 labels, whitespace removed: `I-III`/`IV-VI`/`VII-IX`/`X-XII` → month 3/6/9/12;
-   `Annualaverage` skipped; any other non-empty label rejects the file. Years: the first quarter column takes
-   the year in `B4`; each next quarter column must be the quarter right after the previous one (`I-III` after
-   `X-XII` adds one year), else rejected. Check: every year in row 4 must equal the derived year of the quarter
-   column it stands on (7/2026: `B4` 2024 = X-XII 2024, `H4` 2025 = IV-VI 2025, `P4` 2026 = I-III 2026), else
-   rejected. The first year must be ≥ 2015 and the newest quarter must end before the bulletin's month. No
-   quarter column: rejected. The price is the quarter's column, the error the next.
+   `Annualaverage` skipped; any other non-empty label rejects the file. Years (amended in review, 2026-11-14):
+   every non-empty row-4 cell must be a year `20\d{2}`, else rejected. The first row-4 year is the anchor: over
+   the first quarter column it is that quarter's year; over an `Annual average` column before it (October
+   layouts: 10/2025 has `B4` 2023 over "Annual average", then I-III 2024), the first quarter column must be
+   `I-III` of the anchor + 1; anywhere else rejected. Each next quarter column must be the quarter right after
+   the previous one (`I-III` after `X-XII` adds one year), else rejected. Check: a row-4 year over a quarter
+   column must equal that quarter's derived year (7/2026: `B4` 2024 = X-XII 2024, `H4` 2025 = IV-VI 2025, `P4`
+   2026 = I-III 2026); over an `Annual average` column, the year of the quarter column just before it (or, before
+   any quarter, the first quarter's year − 1); over any other column, rejected. The first year must be ≥ 2015
+   and the newest quarter must end before the bulletin's month. No quarter column: rejected. The price is the
+   quarter's column, the error the next. Bulletin years in A1 are `20\d{2}` too; any value the rules miss that
+   still raises (`ValueError`, `OverflowError`) is a rejection ("a malformed value"), never a crash.
 5. **Rows.** Column A, whitespace removed, is tested **in this order**: (a) `1-2` or `2.5-3` → read inside the
-   current block, skipped outside one (the `Total` rows); `3.5-4`, `4.5+` → skipped; (b) case-insensitive
+   current block (the same group twice in one block rejects the file: amended in review), skipped outside one
+   (the `Total` rows); `3.5-4`, `4.5+` → skipped; (b) case-insensitive
    `Residential Districts` → the section is `district`; `Big cities` → `city`; (c) the stripped original
    matching `^(.*[A-Za-z].*?)\s*-\s*(\d{1,5})\s*$` (a letter in the name, so a room row never matches) opens a
    block with kind = the current section; a header before any section row, or the same (kind, code) twice,
@@ -362,6 +369,20 @@ none new (tables empty in CI, so the wizard shows no hint as today).
   `test_ac4_city_resolution_unknown_and_order`, `test_ac10_backtest_script_empty`); fixtures move to
   `conftest.py` for the API test; `types-openpyxl` for mypy strict; the model file follows one-model-per-file;
   the 0014c screens state needs `small_flat_ratio: null` (required in the generated type).
+- **Build notes (coder, 2026-11-14).** (1) The real run (`CBS_RENT=cbs make cbs-rent-history`, then
+  `make rent-backtest`): 4 of 5 bulletins stored (506 rows, 2023-Q4 … 2026-Q2); **10/2025 rejected** by rule 4
+  (CBS labels 2024 `VII-IX` twice). Its quarters are all in 1/2026 and 7/2026. Its `B4` year 2023 stands over
+  an annual-average column, which the original rule 4 ("the first quarter column takes `B4`") rejected too:
+  **rule 4 amended in review, 2026-11-14** (the anchor rule above; 10/2025 with its label typo fixed by hand
+  parses to the same Tel Aviv values as 7/2026). 10/2026 was not yet published on 2026-11-14 (the 2,056-byte
+  page). Suggestion `RATIO_WINDOW_QUARTERS = 1; RATIO_HALF_WIDTH = {'city': 0.02, 'district': 0.07}` (city p80
+  1.25 %, district 6.27 %), set as the constants; so `RATIO_MIN_QUARTERS = 1`. Widths: neighbourhood + city
+  ratio 0.0825, city + city ratio 0.181, neighbourhood + district 0.106, city + district 0.193, all within
+  `MAX_HALF_WIDTH` 0.20. (2) Review fixes, 2026-11-14: rule 4 (October layout), a repeated room row in a
+  block rejects (it would break the single upsert), malformed years and huge numbers reject or skip instead of
+  raising (`_number` tests the range first). (3) A file with more than one sheet is
+  rejected ("the one sheet"). (4) `import_cbs_rent(db, client, *, today, history)` holds the job's work (as
+  0014a's `import_rent_reference`), so tests inject `today`; `run_cbs_import` only gates and builds it.
 
 ## Blast radius
 `graphify affected` on main's graph (2026-11-14). The graph was last built at 0010m (before 0014a–c), so it
@@ -396,3 +417,14 @@ has no node for `estimate_rent`, `RentEstimateRange`, `figure_keys`, `backtest` 
   migration test's `command.check` need the model and migration to agree (AC13).
 
 ## Digest (filled by orchestrator after verification)
+    Spec 0014d — the owner sees an estimate for 1, 1.5 and 2 room flats   (done, PR #92, merged 2026-11-14)
+    What a user can do after this: an owner pricing a 1–2 room apartment sees "average rent for 1–2 rooms in
+      <area>: ₪X–Y · medium certainty · nadlan.gov.il and הלמ״ס" (nadlan's 3-room figure × the CBS 1–2 / 2.5–3 ratio).
+    Backtest (CBS bulletins 7/2025–7/2026, 506 figures, 11 quarters): RATIO_WINDOW_QUARTERS = 1, RATIO_HALF_WIDTH
+      city ±2% / district ±7%. Combined with nadlan's widths: neighbourhood ±8–11%, city ±18–19%, under the ±20% cap,
+      so district-ratio cities show a number too. Bulletin 10/2025 is rejected (CBS labels a quarter twice); its
+      quarters are in later bulletins.
+    Review: 0 blockers, 3 majors fixed (October-layout bulletins rejected, duplicate room rows, malformed values
+      crashing the job), 3 minors (1 to FOLLOWUPS).
+    CI: merged without a green e2e on Gilad's word (load timeouts in tests 0014d does not touch; see FOLLOWUPS).
+    Off until `CBS_RENT=cbs` (Slice 13, after the licence read); empty tables show no hint.
