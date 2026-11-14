@@ -432,3 +432,24 @@ balcony edit would never be sent.
       — 0014a merges first, then one re-point line here.
     Reviewers: code, qa, ux   Estimated: 1 coder run, large (Opus/high), 1 review round
     Links: specs/0014b-listing-price-signals.md · PRODUCT.md "Rent price estimate" · no artboard (design from the kit)
+
+Built 2026-11-14 (merged shape; PR #90 open, not merged — the orchestrator merges with `make merge PR=90`):
+
+    Spec 0014b — A listing remembers its prices and what happened to it; four more apartment facts   IN REVIEW (PR #90, ready-to-merge)
+    Shipped: every price a listing had is recorded; after pausing an apartment the owner is asked, optionally
+      and privately, what happened to it and the final rent; the wizard, the edit page and the listing page
+      carry four optional apartment facts (ממ״ד, מרפסת, מצב הדירה, מיזוג אוויר). Rooms are unchanged on screen.
+    Demo: 1. `make dev`, sign in as an owner, new listing → דירה שלמה → details: answer the four facts and
+      publish; the listing page shows them  2. הדירות שלי → pause the apartment: the dialog opens; choose
+      "הושכרה במקום אחר", type 6800, save; the card shows the answer with "עדכון התשובה"  3. resume it: the
+      answer is gone; search and the listing page never showed it.
+    Tests: +10 unit, +11 integration, +0 e2e (one e2e extended with the dialog flow; pytest 626 green,
+      vitest 695 green)   CI: on the PR
+    Findings: 0 blockers; 1 major fixed (the condition options overflowed the card at 390 px); 4 minors
+      fixed (a rent could be stored without a reason at DB level; the page cleared a cached answer in a case
+      the server keeps it; the privacy line's wording; a duplicated helper); 0 waived; 5 follow-ups logged
+      (4 from the review, 1 from Scope: Slice 11 renewal must clear the answer as a resume does).
+    Changed in PRODUCT.md: nothing. Differences from the spec's first text, both applied above: the
+      `ck_listings_final_rent_ils` SQL and the `listings.closure.intro` copy.
+    Next spec I propose: the rent estimate engine, after Slice 11 (PRODUCT.md "Rent price estimate"); no
+      decision needed now. `make screens` has 24 states red from before this spec (FOLLOWUPS, 0010f line).
