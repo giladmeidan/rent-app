@@ -1,7 +1,7 @@
 ---
 id: 0010h
 title: The API for שוק השותפים people browse - people page through other people's cards, like them, a mutual like opens a direct chat that either side can end, and browsing people (also on the room side) is rate limited
-status: in-progress
+status: done
 depends_on: [0010c, 0010g, 0010f]   # 0010c: personal + looking parts, people_visible needs both; 0010g: open_direct / close_direct, nullable chat listing; 0010f: migration chain 0016 -> 0017
 reviewers: [code, qa, security, perf]   # security: personal data shown to other users, the two-way gender rule, a new write path into conversations, ids in URLs; perf: the browse statement and its rate limit; qa: like/unlike/mutual/remove state machine
 estimate: 1 coder run   # coder Opus/high (PII, migration, chat writes; Speed rule 6); the web half is 0010i
