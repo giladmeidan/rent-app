@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import type { TFunction } from 'i18next';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useNavigate } from 'react-router';
@@ -11,6 +12,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { focusMainIfLost } from '../../components/focus';
 import { Loading } from '../../components/Loading';
 import { Mascot } from '../../components/Mascot';
+import { retryAfterText } from '../../components/retryAfter';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { Switch } from '../../components/Switch';
@@ -82,6 +84,14 @@ function failureOf(error: unknown): Failure {
   }
   if (error.status === 429) return 'rateLimited';
   return 'other';
+}
+
+/** A failure's line: a rate limit says when to retry when the 429 said (spec 0011c). */
+function failureText(t: TFunction, failure: Exclude<Failure, 'other'>, error: unknown): string {
+  if (failure === 'rateLimited' && error instanceof ApiError && error.retryAfter !== null) {
+    return t('flatmates.join.rateLimitedIn', { when: retryAfterText(t, error.retryAfter) });
+  }
+  return t(COPY[failure]);
 }
 
 /** A final answer about this token (404, 409, 422): retrying cannot change it, so it is cleared.
@@ -257,7 +267,7 @@ function JoinFlow() {
         ) : (
           <Card padding="lg" className={card}>
             <p role="alert" className={message}>
-              {t(COPY[failure])}
+              {failureText(t, failure, preview.error)}
             </p>
             <WayOut failure={failure} />
           </Card>
@@ -336,7 +346,7 @@ function JoinFlow() {
               role="alert"
               className={`${message} text-danger focus:outline-none`}
             >
-              {t(COPY[failure])}
+              {failureText(t, failure, join.error)}
             </p>
             <WayOut failure={failure} />
           </>

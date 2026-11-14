@@ -69,7 +69,9 @@ export async function likePersonCard(cardId: string): Promise<PersonLikeOut> {
   const { data, error, response } = await api.PUT('/people/{card_id}/like', {
     params: { path: { card_id: cardId } },
   });
-  if (data === undefined) throw new ApiError('PUT', '/people/{id}/like', response.status, error);
+  if (data === undefined) {
+    throw new ApiError('PUT', '/people/{id}/like', response.status, error, response.headers);
+  }
   return data;
 }
 

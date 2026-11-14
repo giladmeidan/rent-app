@@ -72,7 +72,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         setConnected(false);
         hadError = true;
         // While open, an error leaves CONNECTING and the browser retries by itself (the server's
-        // `retry: 3000`). CLOSED means the server refused the stream.
+        // `retry: N`, 2–10 s per stream). CLOSED means the server refused the stream.
         if (es.readyState !== EventSource.CLOSED) return;
         void queryClient.invalidateQueries({ queryKey: ME_KEY, exact: true });
         const wait = backoff;

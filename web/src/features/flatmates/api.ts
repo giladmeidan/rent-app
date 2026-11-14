@@ -74,7 +74,13 @@ export async function previewInvite(token: string): Promise<InvitePreviewOut> {
     body: { token },
   });
   if (data === undefined) {
-    throw new ApiError('POST', '/flatmate-invites/preview', response.status, error);
+    throw new ApiError(
+      'POST',
+      '/flatmate-invites/preview',
+      response.status,
+      error,
+      response.headers,
+    );
   }
   return data;
 }
@@ -87,7 +93,7 @@ export async function joinFlat(token: string, shown: boolean): Promise<JoinOut> 
     body: { token, shown },
   });
   if (data === undefined) {
-    throw new ApiError('POST', '/flatmate-invites/join', response.status, error);
+    throw new ApiError('POST', '/flatmate-invites/join', response.status, error, response.headers);
   }
   return data;
 }
