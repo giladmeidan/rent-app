@@ -1,7 +1,7 @@
 ---
 id: 0009z
 title: A visitor at `/` gets a full landing page that shows what the site holds (map search, match score, שוק השותפים, the owner side, real listings) and leads into each part
-status: in-review
+status: done
 depends_on: []
 reviewers: [ux, qa, code]   # ux: a rebuilt screen, compared against design/screens-v2/Main.html. qa: a UI change with a new query and rewritten tests (checklist line 8). code: a new shared Button variant + the blast radius. No auth, data or API change.
 estimate: 1 coder run   # coder Opus/medium: the product's front door, design-heavy
