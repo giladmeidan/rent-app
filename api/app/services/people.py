@@ -323,6 +323,26 @@ def _has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -
     return bool(row.applied)
 
 
+def room_person_user(db: Session, owner: User, pair_id: uuid.UUID) -> uuid.UUID | None:
+    """The seeker of room pair `pair_id` when the pair is of a public room listing `owner` owns and
+    the seeker is shown and fits (`like_person`'s rule without its application clause), else None.
+    One SELECT. A report's lookup (spec 0011b)."""
+    live = search_service._public_listings().where(Listing.id == RoomPair.listing_id).exists()
+    return db.scalar(
+        select(RoomPair.seeker_id)
+        .join(Listing, Listing.id == RoomPair.listing_id)
+        .join(SeekerProfile, SeekerProfile.user_id == RoomPair.seeker_id)
+        .where(
+            RoomPair.id == pair_id,
+            Listing.owner_id == owner.id,
+            Listing.listing_type == "room",
+            live,
+            *_fits(),
+            _shown(),
+        )
+    )
+
+
 def like_person(
     db: Session, r: RedisClient, owner: User, listing_id: uuid.UUID, person_id: uuid.UUID
 ) -> None:

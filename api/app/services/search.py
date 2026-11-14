@@ -232,6 +232,13 @@ def get_public_listing_with_match(
     return row[0], explain_row(row), fit
 
 
+def public_listing_owner(db: Session, listing_id: uuid.UUID) -> uuid.UUID | None:
+    """The owner of listing `listing_id` if it is public (`_public_listings()`), else None. One
+    SELECT. A report's lookup (spec 0011b)."""
+    listing = db.scalar(_public_listings().where(Listing.id == listing_id))
+    return None if listing is None else listing.owner_id
+
+
 def liked_rooms(
     db: Session, seeker_id: uuid.UUID
 ) -> list[tuple[Listing, MatchOut, dt.datetime, uuid.UUID | None, str | None]]:

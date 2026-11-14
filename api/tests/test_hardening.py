@@ -87,6 +87,7 @@ OWN = {
     ("POST", "/flatmate-invites/join"),  # 0008d
     ("POST", "/listings/{listing_id}/photos"),  # 0010d
     ("PUT", "/me/photo"),  # 0010j
+    ("POST", "/reports"),  # 0011b
 }
 # Signing in (5 guesses per code) and signing out (always works).
 EXEMPT = {("POST", "/auth/otp/verify"), ("POST", "/auth/logout")}

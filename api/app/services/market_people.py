@@ -182,6 +182,21 @@ def _candidate(viewer: Viewer) -> tuple[ColumnElement[bool], ...]:
     )
 
 
+def card_user(db: Session, me: User, card_id: uuid.UUID) -> uuid.UUID | None:
+    """The user id behind `card_id` when `me` shows a card and that person is a candidate of `me`
+    (`_candidate`: visible, not `me`, a two-way fit, not already a match), else None. Two SELECTs
+    (the viewer, then the card's user). A report's lookup (spec 0011b): a match is reported from
+    its chat."""
+    viewer = _viewer(db, me)
+    if not viewer.people_visible:
+        return None
+    return db.scalar(
+        select(User.id)
+        .join(SeekerProfile, SeekerProfile.user_id == User.id)
+        .where(User.card_id == card_id, *_candidate(viewer))
+    )
+
+
 def browse_statement(viewer: Viewer, offset: int) -> Select[Any]:
     """`browse`'s page statement (also EXPLAINed by the tests): one page of the viewer's
     candidates with `count(*) OVER ()` as `total`. Rows of `card_id`, `display_name`, `photo_key`,

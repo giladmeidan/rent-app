@@ -139,6 +139,7 @@ Bucket("estimate", 300, 1500)`.
 | DELETE /listings/{id}/flatmate-invite | own listing | **NEW `write`** | |
 | POST /flatmate-invites/preview | signed in | 20 / h shared with join (0008d) | unchanged |
 | POST /flatmate-invites/join | signed in | same | unchanged |
+| POST /reports | signed in | reports 10 / h, 30 / day (0011b) | unchanged; its own limit, proved by 0011b AC9 |
 | DELETE /listings/{id}/flatmates/{fid} | own listing | **NEW `write`** | |
 | PATCH /me/flats/{id} | flat member | **NEW `write`** | |
 | DELETE /me/flats/{id} | signed in | **NEW `write`** | |
@@ -204,7 +205,7 @@ NEW write routes plus `GET /rent-estimate` (19 rows, plus a second `PATCH /listi
 key for the `address` bucket; a query string for the GET); `GET /me/people-likes` is
 covered by AC14 only.
 - [ ] AC1 Given `create_app()`, Then its POST / PUT / PATCH / DELETE routes are exactly the union of the writes in
-  `LIMITED` (the 18 NEW write routes), `OWN` (the 9 routes with their own limit: otp request, apply, message send, both like PUTs, flatmate
+  `LIMITED` (the 18 NEW write routes), `OWN` (the 10 routes with their own limit: otp request, apply, message send, report, both like PUTs, flatmate
   preview and join, both uploads) and `EXEMPT` (otp verify, logout); a new write route without a bucket fails —
   `test_hardening.py::test_ac1_every_write_route_has_a_limit`
 - [ ] AC2 For each `LIMITED` route (parametrised), Given a signed-in user (an owner for `POST /listings`) whose

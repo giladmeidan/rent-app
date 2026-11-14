@@ -475,4 +475,38 @@ describe('MarketPeoplePage', () => {
     });
     expect(screen.queryByText(he.common.error)).toBeNull();
   });
+
+  it('ac16_report_person', async () => {
+    const r = he.report;
+    const c1 = personCard({ display_name: 'C1' });
+    const c2 = personCard({ display_name: 'C2' });
+    const { api } = renderPage([page([c1, c2])], {
+      extra: { 'POST /reports': [json({ already_reported: false }, 201)] },
+    });
+    await screen.findAllByRole('article');
+    for (const card of cards()) {
+      const name = within(card).getByRole('heading', { level: 2 });
+      const like = within(card).getByRole('button', { name: he.market.people.like });
+      const report = within(card).getByRole('button', { name: r.button });
+      // Described by the card's name, after the like button in the same row.
+      expect(report).toHaveAccessibleDescription(name.textContent ?? '');
+      expect(report.parentElement).toBe(like.parentElement);
+      expect(like.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+
+    fireEvent.click(within(cardOf('C2')).getByRole('button', { name: r.button }));
+    const dialog = screen.getByRole('dialog', {
+      name: i18n.t('report.title.person', { name: 'C2' }),
+    });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(5);
+    fireEvent.click(within(dialog).getByRole('radio', { name: r.reasons.offensive }));
+    fireEvent.click(within(dialog).getByRole('button', { name: r.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(r.sent);
+    expect(api.calls('POST /reports')[0]?.body).toEqual({
+      target_type: 'person',
+      target_id: c2.card_id,
+      reason: 'offensive',
+      note: null,
+    });
+  });
 });

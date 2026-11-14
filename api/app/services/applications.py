@@ -476,6 +476,21 @@ def list_applicants(
     return db.execute(query.order_by(*order)).all()
 
 
+def applicant_user(db: Session, owner: User, application_id: uuid.UUID) -> uuid.UUID | None:
+    """The seeker of application `application_id` when it is in `owner`'s inbox (`list_applicants`:
+    to a listing `owner` owns, any listing state, not withdrawn), else None. One SELECT. A
+    report's lookup (spec 0011b)."""
+    return db.scalar(
+        select(Application.seeker_id)
+        .join(Listing, Listing.id == Application.listing_id)
+        .where(
+            Application.id == application_id,
+            Listing.owner_id == owner.id,
+            Application.status != "withdrawn",
+        )
+    )
+
+
 def set_applicant_status(
     db: Session,
     owner: User,
