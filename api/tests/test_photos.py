@@ -666,7 +666,7 @@ def test_ac10_listing_read_surfaces(
     assert created.status_code == 201
     assert created.json()["photos"] == []
 
-    # `/me/likes`: a seeker who liked a room with photos, and one without.
+    # `/me/likes`: a seeker invited to a room with photos, and to one without (spec 0010l).
     seeker = signup(client, outbox, "s@example.com", "seeker")
     seeker_id = _user_id(db_engine, "s@example.com")
     make_profile(db_engine, seeker_id, gush_dan)
@@ -675,9 +675,9 @@ def test_ac10_listing_read_surfaces(
     room_photo = make_photo(db_engine, room, position=0)
     make_photo(db_engine, room, position=1)
     for room_id in (room, bare_room):
-        make_pair(db_engine, room_id, seeker_id, price_ils_seen=7200, seeker_liked=True)
+        make_pair(db_engine, room_id, seeker_id, price_ils_seen=7200, lister_liked=True)
     likes = seeker.get("/me/likes").json()
-    covers = {item["listing"]["id"]: item["listing"]["cover"] for item in likes["mine"]}
+    covers = {item["listing"]["id"]: item["listing"]["cover"] for item in likes["liked_me"]}
     assert covers[str(bare_room)] is None
     assert covers[str(room)] is not None and covers[str(room)]["id"] == str(room_photo)
 

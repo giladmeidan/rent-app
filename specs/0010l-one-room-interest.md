@@ -1,7 +1,7 @@
 ---
 id: 0010l
 title: On a room a seeker has one way to say "I'm interested", the application; the seeker's room-like is removed, and a lister's like becomes an invite that the seeker's application answers with an open chat
-status: verified
+status: in-review
 depends_on: []   # 0008a/0008c/0010b/0010h done; #82 (my applications active/past) merged
 reviewers: [code, qa, security]   # security: the apply path now opens a chat (shortlist without the lister's click) and the lock order changes; qa: the room page, /me/likes and the inbox end to end
 estimate: 1 coder run, large   # coder Opus/high (migration, apply concurrency; Speed rule 6). ~45 files, most of it deletion; cannot split (see Risks)
@@ -312,3 +312,21 @@ invite that the seeker's application answers with a shortlisted "mutual match" a
 changes: `_mutual` folded into `_upsert` (keeps the flatmate re-test), the apply router publishes the chat
 event on a shortlist, `MutualBanner` kept (person matches use it), the inbox shows a message whenever there is
 one, an honest downgrade, a full blast-radius list. One large coder run (~45 files, mostly deletion).
+
+Built 2026-11-14 (merged shape; PR open, not merged — Gilad merges):
+
+    Spec 0010l — one room interest, the application   IN REVIEW (PR open, ready-to-merge)
+    Shipped: on a room the seeker has one action, "אני מעוניין/ת" (message optional; still required on an
+      apartment); the room-like and its endpoints are gone (migration 0018); a lister's like in people browse is
+      an invite, and the seeker's application to it is shortlisted at once with an open chat.
+    Demo: 1. as a lister open people browse on your room and like a seeker  2. as that seeker open /me/likes,
+      open the room, press "אני מעוניין/ת" with no message  3. see "התאמה הדדית" and follow "לצ'אט עם המפרסמים".
+    Tests: api +11 / −7 (pytest 582 green), web unit +8 / −12 rewritten (vitest 687 green), e2e 2 rewritten
+      (likes.spec ac9 invite → apply → chat, axe on /me/likes and the room page). CI: on the PR.
+    Findings: 0 blockers; 2 majors fixed (an invite could outlive an application in a browse+like race —
+      now a (listing, seeker) advisory lock, with a test that drives the race; `make screens` hung on the
+      removed "liked" pin); 4 minors fixed (header likes badge refresh, room chat-link copy, race test made
+      event-driven, a flatmate's stale invite hidden); 9 nits dropped; 4 follow-ups logged.
+    Changed in PRODUCT.md: nothing beyond the 2026-11-14 decision already recorded.
+    Decision for you (optional): an invite has no expiry and survives the seeker opting out of browse —
+      keep (recommend; it is the seeker's own action) or expire it. Logged in FOLLOWUPS.

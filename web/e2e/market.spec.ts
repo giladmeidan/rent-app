@@ -229,7 +229,7 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   await ownerPage.goto(roomUrl);
   await expect(ownerPage.getByText(he.applications.profileRequired)).toBeVisible();
   await expect(
-    ownerPage.getByRole('region', { name: he.applications.heading, exact: true }),
+    ownerPage.getByRole('region', { name: he.applications.room.cta, exact: true }),
   ).toBeVisible();
   await ownerContext.close();
 });

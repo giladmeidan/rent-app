@@ -1,23 +1,31 @@
-"""Applications (spec 0004a): a seeker applies to a public listing with a short message, lists
-their applications and withdraws one; the public listing page counts its applicants and views.
+"""Applications (spec 0004a): a seeker applies to a public listing with a short message (optional
+on a room, spec 0010l), lists their applications and withdraws one; the public listing page counts
+its applicants and views.
 The owner's inbox (spec 0004c): an owner lists the applicants of one of their listings and
 shortlists, un-shortlists or declines them (`ALLOWED_FROM`).
 
 Rules (PRODUCT.md "Applications"):
 - One application per (listing, seeker), ever (`uq_applications_listing_seeker`). Applying again
-  after a **withdrawal** reopens the same row as new (`submitted`, the new message, `created_at`
-  now); after `submitted`, `shortlisted` or `declined` it is `AlreadyAppliedError`. Both are one
-  `INSERT ... ON CONFLICT DO UPDATE ... WHERE status = 'withdrawn'`, so two concurrent applies
-  yield one application and one `AlreadyAppliedError`. Applying sets `source = 'apply'`, also on a
-  reopen (spec 0008a); a mutual like reopens a withdrawn row the same way, as a shortlisted
-  `source = 'like'` application without a message (`services/people.py`).
-- Applying consumes the pair's likes (spec 0008a): in the same transaction, and **before** the
-  application INSERT, `people.consume_likes` clears both like columns of the (listing, seeker)
-  `room_pairs` row, so a one-sided like never outlives an application and after a withdraw both
-  sides start over. That UPDATE takes the pair's row lock first, the order the like paths use
-  (pair, then `applications`), so an apply racing a mutual cannot deadlock: a like waiting on the
-  lock sees the committed application and rolls back with `AlreadyAppliedError`, and an apply
-  waiting on a mutual finds the shortlisted row and gets `AlreadyAppliedError`.
+  after a **withdrawal** reopens the same row as new (the new status, source, message and
+  snapshots, `created_at` now); after `submitted`, `shortlisted` or `declined` it is
+  `AlreadyAppliedError`. Both are one `INSERT ... SELECT ... ON CONFLICT DO UPDATE ... WHERE
+  status = 'withdrawn'`, so two concurrent applies yield one application and one
+  `AlreadyAppliedError`.
+- The message (spec 0010l, PRODUCT.md "Applications"): optional on a room, required on an
+  apartment (`MessageRequiredError`, checked right after the role and not counted).
+- An application answers the lister's **invite** (spec 0010l, PRODUCT.md "People & likes"): in
+  the same transaction, and **before** the application INSERT, `people.consume_invite` reads the
+  (listing, seeker) `room_pairs` row `FOR UPDATE` and clears its `lister_liked_at`, so an invite
+  never outlives an application and after a withdraw the lister has to like again. When the
+  lister had liked, the application is written `shortlisted` with `source = 'like'` and the pair's
+  frozen price as its price snapshot (0008a), and its chat opens in the same transaction (the
+  lister's read marker null, the seeker's now()); otherwise it is `submitted`, `source = 'apply'`
+  and the live price. This is the only writer of a like-sourced application. The (listing,
+  seeker) advisory key and then the pair's lock are taken first, the order the like uses (key,
+  pair, then `applications`; the key also covers a pair that does not exist yet), so an apply
+  racing a like cannot deadlock or leave an invite beside its application: an apply waiting on a
+  like reads its committed `lister_liked_at` and shortlists, and a like waiting on an apply sees
+  the committed application and rolls back with `AlreadyAppliedError`.
 - A flatmate of the listing cannot apply (spec 0008d), even racing their own join: the listing
   SELECT takes `FOR KEY SHARE` (waiting for a join's `FOR UPDATE`), before the pair's lock, and the
   application INSERT ... SELECT re-tests membership (`ListingNotFoundError`). The lock order is the
@@ -103,6 +111,10 @@ class AlreadyAppliedError(Exception):
     """The seeker already has a submitted, shortlisted or declined application to the listing."""
 
 
+class MessageRequiredError(Exception):
+    """A public apartment and no message (spec 0010l: the message is optional on a room only)."""
+
+
 class SeekerOnlyError(Exception):
     """An apartment, and the caller is not a seeker (spec 0010b: apartments keep the roles; a room
     takes applications from any account)."""
@@ -136,26 +148,35 @@ class NotWithdrawableError(Exception):
 
 
 def _upsert(
-    db: Session, listing: Listing, seeker_id: uuid.UUID, message: str
+    db: Session, listing: Listing, seeker_id: uuid.UUID, message: str | None
 ) -> Application | None:
-    """Consume the pair's likes, then insert the application, or reopen a withdrawn one; None
-    when one exists in any other status (including the row a concurrent apply or mutual just
-    inserted) or when the seeker is a flatmate of the listing (a join that committed while the
-    caller waited for the listing's lock, spec 0008d); the caller rolls back, likes included.
-    Both snapshot the listing's price and area (0006c, security B1) and its type (0007b) as the
-    seeker applied to them. Two statements; the caller holds the listing's `FOR KEY SHARE` lock,
-    so both run after any concurrent join committed."""
+    """Consume the pair's invite, then insert the application, or reopen a withdrawn one; None
+    when one exists in any other status (including the row a concurrent apply just inserted) or
+    when the seeker is a flatmate of the listing (a join that committed while the caller waited
+    for the listing's lock, spec 0008d); the caller rolls back, the invite included. An invited
+    application (the lister had liked, spec 0010l) is `shortlisted`, `source = 'like'`, its price
+    snapshot the pair's frozen price, and its conversation is inserted here; any other is
+    `submitted`, `source = 'apply'`, the live price. Both snapshot the listing's area (0006c,
+    security B1) and its type (0007b). Two to four statements; the caller holds the listing's
+    `FOR KEY SHARE` lock, so all run after any concurrent join committed."""
     # Imported here: `services/people.py` imports this module. The listing's lock (the caller's),
-    # then the pair's, then the application row (the like paths' order; see the module docstring).
-    from app.services.people import consume_likes, flatmate_of
+    # then the (listing, seeker) key and the pair's (`consume_invite`), then the application row
+    # (the like's order; see the module docstring).
+    from app.services.people import consume_invite, flatmate_of
 
-    consume_likes(db, listing.id, seeker_id)
+    pair = consume_invite(db, listing.id, seeker_id)
+    # An invite's budget input stays the price the lister browsed at (0008a, security).
+    invited_price: int | None = None
+    if pair is not None and pair.lister_liked_at is not None:
+        invited_price = pair.price_ils_seen
+    invited = invited_price is not None
     values = {
         "listing_id": listing.id,
         "seeker_id": seeker_id,
-        "source": "apply",
+        "status": "shortlisted" if invited else "submitted",
+        "source": "like" if invited else "apply",
         "message": message,
-        "price_ils_at_apply": listing.price_ils,
+        "price_ils_at_apply": listing.price_ils if invited_price is None else invited_price,
         "area_id_at_apply": listing.area_id,
         "listing_type_at_apply": listing.listing_type,
     }
@@ -169,8 +190,8 @@ def _upsert(
     stmt = stmt.on_conflict_do_update(
         constraint="uq_applications_listing_seeker",
         set_={
-            "status": "submitted",
-            "source": "apply",
+            "status": stmt.excluded.status,
+            "source": stmt.excluded.source,
             "message": stmt.excluded.message,
             "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
             "area_id_at_apply": stmt.excluded.area_id_at_apply,
@@ -180,23 +201,45 @@ def _upsert(
         },
         where=Application.status == "withdrawn",
     )
-    return db.scalar(stmt.returning(Application).execution_options(populate_existing=True))
+    application = db.scalar(stmt.returning(Application).execution_options(populate_existing=True))
+    if application is not None and application.status == "shortlisted":
+        # The chat opens with the invited application (spec 0010l, as the mutual like did in
+        # 0008a). One conversation per application, ever (0005a): a reopened one keeps its markers
+        # and history, as a re-shortlist does. The seeker just acted, so only the lister's chat is
+        # new.
+        db.execute(
+            insert(Conversation)
+            .values(
+                id=application.id,  # an application chat's id is its application's (0010g)
+                application_id=application.id,
+                owner_id=listing.owner_id,
+                seeker_id=seeker_id,
+                owner_read_at=None,
+                seeker_read_at=func.now(),
+            )
+            .on_conflict_do_nothing(index_elements=["application_id"])
+        )
+    return application
 
 
 def apply(
-    db: Session, r: RedisClient, seeker: User, listing_id: uuid.UUID, message: str
+    db: Session, r: RedisClient, seeker: User, listing_id: uuid.UUID, message: str | None
 ) -> tuple[Application, Listing]:
     """Apply `seeker` (any account, spec 0010b) to a public listing with `message` (already
-    validated by `ApplicationIn`). Raises, in this order, `SeekerOnlyError` (a public apartment
-    and the caller's role is not seeker; nothing counted), `ProfileRequiredError` (no profile, or
+    validated by `ApplicationIn`; None = no message, spec 0010l). Raises, in this order,
+    `SeekerOnlyError` (a public apartment and the caller's role is not seeker; nothing counted),
+    `MessageRequiredError` (a public apartment without a message; nothing counted),
+    `ProfileRequiredError` (no profile, or
     a personal-only one without the looking part, spec 0010c; nothing counted),
     `RoomGenderMismatchError` / `SeekerGenderRequiredError` (the room gate, nothing counted),
     `RateLimitedError`, `ListingNotFoundError` (unknown, not public or the caller's own)
     or `AlreadyAppliedError`. One SELECT for the role and profile checks (with whether the seeker
     is a flatmate of the listing, 0008d, and the type of the listing if it is public, 0010b), one
     for the listing (with the match and room fit, taking `FOR KEY SHARE` on it, so a concurrent
-    flatmate join is waited for), both before the limiter; after it, the pair's likes are consumed
-    and the application written (`_upsert`, which re-tests the membership). Commits."""
+    flatmate join is waited for), both before the limiter; after it, the pair's invite is consumed
+    and the application written (`_upsert`, which re-tests the membership and, on an invite,
+    opens the chat). The returned application is `shortlisted` exactly when it answered an invite
+    (the router then publishes the chat event). Commits."""
     # Imported here: `services/people.py` imports this module.
     from app.services.people import flatmate_of
 
@@ -220,6 +263,10 @@ def apply(
     # profile gets the same 403.
     if gate.listing_type == "apartment" and seeker.role != "seeker":
         raise SeekerOnlyError
+    # Spec 0010l: optional on a room only. A non-public apartment has no type here and falls
+    # through to the counted 404, so the 422 reveals nothing.
+    if message is None and gate.listing_type == "apartment":
+        raise MessageRequiredError
     if not gate.has_profile:
         raise ProfileRequiredError
     listing: Listing | None
@@ -243,6 +290,10 @@ def apply(
             # (`ck_listings_room_fields`).
             if fit is None and listing.gender_preference != "any":
                 raise SeekerGenderRequiredError
+            # The gate's type was read one statement earlier: an apartment resumed in between
+            # still needs its message (`ck_applications_message`), so never a 500.
+            if message is None and listing.listing_type == "apartment":
+                raise MessageRequiredError
         count_or_raise(
             r,
             (

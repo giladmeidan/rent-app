@@ -233,14 +233,11 @@ async function mockApi(
     if (url.pathname === '/me/profile') {
       return seeker ? json(route, seekerProfile) : json(route, { detail: 'unauthenticated' }, 401);
     }
-    // The seeker liked listing 2 (a room) and applied to listing 3 (0009v AC11).
+    // No invites (the header's likes count asks for them); the map has no "liked" mark since
+    // spec 0010l. The seeker applied to listing 3 (0009v AC11).
     if (url.pathname === '/me/likes') {
       if (!seeker) return json(route, { detail: 'unauthenticated' }, 401);
-      const liked = listings(true, map)[1];
-      return json(route, {
-        liked_me: [],
-        mine: [{ listing: liked, liked_at: '2026-11-10T10:00:00Z' }],
-      });
+      return json(route, { liked_me: [] });
     }
     if (url.pathname === '/me/applications') {
       if (!seeker) return json(route, { detail: 'unauthenticated' }, 401);
@@ -410,7 +407,7 @@ async function mapReady(page: Page) {
 }
 
 test('map-tiers', async ({ page }, info) => {
-  // A seeker: tiers high (87, 82), good (64) and partial (58); listing 2 liked, 3 applied, 1 seen.
+  // A seeker: tiers high (87, 82), good (64) and partial (58); listing 3 applied, 1 seen.
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'rent-app:seen',
@@ -420,7 +417,6 @@ test('map-tiers', async ({ page }, info) => {
   await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
   await page.goto('/search?view=map');
   await mapReady(page);
-  await page.locator('[data-pin-id] svg[data-mark="liked"]').waitFor();
   await page.locator('[data-pin-id] svg[data-mark="applied"]').waitFor();
   await shot0009v(page, info.project.name, 'map-tiers');
 });

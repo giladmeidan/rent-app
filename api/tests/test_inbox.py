@@ -52,7 +52,6 @@ APPLICANT_KEYS = {
 COUNT_KEYS = {
     "applicant_count",
     "new_applicant_count",
-    "liked_me_count",  # 0008a
     "flatmate_count",  # 0008d
     "flatmate_invite_active",  # 0008d
 }

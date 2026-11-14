@@ -8,11 +8,12 @@ export type ApplicationStatus = MyApplicationOut['status'];
 /** A seeker applies to a live listing. 409 `already_applied`, 429 `rate_limited`, … throw. */
 export async function applyToListing(
   listingId: string,
-  message: string,
+  // `null`: no message (spec 0010l: optional on a room; the API refuses none on an apartment).
+  message: string | null,
 ): Promise<MyApplicationOut> {
   const { data, error, response } = await api.POST('/listings/{listing_id}/applications', {
     params: { path: { listing_id: listingId } },
-    body: { message },
+    body: message === null ? {} : { message },
   });
   if (data === undefined) {
     throw new ApiError(

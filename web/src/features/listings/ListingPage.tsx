@@ -14,10 +14,7 @@ import { focusRing } from '../../components/focusRing';
 import { APPROXIMATE_RADIUS_M } from '../../components/map/config';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
-import { useMe } from '../auth/useMe';
 import { ApplySection } from '../applications/ApplySection';
-import { LikeRoomButton } from '../likes/LikeRoomButton';
-import { MutualBanner } from '../likes/MutualBanner';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
 import { FlatPeople } from '../rooms/FlatPeople';
@@ -57,13 +54,9 @@ export function ListingPage() {
   const backToMarket = loadedType === undefined ? market : loadedType === 'room';
   // The small map is dropped when it cannot be shown; the address text stays.
   const [mapFailed, setMapFailed] = useState(false);
-  // Set by a like that made the pair mutual; it replaces the control and outlives the cache writes.
-  const [mutualId, setMutualId] = useState<string | null>(null);
   // The phone's apply bar watches the action column and moves focus to the apply section's <h2>.
   const actionsRef = useRef<HTMLDivElement>(null);
   const applyHeadingRef = useRef<HTMLHeadingElement>(null);
-  // The banner is a signed-in account's (any role, spec 0010b): a logout never inherits it.
-  const signedIn = useMe().data != null;
   const error = listing.error;
   // 404: not live or unknown; 422: a malformed id. Neither has anything to retry.
   const notFound = error instanceof ApiError && (error.status === 404 || error.status === 422);
@@ -201,15 +194,7 @@ export function ListingPage() {
           // taller than the screen.
           className="flex flex-col gap-5 lg:sticky lg:top-6 lg:-m-1 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:p-1"
         >
-          {mutualId !== null && signedIn ? (
-            <MutualBanner applicationId={mutualId} />
-          ) : (
-            l.like !== null &&
-            l.room_fit !== false && (
-              <LikeRoomButton listingId={l.id} like={l.like} onMutual={setMutualId} showHint />
-            )
-          )}
-
+          {/* One action on a room too (spec 0010l): the application. */}
           <Card padding="md">
             <ApplySection listing={l} headingRef={applyHeadingRef} />
           </Card>

@@ -2,7 +2,6 @@ import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../components/Avatar';
-import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DisclosureButton } from '../applicants/DisclosureButton';
@@ -21,7 +20,6 @@ import { useLikePerson, useUnlikePerson } from './useLikePerson';
 
 const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
 
-export type Mutual = { name: string; applicationId: string };
 /** An outcome after which the card is gone from the refetched list (the API drops a person with an
  * open application or who no longer fits), so the page, not the card, shows it. */
 export type PageAlert = { kind: 'alreadyApplied' | 'gone'; name: string };
@@ -32,7 +30,6 @@ type Props = {
   listing: MyListingOut;
   /** The person's area names, already resolved (an id with no name is left out). */
   areaNames: string[];
-  onMutual: (mutual: Mutual) => void;
   onAlert: (alert: PageAlert) => void;
 };
 
@@ -55,7 +52,7 @@ function errorKind(error: unknown): LikeError | null {
 
 /** One person on a room's people page: the inbox card's anatomy (0006g / 0007c) for someone who
  * has not applied. Free text (`about_me`) is plain text; the chips and reasons are fact-free. */
-export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Props) {
+export function PersonCard({ person, listing, areaNames, onAlert }: Props) {
   const { t } = useTranslation();
   const headingId = useId();
   const [whyOpen, setWhyOpen] = useState(false);
@@ -81,10 +78,8 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
       if (person.liked_by_me) {
         await unlike.mutateAsync(person.id);
       } else {
-        const result = await like.mutateAsync(person.id);
-        if (result.application_id !== null) {
-          onMutual({ name, applicationId: result.application_id });
-        }
+        // An invite (spec 0010l): the person's application answers it, in the inbox.
+        await like.mutateAsync(person.id);
       }
     } catch (caught) {
       const kind = errorKind(caught);
@@ -120,11 +115,6 @@ export function PersonCard({ person, listing, areaNames, onMutual, onAlert }: Pr
               <h2 id={headingId} className="min-w-0 max-w-full [overflow-wrap:anywhere] text-h3">
                 {name}
               </h2>
-              {person.liked_me && (
-                <Badge tone="accent" data-testid="person-liked-me">
-                  {t('people.likedMe')}
-                </Badge>
-              )}
             </div>
             <RoomLine gender={person.gender} age={person.age} />
             {areaNames.length > 0 && (

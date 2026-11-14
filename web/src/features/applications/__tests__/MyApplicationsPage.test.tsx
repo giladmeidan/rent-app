@@ -431,6 +431,24 @@ describe('MyApplicationsPage', () => {
     );
   });
 
+  it('ac14_message_whenever_there_is_one', async () => {
+    // Spec 0010l AC14: an invite answered with a message shows the tag and the message; a room
+    // application without one shows no empty box.
+    const answered = to('L1', { source: 'like', message: 'Count me in', status: 'shortlisted' });
+    const silent = to('L2', { source: 'apply', message: null });
+    renderPage([json([answered, silent])]);
+    await screen.findAllByRole('article');
+    const [first, second] = cards() as [HTMLElement, HTMLElement];
+    expect(within(first).getByTestId('application-mutual')).toHaveTextContent(
+      he.applications.mutual,
+    );
+    expect(within(first).getByText(he.applications.yourMessage)).toBeVisible();
+    expect(within(first).getByTestId('application-message')).toHaveTextContent('Count me in');
+    expect(within(second).queryByTestId('application-mutual')).toBeNull();
+    expect(within(second).queryByText(he.applications.yourMessage)).toBeNull();
+    expect(within(second).queryByTestId('application-message')).toBeNull();
+  });
+
   it('ac1_cards_kit_layout', async () => {
     const message = 'line one\nline two\nline three';
     const submitted = to('L1', { status: 'submitted', message });

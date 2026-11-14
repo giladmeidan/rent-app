@@ -18,7 +18,7 @@ import { hasStatus } from '../applications/api';
 import { cardTitle } from '../listings/cardTitle';
 import { useMyListings } from '../listings/useMyListings';
 import { usePeople } from './usePeople';
-import { PersonCard, type Mutual, type PageAlert } from './PersonCard';
+import { PersonCard, type PageAlert } from './PersonCard';
 
 const section = 'flex flex-col gap-4';
 const focusRing =
@@ -28,8 +28,8 @@ const bannerBase = 'rounded-lg px-4 py-3 text-start text-body font-semibold focu
 /**
  * `/me/listings/:id/people`, any account (`RequireUser`, spec 0010b): the people who want a room, for one of
  * the caller's own rooms found in `GET /me/listings` (an id not in it, or an apartment, is "not
- * found" and its people are never requested). The last mutual like is page state, so its banner
- * survives the refetch that drops the card.
+ * found" and its people are never requested). A like is an invite (spec 0010l): it flips the
+ * card's button, and the person's application answers it in the inbox.
  */
 export function PeoplePage() {
   const { t } = useTranslation();
@@ -39,18 +39,12 @@ export function PeoplePage() {
   const isRoom = listing?.listing_type === 'room';
   const people = usePeople(id, isRoom);
   const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
-  const [mutual, setMutual] = useState<Mutual | null>(null);
-  // The two outcomes after which the card leaves the refetched list: kept here, like `mutual`.
+  // The two outcomes after which the card leaves the refetched list: page state, so the message
+  // survives the refetch that drops the card.
   const [alert, setAlert] = useState<PageAlert | null>(null);
-  const mutualRef = useRef<HTMLDivElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   // The card (and the focused button) is gone by now: move focus to the message and bring it into
-  // view. The regions are always in the DOM, so the text change is announced.
-  useEffect(() => {
-    if (mutual === null) return;
-    mutualRef.current?.focus();
-    mutualRef.current?.scrollIntoView({ block: 'center' });
-  }, [mutual]);
+  // view. The region is always in the DOM, so the text change is announced.
   useEffect(() => {
     if (alert === null) return;
     alertRef.current?.focus();
@@ -139,14 +133,7 @@ export function PeoplePage() {
                 person={person}
                 listing={listing}
                 areaNames={person.area_ids.flatMap((areaId) => areaName.get(areaId) ?? [])}
-                onMutual={(m) => {
-                  setAlert(null);
-                  setMutual(m);
-                }}
-                onAlert={(a) => {
-                  setMutual(null);
-                  setAlert(a);
-                }}
+                onAlert={setAlert}
               />
             ))}
           </ul>
@@ -168,25 +155,6 @@ export function PeoplePage() {
   return (
     <PageContainer as="section" width="wide" className={section}>
       <PageHeader back={back} title={t('people.title')} subtitle={cardTitle(t, listing)} />
-      <div
-        ref={mutualRef}
-        role="status"
-        tabIndex={-1}
-        className={
-          mutual === null
-            ? 'sr-only'
-            : `flex flex-wrap items-center gap-3 bg-accent-soft text-accent-strong ${bannerBase}`
-        }
-      >
-        {mutual !== null && (
-          <>
-            <span>{t('people.mutual', { name: mutual.name })}</span>
-            <Link to={`/chat/${mutual.applicationId}`} className={`underline ${focusRing}`}>
-              {t('people.toChat')}
-            </Link>
-          </>
-        )}
-      </div>
       <div
         ref={alertRef}
         role="alert"

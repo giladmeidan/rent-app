@@ -240,13 +240,15 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   });
 
   await test.step('ac13 a women-only room: the room-section gate, the misfit line, the button', async () => {
+    // A room's section reads "I'm interested" (spec 0010l).
+    const room = page.getByRole('region', { name: he.applications.room.cta });
     // A plain housing profile: PUT replaces, so the room section is cleared.
     await putProfile(page);
     await page.goto(`/listings/${roomId}`);
-    const gate = section.getByRole('link', { name: he.rooms.apply.fillRoomSection });
+    const gate = room.getByRole('link', { name: he.rooms.apply.fillRoomSection });
     await expect(gate).toBeVisible();
     expect(await gate.getAttribute('href')).toContain('section=about');
-    await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
+    await expect(room.getByRole('button', { name: he.applications.room.cta })).toHaveCount(0);
     // A signed-in seeker gets the ages and the answers (room privacy, the counterpart of AC12).
     const facts = page.getByRole('region', { name: he.rooms.facts.title });
     await expect(facts).toContainText(
@@ -267,8 +269,8 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     // A man: the room cannot take him; it is gone from his room search.
     await putProfile(page, { gender: 'man' });
     await page.reload();
-    await expect(section.getByText(he.rooms.apply.misfit, { exact: true })).toBeVisible();
-    await expect(section.getByRole('button', { name: he.applications.apply })).toHaveCount(0);
+    await expect(room.getByText(he.rooms.apply.misfit, { exact: true })).toBeVisible();
+    await expect(room.getByRole('button', { name: he.applications.room.cta })).toHaveCount(0);
     await page.goto('/market');
     await expect(page.getByText(he.common.loading)).toHaveCount(0);
     await expect(page.locator('p[aria-live="polite"]')).not.toBeEmpty();
@@ -277,7 +279,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     // A woman: the apply button.
     await putProfile(page, { gender: 'woman' });
     await page.goto(`/listings/${roomId}`);
-    await expect(section.getByRole('button', { name: he.applications.apply })).toBeVisible();
-    await expect(section.getByText(he.rooms.apply.misfit, { exact: true })).toHaveCount(0);
+    await expect(room.getByRole('button', { name: he.applications.room.cta })).toBeVisible();
+    await expect(room.getByText(he.rooms.apply.misfit, { exact: true })).toHaveCount(0);
   });
 });

@@ -22,7 +22,7 @@ from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore, get_photo_store
 from tests.conftest import Outbox, jpeg, make_application, make_flatmate, make_listing, signup
 from tests.test_matching import _user_id
-from tests.test_people import _like_room, _room, _seeker
+from tests.test_people import _room, _seeker
 from tests.test_photos import (
     KEY,
     _app,
@@ -338,11 +338,11 @@ def test_ac4_photo_only_where_person_is_shown(
     )
     assert patched["photo_url"] == url["S"]
 
-    # O's people page: S opted in, on O's other room.
-    _ok(_like_room(seeker, other_room))
+    # O's people page: S opted in, on O's other room (and invited there: spec 0010l).
     page = _ok(owner.get(f"/listings/{other_room}/people"))
     (card,) = [item for item in page["items"] if item["display_name"] == "Dana"]
     assert card["photo_url"] == url["S"]
+    assert _ok(owner.put(f"/listings/{other_room}/people/{card['id']}/like")) == {"liked": True}
 
     # The chat: O, S and F each see the other party and every member with their photo.
     members = [
@@ -377,6 +377,6 @@ def test_ac4_photo_only_where_person_is_shown(
         assert response.status_code == 200, (surface, response.text)
         _assert_no_person_key(response.text, keys, surface)
     assert _ok(mate.get("/me/flats"))[0]["owner_name"] == "Noa"  # the owner is shown, unpictured
-    assert _ok(seeker.get("/me/likes"))["mine"]  # the liked room is listed
+    assert _ok(seeker.get("/me/likes"))["liked_me"]  # the room that invited them is listed
     search_ids = {item["id"] for item in _ok(client.get("/listings?listing_type=room"))["items"]}
     assert {str(room), str(other_room)} <= search_ids

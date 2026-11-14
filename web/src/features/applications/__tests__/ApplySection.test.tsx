@@ -20,6 +20,8 @@ import { personalOnlyProfile, profile } from '../../profile/__tests__/fixtures';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import type { MyApplicationOut } from '../api';
 import { MY_APPLICATIONS_KEY } from '../useMyApplications';
+import { CONVERSATIONS_KEY } from '../../chat/useConversations';
+import { MY_LIKES_KEY } from '../../likes/useMyLikes';
 import { readDraft, writeDraft } from '../../../app/drafts';
 import { PROFILE_KEY } from '../../profile/useProfile';
 import { application } from './fixtures';
@@ -38,6 +40,15 @@ const MESSAGE = 'Hi, we are a quiet couple';
 type Reply = Parameters<typeof mockApi>[0][string][number];
 
 const unauthenticated = () => json({ detail: 'unauthenticated' }, 401);
+
+// Spec 0010l: on a room the section's heading and button read "I'm interested" and the message is
+// optional; an apartment keeps "apply". Tests that cover both match either wording.
+const ROOM_CTA = he.applications.room.cta;
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+const either = (a: string, b: string) => new RegExp(`^(${escape(a)}|${escape(b)})$`);
+const APPLY_NAME = either(he.applications.apply, ROOM_CTA);
+const HEADING_NAME = either(he.applications.heading, ROOM_CTA);
+const LABEL_NAME = either(he.applications.form.label, he.applications.room.messageOptional);
 const listingReply =
   (applicant_count = 0) =>
   () =>
@@ -53,13 +64,14 @@ const routes = (
 
 const renderListing = (client = testQueryClient()) => renderRoutes('/listings/A', routes, client);
 
-/** The apply section, once the listing has loaded. An owner's is headed `headingOwner`. */
-async function section(name = he.applications.heading) {
+/** The apply section, once the listing has loaded. An owner's is headed `headingOwner`; an
+ * applicant's "apply" (an apartment) or "I'm interested" (a room). */
+async function section(name: string | RegExp = HEADING_NAME) {
   return within(await screen.findByRole('region', { name }));
 }
 
 /** Waits for `/me` (and the seeker's list) to settle: the section's skeleton is gone. */
-async function settled(name = he.applications.heading) {
+async function settled(name: string | RegExp = HEADING_NAME) {
   const s = await section(name);
   await vi.waitFor(() => {
     expect(s.queryByTestId('skeleton')).toBeNull();
@@ -100,8 +112,8 @@ function renderSeeker(
 /** Opens the form and returns the textarea. */
 async function openForm() {
   const s = await settled();
-  fireEvent.click(s.getByRole('button', { name: he.applications.apply }));
-  return s.getByRole('textbox', { name: he.applications.form.label });
+  fireEvent.click(s.getByRole('button', { name: APPLY_NAME }));
+  return s.getByRole('textbox', { name: LABEL_NAME });
 }
 
 function type(field: HTMLElement, value: string) {
@@ -272,7 +284,7 @@ describe('ApplySection', () => {
         'href',
         `/signup?role=seeker&next=${NEXT}`,
       );
-      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
       expect(api.calls(MINE)).toHaveLength(0);
       view.unmount();
       vi.unstubAllGlobals();
@@ -283,7 +295,7 @@ describe('ApplySection', () => {
     const s = await settled(he.applications.headingOwner);
     expect(s.getByText(he.applications.countOwner_zero)).toBeVisible();
     expect(s.queryByText(he.applications.loginPrompt)).toBeNull();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     expect(s.queryByRole('textbox')).toBeNull();
     expect(api.calls('GET /me')).toHaveLength(1);
     expect(api.calls(MINE)).toHaveLength(0);
@@ -294,7 +306,7 @@ describe('ApplySection', () => {
     const api = renderSeeker([json([])], { [APPLY]: [post.promise] });
 
     const field = await openForm();
-    const button = screen.getByRole('button', { name: he.applications.apply });
+    const button = screen.getByRole('button', { name: APPLY_NAME });
     expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(button.getAttribute('aria-controls')).toBe(field.closest('form')?.id);
     expect(field).toHaveFocus();
@@ -335,7 +347,7 @@ describe('ApplySection', () => {
       'href',
       '/me/applications',
     );
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     expect(s.queryByRole('textbox')).toBeNull();
     expect(s.getByText(countText(1))).toBeVisible();
     expect(s.queryByText(countText(0))).toBeNull();
@@ -348,7 +360,7 @@ describe('ApplySection', () => {
     type(await openForm(), 'x');
     fireEvent.click(screen.getByRole('button', { name: he.applications.form.cancel }));
     expect(screen.queryByRole('textbox')).toBeNull();
-    const reopen = screen.getByRole('button', { name: he.applications.apply });
+    const reopen = screen.getByRole('button', { name: APPLY_NAME });
     expect(reopen).toHaveAttribute('aria-expanded', 'false');
     expect(reopen).toHaveFocus();
 
@@ -474,7 +486,7 @@ describe('ApplySection', () => {
         'href',
         '/me/applications',
       );
-      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
       cleanup();
     }
 
@@ -497,14 +509,14 @@ describe('ApplySection', () => {
     s = await section();
     expect(s.getByText(countText(0))).toBeVisible();
     expect(s.getByTestId('skeleton').closest('[aria-busy="true"]')).not.toBeNull();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     cleanup();
 
     // The list fails: ErrorState; retry refetches it.
     api = renderSeeker([json({ detail: 'boom' }, 500), json([])]);
     s = await section();
     fireEvent.click(await s.findByRole('button', { name: he.common.retry }));
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(api.calls(MINE)).toHaveLength(2);
     cleanup();
 
@@ -562,7 +574,7 @@ describe('ApplySection', () => {
     let s = await settled();
     expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
     expect(gateLink(s)).toHaveAttribute('href', `/me/profile?section=looking&next=${NEXT}`);
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     expect(api.calls(PROFILE)).toHaveLength(1);
     expect(api.calls(PROFILE)[0]?.request.credentials).toBe('include');
     cleanup();
@@ -570,7 +582,7 @@ describe('ApplySection', () => {
     // A profile: the apply button as today, no gate.
     renderSeeker([json([])]);
     s = await settled();
-    expect(s.getByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(s.getByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(s.queryByText(he.applications.profileRequired)).toBeNull();
     cleanup();
 
@@ -585,7 +597,7 @@ describe('ApplySection', () => {
     expect(s.getByTestId('skeleton').closest('[aria-busy="true"]')).not.toBeNull();
     await new Promise((r) => setTimeout(r, 20));
     expect(s.getByTestId('skeleton')).toBeInTheDocument();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     expect(s.queryByText(he.applications.profileRequired)).toBeNull();
     cleanup();
 
@@ -593,7 +605,7 @@ describe('ApplySection', () => {
     api = renderSeeker([json([])], { [PROFILE]: [json({ detail: 'boom' }, 500), json(profile())] });
     s = await section();
     fireEvent.click(await s.findByRole('button', { name: he.common.retry }));
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(api.calls(PROFILE)).toHaveLength(2);
     cleanup();
 
@@ -619,7 +631,7 @@ describe('ApplySection', () => {
     renderSeeker([json([application({ status: 'withdrawn' })])], { [PROFILE]: [noProfile()] });
     s = await section();
     expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     cleanup();
 
     // A visitor and an owner never request the profile.
@@ -648,7 +660,7 @@ describe('ApplySection', () => {
     const s = await section();
     expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
     expect(s.queryByRole('textbox')).toBeNull();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     expect(s.queryByRole('alert')).toBeNull();
     expect(api.calls(PROFILE)).toHaveLength(2);
     expect(api.calls(MINE)).toHaveLength(1);
@@ -673,7 +685,7 @@ describe('ApplySection', () => {
         json(listingDetail({ id: 'A', listing_type: 'room', flatmates_count: 2, ...overrides })),
     ];
     const noControls = (s: ReturnType<typeof within>) => {
-      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
       expect(s.queryByRole('textbox')).toBeNull();
       expect(s.queryByText(he.applications.profileRequired)).toBeNull();
       expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
@@ -708,7 +720,7 @@ describe('ApplySection', () => {
     for (const fit of [true, null]) {
       renderSeeker([json([])], { [LISTING]: room({ gender_preference: 'any', room_fit: fit }) });
       s = await settled();
-      expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+      expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
       expect(s.queryByText(MISFIT)).toBeNull();
       cleanup();
     }
@@ -716,7 +728,7 @@ describe('ApplySection', () => {
     // An apartment (`room_fit: null`) is unchanged.
     renderSeeker([json([])]);
     s = await settled();
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(s.queryByText(MISFIT)).toBeNull();
     cleanup();
 
@@ -746,7 +758,7 @@ describe('ApplySection', () => {
         'href',
         `/me/profile?section=about&section=looking&next=${NEXT}`,
       );
-      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
       expect(s.queryByText(he.applications.profileRequired)).toBeNull();
       expect(s.queryByRole('link', { name: he.applications.fillProfile })).toBeNull();
       cleanup();
@@ -758,7 +770,7 @@ describe('ApplySection', () => {
       [PROFILE]: [json(profile({ gender: 'woman' }))],
     });
     let s = await settled();
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(s.queryByText(GATE)).toBeNull();
     cleanup();
 
@@ -768,7 +780,7 @@ describe('ApplySection', () => {
       [PROFILE]: [json(profile({ gender: null }))],
     });
     s = await settled();
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
     cleanup();
     renderSeeker([json([])], { [LISTING]: room('any'), [PROFILE]: [noProfile()] });
@@ -786,7 +798,7 @@ describe('ApplySection', () => {
       'href',
       `/me/profile?section=looking&next=${NEXT}`,
     );
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     cleanup();
 
     // A women-only room, and a profile with only "מה מחפשים": `RoomGate`, to both parts.
@@ -813,7 +825,7 @@ describe('ApplySection', () => {
     s = await settled();
     expect(await s.findByText(he.applications.profileRequired)).toBeVisible();
     expect(s.queryByRole('link', { name: he.rooms.apply.fillRoomSection })).toBeNull();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
   });
 
   it('ac10_room_409s', async () => {
@@ -845,7 +857,7 @@ describe('ApplySection', () => {
     let s = await section();
     expect(await s.findByText(MISFIT)).toBeVisible();
     expect(s.queryByRole('textbox')).toBeNull();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     noBanners(s);
     expect(client.getQueryData<{ room_fit: boolean | null }>(['listing', 'A'])?.room_fit).toBe(
       false,
@@ -866,7 +878,7 @@ describe('ApplySection', () => {
     s = await section();
     expect(await s.findByText(GATE)).toBeVisible();
     expect(s.queryByRole('textbox')).toBeNull();
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     noBanners(s);
     expect(api.calls(PROFILE)).toHaveLength(2);
     expect(api.calls(LISTING)).toHaveLength(2);
@@ -1028,7 +1040,7 @@ describe('ApplySection', () => {
     async function form() {
       const s = await settled();
       return {
-        toggle: s.getByRole('button', { name: he.applications.apply }),
+        toggle: s.getByRole('button', { name: APPLY_NAME }),
         field: s.queryByRole('textbox', { name: he.applications.form.label }),
       };
     }
@@ -1085,9 +1097,9 @@ describe('ApplySection', () => {
     // Closing with the toggle (not Cancel) keeps the draft; Cancel clears it.
     renderSeeker([json([])]);
     type(await openForm(), MESSAGE);
-    fireEvent.click(screen.getByRole('button', { name: he.applications.apply }));
+    fireEvent.click(screen.getByRole('button', { name: APPLY_NAME }));
     expect(draft()).toBe(MESSAGE);
-    fireEvent.click(screen.getByRole('button', { name: he.applications.apply }));
+    fireEvent.click(screen.getByRole('button', { name: APPLY_NAME }));
     fireEvent.click(screen.getByRole('button', { name: he.applications.form.cancel }));
     expect(draft()).toBe('');
     cleanup();
@@ -1127,6 +1139,112 @@ describe('ApplySection', () => {
     expect(screen.getByRole('textbox', { name: he.applications.form.label })).toHaveValue('');
   });
 
+  it('ac10_room_interest_optional_message_invite_and_chat', async () => {
+    // Spec 0010l AC10. A room: "I'm interested" as heading and button, the message optional.
+    const roomReply = (like: { liked_me: boolean } | null) => () =>
+      json(
+        listingDetail({
+          id: 'A',
+          listing_type: 'room',
+          flatmates_count: 2,
+          gender_preference: 'any',
+          room_fit: true,
+          like,
+        }),
+      );
+    const submitted = application({ status: 'submitted', message: null });
+    let api = renderSeeker([json([])], {
+      [LISTING]: [roomReply({ liked_me: false })],
+      [APPLY]: [
+        json(
+          { ...submitted, listing: { ...submitted.listing, id: 'A', listing_type: 'room' } },
+          201,
+        ),
+      ],
+    });
+    let s = await settled(ROOM_CTA);
+    expect(s.getByRole('heading', { level: 2, name: ROOM_CTA })).toBeVisible();
+    expect(s.queryByText(he.applications.room.invitedHint)).toBeNull();
+    fireEvent.click(s.getByRole('button', { name: ROOM_CTA }));
+    const field = s.getByRole('textbox', { name: he.applications.room.messageOptional });
+    expect(field).toHaveAttribute('maxLength', '500');
+    expect(s.getByText(charsLeft(500))).toBeVisible();
+    // An empty (or blank) message is sent as none: no `message` key, no "required" error.
+    type(field, '   ');
+    send();
+    expect(await s.findByText(he.applications.sent)).toBeVisible();
+    expect(api.calls(APPLY)).toHaveLength(1);
+    expect(api.calls(APPLY)[0]?.body).toEqual({});
+    expect(s.queryByText(he.listings.errors.required)).toBeNull();
+    expect(s.queryByRole('link', { name: he.applications.room.chat })).toBeNull();
+    cleanup();
+
+    // Invited (`like.liked_me`): the hint above the button; the answer comes back shortlisted,
+    // with the "mutual match" tag and the chat link, which takes focus; the chat list refetches.
+    const shortlisted = application({ status: 'shortlisted', source: 'like', message: null });
+    const client = testQueryClient();
+    client.setQueryData(CONVERSATIONS_KEY, []);
+    client.setQueryData(MY_LIKES_KEY, { liked_me: [] });
+    api = renderSeeker(
+      [json([])],
+      {
+        [LISTING]: [roomReply({ liked_me: true })],
+        [APPLY]: [
+          json(
+            { ...shortlisted, listing: { ...shortlisted.listing, id: 'A', listing_type: 'room' } },
+            201,
+          ),
+        ],
+      },
+      0,
+      client,
+    );
+    s = await settled(ROOM_CTA);
+    const hint = s.getByText(he.applications.room.invitedHint);
+    const button = s.getByRole('button', { name: ROOM_CTA });
+    expect(hint.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button).toHaveAccessibleDescription(he.applications.room.invitedHint);
+    fireEvent.click(button);
+    send();
+    const chat = await s.findByRole('link', { name: he.applications.room.chat });
+    expect(chat).toHaveAttribute('href', `/chat/${shortlisted.id}`);
+    expect(s.getByTestId('application-mutual')).toHaveTextContent(he.applications.mutual);
+    await vi.waitFor(() => {
+      expect(chat).toHaveFocus();
+    });
+    expect(api.calls(APPLY)[0]?.body).toEqual({});
+    expect(client.getQueryState(CONVERSATIONS_KEY)?.isInvalidated).toBe(true);
+    // The invite is answered: the header's likes badge refetches.
+    expect(client.getQueryState(MY_LIKES_KEY)?.isInvalidated).toBe(true);
+    // The hint is gone with the form (`like: null` in the cache), and no listing refetch.
+    expect(s.queryByText(he.applications.room.invitedHint)).toBeNull();
+    expect(api.calls(LISTING)).toHaveLength(1);
+    cleanup();
+
+    // A message, when written, is sent as is.
+    api = renderSeeker([json([])], {
+      [LISTING]: [roomReply(null)],
+      [APPLY]: [json({ ...submitted, message: MESSAGE }, 201)],
+    });
+    s = await settled(ROOM_CTA);
+    fireEvent.click(s.getByRole('button', { name: ROOM_CTA }));
+    type(s.getByRole('textbox', { name: he.applications.room.messageOptional }), MESSAGE);
+    send();
+    await s.findByText(he.applications.sent);
+    expect(api.calls(APPLY)[0]?.body).toEqual({ message: MESSAGE });
+    cleanup();
+
+    // An apartment is unchanged: "apply", the message required before any request.
+    api = renderSeeker([json([])]);
+    s = await settled(he.applications.heading);
+    fireEvent.click(s.getByRole('button', { name: he.applications.apply }));
+    expect(s.getByRole('textbox', { name: he.applications.form.label })).toBeVisible();
+    expect(s.queryByText(he.applications.room.invitedHint)).toBeNull();
+    send();
+    expect(await s.findByText(he.listings.errors.required)).toBeVisible();
+    expect(api.calls(APPLY)).toHaveLength(0);
+  });
+
   it('ac13_own_listing_and_room_for_anyone', async () => {
     // Spec 0010b. The caller's own listing (`is_mine`): the owner's wording, the own-listing note
     // and a manage link to "שלי" (a room) or "my listings" (an apartment); no form, and neither
@@ -1150,7 +1268,7 @@ describe('ApplySection', () => {
       expect(s.getByText(i18n.t('applications.countOwner', { count: 2 }))).toBeVisible();
       expect(s.getByText(he.applications.own)).toBeVisible();
       expect(s.getByRole('link', { name: he.applications.manage })).toHaveAttribute('href', href);
-      expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+      expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
       expect(s.queryByText(he.applications.loginPrompt)).toBeNull();
       await new Promise((r) => setTimeout(r, 20));
       expect(api.calls(MINE)).toHaveLength(0);
@@ -1168,7 +1286,7 @@ describe('ApplySection', () => {
     renderListing();
     let s = await settled();
     expect(s.getByText(countText(2))).toBeVisible();
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     expect(s.queryByText(he.applications.own)).toBeNull();
     expect(api.calls(MINE)).toHaveLength(1);
     expect(api.calls(PROFILE)).toHaveLength(1);
@@ -1178,7 +1296,7 @@ describe('ApplySection', () => {
     api = mockApi({ 'GET /me': [json(owner)], [LISTING]: [listingReply(2)] });
     renderListing();
     s = await settled(he.applications.headingOwner);
-    expect(s.queryByRole('button', { name: he.applications.apply })).toBeNull();
+    expect(s.queryByRole('button', { name: APPLY_NAME })).toBeNull();
     expect(s.queryByText(he.applications.own)).toBeNull();
     expect(api.calls(MINE)).toHaveLength(0);
     cleanup();
@@ -1186,7 +1304,7 @@ describe('ApplySection', () => {
     // A seeker on an apartment: the form.
     renderSeeker([json([])]);
     s = await settled();
-    expect(await s.findByRole('button', { name: he.applications.apply })).toBeVisible();
+    expect(await s.findByRole('button', { name: APPLY_NAME })).toBeVisible();
     cleanup();
   });
 });

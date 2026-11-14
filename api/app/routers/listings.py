@@ -70,7 +70,6 @@ def my_listings(user: UserDep, db: DbDep) -> list[MyListingOut]:
             **dict(ListingOut.model_validate(listing)),
             applicant_count=applicant_count,
             new_applicant_count=new_applicant_count,
-            liked_me_count=liked_me_count,
             flatmate_count=flatmate_count,
             flatmate_invite_active=listing.flatmate_invite_hash is not None,
         ).model_copy(update={"photos": photos_service.photos_out(photos[listing.id])})
@@ -78,7 +77,6 @@ def my_listings(user: UserDep, db: DbDep) -> list[MyListingOut]:
             listing,
             applicant_count,
             new_applicant_count,
-            liked_me_count,
             flatmate_count,
         ) in rows
     ]

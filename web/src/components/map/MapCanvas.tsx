@@ -21,8 +21,8 @@ export type Pin = {
   /** The pin button's accessible name. */
   label: string;
   tier: PinTier;
-  /** One outline icon before the text: a check for `applied`, a heart for `liked`. */
-  mark: 'applied' | 'liked' | null;
+  /** One outline icon before the text: a check for `applied` (spec 0010l: no `liked` mark). */
+  mark: 'applied' | null;
   /** Opened on this device: normal weight and no shadow, never another colour. */
   seen: boolean;
   /** Stacking order, higher on top, at least 1. */
@@ -129,14 +129,13 @@ const pinButton = `flex min-h-[44px] min-w-[44px] cursor-pointer items-center ju
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Outline icons (brand rule), 24 px grid drawn at 14 px with a 1.75 px stroke.
-const MARK_PATHS: Record<'applied' | 'liked', string> = {
-  // The app's own glyphs: Badge's check and the likes tab's heart.
+const MARK_PATHS: Record<'applied', string> = {
+  // The app's own glyph: Badge's check.
   applied: 'M5 12l5 5 9-10',
-  liked: 'M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z',
 };
 
 /** The mark's icon: decorative, the pin's name says it. */
-function markIcon(mark: 'applied' | 'liked'): SVGSVGElement {
+function markIcon(mark: 'applied'): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('width', '14');

@@ -9,7 +9,6 @@ import he from '../../../locales/he.json';
 import {
   currentPath,
   deferred,
-  empty,
   json,
   mockApi,
   noa,
@@ -20,7 +19,6 @@ import { cardTitle } from '../cardTitle';
 import { formatDate } from '../format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { application } from '../../applications/__tests__/fixtures';
-import { CONVERSATIONS_KEY } from '../../chat/useConversations';
 import { listingDetail } from '../../search/__tests__/fixtures';
 import { parseMapPosition } from '../../search/mapPosition';
 import { ListingPage } from '../ListingPage';
@@ -1085,11 +1083,11 @@ describe('ListingPage', () => {
     });
   });
 
-  describe('likes (0008c)', () => {
-    const likeRoom = (like: { liked_by_me: boolean; liked_me: boolean } | null, over = {}) =>
+  describe('one room interest (0010l)', () => {
+    const inviteRoom = (like: { liked_me: boolean } | null, over = {}) =>
       listingDetail({ listing_type: 'room', like, room_fit: true, ...over });
     const seekerApi = (
-      room: ReturnType<typeof likeRoom>,
+      room: ReturnType<typeof inviteRoom>,
       extra: Parameters<typeof mockApi>[0] = {},
     ) =>
       mockApi({
@@ -1099,238 +1097,46 @@ describe('ListingPage', () => {
         [`GET /listings/${room.id}`]: [json(room)],
         ...extra,
       });
-    const likeButton = () => screen.findByRole('button', { name: he.likes.like });
+    const cta = () => screen.findByRole('button', { name: he.applications.room.cta });
 
-    it('ac2_like_back_mutual', async () => {
-      const room = likeRoom({ liked_by_me: false, liked_me: true });
-      const api = seekerApi(room, {
-        [`PUT /listings/${room.id}/like`]: [json({ liked: true, application_id: 'X' })],
-      });
-      const client = testQueryClient();
-      client.setQueryData(CONVERSATIONS_KEY, []);
-      render(room.id, client);
-      const button = await likeButton();
-      expect(screen.getByText(he.likes.likedYouLine)).toBeVisible();
-      const apply = await screen.findByRole('button', { name: he.applications.apply });
-      expect(button.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-      fireEvent.click(button);
-      const banner = (await screen.findByText(he.likes.mutual)).closest<HTMLElement>(
-        '[role="status"]',
-      ) as HTMLElement;
-      expect(within(banner).getByText(he.likes.mutual)).toBeVisible();
-      expect(within(banner).getByRole('link', { name: he.likes.toChat })).toHaveAttribute(
-        'href',
-        '/chat/X',
+    it('ac10_room_page_has_only_the_apply_card', async () => {
+      // An invited seeker: the action column holds the apply card alone, with the hint above its
+      // one button; no like control of any kind.
+      const room = inviteRoom({ liked_me: true });
+      seekerApi(room);
+      render(room.id);
+      const button = await cta();
+      const actions = screen.getByTestId('listing-actions');
+      expect(within(actions).getAllByRole('button')).toEqual([button]);
+      expect(actions.querySelectorAll('[aria-pressed]')).toHaveLength(0);
+      expect(within(actions).getByRole('heading', { level: 2 })).toHaveTextContent(
+        he.applications.room.cta,
       );
-      expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
-      // Focus moves to the chat link when the clicked button unmounts.
-      expect(within(banner).getByRole('link', { name: he.likes.toChat })).toHaveFocus();
-      // The chats list is stale: the new chat shows up.
-      expect(client.getQueryState(CONVERSATIONS_KEY)?.isInvalidated).toBe(true);
-      // The applications refetch (the new shortlisted one); the banner outlives the caches.
-      await vi.waitFor(() => {
-        expect(api.calls('GET /me/applications').length).toBeGreaterThanOrEqual(2);
-      });
-      expect(screen.getByText(he.likes.mutual)).toBeVisible();
-      expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
+      const hint = within(actions).getByText(he.applications.room.invitedHint);
+      expect(hint.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByText(he.likes.mutual)).toBeNull();
     });
 
-    it('ac3_like_toggle_and_absent', async () => {
-      const room = likeRoom({ liked_by_me: false, liked_me: false });
-      const route = `PUT /listings/${room.id}/like`;
-      const api = seekerApi(room, {
-        [route]: [json({ liked: true, application_id: null })],
-        [`DELETE /listings/${room.id}/like`]: [empty()],
-      });
-      render(room.id);
-      const button = await likeButton();
-      expect(button).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.queryByText(he.likes.likedYouLine)).toBeNull();
-      // Idle: the hint under the button, tied to it.
-      expect(button).toHaveAccessibleDescription(he.likes.hint);
-      fireEvent.click(button);
-      const pressed = await screen.findByRole('button', { name: he.likes.liked, pressed: true });
-      expect(pressed).toHaveAttribute('aria-pressed', 'true');
-      expect(pressed).toHaveTextContent(he.likes.liked);
-      expect(screen.queryByText(he.likes.hint)).toBeNull();
-      await vi.waitFor(() => {
-        expect(pressed).toBeEnabled();
-      });
-      fireEvent.click(pressed);
-      expect(await screen.findByRole('button', { name: he.likes.like })).toHaveAttribute(
-        'aria-pressed',
-        'false',
-      );
-      expect(api.calls(route)).toHaveLength(1);
-      expect(api.calls(`DELETE /listings/${room.id}/like`)).toHaveLength(1);
-      expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
-
-      // No control: anonymous / an apartment / an open application (`like: null`), or a misfit.
-      const absents = [
-        [likeRoom(null), he.applications.apply],
-        [
-          likeRoom({ liked_by_me: false, liked_me: true }, { room_fit: false }),
-          he.rooms.apply.misfit,
-        ],
+    it('ac10_no_hint_without_an_invite', async () => {
+      // Not invited, `like: null` (anonymous, an open application) or a misfit: no hint.
+      const cases = [
+        [inviteRoom({ liked_me: false }), he.applications.room.cta],
+        [inviteRoom(null), he.applications.room.cta],
+        [inviteRoom({ liked_me: true }, { room_fit: false }), he.rooms.apply.misfit],
       ] as const;
-      for (const [absent, settled] of absents) {
+      for (const [room, settled] of cases) {
         cleanup();
         vi.unstubAllGlobals();
-        seekerApi(absent);
-        render(absent.id);
-        await screen.findByRole('heading', { level: 1 });
-        // The apply section has settled, so a like control would be on the page by now.
-        expect(await screen.findByText(settled)).toBeVisible();
-        expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
-        expect(screen.queryByText(he.likes.likedYouLine)).toBeNull();
-      }
-    });
-
-    it('ac4_like_errors', async () => {
-      const cases: {
-        reply: () => Response;
-        applications?: (id: string) => Response[];
-        check: (id: string, api: ReturnType<typeof mockApi>) => Promise<void>;
-      }[] = [
-        ...['room_section_required', 'seeker_profile_required'].map((code) => ({
-          reply: () => json({ detail: code }, 409),
-          check: async (id: string) => {
-            expect(await screen.findByText(he.likes.errors.roomSection)).toBeVisible();
-            expect(screen.getByRole('link', { name: he.likes.toProfile })).toHaveAttribute(
-              'href',
-              `/me/profile?section=about&section=looking&next=${encodeURIComponent(`/listings/${id}`)}`,
-            );
-          },
-        })),
-        {
-          reply: () => json({ detail: 'room_gender_mismatch' }, 409),
-          check: async () => {
-            expect(await screen.findByText(he.rooms.apply.misfit)).toBeVisible();
-            expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
-            expect(screen.queryByRole('alert')).toBeNull();
-          },
-        },
-        {
-          reply: () => json({ detail: 'already_applied' }, 409),
-          check: async (_id, api) => {
-            await vi.waitFor(() => {
-              expect(api.calls('GET /me/applications').length).toBeGreaterThanOrEqual(2);
-            });
-            expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
-            // ApplySection now shows the application the refetch returned.
-            expect(await screen.findByText(/הגשת מועמדות ב־/)).toBeVisible();
-          },
-          applications: (id: string) => [
-            json([]),
-            json([{ ...application(), listing: { ...application().listing, id } }]),
-          ],
-        },
-        {
-          reply: () => json({ detail: 'boom' }, 500),
-          check: async () => {
-            expect(await screen.findByText(he.common.error)).toBeVisible();
-          },
-        },
-        {
-          reply: () => json({ detail: 'not_found' }, 404),
-          check: async () => {
-            expect(await screen.findByText(he.likes.errors.gone)).toBeVisible();
-          },
-        },
-        {
-          reply: () => json({ detail: 'rate_limited' }, 429),
-          check: async () => {
-            expect(await screen.findByText(he.likes.errors.rateLimited)).toBeVisible();
-          },
-        },
-        {
-          reply: () => json({ detail: 'unauthenticated' }, 401),
-          check: async (id) => {
-            await vi.waitFor(() => {
-              expect(currentPath()).toBe(`/login?next=${encodeURIComponent(`/listings/${id}`)}`);
-            });
-          },
-        },
-      ];
-      for (const { reply, check, applications } of cases) {
-        const room = likeRoom({ liked_by_me: false, liked_me: false });
-        const api = seekerApi(room, {
-          [`PUT /listings/${room.id}/like`]: [reply],
-          ...(applications ? { 'GET /me/applications': applications(room.id) } : {}),
-        });
+        seekerApi(room);
         render(room.id);
-        const button = await likeButton();
-        // The applications list has loaded (its query is enabled once `/me` answers).
-        await screen.findByRole('button', { name: he.applications.apply });
-        fireEvent.click(button);
-        await check(room.id, api);
-        // A 401 forgets the session, which resets the listing queries (as `useApply`'s does).
-        if (!currentPath()?.startsWith('/login')) {
-          expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
-        }
-        cleanup();
-        vi.unstubAllGlobals();
+        await screen.findByRole('heading', { level: 1 });
+        expect(await screen.findByText(settled, { selector: 'button, p' })).toBeVisible();
+        expect(screen.queryByText(he.applications.room.invitedHint)).toBeNull();
       }
     });
 
-    it('ac2_mutual_shows_as_mutual_not_applied', async () => {
-      const room = likeRoom({ liked_by_me: false, liked_me: true });
-      const app = application({ source: 'like', message: null, status: 'shortlisted' });
-      const api = seekerApi(room, {
-        [`PUT /listings/${room.id}/like`]: [json({ liked: true, application_id: app.id })],
-        'GET /me/applications': [
-          json([]),
-          json([{ ...app, listing: { ...app.listing, id: room.id } }]),
-        ],
-      });
-      render(room.id);
-      fireEvent.click(await likeButton());
-      await vi.waitFor(() => {
-        expect(screen.getAllByTestId('application-mutual').length).toBeGreaterThan(0);
-      });
-      expect(screen.getAllByText(he.applications.mutual).length).toBeGreaterThan(0);
-      expect(screen.queryByText(/הגשת מועמדות ב־/)).toBeNull();
-      expect(screen.getByText(i18n.t('applications.count', { count: 1 }))).toBeVisible();
-      expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
-    });
-
-    it('like_double_click_sends_one_put', async () => {
-      const room = likeRoom({ liked_by_me: false, liked_me: true });
-      const api = seekerApi(room, {
-        [`PUT /listings/${room.id}/like`]: [json({ liked: true, application_id: 'X' })],
-      });
-      render(room.id);
-      const button = await likeButton();
-      fireEvent.click(button);
-      fireEvent.click(button);
-      expect(await screen.findByText(he.likes.mutual)).toBeVisible();
-      expect(api.calls(`PUT /listings/${room.id}/like`)).toHaveLength(1);
-    });
-
-    it('ac8_like_toggle_name_matches_text', async () => {
-      const room = likeRoom({ liked_by_me: false, liked_me: false });
-      seekerApi(room, {
-        [`PUT /listings/${room.id}/like`]: [json({ liked: true, application_id: null })],
-      });
-      render(room.id);
-      // Idle: named by its visible text, not pressed, no aria-label.
-      const button = await likeButton();
-      expect(button).toHaveAccessibleName(button.textContent ?? '');
-      expect(button).toHaveAttribute('aria-pressed', 'false');
-      expect(button).not.toHaveAttribute('aria-label');
-
-      // Liked: the visible text changes and is still the name; the state is aria-pressed.
-      fireEvent.click(button);
-      const pressed = await screen.findByRole('button', { name: he.likes.liked, pressed: true });
-      expect(pressed).toHaveTextContent(he.likes.liked);
-      expect(pressed).toHaveAccessibleName(pressed.textContent ?? '');
-      expect(pressed).toHaveAttribute('aria-pressed', 'true');
-      expect(pressed).not.toHaveAttribute('aria-label');
-    });
-
-    it('ac3_apply_ends_the_like_control', async () => {
-      const room = likeRoom({ liked_by_me: false, liked_me: true });
+    it('ac3_apply_ends_the_invite_hint', async () => {
+      const room = inviteRoom({ liked_me: true });
       const app = application({ status: 'submitted' });
       const api = seekerApi(room, {
         [`POST /listings/${room.id}/applications`]: [
@@ -1338,14 +1144,13 @@ describe('ListingPage', () => {
         ],
       });
       render(room.id);
-      fireEvent.click(await screen.findByRole('button', { name: he.applications.apply }));
-      fireEvent.change(screen.getByLabelText(he.applications.form.label), {
+      fireEvent.click(await cta());
+      fireEvent.change(screen.getByLabelText(he.applications.room.messageOptional), {
         target: { value: 'שלום' },
       });
       fireEvent.click(screen.getByRole('button', { name: he.applications.form.submit }));
       expect(await screen.findByText(he.applications.sent)).toBeVisible();
-      expect(screen.queryByRole('button', { name: he.likes.like })).toBeNull();
-      expect(screen.queryByText(he.likes.likedYouLine)).toBeNull();
+      expect(screen.queryByText(he.applications.room.invitedHint)).toBeNull();
       expect(api.calls(`GET /listings/${room.id}`)).toHaveLength(1);
     });
   });

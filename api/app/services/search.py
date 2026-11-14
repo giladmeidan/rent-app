@@ -24,8 +24,8 @@ only for an account whose profile has a room section, so `total` differs per cal
 the fit: it reports it. A non-public listing is indistinguishable from an unknown id
 (`ListingNotFoundError`, a 404).
 
-The seeker's likes (spec 0008a, `liked_rooms`) are the public rooms they liked or whose lister
-liked them, read here because they build on `_public_listings()`.
+The seeker's invites (spec 0008a, 0010l, `liked_rooms`) are the public rooms whose lister liked
+them, read here because they build on `_public_listings()`.
 
 The cover photo (spec 0010d): the search page and the liked rooms join each listing's position-0
 photo (`_with_cover`) in their one page statement and return its id and key (`None`, `None`
@@ -213,8 +213,7 @@ def get_public_listing_with_match(
     does not fit is returned with `False`. Raises `ListingNotFoundError` for an unknown id and for
     a paused, expired or inactive-area listing alike. One statement. `lock` (with a
     `profile_user_id`): the statement also takes `FOR KEY SHARE` on the listing row, which waits
-    for a flatmate join holding it `FOR UPDATE` (spec 0008d; `applications.apply`,
-    `people.like_room`)."""
+    for a flatmate join holding it `FOR UPDATE` (spec 0008d; `applications.apply`)."""
     query = _public_listings().where(Listing.id == listing_id)
     if profile_user_id is None:
         listing = db.scalar(query)
@@ -235,18 +234,17 @@ def get_public_listing_with_match(
 
 def liked_rooms(
     db: Session, seeker_id: uuid.UUID
-) -> list[
-    tuple[Listing, MatchOut, dt.datetime | None, dt.datetime | None, uuid.UUID | None, str | None]
-]:
-    """The public rooms with a like between them and `seeker_id` (either side), each with the
-    seeker's match, `lister_liked_at`, `seeker_liked_at` and the cover photo's id and key (spec
-    0010d; `None`, `None` without photos), newest like first. Only rooms (a room
+) -> list[tuple[Listing, MatchOut, dt.datetime, uuid.UUID | None, str | None]]:
+    """The public rooms whose lister liked (invited) `seeker_id` (spec 0010l), each with the
+    seeker's match, `lister_liked_at` and the cover photo's id and key (spec 0010d; `None`,
+    `None` without photos), newest like first. Never a room whose flat the seeker lives in (a
+    flatmate, spec 0008d). Only rooms (a room
     switched to an apartment keeps its pairs; `room_fit` is NULL for it), whose fit is not false,
     that are not the seeker's own and have no non-withdrawn application from them (the
     application took over). Empty while the seeker's profile has no looking part (spec 0010c: no
     budget, no score). Never names the owner. One statement."""
     # Imported here: `services/people.py` imports this module.
-    from app.services.people import open_application
+    from app.services.people import flatmate_of, open_application
 
     query = (
         _with_profile(_public_listings(), seeker_id)
@@ -257,23 +255,24 @@ def liked_rooms(
             # The looking part (spec 0010c): without it the score is NULL.
             SeekerProfile.budget_max_ils.is_not(None),
             room_fit(Listing, SeekerProfile).is_not(False),
-            or_(RoomPair.lister_liked_at.is_not(None), RoomPair.seeker_liked_at.is_not(None)),
+            RoomPair.lister_liked_at.is_not(None),
             ~open_application(Listing.id, seeker_id),
+            # A flatmate never answers an invite to their own flat (0008d): it may predate the
+            # join, and stays hidden while they live there.
+            ~flatmate_of(Listing.id, seeker_id),
         )
     )
     matched, _ = _with_match(query)
-    newest = func.coalesce(RoomPair.seeker_liked_at, RoomPair.lister_liked_at)
     rows = db.execute(
-        _with_cover(
-            matched.add_columns(RoomPair.lister_liked_at, RoomPair.seeker_liked_at)
-        ).order_by(newest.desc(), Listing.id)
+        _with_cover(matched.add_columns(RoomPair.lister_liked_at)).order_by(
+            RoomPair.lister_liked_at.desc(), Listing.id
+        )
     ).all()
     return [
         (
             row[0],
             explain_row(row),
             row.lister_liked_at,
-            row.seeker_liked_at,
             row.cover_id,
             row.cover_key,
         )

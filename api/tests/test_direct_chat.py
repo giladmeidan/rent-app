@@ -32,7 +32,7 @@ from tests.conftest import (
 )
 from tests.test_flatmates import Published, _scans_of
 from tests.test_matching import _user_id
-from tests.test_people import _like_person, _like_room, _page, _room, _seeker
+from tests.test_people import _apply, _like_person, _page, _room, _seeker
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -421,13 +421,14 @@ def test_ac6_application_chat_ids_unchanged(
         owner.patch(f"/listings/{apartment}/applications/{applied}", json={"status": "shortlisted"})
     )
 
-    # A room mutual like (services/people.py).
+    # A room invite answered by an application (spec 0010l, services/applications.py).
     room = _room(db_engine, owner_id, gush_dan)
     liker = _seeker(client, outbox, db_engine, gush_dan, "l@example.com", "Lia")
-    assert _ok(_like_room(liker, room)) == {"liked": True, "application_id": None}
     (card,) = _page(owner, room)["items"]
-    liked = _ok(_like_person(owner, room, card["id"]))["application_id"]
-    assert liked is not None
+    assert _ok(_like_person(owner, room, card["id"])) == {"liked": True}
+    answered = _apply(liker, room)
+    assert answered["status"] == "shortlisted"
+    liked = answered["id"]
 
     with db_engine.connect() as conn:
         rows = conn.execute(text("SELECT id, application_id FROM conversations")).tuples().all()

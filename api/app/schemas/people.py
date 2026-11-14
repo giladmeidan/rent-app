@@ -45,8 +45,7 @@ class PersonOut(BaseModel):
     lifestyle: Lifestyle
     about_me: str | None
     match: MatchOut  # against the room at the pair's frozen price
-    liked_by_me: bool  # the lister liked this person for this room
-    liked_me: bool  # this person liked the room
+    liked_by_me: bool  # the lister liked (invited) this person for this room
 
 
 class PeoplePageOut(BaseModel):
@@ -55,11 +54,10 @@ class PeoplePageOut(BaseModel):
 
 
 class LikeOut(BaseModel):
-    """The result of a like. `application_id` is set only when this like made the pair mutual:
-    the shortlisted application it created, which is also its chat's id."""
+    """The result of a lister's like: recorded as an invite (spec 0010l). It never creates an
+    application; the seeker's application answers it."""
 
     liked: bool
-    application_id: uuid.UUID | None
 
 
 class LikedRoomOut(BaseModel):
@@ -68,8 +66,7 @@ class LikedRoomOut(BaseModel):
 
 
 class MyLikesOut(BaseModel):
-    """The seeker's likes: rooms whose lister liked them and that they have not liked back
-    (`liked_me`), and rooms they liked (`mine`); newest like first in each."""
+    """The seeker's invites: rooms whose lister liked them and that they have not applied to
+    (`liked_me`), newest like first (spec 0010l: the seeker's own room-likes are gone)."""
 
     liked_me: list[LikedRoomOut]
-    mine: list[LikedRoomOut]

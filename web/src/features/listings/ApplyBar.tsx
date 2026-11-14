@@ -70,7 +70,8 @@ export function ApplyBar({ listing, target, headingRef }: Props) {
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
     >
       <Button variant="primary" size="lg" fullWidth onClick={jump}>
-        {t('applications.apply')}
+        {/* The section's own wording: "I'm interested" on a room (spec 0010l). */}
+        {listing.listing_type === 'room' ? t('applications.room.cta') : t('applications.apply')}
       </Button>
     </div>
   );

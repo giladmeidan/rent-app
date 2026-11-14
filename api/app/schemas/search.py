@@ -25,9 +25,9 @@ that applies this.
 `ListingDetail.room_fit` is the caller's own fit to a room: `true` / `false` exactly when the
 listing is a room and the caller (any role) has a profile with the looking part and a room section,
 else `null`. Search items do not carry it: a room that does not fit the caller never reaches them.
-`ListingDetail.like` (spec 0008a) is the caller's like state on a room (`LikeStateOut`): set only
-for a signed-in account on a room it does not own and has no non-withdrawn application to, else
-`null` (spec 0010b: any role).
+`ListingDetail.like` (spec 0008a, 0010l) is whether the room's lister invited the caller
+(`LikeStateOut`): set only for a signed-in account on a room it does not own and has no
+non-withdrawn application to, else `null` (spec 0010b: any role).
 `ListingPublic.is_mine` (spec 0010b) says the caller owns the listing (false for a visitor); on an
 own listing `match` is `null`.
 
@@ -212,9 +212,9 @@ class ListingPublic(BaseModel):
 # Defined here, not in `schemas/people.py` (which re-exports it): `ListingDetail` needs it, and
 # `people` imports `ListingPublic` from this module.
 class LikeStateOut(BaseModel):
-    """The likes between the caller (any account, spec 0010b) and one room (spec 0008a)."""
+    """Whether one room's lister invited the caller (any account, spec 0010b; spec 0008a, 0010l:
+    the seeker's own room-like is gone)."""
 
-    liked_by_me: bool
     liked_me: bool
 
 

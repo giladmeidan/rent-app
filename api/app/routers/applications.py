@@ -4,7 +4,9 @@ Every endpoint requires a session of any role (`current_user`, spec 0010b): 401 
 without one. The role is read once, by `apply`: an **apartment** takes applications from seekers
 only (403 `seeker_only`, not counted); a room is open to any account.
 
-Applicant side (spec 0004a): a listing that is not public, or is the caller's own, is a 404
+Applicant side (spec 0004a): the message is optional on a room and required on a public apartment
+(spec 0010l: 422 `message_required`, not counted). A listing that is not public, or is the
+caller's own, is a 404
 `not_found` (the same body as an unknown id); so is another account's application. Rooms are open to
 applications (spec 0007b); a room that does not fit the applicant is a 409 `room_gender_mismatch`,
 a women- or men-only room for an applicant without a room section a 409 `seeker_gender_required`.
@@ -19,7 +21,9 @@ application also carries the applicant's room section as `room` (spec 0007c: gen
 
 Every successful lister status change and applicant withdraw publishes a `status` chat event to the
 chat's members after the commit (spec 0005c): it may open or close the application's chat. On a
-room application that includes the listing's flatmates (`chat.event_members`, spec 0008d)."""
+room application that includes the listing's flatmates (`chat.event_members`, spec 0008d). So does
+an apply that answered the lister's invite (spec 0010l: it comes back `shortlisted`, its chat
+open); a `submitted` apply publishes nothing."""
 
 import datetime as dt
 import uuid
@@ -85,6 +89,10 @@ def _out(application: Application, listing: Listing) -> MyApplicationOut:
             "model": ErrorOut,
             "description": "seeker_only: an apartment by a non-seeker (not counted)",
         },
+        422: {
+            "description": "message_required: a public apartment without a message (not "
+            "counted); or a malformed body (list `detail`)",
+        },
         404: {
             "model": ErrorOut,
             "description": "not_found: unknown id, a paused, expired or inactive-area listing, "
@@ -112,6 +120,8 @@ def apply(
         application, listing = applications_service.apply(db, r, user, listing_id, body.message)
     except applications_service.SeekerOnlyError:
         raise HTTPException(status_code=403, detail="seeker_only") from None
+    except applications_service.MessageRequiredError:
+        raise HTTPException(status_code=422, detail="message_required") from None
     except applications_service.ProfileRequiredError:
         raise HTTPException(status_code=409, detail="seeker_profile_required") from None
     except applications_service.SeekerGenderRequiredError:
@@ -126,6 +136,10 @@ def apply(
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.AlreadyAppliedError:
         raise HTTPException(status_code=409, detail="already_applied") from None
+    if application.status == "shortlisted":
+        # An invite answered (spec 0010l): its chat just opened, as a shortlist's does.
+        members = chat_service.event_members(db, application, listing.owner_id)
+        chat_events.publish(r, members, application.id, "status")
     return _out(application, listing)
 
 

@@ -41,7 +41,7 @@ from tests.conftest import (
     signup,
 )
 from tests.test_matching import _user_id
-from tests.test_people import _like_person, _like_room, _page, _room, _seeker
+from tests.test_people import _like_person, _page, _room, _seeker
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -855,19 +855,16 @@ def test_ac8_flatmate_cannot_apply_or_like_own_flat(
         "UPDATE seeker_profiles SET people_visible = true WHERE user_id = :id",
         id=mate_id,
     )
-    assert _ok(_like_room(mate, room)) == {"liked": True, "application_id": None}
     (card,) = _page(owner, room)["items"]
     assert card["display_name"] == "Fay"
-    assert _my_listing(owner, room)["liked_me_count"] == 1
+    assert _ok(_like_person(owner, room, card["id"])) == {"liked": True}  # an invite
 
     _ok(_join(mate, _invite(owner, room)))
-    assert _my_listing(owner, room)["liked_me_count"] == 0  # a flatmate's like is not pending
-    response = mate.post(f"/listings/{room}/applications", json={"message": "Hello there"})
-    assert response.status_code == 404
-    assert response.json() == NOT_FOUND
-    response = _like_room(mate, room)
-    assert response.status_code == 404
-    assert response.json() == NOT_FOUND
+    # Not even the lister's invite opens their own flat to them (spec 0010l).
+    for body in ({"message": "Hello there"}, {}):
+        response = mate.post(f"/listings/{room}/applications", json=body)
+        assert response.status_code == 404
+        assert response.json() == NOT_FOUND
     assert _page(owner, room) == {"items": [], "total": 0}
     response = _like_person(owner, room, card["id"])
     assert response.status_code == 404
@@ -969,18 +966,29 @@ def test_ac8_join_racing_like_is_never_both(
     gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
-    # The seeker's like would make it mutual: the lister liked them first.
-    a = _user_id(_seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi"))
-    make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=4500, lister_liked=True)
-    like_room = _as(
-        a, lambda db, user: people_service.like_room(db, get_redis(), user, uuid.UUID(room))
-    )
-    assert _while_joining(db_engine, room, a, like_room) == "ListingNotFoundError"
-    assert _open_applications(db_engine, room, a) == 0
+    """Spec 0010l AC5: an apply that answers an invite, while the seeker joins the flat, is never
+    both: the apply waits for the join and is the 404 (no application, no chat, the invite kept);
+    the lister's like while the person joins is the 404 too."""
+    for n, message in enumerate((None, "Hello there")):
+        a = _user_id(_seeker(client, outbox, db_engine, gush_dan, f"a{n}@example.com", "Avi"))
+        make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=4500, lister_liked=True)
 
-    # The lister's like would make it mutual: the seeker liked first.
+        def answer(db: Any, user: User, message: str | None = message) -> Any:
+            return applications_service.apply(db, get_redis(), user, uuid.UUID(room), message)
+
+        apply = _as(a, answer)
+        assert _while_joining(db_engine, room, a, apply) == "ListingNotFoundError"
+        assert _open_applications(db_engine, room, a) == 0
+        assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 0
+        invited = _scalar(
+            db_engine,
+            "SELECT lister_liked_at IS NOT NULL FROM room_pairs WHERE seeker_id = :s",
+            s=a,
+        )
+        assert invited is True  # rolled back with the refused apply
+
     b = _user_id(_seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat"))
-    pair = make_pair(db_engine, uuid.UUID(room), b, price_ils_seen=4500, seeker_liked=True)
+    pair = make_pair(db_engine, uuid.UUID(room), b, price_ils_seen=4500)
     like_person = _as(
         owner_id,
         lambda db, user: people_service.like_person(db, get_redis(), user, uuid.UUID(room), pair),
@@ -1088,44 +1096,6 @@ def test_ac9_flatmate_read_marker(
     assert _item(mate, chat)["unread_count"] == 0
     assert party_markers() == before
     assert _item(seeker, chat)["unread_count"] == 1
-
-
-def test_ac10_mutual_match_includes_flatmates(
-    client: TestClient,
-    outbox: Outbox,
-    owner: TestClient,
-    owner_id: uuid.UUID,
-    mate: TestClient,
-    mate_id: uuid.UUID,
-    room: str,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-    published: Published,
-) -> None:
-    _ok(_join(mate, _invite(owner, room)))
-    liker = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
-    assert _ok(_like_room(liker, room)) == {"liked": True, "application_id": None}
-    assert published.calls == []
-    (card,) = _page(owner, room)["items"]
-    application_id = _ok(_like_person(owner, room, card["id"]))["application_id"]
-    assert application_id is not None
-    conversation = uuid.UUID(application_id)
-    assert published.calls == [({owner_id, _user_id(liker), mate_id}, conversation, "status")]
-
-    item = _item(mate, conversation)
-    assert (item["my_role"], item["other_name"], item["member_count"]) == ("flatmate", "Avi", 3)
-    assert _ok(_thread(mate, conversation))["members"] == _members("Noa", ["Fay"], "Avi", me="Fay")
-
-    # The mirror case: the lister likes first, the seeker's like makes it mutual.
-    published.calls.clear()
-    second = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat")
-    (card,) = (c for c in _page(owner, room)["items"] if c["display_name"] == "Bat")
-    assert _ok(_like_person(owner, room, card["id"]))["application_id"] is None
-    mirrored = _ok(_like_room(second, room))["application_id"]
-    assert published.calls == [
-        ({owner_id, _user_id(second), mate_id}, uuid.UUID(mirrored), "status")
-    ]
-    assert mirrored in _ids(mate)
 
 
 def test_ac12_statement_counts(

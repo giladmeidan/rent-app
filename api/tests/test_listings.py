@@ -401,7 +401,7 @@ def test_ac6_me_listings_is_own_newest_first(
     body = response.json()
     assert [item["id"] for item in body] == [second["id"], first["id"]]
     assert [item["status"] for item in body] == ["paused", "active"]
-    assert [item["liked_me_count"] for item in body] == [0, 0]  # 0008a, in the same statement
+    assert all("liked_me_count" not in item for item in body)  # spec 0010l: removed
     # 0008d, in the same statement: no flatmates, no invite link.
     assert [(item["flatmate_count"], item["flatmate_invite_active"]) for item in body] == [
         (0, False),

@@ -19,7 +19,6 @@ export function useCreateListing() {
                 ...created,
                 applicant_count: 0,
                 new_applicant_count: 0,
-                liked_me_count: 0,
                 flatmate_count: 0,
                 flatmate_invite_active: false,
               },

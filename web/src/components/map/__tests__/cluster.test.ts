@@ -113,7 +113,7 @@ describe('cluster', () => {
 
     // A mark widens the chip by 20 px; the hit area is never narrower than 44 px.
     expect(
-      hitRect(pin({ mark: 'liked' }), zoom).x1 - hitRect(pin({ mark: 'liked' }), zoom).x0,
+      hitRect(pin({ mark: 'applied' }), zoom).x1 - hitRect(pin({ mark: 'applied' }), zoom).x0,
     ).toBe(104);
     expect(hitRect(pin({ text: '9' }), zoom).x1 - hitRect(pin({ text: '9' }), zoom).x0).toBe(44);
   });
@@ -122,7 +122,7 @@ describe('cluster', () => {
     const random = seeded(9009);
     const [west, south, east, north] = GUSH_DAN_BOUNDS;
     const texts = ['5,000 ₪', '7,200 ₪ · 87%', '12,500 ₪', '3,400 ₪ · 92%', '900 ₪'];
-    const marks: Pin['mark'][] = [null, null, 'liked', 'applied'];
+    const marks: Pin['mark'][] = [null, null, 'applied'];
     const tiers: PinTier[] = ['high', 'good', 'partial', 'none'];
     const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)] as T;
     const pins = Array.from({ length: 200 }, () =>
