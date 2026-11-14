@@ -30,6 +30,8 @@ describe('Button', () => {
       soft: ['border', 'border-accent', 'bg-accent-soft', 'text-accent-strong'],
       ghost: ['bg-transparent', 'text-accent', 'hover:bg-accent-soft', 'hover:text-accent-strong'],
       danger: ['bg-danger', 'text-on-ink', 'hover:bg-danger/90'],
+      // Spec 0009z AC8: the outline on ink.
+      inverse: ['border', 'border-on-ink', 'bg-transparent', 'text-on-ink', 'hover:bg-on-ink/10'],
     } as const;
     for (const [variant, classes] of Object.entries(variants)) {
       const { unmount: done } = render(

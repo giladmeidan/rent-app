@@ -1,7 +1,7 @@
 import { cx } from './cx';
 import { focusRing } from './focusRing';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'ghost' | 'danger' | 'inverse';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 export type ButtonShape = 'rounded' | 'pill';
 
@@ -29,6 +29,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   soft: 'border border-accent bg-accent-soft text-accent-strong',
   ghost: 'bg-transparent text-accent hover:bg-accent-soft hover:text-accent-strong',
   danger: 'bg-danger text-on-ink hover:bg-danger/90',
+  // An outline on an `ink` fill (the landing's closing band, spec 0009z).
+  inverse: 'border border-on-ink bg-transparent text-on-ink hover:bg-on-ink/10',
 };
 
 const SIZES: Record<ButtonSize, { box: string; padding: string; square: string }> = {

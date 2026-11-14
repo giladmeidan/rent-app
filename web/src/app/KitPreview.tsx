@@ -63,6 +63,7 @@ const checkIcon = (
   </svg>
 );
 
+// `inverse` is for an ink fill: it has its own strip below, not this white row.
 const VARIANTS: readonly ButtonVariant[] = ['primary', 'secondary', 'soft', 'ghost', 'danger'];
 const SIZES: readonly ButtonSize[] = ['sm', 'md', 'lg'];
 const POSES: readonly MascotPose[] = ['default', 'hello', 'search', 'celebrate', 'sleep'];
@@ -89,6 +90,7 @@ export default function KitPreview() {
     soft: t('applicants.actions.unshortlist'),
     ghost: t('applicants.more'),
     danger: t('applicants.actions.decline'),
+    inverse: t('landing.cta.owner'),
   };
 
   return (
@@ -132,6 +134,19 @@ export default function KitPreview() {
               </Button>
             </div>
           ))}
+          <div className="flex flex-wrap items-center gap-3 rounded-lg bg-ink p-4">
+            {SIZES.map((size) => (
+              <Button key={size} variant="inverse" size={size}>
+                {variantLabel.inverse}
+              </Button>
+            ))}
+            <Button variant="inverse" shape="pill">
+              {variantLabel.inverse}
+            </Button>
+            <Button variant="inverse" disabled>
+              {t('profile.save')}
+            </Button>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button to="/search" variant="secondary">
               {t('header.search')}
