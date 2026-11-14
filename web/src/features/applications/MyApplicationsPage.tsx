@@ -23,6 +23,7 @@ import { formatIls } from '../listings/format';
 import { hasStatus, type MyApplicationOut } from './api';
 import { ApplicationStatusChip } from './ApplicationStatusChip';
 import { appliedOn, isWithdrawable } from './format';
+import { InvitesSection } from './InvitesSection';
 import { useMyApplications } from './useMyApplications';
 import { useWithdraw } from './useWithdraw';
 
@@ -308,6 +309,9 @@ function MyApplications({ type, panel }: { type: ListingType; panel: boolean }) 
           title={room ? t('market.mine.tabs.applications') : t('applications.mine.title')}
         />
       )}
+      {/* The rooms' invites (spec 0010m), above the applications; apartments have none, so they
+          never request `/me/likes`. */}
+      {room && <InvitesSection />}
       {body}
     </>
   );

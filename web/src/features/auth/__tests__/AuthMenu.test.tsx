@@ -249,21 +249,28 @@ describe('AuthMenu', () => {
     expect(screen.queryByRole('link', { name: he.nav.profile })).toBeNull();
   });
 
-  // The likes tab is the market's (spec 0010a): these render at `/market`.
+  // The invite count is on the market's "הפעילות שלי" tab (spec 0010m); "לייקים" has no count. These
+  // render at `/market`.
   it('ac3_likes_badge_forms', async () => {
     const room = () => ({ listing: {}, liked_at: '2026-11-11T09:00:00Z' });
     const forms: [number, string][] = [
-      [1, '\u05d7\u05d3\u05e8 \u05d0\u05d7\u05d3 \u05d0\u05d4\u05d1 \u05d0\u05d5\u05ea\u05da'],
-      [2, '2 \u05d7\u05d3\u05e8\u05d9\u05dd \u05d0\u05d4\u05d1\u05d5 \u05d0\u05d5\u05ea\u05da'],
+      [1, i18n.t('market.mine.invitesBadge', { count: 1 })],
+      [2, i18n.t('market.mine.invitesBadge', { count: 2 })],
+      [5, i18n.t('market.mine.invitesBadge', { count: 5 })],
     ];
+    expect(forms.map(([, text]) => text)).toEqual([
+      he.market.mine.invitesBadge_one,
+      he.market.mine.invitesBadge_two,
+      he.market.mine.invitesBadge_other.replace('{{count}}', '5'),
+    ]);
     for (const [count, text] of forms) {
       mockApi({
         'GET /me': [json(noa)],
         [LIST]: [json([])],
-        'GET /me/likes': [json({ liked_me: Array.from({ length: count }, room), mine: [] })],
+        'GET /me/likes': [json({ liked_me: Array.from({ length: count }, room) })],
       });
       const view = renderRoutes('/market', menu);
-      const link = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
+      const link = await screen.findByRole('link', { name: new RegExp(he.nav.mine) });
       expect(await within(link).findByText(text)).toHaveClass('sr-only');
       view.unmount();
       vi.unstubAllGlobals();
@@ -272,59 +279,59 @@ describe('AuthMenu', () => {
 
   it('ac6_likes_link', async () => {
     const room = () => ({ listing: {}, liked_at: '2026-11-11T09:00:00Z' });
-    // Two rooms liked the seeker: the link, the badge number, and the sr-only sentence.
+    // Two invites: "הפעילות שלי" opens the room applications, with the number and the sr-only
+    // sentence; "לייקים" links to /me/likes with no number.
     let api = mockApi({
       'GET /me': [json(noa)],
       [LIST]: [json([])],
-      'GET /me/likes': [json({ liked_me: [room(), room()], mine: [room()] })],
+      'GET /me/likes': [json({ liked_me: [room(), room()] })],
     });
     let view = renderRoutes('/market', menu);
-    const link = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
-    expect(link).toHaveAttribute('href', '/me/likes');
-    expect(await within(link).findByText('2')).toHaveAttribute('aria-hidden', 'true');
-    expect(within(link).getByText(i18n.t('likes.badgeLabel', { count: 2 }))).toHaveClass('sr-only');
+    const mine = await screen.findByRole('link', { name: new RegExp(he.nav.mine) });
+    expect(await within(mine).findByText('2')).toHaveAttribute('aria-hidden', 'true');
+    expect(mine).toHaveAttribute('href', '/market/mine?tab=applications');
+    expect(within(mine).getByText(i18n.t('market.mine.invitesBadge', { count: 2 }))).toHaveClass(
+      'sr-only',
+    );
+    const likes = screen.getByRole('link', { name: he.header.likes });
+    expect(likes).toHaveAttribute('href', '/me/likes');
+    expect(within(likes).queryByText(/\d/)).toBeNull();
     expect(api.calls('GET /me/likes')).toHaveLength(1);
     view.unmount();
     vi.unstubAllGlobals();
 
-    // One room: the singular sentence.
-    mockApi({
+    // None: both links plain, "הפעילות שלי" to /market/mine.
+    api = mockApi({
       'GET /me': [json(noa)],
       [LIST]: [json([])],
-      'GET /me/likes': [json({ liked_me: [room()], mine: [] })],
-    });
-    view = renderRoutes('/market', menu);
-    expect(await screen.findByText(i18n.t('likes.badgeLabel', { count: 1 }))).toBeInTheDocument();
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // None: the link without a badge.
-    mockApi({
-      'GET /me': [json(noa)],
-      [LIST]: [json([])],
-      'GET /me/likes': [json({ liked_me: [], mine: [room()] })],
+      'GET /me/likes': [json({ liked_me: [] })],
     });
     const client = testQueryClient();
     view = renderRoutes('/market', menu, client);
-    const plain = await screen.findByRole('link', { name: he.header.likes });
-    // The list has loaded (one room of `mine`, none of `liked_me`) before "no badge" is asserted.
+    const plain = await screen.findByRole('link', { name: he.nav.mine });
+    // The list has loaded before "no badge" is asserted.
     await vi.waitFor(() => {
       expect(client.getQueryState(['me', 'likes'])?.status).toBe('success');
     });
+    expect(plain).toHaveAttribute('href', '/market/mine');
     expect(within(plain).queryByText(/\d/)).toBeNull();
+    expect(screen.getByRole('link', { name: he.header.likes })).toHaveAttribute(
+      'href',
+      '/me/likes',
+    );
     view.unmount();
     vi.unstubAllGlobals();
 
-    // An owner: the same market bar (spec 0010b), with the link and its count.
+    // An owner: the same market bar (spec 0010b), with the invite count.
     api = mockApi({
       'GET /me': [json({ ...noa, role: 'owner' })],
       [LIST]: [json([])],
-      'GET /me/likes': [json({ liked_me: [room()], mine: [] })],
+      'GET /me/likes': [json({ liked_me: [room()] })],
     });
     view = renderRoutes('/market', menu);
-    const ownerLink = await screen.findByRole('link', { name: new RegExp(he.header.likes) });
-    expect(ownerLink).toHaveAttribute('href', '/me/likes');
+    const ownerLink = await screen.findByRole('link', { name: new RegExp(he.nav.mine) });
     expect(await within(ownerLink).findByText('1')).toHaveAttribute('aria-hidden', 'true');
+    expect(ownerLink).toHaveAttribute('href', '/market/mine?tab=applications');
     expect(api.calls('GET /me/likes')).toHaveLength(1);
     view.unmount();
     vi.unstubAllGlobals();

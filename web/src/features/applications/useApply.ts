@@ -19,7 +19,7 @@ export const loginPath = (listingId: string) =>
  * Applies to `listingId` (`null`: no message, a room only, spec 0010l). On 201 the new (or
  * reopened) application tops the seeker's list and the listing's count goes up by one in the cache:
  * no refetch, so no extra counted view. A room's 201 ends any invite to it (spec 0010l), so the
- * likes list (the header's badge) is refetched; a `shortlisted` one answered the invite and its
+ * invites list (the invites section and the הפעילות שלי badge) is refetched; a `shortlisted` one answered the invite and its
  * chat just opened, so the chat list is refetched too. The 409s:
  * - `seeker_profile_required` refetches the profile (the section then shows the profile gate);
  * - `seeker_gender_required` (a women- or men-only room, no room section) refetches the profile and
