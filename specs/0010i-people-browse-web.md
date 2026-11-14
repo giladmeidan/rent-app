@@ -1,7 +1,7 @@
 ---
 id: 0010i
 title: In שוק השותפים the אנשים tab shows people's cards with a like button, the likes page lists people who liked you, people you liked and your matches, a mutual like leads to the direct chat, and a match can be removed from the chat
-status: in-progress
+status: done
 depends_on: [0010h, 0010k]   # 0010h: GET /people, the like endpoints, /me/people-likes, /me/matches; 0010k: the shared `Avatar`. 0010g (via 0010h): direct chats in the chat screens
 reviewers: [code, qa, ux]   # qa: page states, the like toggle and the cache, remove-match flow; ux: new market people tab, card, likes sections, remove-match confirm
 estimate: 1 coder run   # coder Opus/high is not needed: web only, no auth or data rules of its own (Sonnet/high is fine; Speed rule 6)
