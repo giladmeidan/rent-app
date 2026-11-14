@@ -14,6 +14,8 @@ import { formatDate, todayInIsrael } from '../listings/format';
 import { compareLifestyle, type LifestyleAnswers } from '../lifestyle/keys';
 import { lifestyleTopic } from '../lifestyle/topic';
 import { profileHref } from '../profile/links';
+import { PERSON_REASONS } from '../reports/reasons';
+import { ReportButton } from '../reports/ReportButton';
 import type { PersonCardOut } from './api';
 import { useLikeCard, useUnlikeCard } from './useMarketPeople';
 
@@ -171,18 +173,26 @@ export function MarketPersonCard({
           </p>
         )}
         <div className="flex flex-col items-start gap-2">
-          {/* `busy` keeps the focused button focusable while it runs (aria-disabled, not disabled). */}
-          <Button
-            size="md"
-            variant={card.liked_by_me ? 'soft' : 'primary'}
-            aria-pressed={card.liked_by_me}
-            aria-describedby={headingId}
-            busy={pending}
-            onClick={() => void toggle()}
-          >
-            {t('market.people.like')}
-            {card.liked_by_me && <span aria-hidden="true">✓</span>}
-          </Button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            {/* `busy` keeps the focused button focusable while it runs (aria-disabled, not disabled). */}
+            <Button
+              size="md"
+              variant={card.liked_by_me ? 'soft' : 'primary'}
+              aria-pressed={card.liked_by_me}
+              aria-describedby={headingId}
+              busy={pending}
+              onClick={() => void toggle()}
+            >
+              {t('market.people.like')}
+              {card.liked_by_me && <span aria-hidden="true">✓</span>}
+            </Button>
+            <ReportButton
+              target={{ type: 'person', id: card.card_id }}
+              title={t('report.title.person', { name })}
+              reasons={PERSON_REASONS}
+              describedBy={headingId}
+            />
+          </div>
           {error !== null && (
             <p role="alert" className="text-body-sm font-semibold text-danger">
               {error === 'rateLimited' && t('people.errors.rateLimited')}

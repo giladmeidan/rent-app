@@ -15,18 +15,28 @@ type Props<T extends string | number> = {
   error?: string;
   /** Lets the options wrap onto more rows, each as wide as its label (for many options). */
   wrap?: boolean;
+  /** One option per row, each the full width, its text at the inline start (long labels). */
+  stacked?: boolean;
 };
+
+/** The shared shape and states of an option's label, with its alignment. */
+function segment(justify: string, align: string): string {
+  return cx(
+    `flex min-h-tap flex-1 cursor-pointer items-center ${justify} rounded-md border border-border-strong bg-surface px-3 ${align} text-body font-medium text-ink`,
+    'peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong',
+    'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent',
+    'peer-aria-[invalid=true]:border-danger',
+  );
+}
 
 /**
  * The classes of a ChoiceGroup option's label (the segment), for a look-alike control: it must
  * follow a `peer` input, like here.
  */
-export const choiceSegment = cx(
-  'flex min-h-tap flex-1 cursor-pointer items-center justify-center rounded-md border border-border-strong bg-surface px-3 text-center text-body font-medium text-ink',
-  'peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong',
-  'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent',
-  'peer-aria-[invalid=true]:border-danger',
-);
+export const choiceSegment = segment('justify-center', 'text-center');
+
+/** A stacked option's label: full width, its text at the inline start. */
+const stackedSegment = segment('justify-start', 'text-start');
 
 /**
  * Native radios in a fieldset, styled as the segmented buttons of CreateListing.dc.html. Arrow keys
@@ -40,6 +50,7 @@ export function ChoiceGroup<T extends string | number>({
   onChange,
   error,
   wrap = false,
+  stacked = false,
 }: Props<T>) {
   const id = useId();
   const errorId = `${id}-error`;
@@ -47,9 +58,12 @@ export function ChoiceGroup<T extends string | number>({
   return (
     <fieldset className="flex flex-col">
       <legend className="mb-2 text-label text-ink">{legend}</legend>
-      <div className={cx('flex gap-2', wrap && 'flex-wrap')}>
+      <div className={cx('flex gap-2', stacked ? 'flex-col' : wrap && 'flex-wrap')}>
         {options.map((option) => (
-          <div key={option.value} className={cx('flex', wrap ? 'flex-auto' : 'flex-1')}>
+          <div
+            key={option.value}
+            className={cx('flex', !stacked && (wrap ? 'flex-auto' : 'flex-1'))}
+          >
             <input
               id={`${id}-${String(option.value)}`}
               type="radio"
@@ -61,7 +75,10 @@ export function ChoiceGroup<T extends string | number>({
               aria-describedby={error !== undefined ? errorId : undefined}
               className="peer sr-only"
             />
-            <label htmlFor={`${id}-${String(option.value)}`} className={choiceSegment}>
+            <label
+              htmlFor={`${id}-${String(option.value)}`}
+              className={stacked ? stackedSegment : choiceSegment}
+            >
               {option.label}
             </label>
           </div>

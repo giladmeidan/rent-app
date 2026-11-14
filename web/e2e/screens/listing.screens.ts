@@ -1,7 +1,8 @@
 // The visual check of spec 0009j (`make screens`): /listings/:id in six states at 390px and
-// 1440px, plus the phone's apartment scrolled halfway with the apply bar showing. Every API
-// request is answered here, so it needs only the vite server: no sign-up, no OTP. The apartment
-// copies Listing.dc.html. An unmatched request fails the run.
+// 1440px, plus the phone's apartment scrolled halfway with the apply bar showing; spec 0011b adds
+// the open report dialog (a viewport shot into `screens/0011b/`). Every API request is answered
+// here, so it needs only the vite server: no sign-up, no OTP. The apartment copies
+// Listing.dc.html. An unmatched request fails the run.
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
@@ -203,6 +204,10 @@ type State = {
   setup: Setup;
   /** What to wait for, and do, before the shot. */
   act: (page: Page) => Promise<void>;
+  /** The spec whose folder the shots go to (`screens/${spec}/`); 0009j's by default. */
+  spec?: string;
+  /** A modal is open: the shot is the viewport, not the full page. */
+  modal?: boolean;
 };
 
 const heading = (page: Page) => page.getByRole('heading', { level: 1 });
@@ -316,6 +321,23 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'report-dialog',
+    spec: '0011b',
+    modal: true,
+    setup: { listing: APARTMENT_SEEKER, seeker: true },
+    act: async (page) => {
+      await expect(heading(page)).toBeVisible();
+      await page
+        .getByTestId('listing-report')
+        .getByRole('button', { name: he.report.listingButton })
+        .click();
+      const dialog = page.getByRole('dialog', { name: he.report.title.listing });
+      await dialog.getByText(he.report.reasons.moneyBeforeViewing, { exact: true }).click();
+      await dialog.getByLabel(he.report.note).fill('ביקשו פיקדון של 2,000 ₪ לפני שראינו את הדירה.');
+      await mapReady(page);
+    },
+  },
+  {
     name: 'loading',
     setup: { listing: null, seeker: false },
     act: async (page) => {
@@ -335,8 +357,8 @@ for (const state of STATES) {
       content: '[data-testid="apply-bar"] { display: none !important; }',
     });
     await page.screenshot({
-      path: `screens/0009j/${state.name}-${info.project.name}.png`,
-      fullPage: true,
+      path: `screens/${state.spec ?? '0009j'}/${state.name}-${info.project.name}.png`,
+      fullPage: state.modal !== true,
     });
     await hideBar.evaluate((el) => {
       (el as Element).remove();

@@ -175,4 +175,29 @@ describe('MyLikesPage', () => {
     expect(api.calls(PEOPLE_LIKES)).toHaveLength(2);
     expect(api.calls(LIKES)).toHaveLength(0);
   });
+
+  it('ac16_report_person', async () => {
+    const r = he.report;
+    const a = personCard({ display_name: 'Ada', liked_me: true });
+    const api = render({
+      [PEOPLE_LIKES]: [json({ liked_me: [a], mine: [], matches: [] })],
+      'POST /reports': [json({ already_reported: true }, 200)],
+    });
+    const people = within(await screen.findByRole('region', { name: he.likes.people.likedMe }));
+    const card = people.getByRole('article', { name: 'Ada' });
+    const report = within(card).getByRole('button', { name: r.button });
+    expect(report).toHaveAccessibleDescription('Ada');
+    fireEvent.click(report);
+    const dialog = screen.getByRole('dialog', { name: 'דיווח על Ada' });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(5);
+    fireEvent.click(within(dialog).getByRole('radio', { name: r.reasons.misleading }));
+    fireEvent.click(within(dialog).getByRole('button', { name: r.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(r.already);
+    expect(api.calls('POST /reports')[0]?.body).toEqual({
+      target_type: 'person',
+      target_id: a.card_id,
+      reason: 'misleading',
+      note: null,
+    });
+  });
 });
