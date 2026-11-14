@@ -1,6 +1,8 @@
-"""People browse and likes (spec 0008a): AC1-AC12 (AC13 is in `test_profiles.py`, AC14 in
+"""People browse and invites (spec 0008a): AC1-AC12 (AC13 is in `test_profiles.py`, AC14 in
 `test_migrations.py`, AC15 the amended asserts in `test_inbox.py`, `test_applications.py` and
-`test_listings.py`). Spec 0010h AC12 (the room side's browse limit) is here too.
+`test_listings.py`). Spec 0010h AC12 (the room side's browse limit) is here too. Spec 0010l
+removed the seeker's room-like: its AC6-AC8 are here, the invite answered by an application
+(AC3-AC5) is in `test_applications.py`.
 
 `R` is `test_matching`'s `L0` as a women-only room for two flatmates, owned by the signed-up owner
 `O`. A seeker profile is `make_profile`'s `P0` (which scores 100 against `L0`) plus a room section
@@ -9,10 +11,8 @@ database's `current_date` is."""
 
 import datetime as dt
 import threading
-import time
 import uuid
 from collections.abc import Callable, Iterator
-from functools import partial
 from typing import Any
 
 import httpx
@@ -21,18 +21,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, select, text
 from sqlalchemy.orm import Session
 
-from app.db import get_sessionmaker
 from app.matching.score import explain_row, match_columns
-from app.models import Listing, SeekerProfile, User
+from app.models import Listing, SeekerProfile
 from app.redis_client import get_redis
 from app.schemas.people import PersonOut
-from app.services import applications as applications_service
 from app.services import chat_events
 from app.services import market_people as market_people_service
-from app.services import people as people_service
 from app.services.applications import AlreadyAppliedError
 from tests.conftest import (
-    NO_LOOKING,
     Outbox,
     make_application,
     make_owner,
@@ -60,9 +56,8 @@ PERSON_KEYS = {
     "about_me",
     "match",
     "liked_by_me",
-    "liked_me",
 }
-NO_LIKE = {"liked_by_me": False, "liked_me": False}
+NO_LIKE = {"liked_me": False}
 
 
 def _scalar(engine: Engine, sql: str, **params: Any) -> Any:
@@ -150,28 +145,31 @@ def _unlike_person(caller: TestClient, listing_id: Any, person_id: Any) -> httpx
     return response
 
 
-def _like_room(caller: TestClient, listing_id: Any) -> httpx.Response:
-    response: httpx.Response = caller.put(f"/listings/{listing_id}/like")
-    return response
-
-
 def _ok(response: httpx.Response) -> Any:
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def _likes(caller: TestClient) -> dict[str, list[str]]:
-    """`GET /me/likes` as listing ids per list."""
+def _likes(caller: TestClient) -> list[str]:
+    """`GET /me/likes` (its one list, `liked_me`: the caller's invites) as listing ids."""
     body = _ok(caller.get("/me/likes"))
-    assert set(body) == {"liked_me", "mine"}
-    return {key: [item["listing"]["id"] for item in body[key]] for key in body}
+    assert set(body) == {"liked_me"}
+    return [item["listing"]["id"] for item in body["liked_me"]]
+
+
+def _apply(caller: TestClient, listing_id: Any, message: str | None = None) -> Any:
+    """`POST /listings/{id}/applications` (no message unless given), asserted 201."""
+    body = {} if message is None else {"message": message}
+    response = caller.post(f"/listings/{listing_id}/applications", json=body)
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 def _pair(engine: Engine, listing_id: Any, seeker_id: uuid.UUID) -> Any:
     with engine.connect() as conn:
         return conn.execute(
             text(
-                "SELECT id, price_ils_seen, lister_liked_at, seeker_liked_at FROM room_pairs"
+                "SELECT id, price_ils_seen, lister_liked_at FROM room_pairs"
                 " WHERE listing_id = :l AND seeker_id = :s"
             ),
             {"l": str(listing_id), "s": seeker_id},
@@ -274,24 +272,19 @@ def test_ac1_candidates_and_order(
     assert card["id"] == str(_pair(db_engine, room, a).id)
     assert card["match"] == _expected_match(db_engine, room, a)
     assert card["match"] == {"score": 100, "agrees": ["budget", "move_in", "area"], "differs": None}
-    assert (card["liked_by_me"], card["liked_me"]) == (False, False)
-
-    assert _ok(_like_room(b, room)) == {"liked": True, "application_id": None}
-    body = _page(owner, room)
-    assert _names(body) == ["Bat", "Avi"]
-    assert body["total"] == 2
-    assert [(item["liked_me"], item["liked_by_me"]) for item in body["items"]] == [
-        (True, False),
-        (False, False),
-    ]
+    assert card["liked_by_me"] is False
+    assert _pair(db_engine, room, _user_id(b)) is None  # not opted in: no pair, never a card
 
     north = _area(db_engine, "north", active=True)
     g = make_seeker(db_engine, "g@example.com", "Gal")
     _visible(db_engine, g, gush_dan, area_ids=[north])  # wants only another area
+    # Spec 0010l: score, then the pair's age, then its id (no "liked the room" first).
+    _ok(_like_person(owner, room, _card(owner, room, "Gal")["id"]))
     body = _page(owner, room)
-    assert _names(body) == ["Bat", "Avi", "Gal"]
-    assert body["items"][2]["match"]["differs"] == "area"
-    assert body["items"][2]["match"]["score"] <= 59
+    assert _names(body) == ["Avi", "Gal"]
+    assert [item["liked_by_me"] for item in body["items"]] == [False, True]
+    assert body["items"][1]["match"]["differs"] == "area"
+    assert body["items"][1]["match"]["score"] <= 59
 
 
 def test_ac2_price_frozen_per_pair(
@@ -503,20 +496,20 @@ def test_ac6_lister_like_unlike(
     a_id = _user_id(a)
     person = _card(owner, room, "Avi")["id"]
 
-    assert _ok(_like_person(owner, room, person)) == {"liked": True, "application_id": None}
+    assert _ok(_like_person(owner, room, person)) == {"liked": True}
     assert _card(owner, room, "Avi")["liked_by_me"] is True
-    assert _likes(a) == {"liked_me": [room], "mine": []}
+    assert _likes(a) == [room]
     # spec 0010d: every liked room carries its cover photo, null without photos.
     assert _ok(a.get("/me/likes"))["liked_me"][0]["listing"]["cover"] is None
     liked_at = _pair(db_engine, room, a_id).lister_liked_at
     assert liked_at is not None
 
-    assert _ok(_like_person(owner, room, person)) == {"liked": True, "application_id": None}
+    assert _ok(_like_person(owner, room, person)) == {"liked": True}
     assert _pair(db_engine, room, a_id).lister_liked_at == liked_at  # a second PUT changes nothing
 
     unliked = _unlike_person(owner, room, person)
     assert unliked.status_code == 204
-    assert _likes(a) == {"liked_me": [], "mine": []}
+    assert _likes(a) == []
     assert _card(owner, room, "Avi")["liked_by_me"] is False
 
     other_person = _card(owner, other, "Avi")["id"]
@@ -543,93 +536,7 @@ def test_ac6_lister_like_unlike(
     assert refused.status_code == 409
     assert refused.json() == ALREADY_APPLIED
     assert _pair(db_engine, room, a_id).lister_liked_at is None  # rolled back
-    assert published == []  # a plain like notifies no one
-
-
-def _assert_mutual(
-    engine: Engine,
-    application_id: str,
-    room: str,
-    seeker_id: uuid.UUID,
-    owner_id: uuid.UUID,
-    *,
-    lister_second: bool,
-) -> None:
-    """AC7's rows for a mutual like of `seeker_id` and `room`."""
-    application = _application(engine, application_id)
-    assert (application.source, application.message, application.status) == (
-        "like",
-        None,
-        "shortlisted",
-    )
-    assert (str(application.listing_id), application.seeker_id) == (room, seeker_id)
-    pair = _pair(engine, room, seeker_id)
-    assert application.price_ils_at_apply == pair.price_ils_seen
-    assert application.listing_type_at_apply == "room"
-    conversation = _conversation(engine, application_id)
-    assert conversation is not None
-    assert (conversation.owner_id, conversation.seeker_id) == (owner_id, seeker_id)
-    if lister_second:
-        assert (conversation.owner_read_at is not None, conversation.seeker_read_at) == (True, None)
-    else:
-        assert (conversation.seeker_read_at is not None, conversation.owner_read_at) == (True, None)
-    assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
-
-
-def test_ac7_mutual_becomes_shortlisted_application(
-    client: TestClient,
-    outbox: Outbox,
-    owner: TestClient,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-    published: list[Any],
-) -> None:
-    owner_id = _user_id(owner)
-    room = _room(db_engine, owner_id, gush_dan)
-    a = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
-    a_id = _user_id(a)
-    assert _ok(_like_person(owner, room, _card(owner, room, "Avi")["id"]))["application_id"] is None
-    # The pair's frozen price differs from the live one: the application takes the frozen price.
-    _execute(db_engine, "UPDATE listings SET price_ils = 6500 WHERE id = :id", id=room)
-
-    liked = _ok(_like_room(a, room))
-
-    assert liked["liked"] is True
-    x = liked["application_id"]
-    assert x is not None
-    _assert_mutual(db_engine, x, room, a_id, owner_id, lister_second=False)
-    assert _application(db_engine, x).price_ils_at_apply == 7000
-    assert _scalar(db_engine, "SELECT count(*) FROM applications") == 1
-
-    inbox = _ok(owner.get(f"/listings/{room}/applications"))
-    assert [(item["id"], item["source"], item["message"]) for item in inbox] == [(x, "like", None)]
-    assert inbox[0]["status"] == "shortlisted"
-    mine = _ok(a.get("/me/applications"))
-    assert [(item["id"], item["source"], item["message"]) for item in mine] == [(x, "like", None)]
-
-    conversations = _ok(a.get("/me/conversations"))
-    assert [(item["id"], item["can_send"]) for item in conversations] == [(x, True)]
-    sent = a.post(f"/conversations/{x}/messages", json={"body": "Hi!"})
-    assert sent.status_code == 201, sent.text
-
-    assert _likes(a) == {"liked_me": [], "mine": []}
-    assert _page(owner, room) == {"items": [], "total": 0}
-    status_events = [call for call in published if call[2] == "status"]
-    assert status_events == [([owner_id, a_id], uuid.UUID(x), "status")]
-
-    # The mirror case: the seeker likes first, the lister second.
-    published.clear()
-    a2 = _seeker(client, outbox, db_engine, gush_dan, "a2@example.com", "Avi2")
-    a2_id = _user_id(a2)
-    assert _ok(_like_room(a2, room)) == {"liked": True, "application_id": None}
-    assert _likes(a2) == {"liked_me": [], "mine": [room]}
-    card = _card(owner, room, "Avi2")
-    assert card["liked_me"] is True
-    y = _ok(_like_person(owner, room, card["id"]))["application_id"]
-    assert y is not None
-    _assert_mutual(db_engine, y, room, a2_id, owner_id, lister_second=True)
-    assert published == [([owner_id, a2_id], uuid.UUID(y), "status")]
-    assert _likes(a2) == {"liked_me": [], "mine": []}
+    assert published == []  # a like (an invite) notifies no one, nor does a plain apply
 
 
 def _in_threads(*calls: Callable[[], str]) -> list[str]:
@@ -652,112 +559,22 @@ def _in_threads(*calls: Callable[[], str]) -> list[str]:
     return outcomes
 
 
-def test_ac8_concurrent_second_likes(
-    owner: TestClient,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    owner_id = _user_id(owner)
-    real_has_application = people_service._has_application
-
-    def slow_has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> bool:
-        # Runs after the pair's lock is taken: hold it so the other side's write waits on it.
-        time.sleep(0.3)
-        return real_has_application(db, listing_id, seeker_id)
-
-    monkeypatch.setattr(people_service, "_has_application", slow_has_application)
-
-    def lister(room: str, person: uuid.UUID, start: threading.Barrier) -> Callable[[], str]:
-        def call() -> str:
-            with get_sessionmaker()() as db:
-                user = db.get(User, owner_id)
-                assert user is not None
-                start.wait()
-                application, _ = people_service.like_person(
-                    db, get_redis(), user, uuid.UUID(room), person
-                )
-                return "mutual" if application is not None else "liked"
-
-        return call
-
-    def seeker(
-        room: str, seeker_id: uuid.UUID, start: threading.Barrier, delay: float = 0
-    ) -> Callable[[], str]:
-        def call() -> str:
-            with get_sessionmaker()() as db:
-                user = db.get(User, seeker_id)
-                assert user is not None
-                start.wait()
-                time.sleep(delay)
-                application, _ = people_service.like_room(db, get_redis(), user, uuid.UUID(room))
-                return "mutual" if application is not None else "liked"
-
-        return call
-
-    def counts(room: str) -> tuple[int, int]:
-        return (
-            _scalar(db_engine, "SELECT count(*) FROM applications WHERE listing_id = :l", l=room),
-            _scalar(
-                db_engine,
-                "SELECT count(*) FROM conversations c JOIN applications a"
-                " ON a.id = c.application_id WHERE a.listing_id = :l",
-                l=room,
-            ),
-        )
-
-    # The seeker liked first; the lister's like and the seeker's second like run at once.
-    for n in range(2):
-        room = _room(db_engine, owner_id, gush_dan)
-        a = make_seeker(db_engine, f"a{n}@example.com", "Avi")
-        _visible(db_engine, a, gush_dan)
-        person = make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=7000, seeker_liked=True)
-        start = threading.Barrier(2, timeout=10)
-        outcomes = _in_threads(lister(room, person, start), seeker(room, a, start))
-        assert outcomes.count("mutual") == 1, outcomes
-        assert set(outcomes) <= {"mutual", "liked", "409"}, outcomes
-        assert counts(room) == (1, 1)
-        pair = _pair(db_engine, room, a)
-        assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
-
-    # Both first likes at once: exactly one of them is mutual.
-    room = _room(db_engine, owner_id, gush_dan)
-    b = make_seeker(db_engine, "b@example.com", "Bat")
-    _visible(db_engine, b, gush_dan)
-    person = make_pair(db_engine, uuid.UUID(room), b, price_ils_seen=7000)
-    start = threading.Barrier(2, timeout=10)
-    outcomes = _in_threads(lister(room, person, start), seeker(room, b, start))
-    assert sorted(outcomes) == ["liked", "mutual"], outcomes
-    assert counts(room) == (1, 1)
-
-    # The lister's mutual commits while the seeker's second like waits on the pair's lock.
-    room = _room(db_engine, owner_id, gush_dan)
-    c = make_seeker(db_engine, "c@example.com", "Cam")
-    _visible(db_engine, c, gush_dan)
-    person = make_pair(db_engine, uuid.UUID(room), c, price_ils_seen=7000, seeker_liked=True)
-    start = threading.Barrier(2, timeout=10)
-    outcomes = _in_threads(lister(room, person, start), seeker(room, c, start, delay=0.1))
-    assert outcomes == ["mutual", "409"], outcomes
-    assert counts(room) == (1, 1)
-    pair = _pair(db_engine, room, c)
-    assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
-
-
 def test_ac9_mutual_lifecycle(
     client: TestClient,
     outbox: Outbox,
     owner: TestClient,
     gush_dan: uuid.UUID,
     db_engine: Engine,
-    published: list[Any],
 ) -> None:
+    """Spec 0010l: invite -> apply (a mutual match) -> un-shortlist -> withdraw -> invite again
+    and apply (reopened as new, the same chat) -> decline (final)."""
     owner_id = _user_id(owner)
     room = _room(db_engine, owner_id, gush_dan)
     a = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
     a_id = _user_id(a)
     person = _card(owner, room, "Avi")["id"]
     _ok(_like_person(owner, room, person))
-    x = _ok(_like_room(a, room))["application_id"]
+    x = _apply(a, room)["id"]
     created_at = _application(db_engine, x).created_at
 
     # Un-shortlist: submitted, still a like, sending closed.
@@ -771,59 +588,32 @@ def test_ac9_mutual_lifecycle(
     assert closed.status_code == 409
     assert closed.json() == {"detail": "chat_closed"}
 
-    # Withdraw: a like by the seeker alone does not reopen it (the likes were cleared) ...
+    # Withdraw: the invite was consumed, so the card is back without the lister's like ...
     withdrawn = _ok(a.post(f"/me/applications/{x}/withdraw"))
     assert (withdrawn["status"], withdrawn["source"]) == ("withdrawn", "like")
-    assert _ok(_like_room(a, room)) == {"liked": True, "application_id": None}
-    assert _application(db_engine, x).status == "withdrawn"
     card = _card(owner, room, "Avi")
-    assert (card["id"], card["liked_me"]) == (person, True)
-    # ... the lister's like back does, as new, with the same conversation.
-    reopened = _ok(_like_person(owner, room, person))
-    assert reopened == {"liked": True, "application_id": x}
+    assert (card["id"], card["liked_by_me"]) == (person, False)
+    assert _likes(a) == []
+    # ... a new invite answered reopens it as new, with the seeker's message and the same chat.
+    _ok(_like_person(owner, room, person))
+    reopened = _apply(a, room, "Back again")
+    assert (reopened["id"], reopened["status"], reopened["source"]) == (x, "shortlisted", "like")
     row = _application(db_engine, x)
-    assert (row.status, row.source, row.message) == ("shortlisted", "like", None)
+    assert (row.status, row.source, row.message) == ("shortlisted", "like", "Back again")
     assert row.created_at > created_at
     assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 1
     assert _conversation(db_engine, x) is not None
 
-    # Decline: final; neither side can like the pair again, and the seeker is off the page.
+    # Decline: final; neither side can act on the pair again, and the seeker is off the page.
     declined = owner.patch(f"/listings/{room}/applications/{x}", json={"status": "declined"})
     assert declined.status_code == 200, declined.text
-    assert _like_room(a, room).json() == ALREADY_APPLIED
+    again = a.post(f"/listings/{room}/applications", json={})
+    assert again.status_code == 409
+    assert again.json() == ALREADY_APPLIED
     assert _like_person(owner, room, person).json() == ALREADY_APPLIED
-    pair = _pair(db_engine, room, a_id)
-    assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
+    assert _pair(db_engine, room, a_id).lister_liked_at is None
     assert "Avi" not in _names(_page(owner, room))
-    assert _likes(a) == {"liked_me": [], "mine": []}
-    # A seeker who is not opted in, whose like the match used up: after a decline the pair is no
-    # longer shown, so the lister's like is a 404 (the opted-in `A` above gets 409).
-    c = _seeker(client, outbox, db_engine, gush_dan, "c@example.com", "Cam", people_visible=False)
-    _ok(_like_room(c, room))
-    c_person = _card(owner, room, "Cam")["id"]
-    z = _ok(_like_person(owner, room, c_person))["application_id"]
-    assert z is not None
-    declined = owner.patch(f"/listings/{room}/applications/{z}", json={"status": "declined"})
-    assert declined.status_code == 200, declined.text
-    hidden = _like_person(owner, room, c_person)
-    assert hidden.status_code == 404
-    assert hidden.json() == NOT_FOUND
-
-    # A like-sourced application withdrawn, then applied to with a message: an applied one.
-    b = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat")
-    _ok(_like_room(b, room))
-    y = _ok(_like_person(owner, room, _card(owner, room, "Bat")["id"]))["application_id"]
-    assert y is not None
-    _ok(b.post(f"/me/applications/{y}/withdraw"))
-    applied = b.post(f"/listings/{room}/applications", json={"message": "Still keen"})
-    assert applied.status_code == 201, applied.text
-    assert (applied.json()["id"], applied.json()["source"], applied.json()["message"]) == (
-        y,
-        "apply",
-        "Still keen",
-    )
-    row = _application(db_engine, y)
-    assert (row.source, row.message, row.status) == ("apply", "Still keen", "submitted")
+    assert _likes(a) == []
 
 
 def test_ac9_apply_consumes_pending_likes(
@@ -839,157 +629,30 @@ def test_ac9_apply_consumes_pending_likes(
     a_id = _user_id(a)
     person = _card(owner, room, "Avi")["id"]
     _ok(_like_person(owner, room, person))
-    assert _likes(a) == {"liked_me": [room], "mine": []}
+    assert _likes(a) == [room]
 
-    applied = a.post(f"/listings/{room}/applications", json={"message": "Hi there"})
-    assert applied.status_code == 201, applied.text
-    x = applied.json()["id"]
-    pair = _pair(db_engine, room, a_id)
-    assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
+    x = _apply(a, room, "Hi there")["id"]
+    assert _pair(db_engine, room, a_id).lister_liked_at is None
     for status in ("shortlisted", "submitted"):
         changed = owner.patch(f"/listings/{room}/applications/{x}", json={"status": status})
         assert changed.status_code == 200, changed.text
     _ok(a.post(f"/me/applications/{x}/withdraw"))
 
-    # The lister's like did not survive the application: both sides start over.
-    pair = _pair(db_engine, room, a_id)
-    assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
-    assert _likes(a) == {"liked_me": [], "mine": []}
+    # The lister's like did not survive the application: the lister starts over.
+    assert _pair(db_engine, room, a_id).lister_liked_at is None
+    assert _likes(a) == []
     assert _card(owner, room, "Avi")["liked_by_me"] is False
-    assert _ok(_like_room(a, room)) == {"liked": True, "application_id": None}
     row = _application(db_engine, x)
-    assert (row.status, row.source) == ("withdrawn", "apply")
-    assert _likes(a) == {"liked_me": [], "mine": [room]}
-
-
-def test_ac8_apply_racing_a_lister_like(
-    owner: TestClient,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An apply and the lister's (mutual) like on an existing pair at once, in both lock orders:
-    no deadlock, one application, and no like left on the pair."""
-    owner_id = _user_id(owner)
-    real_has_application = people_service._has_application
-    real_consume_likes = people_service.consume_likes
-
-    def slow_has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> bool:
-        time.sleep(0.3)  # the lister holds the pair's lock
-        return real_has_application(db, listing_id, seeker_id)
-
-    def slow_consume_likes(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> None:
-        real_consume_likes(db, listing_id, seeker_id)
-        time.sleep(0.3)  # the apply holds the pair's lock, before its application row
-
-    monkeypatch.setattr(people_service, "_has_application", slow_has_application)
-    monkeypatch.setattr(people_service, "consume_likes", slow_consume_likes)
-
-    def lister(room: str, person: uuid.UUID, start: threading.Barrier, delay: float) -> str:
-        with get_sessionmaker()() as db:
-            user = db.get(User, owner_id)
-            assert user is not None
-            start.wait()
-            time.sleep(delay)
-            application, _ = people_service.like_person(
-                db, get_redis(), user, uuid.UUID(room), person
-            )
-            return "mutual" if application is not None else "liked"
-
-    def applier(room: str, seeker_id: uuid.UUID, start: threading.Barrier, delay: float) -> str:
-        with get_sessionmaker()() as db:
-            user = db.get(User, seeker_id)
-            assert user is not None
-            start.wait()
-            time.sleep(delay)
-            applications_service.apply(db, get_redis(), user, uuid.UUID(room), "Hi there")
-            return "applied"
-
-    # (lister delay, apply delay) -> outcomes: the first to take the pair's lock wins.
-    for n, (lister_delay, apply_delay, expected) in enumerate(
-        ((0.0, 0.1, ["mutual", "409"]), (0.1, 0.0, ["409", "applied"]))
-    ):
-        room = _room(db_engine, owner_id, gush_dan)
-        a = make_seeker(db_engine, f"a{n}@example.com", "Avi")
-        _visible(db_engine, a, gush_dan)
-        person = make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=7000, seeker_liked=True)
-        start = threading.Barrier(2, timeout=10)
-        outcomes = _in_threads(
-            partial(lister, room, person, start, lister_delay),
-            partial(applier, room, a, start, apply_delay),
-        )
-        assert outcomes == expected, outcomes
-        applications = "SELECT count(*) FROM applications WHERE listing_id = :l"
-        assert _scalar(db_engine, applications, l=room) == 1
-        pair = _pair(db_engine, room, a)
-        assert (pair.lister_liked_at, pair.seeker_liked_at) == (None, None)
-
-
-def test_ac10_seeker_like_gates_and_limit(
-    client: TestClient,
-    outbox: Outbox,
-    owner: TestClient,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-) -> None:
-    owner_id = _user_id(owner)
-    room = _room(db_engine, owner_id, gush_dan)
-    apartment = _l0(db_engine, owner_id, gush_dan)
-    paused = _room(db_engine, owner_id, gush_dan, status="paused")
-    r = get_redis()
-
-    def counted(caller: TestClient) -> int:
-        return int(r.get(f"rl:like:user:{_user_id(caller)}") or 0)
-
-    no_profile = signup(client, outbox, "n@example.com", "seeker")
-    no_section = signup(client, outbox, "p@example.com", "seeker")
-    make_profile(db_engine, _user_id(no_section), gush_dan)
-    man = _seeker(client, outbox, db_engine, gush_dan, "m@example.com", "Moshe", gender="man")
-    woman = _seeker(client, outbox, db_engine, gush_dan, "w@example.com", "Wendy")
-
-    cases: list[tuple[TestClient, Any, int, dict[str, str]]] = [
-        (no_profile, room, 409, {"detail": "seeker_profile_required"}),
-        (no_section, room, 409, {"detail": "room_section_required"}),
-        (man, room, 409, {"detail": "room_gender_mismatch"}),
-        (woman, apartment, 404, NOT_FOUND),
-        (woman, paused, 404, NOT_FOUND),
-        (woman, uuid.uuid4(), 404, NOT_FOUND),
-    ]
-    for caller, listing_id, code, body in cases:
-        response = _like_room(caller, listing_id)
-        assert response.status_code == code, (listing_id, response.text)
-        assert response.json() == body
-        assert counted(caller) == 0, body
-    assert _pair_count(db_engine) == 0
-
-    assert _like_room(client, room).status_code == 401
-    # Spec 0010b: no role gate; the owner's own room, and they have no profile (checked first).
-    assert _like_room(owner, room).json() == {"detail": "seeker_profile_required"}
-    assert _like_room(woman, "not-a-uuid").status_code == 422
-
-    for n in range(people_service.LIKE_RATE_LIMIT_HOUR):
-        assert _like_room(woman, room).status_code == 200, n
-    limited = _like_room(woman, room)
-    assert limited.status_code == 429
-    assert limited.json() == {"detail": "rate_limited"}
-    assert int(limited.headers["Retry-After"]) > 0
-    # Shared with the lister side: the lister is limited per their own id.
-    assert counted(woman) == people_service.LIKE_RATE_LIMIT_HOUR
-
-    gone = woman.delete(f"/listings/{uuid.uuid4()}/like")
-    assert gone.status_code == 204
-    assert gone.content == b""
-    assert woman.delete(f"/listings/{apartment}/like").status_code == 204
-    assert client.delete(f"/listings/{room}/like").status_code == 401
-    assert owner.delete(f"/listings/{room}/like").status_code == 204  # spec 0010b: any account
+    assert (row.status, row.source) == ("withdrawn", "like")
 
 
 def test_ac4_room_likes_and_browse_for_any_account(
     client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
-    """Spec 0010b AC4: a seeker lists a room, browses its people and likes one; an owner with a
-    room section likes someone else's room and sees it in `/me/likes`; an account that is not the
-    room's lister gets the unknown id's 404; nobody likes their own room."""
+    """Spec 0010b AC4 (0010l: invites only): a seeker lists a room, browses its people and likes
+    one; an owner with a room section who opted in is invited to someone else's room and sees it
+    in `/me/likes`; an account that is not the room's lister gets the unknown id's 404; the
+    lister's own room has no `like` state."""
     lister = signup(client, outbox, "lister@example.com", "seeker")
     room = _room(db_engine, _user_id(lister), gush_dan)
     _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
@@ -997,9 +660,9 @@ def test_ac4_room_likes_and_browse_for_any_account(
     page = _page(lister, room)
     assert _names(page) == ["Avi"]
     person = page["items"][0]["id"]
-    assert _ok(_like_person(lister, room, person)) == {"liked": True, "application_id": None}
+    assert _ok(_like_person(lister, room, person)) == {"liked": True}
 
-    owner = signup(client, outbox, "owner@example.com", "owner")
+    owner = signup(client, outbox, "owner@example.com", "owner", display_name="Ora")
     stranger = signup(client, outbox, "stranger@example.com", "seeker")
     unknown = _people(owner, uuid.uuid4())
     for caller in (owner, stranger):
@@ -1012,48 +675,12 @@ def test_ac4_room_likes_and_browse_for_any_account(
             assert response.content == unknown.content
     assert _card(lister, room, "Avi")["liked_by_me"] is True
 
-    # An owner likes someone else's room once their profile has a room section.
-    assert _like_room(owner, room).json() == {"detail": "seeker_profile_required"}
-    _visible(db_engine, _user_id(owner), gush_dan, people_visible=False)
-    assert _ok(_like_room(owner, room)) == {"liked": True, "application_id": None}
-    assert _likes(owner) == {"liked_me": [], "mine": [room]}
+    # An owner-role account with a room section, opted in, is a candidate and can be invited.
+    _visible(db_engine, _user_id(owner), gush_dan)
+    _ok(_like_person(lister, room, _card(lister, room, "Ora")["id"]))
+    assert _likes(owner) == [room]
+    assert _ok(owner.get(f"/listings/{room}"))["like"] == {"liked_me": True}
     assert _ok(lister.get(f"/listings/{room}"))["like"] is None  # their own room
-
-    # Their own room is the unknown id's 404 (the profile is checked first).
-    own_room = _room(db_engine, _user_id(owner), gush_dan)
-    own = _like_room(owner, own_room)
-    assert own.status_code == 404
-    assert own.json() == NOT_FOUND
-    no_profile = signup(client, outbox, "bare@example.com", "owner")
-    bare_room = _room(db_engine, _user_id(no_profile), gush_dan)
-    assert _like_room(no_profile, bare_room).json() == {"detail": "seeker_profile_required"}
-    assert _pair(db_engine, own_room, _user_id(owner)) is None
-
-
-def test_ac11_like_shares_card_with_that_room_only(
-    client: TestClient,
-    outbox: Outbox,
-    owner: TestClient,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-) -> None:
-    owner_id = _user_id(owner)
-    room = _room(db_engine, owner_id, gush_dan)
-    other = _room(db_engine, owner_id, gush_dan)
-    b = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat", people_visible=False)
-    assert _page(owner, room) == {"items": [], "total": 0}
-
-    _ok(_like_room(b, room))
-
-    card = _card(owner, room, "Bat")
-    assert (card["liked_me"], card["liked_by_me"]) == (True, False)
-    assert _page(owner, other) == {"items": [], "total": 0}
-    assert _likes(b) == {"liked_me": [], "mine": [room]}
-
-    unliked = b.delete(f"/listings/{room}/like")
-    assert unliked.status_code == 204
-    assert _page(owner, room) == {"items": [], "total": 0}
-    assert _likes(b) == {"liked_me": [], "mine": []}
 
 
 def test_ac12_listing_like_state_and_count(
@@ -1063,6 +690,8 @@ def test_ac12_listing_like_state_and_count(
     gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
+    """Spec 0010l: `like` is `{liked_me}` (the lister's invite) and `/me/listings` has no
+    liked-me count."""
     owner_id = _user_id(owner)
     room = _room(db_engine, owner_id, gush_dan)
     apartment = _l0(db_engine, owner_id, gush_dan)
@@ -1071,39 +700,26 @@ def test_ac12_listing_like_state_and_count(
     def like(caller: TestClient, listing_id: str) -> Any:
         return _ok(caller.get(f"/listings/{listing_id}"))["like"]
 
-    def liked_me_count() -> int:
-        items = {item["id"]: item for item in _ok(owner.get("/me/listings"))}
-        assert items[apartment]["liked_me_count"] == 0
-        count: int = items[room]["liked_me_count"]
-        return count
-
     assert like(a, room) == NO_LIKE
-    assert liked_me_count() == 0
-    _ok(_like_room(a, room))
-    assert like(a, room) == {"liked_by_me": True, "liked_me": False}
-    assert liked_me_count() == 1
-
-    assert a.delete(f"/listings/{room}/like").status_code == 204
-    assert liked_me_count() == 0
     person = _card(owner, room, "Avi")["id"]
     _ok(_like_person(owner, room, person))
-    assert like(a, room) == {"liked_by_me": False, "liked_me": True}
-    assert liked_me_count() == 0  # the lister's own likes do not count
+    assert like(a, room) == {"liked_me": True}
+    assert _unlike_person(owner, room, person).status_code == 204
+    assert like(a, room) == NO_LIKE
+    _ok(_like_person(owner, room, person))
 
     for caller in (client, owner):
         assert like(caller, room) is None
     assert like(a, apartment) is None
 
-    _ok(_like_room(a, room))  # mutual
-    assert liked_me_count() == 0
+    _apply(a, room)  # answers the invite
     assert like(a, room) is None  # the page shows the application
 
     b = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat")
-    _ok(_like_room(b, room))
-    assert liked_me_count() == 1
     make_application(db_engine, uuid.UUID(room), _user_id(b))  # a submitted one
     assert like(b, room) is None
-    assert liked_me_count() == 0
+    for item in _ok(owner.get("/me/listings")):
+        assert "liked_me_count" not in item
 
 
 def test_ac12_withdrawn_applicant_like_not_revived(
@@ -1113,32 +729,25 @@ def test_ac12_withdrawn_applicant_like_not_revived(
     gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
+    """An invited applicant who withdraws comes back to people browse without the lister's like
+    (the application consumed it); one who never opted in does not appear at all."""
     owner_id = _user_id(owner)
     room = _room(db_engine, owner_id, gush_dan)
     a = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
     b = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat", people_visible=False)
 
-    def liked_me_count() -> int:
-        items = {item["id"]: item for item in _ok(owner.get("/me/listings"))}
-        count: int = items[room]["liked_me_count"]
-        return count
-
+    _ok(_like_person(owner, room, _card(owner, room, "Avi")["id"]))
     for seeker in (a, b):
-        _ok(_like_room(seeker, room))
-    assert liked_me_count() == 2
-    for seeker in (a, b):
-        applied = seeker.post(f"/listings/{room}/applications", json={"message": "Hi there"})
-        assert applied.status_code == 201, applied.text
-        _ok(seeker.post(f"/me/applications/{applied.json()['id']}/withdraw"))
+        applied = _apply(seeker, room, "Hi there")
+        _ok(seeker.post(f"/me/applications/{applied['id']}/withdraw"))
 
-    assert liked_me_count() == 0
-    # `A` (opted in) is back on the page without the like; `B` (not opted in) is gone with it.
+    # `A` (opted in) is back on the page without the like; `B` (not opted in) never shows.
     page = _page(owner, room)
     assert _names(page) == ["Avi"]
-    assert page["items"][0]["liked_me"] is False
+    assert page["items"][0]["liked_by_me"] is False
     for seeker in (a, b):
         assert _ok(seeker.get(f"/listings/{room}"))["like"] == NO_LIKE
-        assert _likes(seeker) == {"liked_me": [], "mine": []}
+        assert _likes(seeker) == []
 
 
 # --- 0010c: the personal part and the looking part -----------------------------------------
@@ -1147,35 +756,6 @@ def test_ac12_withdrawn_applicant_like_not_revived(
 def _personal_only(caller: TestClient) -> None:
     """`caller` PUTs only the personal part (spec 0010c): the looking part clears."""
     _ok(caller.put("/me/profile", json={"gender": "woman", "about_me": "Quiet and tidy"}))
-
-
-def test_ac5_like_room_needs_both_parts(
-    client: TestClient,
-    outbox: Outbox,
-    owner: TestClient,
-    gush_dan: uuid.UUID,
-    db_engine: Engine,
-) -> None:
-    room = _room(db_engine, _user_id(owner), gush_dan)
-    r = get_redis()
-    personal = signup(client, outbox, "p@example.com", "seeker")
-    make_profile(db_engine, _user_id(personal), gush_dan, gender="woman", **NO_LOOKING)
-    looking = signup(client, outbox, "l@example.com", "seeker")
-    make_profile(db_engine, _user_id(looking), gush_dan)
-    both = _seeker(client, outbox, db_engine, gush_dan, "b@example.com", "Bat")
-
-    for caller, detail in (
-        (personal, "seeker_profile_required"),
-        (looking, "room_section_required"),
-    ):
-        response = _like_room(caller, room)
-        assert response.status_code == 409, response.text
-        assert response.json() == {"detail": detail}
-        assert not r.exists(f"rl:like:user:{_user_id(caller)}")
-    assert _pair_count(db_engine) == 0
-
-    assert _ok(_like_room(both, room)) == {"liked": True, "application_id": None}
-    assert _pair_count(db_engine) == 1
 
 
 def test_ac6_no_looking_part_leaves_people_browse(
@@ -1188,7 +768,7 @@ def test_ac6_no_looking_part_leaves_people_browse(
     room = _room(db_engine, _user_id(owner), gush_dan)
     s = _seeker(client, outbox, db_engine, gush_dan, "s@example.com", "Sara")
     _seeker(client, outbox, db_engine, gush_dan, "v@example.com", "Vered")
-    _ok(_like_room(s, room))
+    _ok(_like_person(owner, room, _card(owner, room, "Sara")["id"]))
     before = _page(owner, room)
     assert sorted(_names(before)) == ["Sara", "Vered"]
     assert before["total"] == 2
@@ -1206,8 +786,8 @@ def test_ac6_no_looking_part_leaves_people_browse(
         )
         is False
     )
-    # The pair (and its like) stays; only the card is gone.
-    assert _pair(db_engine, room, _user_id(s)).seeker_liked_at is not None
+    # The pair (and the lister's like) stays; only the card is gone.
+    assert _pair(db_engine, room, _user_id(s)).lister_liked_at is not None
 
 
 def test_ac6b_my_likes_without_looking_part(
@@ -1217,30 +797,29 @@ def test_ac6b_my_likes_without_looking_part(
     gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
-    """`GET /me/likes` without the looking part is 200 with both lists empty (no NULL score
+    """`GET /me/likes` without the looking part is 200 with an empty list (no NULL score
     reaches `explain`), so a personal-only caller never sees flatmate ages or answers there; with
     both parts, an owner-role account is a seeker by decision 13 and sees them."""
     ages, answers = [27, 30], {"night": 3}
     owner_id = _user_id(owner)
-    mine = _room(db_engine, owner_id, gush_dan, flatmate_ages=ages, lifestyle=answers)
     liked_me = _room(db_engine, owner_id, gush_dan, flatmate_ages=ages, lifestyle=answers)
     s = _seeker(client, outbox, db_engine, gush_dan, "s@example.com", "Sara")
     s_id = _user_id(s)
-    _ok(_like_room(s, mine))
     make_pair(db_engine, uuid.UUID(liked_me), s_id, price_ils_seen=7000, lister_liked=True)
-    assert _likes(s) == {"liked_me": [liked_me], "mine": [mine]}
+    assert _likes(s) == [liked_me]
 
     _personal_only(s)
 
     response = s.get("/me/likes")
     assert response.status_code == 200, response.text
-    assert response.json() == {"liked_me": [], "mine": []}
+    assert response.json() == {"liked_me": []}
 
     # The seeker rule on `/me/likes` (decision 13): an owner-role account with the looking part.
     flat_owner = signup(client, outbox, "o2@example.com", "owner", display_name="Other")
-    _visible(db_engine, _user_id(flat_owner), gush_dan, people_visible=False)
-    _ok(_like_room(flat_owner, mine))
-    [item] = _ok(flat_owner.get("/me/likes"))["mine"]
+    flat_owner_id = _user_id(flat_owner)
+    _visible(db_engine, flat_owner_id, gush_dan, people_visible=False)
+    make_pair(db_engine, uuid.UUID(liked_me), flat_owner_id, price_ils_seen=7000, lister_liked=True)
+    [item] = _ok(flat_owner.get("/me/likes"))["liked_me"]
     assert (item["listing"]["flatmate_ages"], item["listing"]["lifestyle"]) == (ages, answers)
     assert item["listing"]["match"] is not None
 
@@ -1266,3 +845,84 @@ def test_ac12_room_people_browse_rate_limited(
     assert limited.json() == {"detail": "rate_limited"}
     assert int(limited.headers["Retry-After"]) > 0
     assert owner.get("/people").status_code == 429
+
+
+# --- 0010l: one way to say "I'm interested" on a room ------------------------------------------
+
+
+def test_ac6_room_like_removed(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """Spec 0010l AC6: `PUT` and `DELETE /listings/{id}/like` are gone: 404, not in the schema."""
+    room = _room(db_engine, _user_id(owner), gush_dan)
+    a = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
+    for caller in (a, client):
+        for method in ("PUT", "DELETE"):
+            response = caller.request(method, f"/listings/{room}/like")
+            assert response.status_code == 404, (method, response.text)
+    assert _pair_count(db_engine) == 0
+    paths = _ok(client.get("/openapi.json"))["paths"]
+    assert "/listings/{listing_id}/like" not in paths
+    assert "/listings/{listing_id}/people/{person_id}/like" in paths  # the lister's like stays
+
+
+def test_ac7_browse_opted_in_only(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """Spec 0010l AC7: people browse lists opted-in candidates only, a card has no `liked_me`, and
+    the lister's like answers `{liked: true}` (an invite: no application)."""
+    room = _room(db_engine, _user_id(owner), gush_dan)
+    _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
+    hidden = _seeker(
+        client, outbox, db_engine, gush_dan, "b@example.com", "Bat", people_visible=False
+    )
+    # A pair left from before 0010l (a seeker like) does not show a hidden person either.
+    make_pair(db_engine, uuid.UUID(room), _user_id(hidden), price_ils_seen=7000)
+
+    body = _page(owner, room)
+    assert _names(body) == ["Avi"]
+    assert body["total"] == 1
+    [card] = body["items"]
+    assert "liked_me" not in card
+    assert set(card) == PERSON_KEYS == set(PersonOut.model_fields)
+
+    assert _ok(_like_person(owner, room, card["id"])) == {"liked": True}
+    hidden_card = _pair(db_engine, room, _user_id(hidden)).id
+    refused = _like_person(owner, room, hidden_card)
+    assert refused.status_code == 404
+    assert refused.json() == NOT_FOUND
+    assert _scalar(db_engine, "SELECT count(*) FROM applications") == 0
+
+
+def test_ac8_my_likes_invites_only(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """Spec 0010l AC8: `GET /me/likes` has no `mine`; `liked_me` lists the rooms whose lister
+    invited the caller, newest first, until the caller applies."""
+    owner_id = _user_id(owner)
+    first = _room(db_engine, owner_id, gush_dan)
+    second = _room(db_engine, owner_id, gush_dan)
+    a = _seeker(client, outbox, db_engine, gush_dan, "a@example.com", "Avi")
+    assert _ok(a.get("/me/likes")) == {"liked_me": []}
+
+    for room in (first, second):
+        _ok(_like_person(owner, room, _card(owner, room, "Avi")["id"]))
+    body = _ok(a.get("/me/likes"))
+    assert set(body) == {"liked_me"}
+    assert [item["listing"]["id"] for item in body["liked_me"]] == [second, first]
+    assert set(body["liked_me"][0]) == {"listing", "liked_at"}
+
+    _apply(a, second)
+    assert _likes(a) == [first]

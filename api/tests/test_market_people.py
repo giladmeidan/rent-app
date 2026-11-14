@@ -36,6 +36,7 @@ from tests.conftest import (
     make_flatmate,
     make_listing,
     make_owner,
+    make_pair,
     make_person_like,
     make_profile,
     make_seeker,
@@ -692,10 +693,11 @@ def test_ac9_like_guards(client: TestClient, db_engine: Engine, gush_dan: uuid.U
     assert _scalar(db_engine, "SELECT count(*) FROM person_pairs") == 0
     assert _like(v.caller, "not-a-uuid").status_code == 422
 
-    # Shared with room likes (`rl:like:user:*`).
-    owner_id = make_seeker(db_engine, "owner@example.com", "Owner")
-    room = _live_room(db_engine, owner_id, gush_dan)
-    _ok(v.caller.put(f"/listings/{room}/like"))
+    # Shared with the lister's like in a room's people browse (`rl:like:user:*`; spec 0010l: the
+    # seeker's room-like is gone).
+    room = _live_room(db_engine, v.id, gush_dan)
+    person = make_pair(db_engine, room, b.id, price_ils_seen=7200)
+    assert _ok(v.caller.put(f"/listings/{room}/people/{person}/like")) == {"liked": True}
     assert _like_count(v.id) == 5
     while _like_count(v.id) < people_service.LIKE_RATE_LIMIT_HOUR:
         _ok(_like(v.caller, b.card))

@@ -192,7 +192,7 @@ def test_ac1_rooms_are_public_with_room_fields(
         page = _detail(caller, room)
         assert page["room_fit"] is None, name
         # 0008a; spec 0010b: any signed-in account on a room it does not own.
-        no_like = {"liked_by_me": False, "liked_me": False}
+        no_like = {"liked_me": False}  # spec 0010l: the lister's invite only
         assert page["like"] == (None if name == "visitor" else no_like), name
         # `like`: 0008a; `photos`: 0010d; `people`: 0010f (no one lives-here nor is shown)
         assert page["people"] == [], name
@@ -420,10 +420,11 @@ def test_ac5_room_apply_gate(
     assert "FROM listings" in statements[2], statements
     statements.clear()
     applied(woman_any, fresh)
-    # Plus apply consuming the pair's likes (spec 0008a: the pair's lock before the application
-    # row), then the upsert.
+    # Plus apply reading the pair's invite under its lock (spec 0010l: the pair's lock before the
+    # application row; no pair here, so no UPDATE), then the upsert.
     assert len(statements) == 5, statements
-    assert statements[3].lstrip().startswith("UPDATE room_pairs"), statements
+    assert statements[3].lstrip().startswith("SELECT room_pairs.id"), statements
+    assert "FOR UPDATE OF room_pairs" in statements[3], statements
     assert statements[4].lstrip().startswith("INSERT INTO applications"), statements
 
 

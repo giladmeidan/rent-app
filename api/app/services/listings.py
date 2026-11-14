@@ -29,7 +29,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Application, Area, Listing, ListingFlatmate, RoomPair, User
+from app.models import Application, Area, Listing, ListingFlatmate, User
 from app.schemas.listing import ListingIn, ListingPatch
 
 LISTING_TTL_DAYS = 90
@@ -103,17 +103,12 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
     return listing
 
 
-def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, int, int, int]]:
+def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, int, int]]:
     """Every listing of `owner` (active, paused and expired), newest first, with its applicant
-    count (every application but withdrawn ones), new-applicant count (`submitted`; spec 0004c),
-    liked-me count (its pending seeker likes, `services/people.py`; 0 for an apartment; spec
-    0008a) and flatmate count (spec 0008d). One statement: the counts are correlated scalar
+    count (every application but withdrawn ones), new-applicant count (`submitted`; spec 0004c)
+    and flatmate count (spec 0008d). One statement: the counts are correlated scalar
     subqueries, each an index range scan on `uq_applications_listing_seeker (listing_id,
-    seeker_id)`, `uq_room_pairs_listing_seeker (listing_id, seeker_id)` or
-    `uq_listing_flatmates_listing_user (listing_id, user_id)`."""
-    # Imported here: `services/people.py` imports this module (through `services/search.py`).
-    from app.services.people import pending_seeker_like
-
+    seeker_id)` or `uq_listing_flatmates_listing_user (listing_id, user_id)`."""
     applicants = (
         select(func.count())
         .where(Application.listing_id == Listing.id, Application.status != "withdrawn")
@@ -124,9 +119,6 @@ def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, 
         .where(Application.listing_id == Listing.id, Application.status == "submitted")
         .scalar_subquery()
     )
-    liked_me = (
-        select(func.count()).select_from(RoomPair).where(pending_seeker_like()).scalar_subquery()
-    )
     flatmates = (
         select(func.count())
         .select_from(ListingFlatmate)
@@ -134,7 +126,7 @@ def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, 
         .scalar_subquery()
     )
     rows = db.execute(
-        select(Listing, applicants, new_applicants, liked_me, flatmates)
+        select(Listing, applicants, new_applicants, flatmates)
         .where(Listing.owner_id == owner.id)
         .order_by(Listing.created_at.desc(), Listing.id)
     ).tuples()

@@ -1,5 +1,5 @@
-"""People browse and likes endpoints (spec 0008a). Thin: all logic is in `services/people.py` (and
-`services/search.py::liked_rooms`).
+"""People browse and invites endpoints (spec 0008a, 0010l). Thin: all logic is in
+`services/people.py` (and `services/search.py::liked_rooms`).
 
 Every endpoint requires a session of any role (`current_user`, spec 0010b): 401 `unauthenticated`
 without one. There are no roles in the market: the services' ownership checks decide.
@@ -9,19 +9,17 @@ listing: unknown, another account's and an apartment are one 404 `not_found`; a 
 inactive-area one is a 409 `listing_not_live` (browse and like; an unlike works whatever the
 state). A person is the pair's id, never a user id.
 
-Room-liker side: `PUT` / `DELETE /listings/{listing_id}/like` and `GET /me/likes`: the caller's own
-room, an apartment and a flat they live in are a 404 on the `PUT`. The `DELETE` is always a 204,
-so it reveals nothing about the listing.
+Invited side: `GET /me/likes` lists the rooms whose lister invited the caller and that they have
+not applied to. A seeker has no room-like (spec 0010l): on a room they apply.
 
 Browsing a room's people shares one browse rate limit per user with `GET /people` (spec 0010h,
 `market_people.BROWSE_RATE_LIMIT_HOUR` / `_DAY`; a 429 with `Retry-After`), counted before the
 listing gate, so every attempt counts.
 
-Both like `PUT`s share one rate limit per user (`LIKE_RATE_LIMIT_HOUR` / `_DAY`, a 429 with
-`Retry-After`), counted only once the listing gate passed. A like that makes the pair mutual
-returns the new shortlisted application's id (also its chat's) and, after the commit, publishes a
-`status` chat event to the chat's members, the room's flatmates included (spec 0005c, 0008d), as a
-shortlist does. A plain like notifies no one."""
+The lister's like shares one rate limit per user with person likes (`LIKE_RATE_LIMIT_HOUR` /
+`_DAY`, a 429 with `Retry-After`), counted only once the listing gate passed. It is an invite
+(spec 0010l): it never creates an application and notifies no one; the seeker's application
+answers it (`routers/applications.py` publishes that chat event)."""
 
 import uuid
 from typing import Annotated, Any
@@ -46,18 +44,12 @@ from app.schemas.people import (
     PersonOut,
 )
 from app.schemas.search import ListingPublic
-from app.services import chat as chat_service
-from app.services import chat_events
 from app.services import market_people as market_people_service
 from app.services import people as people_service
 from app.services import photos as photos_service
 from app.services import profiles as profiles_service
 from app.services import search as search_service
-from app.services.applications import (
-    AlreadyAppliedError,
-    ProfileRequiredError,
-    RoomGenderMismatchError,
-)
+from app.services.applications import AlreadyAppliedError
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import RateLimitedError
 
@@ -98,7 +90,6 @@ def _person_out(row: Row[Any]) -> PersonOut:
         about_me=row.about_me,
         match=explain_row(row),
         liked_by_me=row.lister_liked_at is not None,
-        liked_me=row.seeker_liked_at is not None,
     )
 
 
@@ -162,7 +153,7 @@ def like_person(
     r: RedisDep,
 ) -> LikeOut:
     try:
-        application, seeker_id = people_service.like_person(db, r, user, listing_id, person_id)
+        people_service.like_person(db, r, user, listing_id, person_id)
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except people_service.ListingNotLiveError:
@@ -171,11 +162,7 @@ def like_person(
         raise _rate_limited(exc) from None
     except AlreadyAppliedError:
         raise HTTPException(status_code=409, detail="already_applied") from None
-    if application is None:
-        return LikeOut(liked=True, application_id=None)
-    members = chat_service.event_members(db, application, user.id)
-    chat_events.publish(r, members, application.id, "status")
-    return LikeOut(liked=True, application_id=application.id)
+    return LikeOut(liked=True)
 
 
 @router.delete(
@@ -199,58 +186,9 @@ def unlike_person(
     return Response(status_code=204)
 
 
-@router.put(
-    "/listings/{listing_id}/like",
-    response_model=LikeOut,
-    responses={
-        **_SESSION,
-        404: {
-            "model": ErrorOut,
-            "description": "not_found: unknown id, a paused, expired or inactive-area listing, "
-            "an apartment, or the caller's own",
-        },
-        409: {
-            "model": ErrorOut,
-            "description": "seeker_profile_required: the profile has no looking part (0010c); "
-            "room_section_required: the profile has no personal part; room_gender_mismatch: the "
-            "room does not fit the seeker; already_applied. Only already_applied costs "
-            "rate-limit budget",
-        },
-        **_RATE_LIMITED,
-    },
-)
-def like_room(listing_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) -> LikeOut:
-    try:
-        application, listing = people_service.like_room(db, r, user, listing_id)
-    except ProfileRequiredError:
-        raise HTTPException(status_code=409, detail="seeker_profile_required") from None
-    except people_service.RoomSectionRequiredError:
-        raise HTTPException(status_code=409, detail="room_section_required") from None
-    except ListingNotFoundError:
-        raise HTTPException(status_code=404, detail="not_found") from None
-    except RoomGenderMismatchError:
-        raise HTTPException(status_code=409, detail="room_gender_mismatch") from None
-    except RateLimitedError as exc:
-        raise _rate_limited(exc) from None
-    except AlreadyAppliedError:
-        raise HTTPException(status_code=409, detail="already_applied") from None
-    if application is None:
-        return LikeOut(liked=True, application_id=None)
-    members = chat_service.event_members(db, application, listing.owner_id)
-    chat_events.publish(r, members, application.id, "status")
-    return LikeOut(liked=True, application_id=application.id)
-
-
-@router.delete("/listings/{listing_id}/like", status_code=204, responses=_SESSION)
-def unlike_room(listing_id: uuid.UUID, user: UserDep, db: DbDep) -> Response:
-    people_service.unlike_room(db, user, listing_id)
-    return Response(status_code=204)
-
-
 @router.get("/me/likes", response_model=MyLikesOut, responses=_SESSION)
 def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
     liked_me: list[LikedRoomOut] = []
-    mine: list[LikedRoomOut] = []
     # Decision 13 (`profiles_service.sees_room_privacy`): the seeker role, or the looking part.
     # `liked_rooms` returns nothing without the looking part (spec 0010c), so a caller with rows
     # has it; asked anyway, so the rule lives in one place.
@@ -259,7 +197,6 @@ def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
         listing,
         match,
         lister_liked_at,
-        seeker_liked_at,
         cover_id,
         cover_key,
     ) in search_service.liked_rooms(db, user.id):
@@ -271,8 +208,5 @@ def my_likes(user: UserDep, db: DbDep) -> MyLikesOut:
             cover=photos_service.cover_out(cover_id, cover_key),
             is_mine=False,
         )
-        if seeker_liked_at is not None:
-            mine.append(LikedRoomOut(listing=room, liked_at=seeker_liked_at))
-        elif lister_liked_at is not None:
-            liked_me.append(LikedRoomOut(listing=room, liked_at=lister_liked_at))
-    return MyLikesOut(liked_me=liked_me, mine=mine)
+        liked_me.append(LikedRoomOut(listing=room, liked_at=lister_liked_at))
+    return MyLikesOut(liked_me=liked_me)

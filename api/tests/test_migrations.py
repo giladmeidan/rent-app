@@ -2438,3 +2438,182 @@ def test_ac14_person_likes_upgrade_downgrade(migration_db_url: str) -> None:
             assert conn.execute(text("SELECT count(*) FROM conversations")).scalar_one() == 1
     finally:
         engine.dispose()
+
+
+def test_ac9_one_room_interest_upgrade_downgrade(migration_db_url: str) -> None:
+    # Spec 0010l: 0018 drops `room_pairs.seeker_liked_at` (a pending seeker like goes with it, an
+    # invite stays) and makes the message optional on a room (`ck_applications_message`, any
+    # source). Downgrade: a `'like'` row loses its message, an `'apply'` room row without one gets
+    # the placeholder, then the 0011 CHECK and an empty `seeker_liked_at` come back.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0017")
+    engine = create_engine(migration_db_url)
+    insert_listing = (
+        "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms, floor,"
+        " size_sqm, price_ils, available_from, elevator, furnished, pets_allowed, expires_at,"
+        " flatmates_count) VALUES (:owner, :area, :type, 'city', 'street', 3, 1, 60, 4500,"
+        " current_date, false, 'none', false, now() + interval '90 days', :count) RETURNING id"
+    )
+    insert_application = (
+        "INSERT INTO applications (listing_id, seeker_id, source, message, status,"
+        " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+        " VALUES (:listing, :seeker, :source, :message, :status, 4500, :area, :type) RETURNING id"
+    )
+    placeholder = "(ללא הודעה)"
+    try:
+        with engine.begin() as conn:
+            area = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            owner, pending, invited, mutual, tenant = (
+                conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :name, 'seeker') RETURNING id"
+                    ),
+                    {"email": f"{name}@example.com", "name": name},
+                ).scalar_one()
+                for name in ("owner", "pending", "invited", "mutual", "tenant")
+            )
+            room = conn.execute(
+                text(insert_listing), {"owner": owner, "area": area, "type": "room", "count": 2}
+            ).scalar_one()
+            apartment = conn.execute(
+                text(insert_listing),
+                {"owner": owner, "area": area, "type": "apartment", "count": None},
+            ).scalar_one()
+            for seeker, liked in (
+                (pending, "seeker_liked_at"),
+                (invited, "lister_liked_at"),
+                (mutual, None),
+            ):
+                columns = f", {liked}" if liked else ""
+                values = ", now()" if liked else ""
+                conn.execute(
+                    text(
+                        f"INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen{columns})"
+                        f" VALUES (:listing, :seeker, 4500{values})"
+                    ),
+                    {"listing": room, "seeker": seeker},
+                )
+            base = {"listing": room, "area": area, "type": "room"}
+            mutual_app = conn.execute(
+                text(insert_application),
+                {
+                    **base,
+                    "seeker": mutual,
+                    "source": "like",
+                    "message": None,
+                    "status": "shortlisted",
+                },
+            ).scalar_one()
+            apartment_app = conn.execute(
+                text(insert_application),
+                {
+                    "listing": apartment,
+                    "area": area,
+                    "type": "apartment",
+                    "seeker": tenant,
+                    "source": "apply",
+                    "message": "Hello there",
+                    "status": "submitted",
+                },
+            ).scalar_one()
+            message_0011 = _check_definition(conn, "ck_applications_message")
+            assert message_0011 is not None
+
+        command.upgrade(cfg, "0018")
+        with engine.connect() as conn:
+            assert "seeker_liked_at" not in _columns(conn, "room_pairs")
+            pairs = conn.execute(
+                text("SELECT seeker_id, lister_liked_at IS NOT NULL FROM room_pairs")
+            ).tuples()
+            # The pending seeker like is gone with its column (its pair row stays, empty).
+            assert dict(pairs.all()) == {pending: False, invited: True, mutual: False}
+            assert conn.execute(
+                text("SELECT source, message, status FROM applications WHERE id = :id"),
+                {"id": mutual_app},
+            ).one() == ("like", None, "shortlisted")
+            message_0018 = _check_definition(conn, "ck_applications_message")
+            assert message_0018 is not None and message_0018 != message_0011
+
+        with engine.begin() as conn:
+            # A room apply without a message, and an invite answered with one.
+            room_apply = conn.execute(
+                text(insert_application),
+                {
+                    **base,
+                    "seeker": pending,
+                    "source": "apply",
+                    "message": None,
+                    "status": "submitted",
+                },
+            ).scalar_one()
+            answer = conn.execute(
+                text(insert_application),
+                {
+                    **base,
+                    "seeker": invited,
+                    "source": "like",
+                    "message": "Hi",
+                    "status": "shortlisted",
+                },
+            ).scalar_one()
+        apartment_base = {"listing": apartment, "area": area, "type": "apartment"}
+        for message in (None, "", "x" * 501):
+            with (
+                pytest.raises(IntegrityError, match="ck_applications_message"),
+                engine.begin() as conn,
+            ):
+                conn.execute(
+                    text(insert_application),
+                    {
+                        **apartment_base,
+                        "seeker": owner,
+                        "source": "apply",
+                        "message": message,
+                        "status": "submitted",
+                    },
+                )
+        with pytest.raises(IntegrityError, match="ck_applications_message"), engine.begin() as conn:
+            conn.execute(
+                text(insert_application),
+                {**base, "seeker": owner, "source": "apply", "message": "", "status": "submitted"},
+            )
+
+        command.downgrade(cfg, "0017")
+        with engine.connect() as conn:
+            assert _columns(conn, "room_pairs")["seeker_liked_at"] is True
+            assert (
+                conn.execute(
+                    text("SELECT count(*) FROM room_pairs WHERE seeker_liked_at IS NOT NULL")
+                ).scalar_one()
+                == 0
+            )
+            messages = dict(
+                conn.execute(text("SELECT id, message FROM applications")).tuples().all()
+            )
+            assert messages == {
+                mutual_app: None,
+                apartment_app: "Hello there",
+                room_apply: placeholder,
+                answer: None,  # an invite answer's message is lost
+            }
+            assert _check_definition(conn, "ck_applications_message") == message_0011
+
+        command.upgrade(cfg, "0018")
+        with engine.connect() as conn:
+            assert "seeker_liked_at" not in _columns(conn, "room_pairs")
+            assert _check_definition(conn, "ck_applications_message") == message_0018
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "head")
+    try:
+        command.check(cfg)
+    except AutogenerateDiffsDetected as exc:  # pragma: no cover - the failure message is the point
+        pytest.fail(f"autogenerate would emit operations against a migrated DB: {exc}")

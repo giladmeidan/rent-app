@@ -16,8 +16,10 @@ fit).
 From 0007c a room application also carries `ApplicantRoomOut` (`gender`, `age`, `lifestyle`, listed
 explicitly): never the seeker's `birth_year` or `flatmate_gender`.
 
-From 0008a both views carry `source`: `"apply"`, or `"like"` for an application a mutual like
-created (`services/people.py`), whose `message` is null (null exactly then)."""
+From 0008a both views carry `source`: `"apply"`, or `"like"` for an application that answered the
+lister's invite (spec 0010l: shortlisted at once, `services/applications.py`). From 0010l the
+message is optional on a room (null when the seeker sent none, whatever the source) and required
+on an apartment."""
 
 import datetime as dt
 import uuid
@@ -42,10 +44,11 @@ ApplicationStatus = Literal["submitted", "shortlisted", "declined", "withdrawn"]
 # What an owner sees and may set: a withdrawn application is invisible to the owner (0004c).
 ApplicantStatus = Literal["submitted", "shortlisted", "declined"]
 ApplicantSort = Literal["match", "newest"]
-# How the application began (0008a): applied with a message, or a mutual like (no message).
+# How the application began (0008a): a plain application, or one that answered the lister's invite
+# (spec 0010l, the "mutual match" tag).
 ApplicationSource = Literal["apply", "like"]
 
-MESSAGE_MAX_LENGTH = 500  # ck_applications_message (migrations 0005, 0011)
+MESSAGE_MAX_LENGTH = 500  # ck_applications_message (migrations 0005, 0011, 0018)
 
 
 def _visible_message(value: str) -> str:
@@ -61,12 +64,21 @@ Message = Annotated[
 ]
 
 
+def _blank_to_none(value: object) -> object:
+    """A blank-after-strip string is no message (spec 0010l), not a 422 from `min_length`."""
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
 class ApplicationIn(BaseModel):
-    """A seeker's application: a required short message (PRODUCT.md "Applications", 1-500)."""
+    """A seeker's application: an optional short message (PRODUCT.md "Applications", 1-500).
+    Absent, null or blank is no message; a non-blank one keeps every `Message` rule. The service
+    requires one on an apartment (`MessageRequiredError`, spec 0010l)."""
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
-    message: Message
+    message: Annotated[Message | None, BeforeValidator(_blank_to_none)] = None
 
 
 class ApplicationListingOut(BaseModel):
@@ -88,7 +100,7 @@ class MyApplicationOut(BaseModel):
     id: uuid.UUID
     status: ApplicationStatus
     source: ApplicationSource
-    message: str | None  # null exactly when `source == "like"`
+    message: str | None  # null when the seeker sent none (a room only, spec 0010l)
     created_at: dt.datetime
     updated_at: dt.datetime
     listing: ApplicationListingOut
@@ -128,7 +140,7 @@ class ApplicantOut(BaseModel):
     id: uuid.UUID
     status: ApplicantStatus
     source: ApplicationSource
-    message: str | None  # null exactly when `source == "like"`
+    message: str | None  # null when the seeker sent none (a room only, spec 0010l)
     applicant_name: str
     photo_url: str | None  # the applicant's person photo's small address (spec 0010j)
     created_at: dt.datetime

@@ -1,14 +1,16 @@
-"""`room_pairs` table (spec 0008a): one row per (room listing, seeker) that either side ever saw in
-people browse or liked.
+"""`room_pairs` table (spec 0008a): one row per (room listing, seeker) that the lister ever saw in
+people browse.
 
-Every CHECK, the unique constraint, the FKs and the index match migration 0011 exactly (autogenerate
-must see no diff). `services/people.py` is the only writer and holds the rules.
+Every CHECK, the unique constraint, the FKs and the index match migrations 0011 and 0018 exactly
+(autogenerate must see no diff). `services/people.py` is the only writer and holds the rules.
 
 `id` is the person card's id, so a lister never handles a seeker's user id. `price_ils_seen` is the
 listing's `price_ils` when the row was created and is **never updated** (Gilad 2026-11-11, "freeze
 price per pair"): the card's budget criterion and a mutual like's `price_ils_at_apply` both read
-it, so editing the price cannot probe the seeker's budget through people browse. A like column is
-NULL when that side has not liked; both are cleared when the pair becomes an application."""
+it, so editing the price cannot probe the seeker's budget through people browse.
+`lister_liked_at` is the lister's like, an **invite** (spec 0010l): NULL when the lister has not
+liked; cleared when the seeker applies (the application answers it). The seeker's room-like
+(`seeker_liked_at`) was dropped in 0018."""
 
 import datetime as dt
 import uuid
@@ -49,7 +51,6 @@ class RoomPair(Base):
     # The listing's price when the row was created; never updated (see the module docstring).
     price_ils_seen: Mapped[int] = mapped_column(Integer, nullable=False)
     lister_liked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    seeker_liked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

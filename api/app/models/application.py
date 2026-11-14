@@ -1,10 +1,11 @@
 """`applications` table (spec 0004a): a seeker's application to a listing, with a short message.
 
-Every CHECK, the unique constraint, the FKs and the index match migrations 0005, 0008, 0010 and
-0011 exactly (autogenerate must see no diff). One row per (listing, seeker), ever: re-applying after
-a withdrawal reopens the same row (`services/applications.py`).
-From 0008a `source` says how it began, `'apply'` (with a message) or `'like'` (a mutual like,
-`services/people.py`, with no message: `ck_applications_message`)."""
+Every CHECK, the unique constraint, the FKs and the index match migrations 0005, 0008, 0010, 0011
+and 0018 exactly (autogenerate must see no diff). One row per (listing, seeker), ever: re-applying
+after a withdrawal reopens the same row (`services/applications.py`).
+From 0008a `source` says how it began: `'apply'`, or `'like'` (spec 0010l: an application that
+answered the lister's invite, shortlisted at once). From 0018 the message is optional on a room
+application, whatever the source, and required on an apartment one (`ck_applications_message`)."""
 
 import datetime as dt
 import uuid
@@ -28,11 +29,11 @@ from app.models import Base
 class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
-        # A message exactly on an applied row (migration 0011); `IS NOT NULL` keeps a NULL from
-        # passing a CHECK that would evaluate to NULL.
+        # NULL or 1-500 characters, and NULL only on a room application (migration 0018); neither
+        # term can evaluate to NULL, so no NULL slips through.
         CheckConstraint(
-            "(source = 'apply' AND message IS NOT NULL AND char_length(message) BETWEEN 1 AND 500)"
-            " OR (source = 'like' AND message IS NULL)",
+            "(message IS NULL OR char_length(message) BETWEEN 1 AND 500)"
+            " AND (message IS NOT NULL OR listing_type_at_apply = 'room')",
             name="ck_applications_message",
         ),
         CheckConstraint("source IN ('apply', 'like')", name="ck_applications_source"),
@@ -59,7 +60,7 @@ class Application(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     # Plain text, stored and returned as sent (after `ApplicationIn`'s rules); never HTML. NULL
-    # exactly when `source = 'like'`.
+    # when the seeker sent none (a room application only, spec 0010l).
     message: Mapped[str | None] = mapped_column(Text)
     # 'apply' or 'like' (0008a). The server default backfilled 0011 and serves the SQL test helpers.
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'apply'"))

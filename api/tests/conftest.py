@@ -393,24 +393,22 @@ def make_pair(
     *,
     price_ils_seen: int,
     lister_liked: bool = False,
-    seeker_liked: bool = False,
 ) -> uuid.UUID:
     """Insert a `room_pairs` row directly (spec 0008a) and return its id (the person card's id).
-    A like flag sets that side's timestamp to now(). Bypasses the service and its candidate
-    rules."""
+    `lister_liked` sets `lister_liked_at` to now() (an invite, spec 0010l). Bypasses the service
+    and its candidate rules."""
     with engine.begin() as conn:
         pair_id: uuid.UUID = conn.execute(
             text(
-                "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen, lister_liked_at,"
-                " seeker_liked_at) VALUES (:listing_id, :seeker_id, :price,"
-                " CASE WHEN :lister THEN now() END, CASE WHEN :seeker THEN now() END) RETURNING id"
+                "INSERT INTO room_pairs (listing_id, seeker_id, price_ils_seen, lister_liked_at)"
+                " VALUES (:listing_id, :seeker_id, :price, CASE WHEN :lister THEN now() END)"
+                " RETURNING id"
             ),
             {
                 "listing_id": listing_id,
                 "seeker_id": seeker_id,
                 "price": price_ils_seen,
                 "lister": lister_liked,
-                "seeker": seeker_liked,
             },
         ).scalar_one()
     return pair_id

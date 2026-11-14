@@ -1,10 +1,13 @@
-"""Seeker applications API, applicant count and view counter (spec 0004a): AC1-AC9."""
+"""Seeker applications API, applicant count and view counter (spec 0004a): AC1-AC9. Spec 0010l
+(one room interest: the message optional on a room, an invite answered by an application) is at
+the end: its AC1-AC5."""
 
 import datetime as dt
 import threading
 import time
 import uuid
 from collections.abc import Iterator
+from functools import partial
 from typing import Any
 
 import httpx
@@ -17,13 +20,18 @@ from app.db import get_sessionmaker
 from app.models import Application, Listing, User
 from app.redis_client import get_redis
 from app.services import applications as applications_service
+from app.services import chat_events
+from app.services import people as people_service
 from scripts.seed import GUSH_DAN_WKT
+from tests import test_people as people_tests
 from tests.conftest import (
     NO_LOOKING,
     Outbox,
     make_application,
+    make_flatmate,
     make_listing,
     make_owner,
+    make_pair,
     make_profile,
     make_seeker,
     signup,
@@ -366,9 +374,8 @@ def test_ac4_one_application_per_seeker_and_listing(
     assert rows == 1
 
 
+# A blank message ("", "   ") is no message since spec 0010l (`test_ac2_apartment_needs_message`).
 _BAD_MESSAGES: list[tuple[str, Any]] = [
-    ("spaces", "   "),
-    ("empty", ""),
     ("too long", "x" * 501),
     ("no letter or digit", "..."),
     ("bidi override", "hi\u202ethere"),
@@ -397,7 +404,6 @@ def test_ac5_message_text_rules(
         response = _apply(seeker, listing_a, message)
         assert response.status_code == 422, name
         _assert_clean_422(response, ["body", "message"])
-    _assert_clean_422(seeker.post(url, json={}), ["body", "message"])
     _assert_clean_422(seeker.post(url, json="just a string"), ["body"])
     assert _count(db_engine) == 0
 
@@ -712,3 +718,260 @@ def test_ac6_existing_application_needs_no_profile(
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [str(application_id)]
     assert _scalar(db_engine, "SELECT count(*) FROM seeker_profiles") == 0
+
+
+# --- 0010l: one room interest ------------------------------------------------------------------
+
+Published = list[tuple[set[uuid.UUID], uuid.UUID, str]]
+
+
+@pytest.fixture
+def published(monkeypatch: pytest.MonkeyPatch) -> Published:
+    """Every `chat_events.publish` call, as (user ids, conversation id, kind); nothing is sent."""
+    calls: Published = []
+
+    def record(_r: Any, user_ids: Any, conversation_id: uuid.UUID, kind: str) -> None:
+        calls.append((set(user_ids), conversation_id, kind))
+
+    monkeypatch.setattr(chat_events, "publish", record)
+    return calls
+
+
+def _invited(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    lister: TestClient,
+    room: str,
+    area: uuid.UUID,
+    email: str,
+    name: str,
+) -> TestClient:
+    """A seeker on `room`'s people page whom its lister liked (an invite, spec 0010l)."""
+    caller = people_tests._seeker(client, outbox, db_engine, area, email, name)
+    person = people_tests._card(lister, room, name)["id"]
+    assert people_tests._ok(people_tests._like_person(lister, room, person)) == {"liked": True}
+    return caller
+
+
+def test_ac1_room_apply_without_message(
+    client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    """Spec 0010l AC1: on a room the message is optional (absent, null or blank is none)."""
+    lister = signup(client, outbox, "o@example.com", "owner")
+    rooms = [people_tests._room(db_engine, _user_id(lister), gush_dan) for _ in range(3)]
+    seeker = people_tests._seeker(client, outbox, db_engine, gush_dan, "s@example.com", "Avi")
+
+    for room, body in zip(rooms, ({}, {"message": None}, {"message": "   "}), strict=True):
+        response = seeker.post(f"/listings/{room}/applications", json=body)
+        assert response.status_code == 201, (body, response.text)
+        applied = response.json()
+        _assert_application_shape(applied)
+        assert (applied["status"], applied["source"], applied["message"]) == (
+            "submitted",
+            "apply",
+            None,
+        )
+        stored = _scalar(
+            db_engine, "SELECT message FROM applications WHERE id = :id", id=applied["id"]
+        )
+        assert stored is None
+        [applicant] = people_tests._ok(lister.get(f"/listings/{room}/applications"))
+        assert (applicant["source"], applicant["message"]) == ("apply", None)
+    assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 0
+    assert _hourly(_user_id(seeker)) == 3
+
+
+def test_ac2_apartment_needs_message(
+    client: TestClient,
+    seeker: TestClient,
+    outbox: Outbox,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    """Spec 0010l AC2: a public apartment without a message is a 422 `message_required` (a string
+    detail), with no row and no rate-limit count; a non-public one is the counted 404."""
+    apartment = make_listing(db_engine, owner_id, gush_dan)
+    url = f"/listings/{apartment}/applications"
+    for body in ({}, {"message": None}, {"message": ""}, {"message": "   "}):
+        response = seeker.post(url, json=body)
+        assert response.status_code == 422, (body, response.text)
+        assert response.json() == {"detail": "message_required"}
+    assert _count(db_engine) == 0
+    assert _hourly(_user_id(seeker)) == 0
+
+    # The role goes first (spec 0010b): a non-seeker gets the 403, as with a message.
+    owner = signup(client, outbox, "o@example.com", "owner")
+    assert owner.post(url, json={}).json() == {"detail": "seeker_only"}
+    # A paused apartment reveals nothing: the unknown id's counted 404.
+    paused = make_listing(db_engine, owner_id, gush_dan, status="paused")
+    hidden = seeker.post(f"/listings/{paused}/applications", json={})
+    assert hidden.status_code == 404
+    assert hidden.json() == NOT_FOUND
+    assert _hourly(_user_id(seeker)) == 1
+
+    assert _applied(seeker, apartment, "Hello there")["message"] == "Hello there"
+
+
+def test_ac3_apply_answers_invite(
+    client: TestClient,
+    outbox: Outbox,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    published: Published,
+) -> None:
+    """Spec 0010l AC3: an application to a room whose lister liked the caller is shortlisted at
+    once, `source: 'like'`, the message as sent, at the pair's frozen price, with its chat open
+    (the seeker's marker set, the lister's not) and one `status` event to the lister, the
+    flatmates and the seeker; the invite is consumed. With and without a message; the room has a
+    flatmate (replaces 0008d's `test_ac10_mutual_match_includes_flatmates`)."""
+    lister = signup(client, outbox, "o@example.com", "owner", display_name="Noa")
+    lister_id = _user_id(lister)
+    room = people_tests._room(db_engine, lister_id, gush_dan)
+    mate_id = make_seeker(db_engine, "f@example.com", "Fay")
+    make_flatmate(db_engine, uuid.UUID(room), mate_id)
+    with_message = _invited(client, outbox, db_engine, lister, room, gush_dan, "a@ex.com", "Avi")
+    without = _invited(client, outbox, db_engine, lister, room, gush_dan, "b@ex.com", "Bat")
+    # The pairs froze 7000 at browse; the live price moves after.
+    _execute(db_engine, "UPDATE listings SET price_ils = 6500 WHERE id = :id", id=room)
+
+    for caller, body, message in (
+        (with_message, {"message": "  Hi, I'm in  "}, "Hi, I'm in"),
+        (without, {}, None),
+    ):
+        caller_id = _user_id(caller)
+        published.clear()
+        response = caller.post(f"/listings/{room}/applications", json=body)
+        assert response.status_code == 201, response.text
+        applied = response.json()
+        assert (applied["status"], applied["source"], applied["message"]) == (
+            "shortlisted",
+            "like",
+            message,
+        )
+        x = applied["id"]
+        row = people_tests._application(db_engine, x)
+        assert (row.status, row.source, row.message) == ("shortlisted", "like", message)
+        assert (row.price_ils_at_apply, row.listing_type_at_apply) == (7000, "room")
+        conversation = people_tests._conversation(db_engine, x)
+        assert conversation is not None
+        assert (conversation.owner_id, conversation.seeker_id) == (lister_id, caller_id)
+        assert conversation.seeker_read_at is not None
+        assert conversation.owner_read_at is None
+        assert people_tests._pair(db_engine, room, caller_id).lister_liked_at is None
+        assert published == [({lister_id, caller_id, mate_id}, uuid.UUID(x), "status")]
+
+        mine = people_tests._ok(caller.get("/me/conversations"))
+        assert [(item["id"], item["can_send"]) for item in mine] == [(x, True)]
+        lister_item = next(
+            item for item in people_tests._ok(lister.get("/me/conversations")) if item["id"] == x
+        )
+        assert lister_item["is_new"] is True
+        assert people_tests._likes(caller) == []
+
+    inbox = people_tests._ok(lister.get(f"/listings/{room}/applications"))
+    assert sorted((item["source"], item["status"], item["message"] or "") for item in inbox) == [
+        ("like", "shortlisted", ""),
+        ("like", "shortlisted", "Hi, I'm in"),
+    ]
+    assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 2
+
+
+def test_ac4_reapply_after_invite_withdrawn(
+    client: TestClient,
+    outbox: Outbox,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    published: Published,
+) -> None:
+    """Spec 0010l AC4: the application consumed the invite, so after a withdraw the seeker's next
+    application is a plain one (`submitted`, `source: 'apply'`, the live price)."""
+    lister = signup(client, outbox, "o@example.com", "owner")
+    room = people_tests._room(db_engine, _user_id(lister), gush_dan)
+    seeker = _invited(client, outbox, db_engine, lister, room, gush_dan, "a@ex.com", "Avi")
+    x = people_tests._apply(seeker, room)["id"]
+    _execute(db_engine, "UPDATE listings SET price_ils = 6500 WHERE id = :id", id=room)
+    assert _withdraw(seeker, x).status_code == 200
+    published.clear()
+
+    again = _applied(seeker, room, "Still keen")
+    assert (again["id"], again["status"], again["source"], again["message"]) == (
+        x,
+        "submitted",
+        "apply",
+        "Still keen",
+    )
+    assert people_tests._application(db_engine, x).price_ils_at_apply == 6500
+    assert published == []  # a submitted apply publishes nothing
+
+
+def test_ac5_apply_racing_lister_like(
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Spec 0010l AC5 (replaces 0008a's `test_ac8_apply_racing_a_lister_like`): the lister's like
+    and the seeker's apply on an existing pair at once, in both lock orders, 20 rounds: no
+    deadlock, exactly one application, a shortlisted one has its conversation, and the invite is
+    never left on the pair next to an application."""
+    real_has_application = people_service._has_application
+    real_consume_invite = people_service.consume_invite
+
+    def slow_has_application(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> bool:
+        time.sleep(0.15)  # the lister holds the pair's lock
+        return real_has_application(db, listing_id, seeker_id)
+
+    def slow_consume_invite(db: Session, listing_id: uuid.UUID, seeker_id: uuid.UUID) -> Any:
+        pair = real_consume_invite(db, listing_id, seeker_id)
+        time.sleep(0.15)  # the apply holds the pair's lock, before its application row
+        return pair
+
+    monkeypatch.setattr(people_service, "_has_application", slow_has_application)
+    monkeypatch.setattr(people_service, "consume_invite", slow_consume_invite)
+
+    def lister(room: str, person: uuid.UUID, start: threading.Barrier, delay: float) -> str:
+        with get_sessionmaker()() as db:
+            user = db.get(User, owner_id)
+            assert user is not None
+            start.wait()
+            time.sleep(delay)
+            people_service.like_person(db, get_redis(), user, uuid.UUID(room), person)
+            return "liked"
+
+    def applier(room: str, seeker_id: uuid.UUID, start: threading.Barrier, delay: float) -> str:
+        with get_sessionmaker()() as db:
+            user = db.get(User, seeker_id)
+            assert user is not None
+            start.wait()
+            time.sleep(delay)
+            application, _ = applications_service.apply(
+                db, get_redis(), user, uuid.UUID(room), None
+            )
+            return application.status
+
+    # (lister delay, apply delay) -> outcomes: the first to take the pair's lock wins.
+    orders = ((0.0, 0.05, ["liked", "shortlisted"]), (0.05, 0.0, ["409", "submitted"]))
+    for n in range(20):
+        lister_delay, apply_delay, expected = orders[n % 2]
+        get_redis().delete(f"rl:like:user:{owner_id}", f"rl:like:user:day:{owner_id}")
+        room = people_tests._room(db_engine, owner_id, gush_dan)
+        a = make_seeker(db_engine, f"a{n}@example.com", "Avi")
+        people_tests._visible(db_engine, a, gush_dan)
+        person = make_pair(db_engine, uuid.UUID(room), a, price_ils_seen=7000)
+        start = threading.Barrier(2, timeout=10)
+        outcomes = people_tests._in_threads(
+            partial(lister, room, person, start, lister_delay),
+            partial(applier, room, a, start, apply_delay),
+        )
+        assert outcomes == expected, (n, outcomes)
+        applications = "SELECT count(*) FROM applications WHERE listing_id = :l"
+        assert _scalar(db_engine, applications, l=room) == 1
+        conversations = (
+            "SELECT count(*) FROM conversations c JOIN applications a ON a.id = c.application_id"
+            " WHERE a.listing_id = :l"
+        )
+        shortlisted = outcomes[1] == "shortlisted"
+        assert _scalar(db_engine, conversations, l=room) == (1 if shortlisted else 0)
+        assert people_tests._pair(db_engine, room, a).lister_liked_at is None

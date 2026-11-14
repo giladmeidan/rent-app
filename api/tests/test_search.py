@@ -12,7 +12,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 
 from scripts.seed import GUSH_DAN_WKT
-from tests.conftest import Outbox, make_listing, make_owner, make_profile, set_location, signup
+from tests.conftest import (
+    Outbox,
+    make_listing,
+    make_owner,
+    make_pair,
+    make_profile,
+    set_location,
+    signup,
+)
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -485,13 +493,14 @@ def test_ac8_is_mine_and_own_room_never_hidden(
     page = lister.get(f"/listings/{theirs}").json()
     assert page["is_mine"] is False
     assert page["match"] is not None
-    assert page["like"] == {"liked_by_me": False, "liked_me": False}
+    assert page["like"] == {"liked_me": False}
     assert client.get(f"/listings/{own}").json()["is_mine"] is False
     assert other_woman.get(f"/listings/{own}").json()["is_mine"] is False
 
-    assert lister.put(f"/listings/{theirs}/like").status_code == 200
+    # Spec 0010l: `/me/likes` lists invites; the other room's lister invites them.
+    make_pair(db_engine, uuid.UUID(theirs), lister_id, price_ils_seen=7000, lister_liked=True)
     likes = lister.get("/me/likes")
     assert likes.status_code == 200
-    rooms = [entry["listing"] for entry in likes.json()["mine"]]
+    rooms = [entry["listing"] for entry in likes.json()["liked_me"]]
     assert [room["id"] for room in rooms] == [theirs]
     assert all(room["is_mine"] is False for room in rooms)
