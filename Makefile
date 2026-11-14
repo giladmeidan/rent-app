@@ -27,7 +27,7 @@ export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
 
-.PHONY: dev dev-api down migrate seed rent-import test test-api test-web lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api down migrate seed rent-import rent-backtest test test-api test-web lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -85,6 +85,11 @@ seed:
 ## makes no request and prints {'skipped': 1}
 rent-import:
 	$(UV) run python scripts/import_rent_reference.py
+
+## rent-backtest: backtest the rent estimate baseline on the imported figures (spec 0014c); prints
+## one line per (window, level) and the suggested WINDOW_QUARTERS and HALF_WIDTH
+rent-backtest:
+	$(UV) run python scripts/rent_backtest.py
 
 ## test: api pytest (needs Postgres at TEST_DATABASE_URL and Redis at REDIS_URL), then web vitest
 test: test-api test-web
