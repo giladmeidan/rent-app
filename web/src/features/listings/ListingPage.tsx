@@ -15,8 +15,12 @@ import { APPROXIMATE_RADIUS_M } from '../../components/map/config';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
 import { ApplySection } from '../applications/ApplySection';
+import { loginPath } from '../applications/useApply';
+import { useMe } from '../auth/useMe';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchCard } from '../match/MatchCard';
+import { LISTING_REASONS } from '../reports/reasons';
+import { FlagIcon, ReportButton } from '../reports/ReportButton';
 import { FlatPeople } from '../rooms/FlatPeople';
 import { RoomFacts } from '../rooms/RoomFacts';
 import { writeMapPosition } from '../search/mapPosition';
@@ -39,6 +43,7 @@ export function ListingPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const listing = usePublicListing(id);
+  const me = useMe();
   // "Seen" on this device means this page opened the listing (spec 0009v), not that a pin was pressed.
   const seenId = listing.isSuccess ? listing.data.id : undefined;
   useEffect(() => {
@@ -201,6 +206,35 @@ export function ListingPage() {
         </div>
       </article>
     );
+    // The report row (spec 0011b): after the article, outside the action column. None on the
+    // caller's own listing, and none while `/me` loads.
+    let reportControl = null;
+    if (me.data === null) {
+      reportControl = (
+        <Button variant="ghost" size="sm" icon={<FlagIcon />} to={loginPath(l.id)}>
+          {t('report.listingButton')}
+        </Button>
+      );
+    } else if (me.data !== undefined && !l.is_mine) {
+      reportControl = (
+        <ReportButton
+          target={{ type: 'listing', id: l.id }}
+          title={t('report.title.listing')}
+          reasons={LISTING_REASONS}
+          label={t('report.listingButton')}
+        />
+      );
+    }
+    if (reportControl !== null) {
+      body = (
+        <>
+          {body}
+          <div data-testid="listing-report" className="flex justify-start">
+            {reportControl}
+          </div>
+        </>
+      );
+    }
   }
 
   return (

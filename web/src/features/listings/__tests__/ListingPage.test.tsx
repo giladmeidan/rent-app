@@ -1407,4 +1407,77 @@ describe('ListingPage', () => {
       screen.getByRole('article').querySelector('div.bg-surface-subtle > svg[aria-hidden="true"]'),
     ).not.toBeNull();
   });
+
+  it('ac15_report_entry', async () => {
+    const r = he.report;
+    const seekerMocks = (l: typeof katznelson) => ({
+      'GET /me': [json(noa)],
+      'GET /me/applications': [json([])],
+      'GET /me/profile': [json(profile())],
+      [`GET /listings/${l.id}`]: [json(l)],
+    });
+
+    // Signed in, not the owner: a row after the article, outside the action column.
+    const api = mockApi({
+      ...seekerMocks(katznelson),
+      'POST /reports': [json({ already_reported: false }, 201)],
+    });
+    let view = render(katznelson.id);
+    const row = await screen.findByTestId('listing-report');
+    const article = screen.getByRole('article');
+    expect(article.nextElementSibling).toBe(row);
+    expect(screen.getByTestId('listing-actions')).not.toContainElement(row);
+    fireEvent.click(within(row).getByRole('button', { name: r.listingButton }));
+    const dialog = screen.getByRole('dialog', { name: r.title.listing });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(6);
+    fireEvent.click(within(dialog).getByRole('radio', { name: r.reasons.broker }));
+    fireEvent.click(within(dialog).getByRole('button', { name: r.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(r.sent);
+    expect(api.calls('POST /reports')[0]?.body).toEqual({
+      target_type: 'listing',
+      target_id: katznelson.id,
+      reason: 'broker',
+      note: null,
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The caller's own listing: no row.
+    const mine = { ...katznelson, is_mine: true };
+    mockApi(seekerMocks(mine));
+    view = render(mine.id);
+    await screen.findByRole('heading', { level: 1 });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(screen.queryByTestId('listing-report')).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Signed out: a link to log in and come back.
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json(katznelson)],
+    });
+    view = render(katznelson.id);
+    const link = within(await screen.findByTestId('listing-report')).getByRole('link', {
+      name: r.listingButton,
+    });
+    expect(link).toHaveAttribute('href', `/login?next=%2Flistings%2F${katznelson.id}`);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Loading, an error and not found: no row.
+    for (const [reply, settled] of [
+      [deferred().promise, null],
+      [json({ detail: 'boom' }, 500), he.common.retry],
+      [json({ detail: 'not_found' }, 404), he.listing.notFound],
+    ] as const) {
+      mockApi({ 'GET /me': [json(noa)], [`GET /listings/${katznelson.id}`]: [reply] });
+      view = render(katznelson.id);
+      if (settled !== null) expect(await screen.findByText(settled)).toBeVisible();
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(screen.queryByTestId('listing-report')).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
 });
