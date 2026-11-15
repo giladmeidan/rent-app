@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CONTACT_EMAIL_INLINE } from '../../../app/contact';
+import { CONTACT_EMAIL } from '../../../app/contact';
 import i18n from '../../../app/i18n';
 import { AppRoutes } from '../../../app/routes';
 import he from '../../../locales/he.json';
@@ -58,10 +58,15 @@ describe('LegalPage', () => {
     // and no raw placeholder left over.
     const page = document.body.textContent ?? '';
     for (const line of lines) {
-      expect(page).toContain(line.replaceAll('{{email}}', CONTACT_EMAIL_INLINE));
+      expect(page).toContain(line.replaceAll('{{email}}', CONTACT_EMAIL));
     }
     expect(page).not.toContain('{{');
-    expect(page).toContain(CONTACT_EMAIL_INLINE);
+    // The address is a `<bdi>` run, with no invisible characters beside it.
+    const bdis = [...document.querySelectorAll('bdi')];
+    expect(bdis.length).toBeGreaterThan(0);
+    for (const bdi of bdis) expect(bdi.textContent).toBe(CONTACT_EMAIL);
+    expect(page).not.toMatch(/[\u2068\u2069]/);
+    expect(page).toContain(CONTACT_EMAIL);
   });
 
   it('ac9_privacy_deletion_anchor', async () => {
@@ -71,5 +76,10 @@ describe('LegalPage', () => {
     expect(section).toBeInstanceOf(HTMLHeadingElement);
     expect(section).toHaveTextContent(he.legal.privacy.s6.title);
     expect(scroll.mock.contexts).toContain(section);
+  });
+
+  it('ac9_malformed_hash_does_not_crash', async () => {
+    await visit('/privacy#%E0');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.legal.privacy.title);
   });
 });

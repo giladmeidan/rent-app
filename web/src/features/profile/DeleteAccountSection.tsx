@@ -27,7 +27,24 @@ export function DeleteAccountSection({ className }: { className?: string }) {
   const logout = useLogout();
 
   const reauth = del.isError && isReauthRequired(del.error);
-  const failed = (del.isError && !reauth) || logout.isError;
+  // The alert: the sign-out that failed (reauth state) or any failure but the reauth one.
+  const failure = logout.isError
+    ? t('common.error')
+    : del.isError && !reauth
+      ? t('profile.delete.failed')
+      : null;
+  // One request per confirmation, even on a double click (the pending state arrives a render late).
+  const sent = useRef(false);
+
+  function confirmDelete() {
+    if (sent.current) return;
+    sent.current = true;
+    del.mutate(undefined, {
+      onError: () => {
+        sent.current = false;
+      },
+    });
+  }
 
   function close() {
     // Nothing is cancelled mid-request: the answer decides where the person goes.
@@ -88,16 +105,16 @@ export function DeleteAccountSection({ className }: { className?: string }) {
                 {t('profile.delete.reauthAction')}
               </Button>
             ) : (
-              <Button variant="danger" onClick={() => del.mutate()} disabled={del.isPending}>
+              <Button variant="danger" onClick={confirmDelete} disabled={del.isPending}>
                 {del.isPending ? t('profile.delete.pending') : t('profile.delete.confirm')}
               </Button>
             )}
           </>
         }
       >
-        {failed && (
+        {failure !== null && (
           <p role="alert" className="text-body-sm text-danger">
-            {online ? t('profile.delete.failed') : t('common.offline')}
+            {online ? failure : t('common.offline')}
           </p>
         )}
       </Dialog>

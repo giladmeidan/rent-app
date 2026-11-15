@@ -10,7 +10,7 @@ export type LegalSection = {
 export type LegalDoc = { title: string; intro: string; sections: LegalSection[] };
 
 // Every key is a literal, so `make i18n-check` proves each one exists in he.json. `email` is the
-// contact address, already isolated for a right-to-left page.
+// contact address; the page wraps it in a `<bdi>`.
 
 export function termsDoc(t: TFunction, email: string): LegalDoc {
   return {

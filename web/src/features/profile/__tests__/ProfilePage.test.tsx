@@ -1319,6 +1319,8 @@ describe('ProfilePage', () => {
       const dialog = await openDialog();
       // Cancel is focused first; confirming sends one request and disables the button.
       expect(within(dialog).getByRole('button', { name: he.common.cancel })).toHaveFocus();
+      // A double click sends one request.
+      fireEvent.click(confirmButton(dialog));
       fireEvent.click(confirmButton(dialog));
       const pending = await within(dialog).findByRole('button', {
         name: he.profile.delete.pending,
@@ -1336,6 +1338,61 @@ describe('ProfilePage', () => {
       expect(readDraft('chat', 'c1', seeker.id)).toBe('');
       expect(readSeen().size).toBe(0);
       expect(client.getQueryData(ME_KEY)).toBeNull();
+    });
+
+    it('ac1_delete_resolves_after_the_page_is_gone', async () => {
+      // Back, or a 401 bounce, unmounts the profile while DELETE is pending: the answer still
+      // forgets the person on this device.
+      const client = testQueryClient();
+      const gone = deferred();
+      const api = renderPage({ [DELETE]: [gone.promise] }, '/me/profile', { client, tree });
+      writeDraft('chat', 'c1', seeker.id, 'unsent');
+      markSeen('listing-1');
+      const dialog = await openDialog();
+      fireEvent.click(confirmButton(dialog));
+      await vi.waitFor(() => {
+        expect(api.calls(DELETE)).toHaveLength(1);
+      });
+      unmount();
+      expect(client.getQueryData(ME_KEY)).not.toBeNull();
+
+      gone.resolve(empty());
+      await vi.waitFor(() => {
+        expect(client.getQueryData(ME_KEY)).toBeNull();
+      });
+      expect(readDraft('chat', 'c1', seeker.id)).toBe('');
+      expect(readSeen().size).toBe(0);
+    });
+
+    it('ac2_unauthenticated_is_reauth', async () => {
+      renderPage({ [DELETE]: [() => json({ detail: 'unauthenticated' }, 401)] }, '/me/profile', {
+        tree,
+      });
+      const dialog = await openDialog();
+      fireEvent.click(confirmButton(dialog));
+      expect(await within(dialog).findByText(he.profile.delete.reauth)).toBeVisible();
+      expect(
+        within(dialog).getByRole('button', { name: he.profile.delete.reauthAction }),
+      ).toBeVisible();
+    });
+
+    it('ac2_reauth_logout_fails', async () => {
+      const api = renderPage(
+        {
+          [DELETE]: [() => json({ detail: 'reauth_required' }, 403)],
+          [LOGOUT]: [() => json({ detail: 'boom' }, 500)],
+        },
+        '/me/profile',
+        { tree },
+      );
+      const dialog = await openDialog();
+      fireEvent.click(confirmButton(dialog));
+      fireEvent.click(
+        await within(dialog).findByRole('button', { name: he.profile.delete.reauthAction }),
+      );
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(he.common.error);
+      expect(api.calls(LOGOUT)).toHaveLength(1);
+      expect(currentPath()).toBe('/me/profile');
     });
 
     it('ac2_reauth_required', async () => {
