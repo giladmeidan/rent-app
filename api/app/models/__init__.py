@@ -8,6 +8,7 @@ class Base(DeclarativeBase):
 
 
 from app.models.admin_action import AdminAction  # noqa: E402  (models must see Base first)
+from app.models.admin_login import AdminLogin  # noqa: E402
 from app.models.application import Application  # noqa: E402
 from app.models.area import Area  # noqa: E402
 from app.models.blocked_email import BlockedEmail  # noqa: E402
@@ -28,6 +29,7 @@ from app.models.user import User  # noqa: E402
 
 __all__ = [
     "AdminAction",
+    "AdminLogin",
     "Application",
     "Area",
     "Base",

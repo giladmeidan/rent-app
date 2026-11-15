@@ -2,10 +2,16 @@
 
 The admin app runs through Starlette's `TestClient` on `create_admin_app`, connected as the
 `homie_admin` role to the test database, on `http://localhost` (the default `testserver` host
-fails the allowlist). Reports, conversations and messages are direct inserts."""
+fails the allowlist), sending `Sec-Fetch-Site: same-origin` as Gilad's browser does. Reports,
+conversations and messages are direct inserts. Spec 0013e (sessions and the lock in
+`admin_logins`, same-origin writes) adds AC1-AC9 of its own, named after its ACs."""
 
 import asyncio
+import base64
+import hashlib
+import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -23,7 +29,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.types import Message
+from starlette.types import ASGIApp, Message
 
 import admin.auth
 from admin import actions
@@ -31,6 +37,7 @@ from admin.auth import PasswordAuth
 from admin.config import AdminSettings
 from admin.main import create_admin_app, main
 from admin.views import UserView
+from app.db import make_engine
 from scripts.admin_role import apply_admin_role
 from tests.conftest import (
     API_DIR,
@@ -137,11 +144,24 @@ def _settings(database_url: str) -> AdminSettings:
     return AdminSettings(database_url=database_url, password=PASSWORD, secret_key=SECRET)
 
 
+SAME_ORIGIN = {"sec-fetch-site": "same-origin"}
+
+
+def _client(app: ASGIApp, **kwargs: Any) -> TestClient:
+    return TestClient(app, base_url="http://localhost", follow_redirects=False, **kwargs)
+
+
 @pytest.fixture
 def admin_client(db_engine: Engine, admin_role: str) -> Iterator[TestClient]:
-    app = create_admin_app(_settings(admin_role))
-    with TestClient(app, base_url="http://localhost", follow_redirects=False) as test_client:
+    with _client(create_admin_app(_settings(admin_role)), headers=SAME_ORIGIN) as test_client:
         yield test_client
+
+
+def _session(cookie: str) -> dict[str, Any]:
+    """The signed session cookie's payload (Starlette: base64 JSON, then the signature)."""
+    data = cookie.split(".")[0]
+    payload: dict[str, Any] = json.loads(base64.b64decode(data + "=" * (-len(data) % 4)))
+    return payload
 
 
 def _login_admin(admin_client: TestClient, password: str = PASSWORD) -> httpx.Response:
@@ -204,7 +224,7 @@ def test_ac1_everything_needs_login(
 
 
 def test_ac2_password_login_session_age_and_lockout(
-    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    admin_client: TestClient, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     clock = [1_800_000_000.0]
     monkeypatch.setattr(admin.auth, "_now", lambda: clock[0])
@@ -213,6 +233,9 @@ def test_ac2_password_login_session_age_and_lockout(
     assert wrong.status_code == 400
     assert "Invalid credentials." in wrong.text
     assert "homie_admin" not in admin_client.cookies
+    assert [(r.ok, r.token_hash) for r in _rows(db_engine, "SELECT * FROM admin_logins")] == [
+        (False, None)
+    ]
 
     right = _login_admin(admin_client)
     assert right.status_code == 302
@@ -221,6 +244,12 @@ def test_ac2_password_login_session_age_and_lockout(
     for flag in ("path=/admin;", "samesite=strict", "httponly"):
         assert flag in cookie
     assert admin_client.get("/admin/report/list").status_code == 200
+    # Spec 0013e AC3: the cookie holds only the session id; the row only its sha256.
+    session = _session(admin_client.cookies["homie_admin"])
+    assert list(session) == ["sid"]
+    ok_hash = _scalar(db_engine, "SELECT token_hash FROM admin_logins WHERE ok")
+    assert re.fullmatch("[0-9a-f]{64}", ok_hash)
+    assert ok_hash == hashlib.sha256(session["sid"].encode()).hexdigest()
 
     clock[0] += 8 * 60 * 60 - 1
     assert admin_client.get("/admin/report/list").status_code == 200
@@ -244,6 +273,57 @@ def test_ac2_password_login_session_age_and_lockout(
 
     # Non-ASCII passwords compare as bytes instead of raising.
     assert _login_admin(admin_client, "סיסמה שגויה לגמרי בעברית").status_code == 400
+    rows = _rows(db_engine, "SELECT admin_logins::text AS row FROM admin_logins")
+    assert len(rows) == 9  # 1 + 1 + 5 + 1 + 1: the two locked attempts wrote nothing
+    assert not any(PASSWORD in r.row for r in rows)
+    assert PASSWORD not in json.dumps(_session(admin_client.cookies["homie_admin"]))
+
+
+def test_ac2_lock_survives_a_restart(
+    admin_client: TestClient, admin_role: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(admin.auth, "_now", lambda: clock[0])
+    for _ in range(5):
+        clock[0] += 1
+        assert _login_admin(admin_client, "five wrong make a lock").status_code == 400
+    fifth = clock[0]
+    with _client(create_admin_app(_settings(admin_role)), headers=SAME_ORIGIN) as restarted:
+        clock[0] = fifth + 15 * 60 - 1
+        assert _login_admin(restarted).status_code == 400
+        clock[0] = fifth + 15 * 60
+        assert _login_admin(restarted).status_code == 302
+        assert restarted.get("/admin/report/list").status_code == 200
+
+
+def _logs_out(client: TestClient) -> bool:
+    """`/admin/logout` answers 302 and its redirects (SQLAdmin's to `/admin/`) end on the login."""
+    response: httpx.Response = client.get("/admin/logout", follow_redirects=True)
+    return (
+        response.history[0].status_code == 302
+        and response.status_code == 200
+        and response.url.path == "/admin/login"
+    )
+
+
+def test_ac1_logout_ends_a_copied_cookie(signed_in: TestClient, db_engine: Engine) -> None:
+    copy = _client(signed_in.app, cookies={"homie_admin": signed_in.cookies["homie_admin"]})
+    assert copy.get("/admin/report/list").status_code == 200
+    assert _logs_out(signed_in)
+    assert _scalar(db_engine, "SELECT ended_at IS NOT NULL FROM admin_logins WHERE ok") is True
+    assert _to_login(copy.get("/admin/report/list"))
+    assert _to_login(signed_in.get("/admin/report/list"))
+    assert _login_admin(signed_in).status_code == 302
+    assert signed_in.get("/admin/report/list").status_code == 200
+
+
+def test_ac1_logout_without_a_session(signed_in: TestClient, db_engine: Engine) -> None:
+    before = _rows(db_engine, "SELECT admin_logins::text AS row FROM admin_logins ORDER BY id")
+    stranger = _client(signed_in.app)
+    assert _logs_out(stranger)
+    after = _rows(db_engine, "SELECT admin_logins::text AS row FROM admin_logins ORDER BY id")
+    assert after == before
+    assert signed_in.get("/admin/report/list").status_code == 200
 
 
 def test_ac2_lock_counts_five_wrong_within_15_minutes(
@@ -270,10 +350,13 @@ def test_ac2_lock_counts_five_wrong_within_15_minutes(
     assert _login_admin(admin_client).status_code == 400
 
 
-def test_ac2_lock_holds_for_logins_whose_bodies_arrive_late() -> None:
+def test_ac2_lock_holds_for_logins_whose_bodies_arrive_late(
+    db_engine: Engine, admin_role: str
+) -> None:
     """Six logins start at once and their bodies arrive later, the right password last: the five
     wrong ones lock it (the lock is checked after the body is read)."""
-    backend = PasswordAuth(_settings("postgresql+psycopg://unused@localhost/unused"))
+    engine = make_engine(admin_role)
+    backend = PasswordAuth(_settings(admin_role), engine)
 
     def request(password: str, gate: asyncio.Event) -> Request:
         body = urlencode({"password": password}).encode()
@@ -305,7 +388,13 @@ def test_ac2_lock_holds_for_logins_whose_bodies_arrive_late() -> None:
         right.set()
         return [*results, await last]
 
-    assert asyncio.run(scenario()) == [False] * 6
+    try:
+        assert asyncio.run(scenario()) == [False] * 6
+    finally:
+        engine.dispose()
+    assert (
+        _scalar(db_engine, "SELECT count(*) FROM admin_logins WHERE locks_until IS NOT NULL") == 1
+    )
 
 
 def test_ac3_resolve_closes_the_whole_target(signed_in: TestClient, db_engine: Engine) -> None:
@@ -466,6 +555,44 @@ def test_ac6_edit_listing_cap(signed_in: TestClient, db_engine: Engine) -> None:
     assert len(_log(db_engine)) == 1
 
 
+def test_ac6_edit_listing_cap_edges(signed_in: TestClient, db_engine: Engine) -> None:
+    user = make_owner(db_engine, "owner@example.com")
+    before = _rows(
+        db_engine, "SELECT email, display_name, suspended_at FROM users WHERE id = :id", id=user
+    )
+
+    def edit(data: dict[str, str]) -> None:
+        saved = signed_in.post(f"/admin/user/edit/{user}", data={**data, "save": "Save"})
+        assert saved.status_code == 302, saved.text
+
+    def cap() -> int:
+        return int(_scalar(db_engine, "SELECT listing_cap FROM users WHERE id = :id", id=user))
+
+    edit({"listing_cap": "0"})
+    assert cap() == 0
+    edit({"listing_cap": "100"})
+    assert cap() == 100
+    edit({"listing_cap": "100"})  # the current value: no log row
+    edit(
+        {
+            "listing_cap": "5",
+            "email": "evil@example.com",
+            "display_name": "Evil",
+            "suspended_at": "2026-01-01 00:00:00",
+        }
+    )
+    assert cap() == 5
+    after = _rows(
+        db_engine, "SELECT email, display_name, suspended_at FROM users WHERE id = :id", id=user
+    )
+    assert after == before
+    assert _log(db_engine) == [
+        ("set_listing_cap", "user", user, "3→0"),
+        ("set_listing_cap", "user", user, "0→100"),
+        ("set_listing_cap", "user", user, "100→5"),
+    ]
+
+
 def test_ac7_reported_chat_only(
     signed_in: TestClient, db_engine: Engine, gush_dan: uuid.UUID
 ) -> None:
@@ -570,6 +697,95 @@ def test_ac9_read_only_views(signed_in: TestClient, db_engine: Engine) -> None:
     assert _scalar(db_engine, "SELECT count(*) FROM users") == 2
 
 
+_TABLES = ("reports", "users", "listings", "admin_actions")
+
+
+def _snapshot(engine: Engine) -> dict[str, list[Any]]:
+    return {
+        table: [r.row for r in _rows(engine, f"SELECT t::text AS row FROM {table} t ORDER BY id")]
+        for table in _TABLES
+    }
+
+
+def test_ac7_read_only_views_with_rows(
+    signed_in: TestClient, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    reporter = make_seeker(db_engine, "reporter@example.com")
+    listing = make_listing(db_engine, owner, gush_dan)
+    report = _report(db_engine, reporter, owner, "listing", listing)
+    assert signed_in.get(f"/admin/user/action/suspend?pks={reporter}").status_code == 302
+    action = _scalar(db_engine, "SELECT id FROM admin_actions")
+    before = _snapshot(db_engine)
+    assert all(before.values())
+
+    for identity, pk in (
+        ("report", report),
+        ("user", owner),
+        ("listing", listing),
+        ("admin-action", action),
+    ):
+        refused = [
+            signed_in.get(f"/admin/{identity}/create"),
+            signed_in.post(f"/admin/{identity}/create", data={}),
+            signed_in.delete(f"/admin/{identity}/delete?pks={pk}"),
+            signed_in.get(f"/admin/{identity}/export/csv"),
+            signed_in.get(f"/admin/{identity}/export/json"),
+            signed_in.post(f"/admin/{identity}/import"),
+        ]
+        if identity != "user":
+            refused += [
+                signed_in.get(f"/admin/{identity}/edit/{pk}"),
+                signed_in.post(f"/admin/{identity}/edit/{pk}", data={"status": "paused"}),
+            ]
+        for response in refused:
+            assert response.status_code == 403, (identity, response.request.url)
+    assert _snapshot(db_engine) == before
+
+
+def test_ac8_reported_chat_many_messages_members_and_time(
+    signed_in: TestClient, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    seeker = make_seeker(db_engine, "seeker@example.com", display_name="שירה")
+    flatmates = [
+        make_seeker(db_engine, "f1@example.com", display_name="דנה"),
+        make_seeker(db_engine, "f2@example.com", display_name="יואב"),
+    ]
+    room = uuid.UUID(_room(db_engine, owner, gush_dan))
+    application = make_application(db_engine, room, seeker, status="shortlisted")
+    for flatmate in flatmates:
+        make_flatmate(db_engine, room, flatmate)
+    _execute(
+        db_engine,
+        "INSERT INTO conversations (id, application_id, owner_id, seeker_id)"
+        " VALUES (:id, :id, :o, :s)",
+        id=application,
+        o=owner,
+        s=seeker,
+    )
+    senders = [owner, seeker, *flatmates]
+    for i in reversed(range(55)):  # stored newest first
+        _execute(
+            db_engine,
+            "INSERT INTO messages (conversation_id, sender_id, body, created_at) VALUES"
+            " (:c, :s, :b, timestamptz '2026-07-01T21:30:00Z' + make_interval(mins => :i))",
+            c=application,
+            s=senders[i % 4],
+            b=f"message {i:02d}",
+            i=i,
+        )
+    report = _report(db_engine, seeker, owner, "chat", application)
+
+    page = signed_in.get(f"/admin/report/chat/{report}")
+    assert page.status_code == 200
+    bodies = re.findall(r'style="white-space: pre-wrap">(message \d\d)</td>', page.text)
+    assert bodies == [f"message {i:02d}" for i in range(55)]
+    members = page.text.split("<h4>Members</h4>")[1].split("</ul>")[0]
+    assert re.findall(r'<li dir="auto">([^<]+)</li>', members) == ["בעלים", "שירה", "דנה", "יואב"]
+    assert '<td class="text-nowrap">2026-07-02 00:30</td>' in page.text
+
+
 def _check_role(admin_role: str, owner: uuid.UUID) -> None:
     engine = create_engine(admin_role)
     try:
@@ -581,6 +797,11 @@ def _check_role(admin_role: str, owner: uuid.UUID) -> None:
             "DELETE FROM sessions",
             "DELETE FROM admin_actions",
             "UPDATE admin_actions SET detail = 'x'",
+            "UPDATE admin_logins SET ok = false",
+            "UPDATE admin_logins SET token_hash = 'x'",
+            "UPDATE admin_logins SET locks_until = now()",
+            "UPDATE admin_logins SET at = now()",
+            "DELETE FROM admin_logins",
             "CREATE TABLE x()",
             "INSERT INTO users (email, display_name, role) VALUES ('y@example.com', 'yy', 'owner')",
         ):
@@ -592,6 +813,16 @@ def _check_role(admin_role: str, owner: uuid.UUID) -> None:
                 text("UPDATE users SET listing_cap = 4, suspended_at = NULL WHERE id = :id"),
                 {"id": owner},
             )
+            token_hash = uuid.uuid4().hex
+            conn.execute(
+                text("INSERT INTO admin_logins (at, ok, token_hash) VALUES (now(), true, :h)"),
+                {"h": token_hash},
+            )
+            ended = conn.execute(
+                text("UPDATE admin_logins SET ended_at = now() WHERE token_hash = :h"),
+                {"h": token_hash},
+            )
+            assert ended.rowcount == 1
         flags = _rows(
             engine,
             "SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls FROM pg_roles"
@@ -623,10 +854,20 @@ def test_nf3_host_and_fetch_site_guards(admin_client: TestClient, db_engine: Eng
         assert "set-cookie" not in refused.headers
     for site in ("same-origin", "none"):
         assert admin_client.get("/admin/login", headers={"sec-fetch-site": site}).status_code == 200
-    assert admin_client.get("/admin/login").status_code == 200
+    # Spec 0013e: a client that sends no `Sec-Fetch-Site` (curl, an old browser) only reads.
+    bare = _client(admin_client.app)
+    assert bare.get("/admin/login").status_code == 200
+    refused = bare.post("/admin/login", data={"username": "", "password": PASSWORD})
+    assert refused.status_code == 400
+    assert "set-cookie" not in refused.headers
+    assert _scalar(db_engine, "SELECT count(*) FROM admin_logins") == 0
     assert _login_admin(admin_client).status_code == 302
     user = make_owner(db_engine, "owner@example.com")
     suspend = f"/admin/user/action/suspend?pks={user}"
+    bare.cookies.set("homie_admin", admin_client.cookies["homie_admin"])
+    assert bare.get("/admin/user/list").status_code == 200
+    assert bare.get(suspend).status_code == 400
+    assert bare.post(f"/admin/user/edit/{user}", data={"listing_cap": "9"}).status_code == 400
     # An action or a write needs `same-origin`: `none` is a link opened from mail or chat.
     for site in ("same-site", "cross-site", "none"):
         assert admin_client.get(suspend, headers={"sec-fetch-site": site}).status_code == 400

@@ -1,4 +1,4 @@
-"""`blocked_emails` table (spec 0013c, migration 0025): the keyed hash of each email whose account
+"""`blocked_emails` table (spec 0013c, migration 0026): the keyed hash of each email whose account
 homie acted against (a `suspend` or `hide_listing`, even if later lifted) before its owner deleted
 it. That email cannot sign up again. No user id: a row cannot be tied back to the tombstone."""
 

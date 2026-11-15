@@ -35,7 +35,7 @@ class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
         # NULL or 1-500 characters, and NULL only on a room application (migration 0018) or a
-        # withdrawn one (a deleted seeker's, scrubbed by spec 0013c, migration 0025); no term can
+        # withdrawn one (a deleted seeker's, scrubbed by spec 0013c, migration 0026); no term can
         # evaluate to NULL, so no NULL slips through.
         CheckConstraint(MESSAGE_CHECK, name="ck_applications_message"),
         CheckConstraint("source IN ('apply', 'like')", name="ck_applications_source"),

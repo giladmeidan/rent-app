@@ -35,7 +35,7 @@ class User(Base):
         # The few suspended users (spec 0012a migration 0024, Gilad 2026-11-15): the visibility
         # rules' "not suspended" check reads only these, so it stays flat as `users` grows.
         Index("ix_users_suspended", "id", postgresql_where=text("suspended_at IS NOT NULL")),
-        # Deleted accounts (spec 0013c migration 0025): a scrubbed tombstone row, so every FK to
+        # Deleted accounts (spec 0013c migration 0026): a scrubbed tombstone row, so every FK to
         # it (threads, reports) stays valid. The chat's "no deleted party" check reads only these.
         CheckConstraint(DELETED_SCRUBBED_CHECK, name="ck_users_deleted_scrubbed"),
         Index("ix_users_deleted", "id", postgresql_where=text("deleted_at IS NOT NULL")),
