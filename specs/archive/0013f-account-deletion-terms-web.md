@@ -1,7 +1,7 @@
 ---
 id: 0013f
 title: "A person deletes their account from the profile, chats show who left, and every page links to the terms of use and the privacy policy"
-status: in-review
+status: done
 depends_on: [0013c]
 reviewers: [code, security, ux, qa]   # security: the reauth flow, signup_blocked, and the legal text's claims read against the code; ux: the delete section and dialog, the footer, the legal pages; qa: the flows and every placeholder
 estimate: 1 coder run   # coder Sonnet/high (UI and copy; the data and auth rules are 0013c's)
@@ -590,3 +590,31 @@ Risks:
 - production must set `VITE_CONTACT_EMAIL` (0013a's checklist).
 Reviewers: code, security, ux, qa   Estimated: 1 coder run (Sonnet/high), 1 review round
 Links: `specs/0013f-account-deletion-terms-web.md` · PRODUCT.md "Launch (Slice 13)" · `design/screens-v1/Main.dc.html` (footer)
+
+## Digest (merged, PR #109, e962ad2)
+Spec 0013f — Delete-account UI, deleted-member placeholders, footer, terms and privacy pages   MERGED e962ad2
+Shipped: a person deletes their account from the profile, with a confirm dialog and a fresh sign-in when the session is older than 15 minutes, and lands on "החשבון נמחק". Chats and My flats show "משתמש/ת שנמחק/ה" for the deleted account. Every page except `/` and `/chat` has a footer (תנאי שימוש · מדיניות פרטיות · יצירת קשר), and `/` has the two legal links under its closing band. `/terms` and `/privacy` carry the Hebrew draft. The verify step that creates an account shows the consent line.
+Demo: `make dev` → sign up → `/me/profile` → "מחיקת החשבון" → "מחיקה סופית" → `/account-deleted`; open `/privacy#deletion` from the footer.
+Tests: +18 unit/component (vitest), +0 integration, +1 e2e (`account.spec.ts`: type-checked, not run because the PR carried `skip-e2e`)   CI: 7 min, green on 8977883
+Findings: 0 blockers, 3 majors fixed, 0 waived, 2 follow-ups logged.
+- The browser data (drafts, seen, the cached session) is now cleared even when the person leaves the page mid-delete.
+- The legal text no longer says kept applications keep their message.
+- The legal text now discloses the server access logs.
+- Follow-ups: photo objects stay reachable when the store delete fails; an unread badge shows on a closed deleted chat.
+Changed in PRODUCT.md: nothing. The spec records "Gilad 2026-11-15: access logs kept and disclosed".
+Before launch, Gilad fills the `[…]` placeholders in `web/src/locales/he.json` (list below) and sets `VITE_CONTACT_EMAIL` in the production web build. A lawyer's read is advised.
+Next spec I propose: none from this session (orchestrator's queue).
+
+Placeholders (`web/src/locales/he.json`):
+- `legal.date`: [תאריך] (both pages' "עודכן לאחרונה")
+- `legal.terms.intro`: [שם המפעיל ומספר מזהה]
+- `legal.terms.s2.i1`: [לאישור] (age 18+)
+- `legal.terms.s11.p1`: [לאישור] (Tel Aviv-Yafo courts)
+- `legal.privacy.intro`: [שם המפעיל ומספר מזהה]
+- `legal.privacy.s1.i13`: [משך שמירת היומנים]
+- `legal.privacy.s3.i2`: [ספק השרתים ומסד הנתונים], [מיקום השרתים], [ספק אחסון התמונות והאתר], [ספק האימייל]
+- `legal.privacy.s3.i5`: [מדינות]
+- `legal.privacy.s5.i9`: [משך שמירת היומנים]
+- Production web build env: `VITE_CONTACT_EMAIL` (without it every page shows contact@example.com)
+
+

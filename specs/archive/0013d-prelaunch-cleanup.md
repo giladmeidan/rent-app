@@ -1,7 +1,7 @@
 ---
 id: 0013d
 title: Before launch, `make screens` is green again, the five e2e tests that time out on a loaded Mac do less work, and the sign-up and map flakes wait on real signals
-status: in-review
+status: done
 depends_on: []   # touches test code only (web/e2e, web/e2e/screens); the product-code minors of the same sweep are 0013g
 reviewers: [code, qa, ux]   # code: shared e2e helpers (19 signUp call sites); qa: the flake fixes and the e2e evidence; ux: the three new screens states (FOLLOWUPS 0010b, 0014b) are what ux never saw. No security: no product code
 estimate: 1 coder run   # coder Opus/medium: the flake fixes are verified only in CI (no local e2e), so the diagnosis has to be right first time (Speed rule 6, "when in doubt, the stronger one"); the screens mocks are mechanical
@@ -282,3 +282,26 @@ eases from the current zoom, and reduced motion sets the ease's duration to 0.
 Applied by the orchestrator (2026-11-15): 1 → Scope 3 now names both causes, the evidence the coder reads first and
 the fix for (a), `E2E_SHARDS ?= 6` (AC9, NF1 and Out amended). 2 → `search.spec.ts:36` removed from Scope 3. 3 → AC8
 names the seven tests with their FOLLOWUPS lines; `ROOM_APPLICATIONS` location corrected. Status set to `verified`.
+
+## Digest (merged, PR #108, 4261f76)
+Spec 0013d — make screens green, e2e flakes fixed at the cause   MERGED 4261f76
+Shipped: `make screens` passes again (338 passed, 0 failed; the 20 red were all 18 `people.screens` states plus `04-applications-five`), with 4 new states (market-mine, market-mine-applications, closure-dialog, apartment-facts). The sign-up flake was shard 4 running out of codes: traces show `/auth/otp/request` 429 (12 codes against a limit of 10 per 15 min). The fix is E2E_SHARDS 4 → 8 (at most 7 codes per shard, 3 spare), plus `requestCode` (waits for the 204), `signUpApi` in the five slow tests, and reduced motion in the map zoom step.
+Demo: `make dev` → `make screens` → open `web/screens/0013d/`.
+Tests: +0 unit, +0 integration, +0 e2e files (4 new screens states, 2 new e2e helpers); no new timeout or retry (NF1).
+CI: run 43749939793 on caf5cfa, 17 min, e2e green on all 8 shards (6/8 is empty), no ✘ and no "Flaky e2e" warning.
+
+| Test (AC8) | main run 43741617742 | this PR's run |
+|---|---|---|
+| market ac18 | ✘ 15.2s (429), retry 17.1s | 4.9s |
+| inbox ac12 | 27.3s | 14.0s |
+| likes ac9 | 16.5s | 14.3s |
+| people-market ac19 | ✘ 31.5s (30 s timeout), retry 18.8s | 11.1s |
+| search ac9 | ✘ 11.0s (429), retry 21.1s | 16.8s |
+| people ac10 | 26.4s | 9.1s |
+| map ac8 › ac10 | 15.3s | 16.8s |
+
+Shard times (list reporter): 1/8 22.3s, 2/8 20.6s, 3/8 6.4s, 4/8 19.8s, 5/8 1.3m, 7/8 22.1s, 8/8 18.3s.
+Findings: 0 blockers, 0 majors; 6 minors (2 fixed, 2 logged, 2 no change), 8 nits dropped. FOLLOWUPS closed: 0010b, 0010f and 0014b (screens), 0014a, 0014c, 0014d, 0011d and 0013e (flaky e2e). New lines: applications ac9 "טוען…" (5 s), 2 ux screens minors, and `account.spec.ts:41-43` (0013f) using inline send-code + focus again.
+Changed in PRODUCT.md: nothing. Decision taken: `E2E_SHARDS ?= 8` (orchestrator, 2026-11-15); AC9's cap of 8 per shard kept.
+Next spec I propose: none from this sweep (0013g holds the product-code minors).
+

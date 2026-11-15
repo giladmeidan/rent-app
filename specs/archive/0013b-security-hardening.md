@@ -492,4 +492,15 @@ Applied by the orchestrator (2026-11-15):
 Also: the worker log level and the web's `Retry-After` copy point to `0013g-review-minors.md`, not 0013d.
 
 ## Digest (merged, PR #106, 4743331)
-Merged with e2e skipped (`skip-e2e`, Gilad 2026-11-15); ci green on `ee0d322`. Full review and merged digest on the PR.
+Spec 0013b — Real client networks for every per-IP limit   MERGED 4743331
+Shipped: once 0013a deploys with `TRUST_PROXY=fly`, every per-IP limit counts the visitor's real network (`Fly-Client-IP`), not the proxy. A network is an IPv4 address or an IPv6 /64, with a /48 counter at 16× beside it.
+- OTP codes: 3 / 15 min and 10 / day per (email, network); 20 / day per email across all networks; 50 / day per network.
+- Public reads: 300 / min and 3,000 / h per network, allowed through if Redis is down.
+- Browse 600 / h and reports 20 / h per network.
+- Anonymous listing views count once per network, capped at 200,000 view keys an hour.
+Demo (`make dev`): 1. Request a code for one email 4 times: the 4th is 429. 2. With `TRUST_PROXY=fly`, send another `Fly-Client-IP`: that request succeeds. 3. Stop Redis: `/listings` still loads.
+Tests: +2 unit, +16 integration, +0 e2e   CI: 8.6 min (ee0d322, e2e skipped by the `skip-e2e` label)
+Findings: 0 blockers, 0 majors. 2 minors fixed: the Redis skip window is timed from the failure, and a full Redis answers the JSON 503. 4 minors logged in FOLLOWUPS: duplicate `Fly-Client-IP` headers, the view budget running out silently, the threadpool burst while Redis hangs, no 429 vitest.
+CI fix: `test_nf1_owner_check_is_one_pass` no longer pins the planner's parent node; it keeps the one-pass guard.
+Changed in PRODUCT.md: nothing (decisions 1 = 20 a day, 2 = option A, as the spec defaulted).
+Next spec I propose: none from this session; 0013a (deploy) is parked because it needs paid accounts.

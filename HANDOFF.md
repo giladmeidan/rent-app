@@ -14,71 +14,56 @@ as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
 Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a` done.
-**Slice 13 (Launch readiness) is specced and verified: 7 specs, none built yet.** Gilad builds them in another chat.
+**Slice 13 (Launch readiness) is built except `0013a` (production deploy), which Gilad parked on 2026-11-15:
+"everything that costs money put on the side".**
 
-- Slice 13 decisions (Gilad, 2026-11-15) are in `specs/PRODUCT.md` → "Launch (Slice 13)" (commit `84b6fef` on
-  `main`): Fly (Frankfurt) + Fly Managed Postgres + Cloudflare Pages (~$55/month); email OTP only at launch (no SMS);
-  self-serve account deletion; reports kept; re-signup blocked after an admin action; orchestrator-drafted Hebrew
-  terms/privacy that Gilad approves; cleanup sweep. Not before launch: daily digest email, Protomaps. **Merging
-  Slice 13 is delegated to the orchestrator.**
-- The specs and this handoff are on `main` (pushed after PR #102, another chat's English wordmark, merged).
-  #102 changed `web/src/app/Layout.tsx`, `LoginPage.tsx`, `SignupPage.tsx` and `he.json` after `0013f` was
-  written; `0013f`'s coder re-reads them (line numbers may have moved).
-- Alembic head `0024`. No open PRs. `0016a` landing polish (`status: draft`) is still another chat's
-  in `../rent-app-0016a`; do not touch it.
-- Main checkout `../rent-app` is on `main` at `6a6cabb` (behind `origin/main`; `git pull` there, then graphify rebuilds), still with Gilad's
-  uncommitted `Makefile` / `.gitignore` edits and seed/promo work. Its stack (`rent-app`, 6 containers incl. `admin`)
-  runs.
+- Merged 2026-11-15 (merging delegated; specs archived with merged digests): `0013g` review minors (PR #104),
+  `0013e` admin hardening (PR #105, migration `0025_admin_logins`), `0013c` account deletion API (PR #107, migration
+  `0026_account_deletion`), `0013b` real client networks for every per-IP limit (PR #106), `0013f` account deletion
+  + terms/privacy web (PR #109), `0013d` pre-launch cleanup (PR #108: `make screens` green, `E2E_SHARDS ?= 8`).
+- **e2e (Gilad, 2026-11-15):** Slice 13 specs merged without e2e: `ci.yml` skips the smoke suite on PRs labelled
+  `skip-e2e` (commit `8e8af0a`); a run where only e2e failed counts as green (merged with `gh pr merge
+  --match-head-commit`, since `make merge` refuses a red check); never re-run CI that passed. #107 merged on a run
+  whose only failures were the 5 load-flaky e2e tests; #105 and #108 ran e2e green; #106 and #109 skipped it. No e2e
+  has run on `main` with `0013f`'s sign-up/consent changes and `0013d`'s shard changes together: the next PR with
+  e2e on is the first. Ask Gilad before using `skip-e2e` in a later slice.
+- Alembic head `0026`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
+- `specs/0015b-shelter-preference.md` (`status: verified`) appeared on `main` from another chat (commit `d840e0e`);
+  not built, not this orchestrator's queue unless Gilad says so.
+- Main checkout `../rent-app` is behind `origin/main` (`git pull` there, then graphify rebuilds), still with Gilad's
+  uncommitted `Makefile` / `.gitignore` edits and seed/promo work.
 
-Last updated: 2026-11-15 (Slice 13 specced and verified).
+Last updated: 2026-11-15 (Slice 13 built and merged, `0013a` parked).
 
-## Current Work — Slice 13 specs (all `status: verified`, in `specs/`)
-| Spec | What | depends_on | Reviewers | Coder | Worktree (branch `spec/<file>`) |
-| --- | --- | --- | --- | --- | --- |
-| `0013a-production-deploy` | Fly configs (api+worker, private Redis, private admin), Pages `_headers`, `make deploy-*`, settings guard, `infra/DEPLOY.md` runbook | – | code, security | Opus/high | `../rent-app-0013a` |
-| `0013b-security-hardening` | `client_network` + `TRUST_PROXY=fly` (`Fly-Client-IP`), OTP per (email, network) + IPv6 /48, per-network read/browse limits, view dedup | – | code, security, qa, perf | Opus/high | `../rent-app-0013b` |
-| `0013c-account-deletion-api` | `DELETE /me` tombstone, `EMAIL_BLOCK_KEY` HMAC block, `resolve_session` checks `deleted_at`, migration `0025_account_deletion` | – | code, security, qa | Opus/high (long) | `../rent-app-0013c` |
-| `0013d-prelaunch-cleanup` | `make screens` green, flaky e2e (settle the shard-4 OTP-budget cause first; `E2E_SHARDS ?= 6` if 429) | – | code, qa, ux | Opus/medium | `../rent-app-0013d` |
-| `0013e-admin-hardening` | `admin_logins` table (server-side session, lock survives restarts), writes need `Sec-Fetch-Site`, 0012b test edges | – | code, security, qa | Opus/high | none yet |
-| `0013f-account-deletion-terms-web` | profile delete flow, deleted-name display, `/terms` + `/privacy` with the Hebrew legal text, footer (not on `/`), consent line | 0013c | code, security, ux, qa | per spec | none yet |
-| `0013g-review-minors` | 409 on photo routes past expiry, "try again in …" on 429s, worker INFO logs, `services/visibility.py` | – | code, qa | Sonnet/medium | none yet |
+## Current Work
+Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
+5550/6500/8120/8121/5260) waits for Gilad's go on paid hosting (~$55/month). Building it costs nothing (configs,
+`make deploy-*`, `infra/DEPLOY.md`); deploying does.
 
-- The four worktrees exist (cut at `84b6fef`, so `git merge origin/main` brings the specs) with `.env` set:
-  a 5550/6500/8120/admin 8121/web 5260; b 5551/6501/8122/8123/5261; c 5552/6502/8124/8125/5262;
-  d 5553/6503/8126/8127/5263 (DB/Redis/API/admin/web). New worktrees start above those.
-- **Migration clash:** `0013c` and `0013e` both claim `0025`; the second to merge renumbers to `0026`.
-- Shared files between the specs are named in each spec's Risks; the second to merge merges `origin/main`.
-- The pre-started build sessions were archived (Gilad builds in another chat).
-
-## Decisions pending for Gilad (defaults are written into the specs; none blocks a build)
-1. `0013a`: error alerts at launch — none, or Sentry free tier as a small follow-up spec (recommended; the privacy
-   policy must then name it).
-2. `0013b`: per-email daily OTP ceiling across networks — 20 accepted at launch (default; one attacker with many
-   /64s can still block an email's new codes for a day, sessions unaffected) / 30 / a known-device exemption.
-3. `0013b`: Redis memory — A: read/browse windows ≤ 1 h + IPv6 /48 counters + Grafana alert at 70 % (default) /
-   B: keep day windows + /48 + alert / C: alert only.
-4. `0013e`: admin writes require `Sec-Fetch-Site: same-origin` (default) vs a per-session CSRF token.
-5. `0013c`: a lifted suspension or un-hidden listing still blocks re-signup (default; Gilad's "an action against
-   him" read that way); deletion needs a sign-in within 15 min (default); reports made by the account kept
-   (default); its listings kept as hidden paused rows without photos/description (default).
-6. `0013f`: approve the Hebrew terms + privacy text and fill its placeholders (operator, email provider, contact
-   address, date); 18+ and Tel Aviv-Yafo courts; a consent line, not a checkbox; no footer on `/` (default, small
-   legal links under the closing band; PRODUCT.md Landing v2 "still no footer") vs a footer everywhere. A lawyer's read
-   is advised (not legal advice).
-FYI: one API machine drops connections ~30 s per deploy (+~$7/month for a second); pick an email provider whose free
-tier sends ≥ 300/day; **homie must not go public before `0013b` is deployed** (runbook §9 "Fly-Client-IP check").
+## Decisions (Gilad, 2026-11-15, during the build)
+- Re-signup after self-deletion: rule **A**, only an admin action blocks (as PRODUCT.md). The gap (a reported account
+  deletes itself before any action and signs up again) is FOLLOWUPS 0013c "option D", post-launch.
+- Server access logs kept and disclosed in the privacy policy (retention placeholder `[משך שמירת היומנים]`).
+- 0013b/0013e/0013c pending decisions took the specs' defaults (20 codes/day per email; Redis option A;
+  `Sec-Fetch-Site: same-origin`; deletion defaults). Sentry stays open (parked with paid items).
 
 ## Next Steps
-1. Gilad answers the decisions above; write the answers into the specs / `PRODUCT.md` the same day.
-2. Build (another chat): `/build` per spec, at most 3 at once; `0013f` after `0013c` is open as a PR. Worktrees for
-   `0013e`, `0013f`, `0013g` still need creating (`.env` with `COMPOSE_PROJECT_NAME` + unique ports).
-3. After each merge: archive the spec, tick the FOLLOWUPS lines it names, remove its worktree and branch.
-4. Go-live (Gilad, after `0013a`+`0013b` merge): buy the domain; create Fly, Cloudflare and email-provider accounts;
-   follow `infra/DEPLOY.md`.
-5. Still open from before: `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label . --backend=claude-cli` in the main checkout
-   (Slice 12's post-slice step); Gilad to commit or drop his `Makefile` / `.gitignore` / seed / promo work; read
-   nadlan.gov.il's and CBS's terms before turning `RENT_REFERENCE` / `CBS_RENT` on in production; digests owed for
-   Slices 9, 9c, 10; Gilad's open FOLLOWUPS decisions; GitGuardian incident 40007526 → false positive.
+1. Parked until Gilad approves paid services: build/deploy `0013a`; buy the domain; Fly, Cloudflare and an
+   email-provider account (free tier ≥ 300/day); Sentry or no alerts; a second API machine (+~$7/month).
+   **homie must not go public before `0013b` is deployed with `TRUST_PROXY=fly`** (runbook §9).
+2. Legal text (`web/src/locales/he.json`, Gilad fills, lawyer's read advised): `legal.date`;
+   `legal.terms.intro` + `legal.privacy.intro` (operator name and ID); `legal.terms.s2.i1` (18+) and
+   `legal.terms.s11.p1` (Tel Aviv-Yafo courts) to confirm; `legal.privacy.s1.i13` + `s5.i9` (log retention);
+   `legal.privacy.s3.i2` (hosting/DB, server location, photo/site storage, email providers); `legal.privacy.s3.i5`
+   (countries). Production web build needs `VITE_CONTACT_EMAIL`.
+3. Post-slice, in the main checkout: `git pull`, then `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label .
+   --backend=claude-cli` (owed for Slices 12 and 13).
+4. FOLLOWUPS from Slice 13 (all minors): 0013f's `account.spec.ts:41-43` brings back the inline send-code pattern
+   0013d removed; applications ac9 "טוען…" timeout; 0013b's duplicate `Fly-Client-IP`, silent view budget, Redis-hang
+   threadpool burst; 0013e re-login leaves the old admin row live ≤ 8 h; option D above.
+5. Still open from before: Gilad to commit or drop his `Makefile` / `.gitignore` / seed / promo work; read
+   nadlan.gov.il's and CBS's terms before `RENT_REFERENCE` / `CBS_RENT` in production; digests owed for Slices 9, 9c,
+   10; Gilad's open FOLLOWUPS decisions; GitGuardian incident 40007526 → false positive.
 
 ## Admin dashboard (local)
 `make admin` in the main checkout (needs `ADMIN_PASSWORD` 16+ and `ADMIN_SECRET_KEY` 32+ in `.env`; names only,
@@ -157,6 +142,9 @@ Redis 6430–6503, API/admin 8050–8127, web 5191–5263: start above those). T
 CORS). Local login code: newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-15: Slice 13 built and merged except `0013a` (parked: costs money): #104 (g), #105 (e), #107 (c), #106 (b),
+  #109 (f), #108 (d). `skip-e2e` CI label added; migrations renumbered (e `0025`, c `0026`); a brittle plan-shape test
+  (`test_nf1_owner_check_is_one_pass`) fixed in #106.
 - 2026-11-15: Slice 13 decided with Gilad and specced: 7 specs (`0013a`–`0013g`) written by forks, one independent
   spec-verifier round each (all failed first, findings applied), all `verified`. Build sessions pre-started, then
   archived (Gilad builds in another chat).
