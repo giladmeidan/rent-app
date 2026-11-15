@@ -1,7 +1,7 @@
 ---
 id: 0011d
 title: "The report button reaches every other place people meet: a chat, the owner's inbox, a room's people page"
-status: in-review
+status: done
 depends_on: [0011b]   # its ReportButton / ReportDialog, reasons, `report` i18n keys and POST /reports (chat, applicant and room_person targets already accepted)
 reviewers: [code, qa, ux]   # web only: no API, data or auth change (0011b's security review covers POST /reports and its five target rules); qa: the entry points; ux: chat header, inbox card and pane, people card
 estimate: 1 coder run   # coder Sonnet/high (web only, reuses 0011b's components; Speed rule 6)
