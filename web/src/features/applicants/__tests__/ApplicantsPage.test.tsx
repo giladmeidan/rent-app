@@ -1843,9 +1843,9 @@ describe('ApplicantsPage, desktop (0009u)', () => {
   });
 
   it('ac2_report_applicant', async () => {
-    // Desktop: the pane has the button, the compact cards have none.
+    // Desktop: the pane has the button (after the chat link), the compact cards have none.
     stubDesktop();
-    const [a, b] = abc();
+    const [a, b] = abc({ a: { status: 'shortlisted' } });
     const { api } = renderPage([json([a, b])], {
       extra: { 'POST /reports': [json({ already_reported: false }, 201)] },
     });
@@ -1855,6 +1855,8 @@ describe('ApplicantsPage, desktop (0009u)', () => {
     }
     const button = within(pane()).getByRole('button', { name: he.report.button });
     expect(button).toHaveAccessibleDescription('A');
+    const chat = within(pane()).getByRole('link', { name: he.applicants.pane.chat });
+    expect(chat.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(button);
     const dialog = screen.getByRole('dialog', {
       name: i18n.t('report.title.person', { name: 'A' }),

@@ -1015,10 +1015,13 @@ describe('ChatThreadPage', () => {
     for (const t of [D, { ...D, can_send: false }]) {
       ({ view } = renderThread(t, [json(t)]));
       expect(await h1(NAME)).toBeVisible();
-      fireEvent.click(screen.getByRole('button', { name: name(NAME) }));
+      const report = screen.getByRole('button', { name: name(NAME) });
+      expect(report.closest('div')).toHaveTextContent(he.chat.thread.direct);
+      fireEvent.click(report);
       const direct = screen.getByRole('dialog', { name: name(NAME) });
       expect(within(direct).getAllByRole('radio')).toHaveLength(5);
       expect(within(direct).queryByText(he.report.reasons.unavailable)).toBeNull();
+      expect(within(direct).queryByText(he.report.groupHint)).toBeNull();
       reset(view);
     }
 
@@ -1027,6 +1030,7 @@ describe('ChatThreadPage', () => {
     ({ view } = renderThread(G, [json(G)]));
     expect(await h1(G.other_name)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: name(G.other_name) }));
+    expect(within(screen.getByRole('dialog')).getAllByRole('radio')).toHaveLength(6);
     expect(
       within(screen.getByRole('dialog')).getByText(
         i18n.t('report.groupHint', { name: G.other_name }),
