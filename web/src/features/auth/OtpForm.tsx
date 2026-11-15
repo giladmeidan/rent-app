@@ -53,6 +53,7 @@ type VerifyResult =
   | { kind: 'ok'; user: UserOut }
   | { kind: 'invalidCode' }
   | { kind: 'profileRequired' }
+  | { kind: 'suspended' }
   | { kind: 'failed' };
 
 /** True only for a body that is exactly `{"detail": "profile_required"}`. */
@@ -73,6 +74,7 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
       return { kind: 'ok', user: data };
     }
     if (response.status === 401) return { kind: 'invalidCode' };
+    if (response.status === 403) return { kind: 'suspended' }; // account_suspended (0012a)
     if (response.status === 422 && isProfileRequired(error)) return { kind: 'profileRequired' };
     return { kind: 'failed' };
   } catch {
@@ -99,7 +101,8 @@ type Props = {
 };
 
 type Step1Error = TooMany | { kind: 'failed' } | null;
-type Step2Error = TooMany | { kind: 'invalidCode' } | { kind: 'failed' } | null;
+type Step2Error =
+  TooMany | { kind: 'invalidCode' } | { kind: 'suspended' } | { kind: 'failed' } | null;
 
 /**
  * Two-step email-code form shared by /signup and /login. The email and code live in this
@@ -252,7 +255,13 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
             setProfileNeeded(true);
             return;
           }
-          setStep2Error({ kind: result.kind === 'invalidCode' ? 'invalidCode' : 'failed' });
+          if (result.kind === 'suspended') {
+            // The code was right and is now used up: a cleared field, and the alert (0012a).
+            setCode('');
+            setStep2Error({ kind: 'suspended' });
+          } else {
+            setStep2Error({ kind: result.kind === 'invalidCode' ? 'invalidCode' : 'failed' });
+          }
           codeRef.current?.focus();
         },
       },
@@ -427,9 +436,11 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
         <p id={codeAlertId} role="alert" className={errorText}>
           {step2Error.kind === 'tooMany'
             ? tooManyText(step2Error)
-            : online
-              ? t('common.error')
-              : t('common.offline')}
+            : step2Error.kind === 'suspended'
+              ? t('auth.errors.suspended')
+              : online
+                ? t('common.error')
+                : t('common.offline')}
         </p>
       )}
       {profileNeeded && (

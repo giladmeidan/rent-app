@@ -12,6 +12,7 @@ import { Loading } from '../../components/Loading';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { useOnline } from '../../components/useOnline';
+import { useMe } from '../auth/useMe';
 import { ListingWizard } from './ListingWizard';
 import { isPastExpiry } from './StatusBadge';
 import { useMyListings } from './useMyListings';
@@ -23,7 +24,8 @@ const section = 'flex flex-col items-center';
  * `/me/listings/:id/edit`: the wizard in edit mode for one of the owner's listings, found in
  * `GET /me/listings` (which has every own listing; the public `GET /listings/{id}` hides paused
  * and expired ones). An id that is not in the list — another owner's, unknown or malformed — is
- * "not found", and nothing tells those apart.
+ * "not found", and nothing tells those apart. A listing removed by homie (spec 0012a) is laid out
+ * as not found, with its own heading, checked before the expired refusal.
  */
 export function EditListingPage() {
   const { t } = useTranslation();
@@ -36,8 +38,10 @@ export function EditListingPage() {
   const side = useSide();
   const renew = useRenewListing(id ?? '');
   const online = useOnline();
+  const me = useMe();
   const navigate = useNavigate();
-  const readOnly = listing !== undefined && isPastExpiry(listing, now);
+  const removed = listing?.removed === true;
+  const readOnly = listing !== undefined && !removed && isPastExpiry(listing, now);
   const notFound = listings.data !== undefined && listing === undefined;
   // Focus the explanation on arrival (the hook runs before any early return).
   useEffect(() => {
@@ -46,16 +50,18 @@ export function EditListingPage() {
   // Not found, on arrival or after a save answered 404 (the wizard drops the listing from the
   // cache): the heading takes focus, after RouteFocus has focused <main> (spec 0009t).
   useEffect(() => {
-    if (notFound) notFoundHeading.current?.focus();
-  }, [notFound]);
+    if (notFound || removed) notFoundHeading.current?.focus();
+  }, [notFound, removed]);
   // The page owns the tab's title in every state: its <h1> (the wizard's is the edit title).
   usePageTitle(
     t(
       notFound
         ? 'listings.edit.notFound'
-        : readOnly
-          ? 'listings.edit.expiredTitle'
-          : 'listings.edit.title',
+        : removed
+          ? 'listings.errors.removed'
+          : readOnly
+            ? 'listings.edit.expiredTitle'
+            : 'listings.edit.title',
     ),
   );
   // By the listing's type (spec 0010a): a room's "my" page is the market's. Before the list
@@ -87,11 +93,15 @@ export function EditListingPage() {
     );
   }
 
-  if (listing === undefined) {
+  if (listing === undefined || removed) {
     return (
       <PageContainer as="section" width="wide" className={section}>
         <div className="flex w-full max-w-narrow flex-col gap-4">
-          <PageHeader back={back} title={t('listings.edit.notFound')} titleRef={notFoundHeading} />
+          <PageHeader
+            back={back}
+            title={t(removed ? 'listings.errors.removed' : 'listings.edit.notFound')}
+            titleRef={notFoundHeading}
+          />
         </div>
       </PageContainer>
     );
@@ -124,7 +134,7 @@ export function EditListingPage() {
             </Button>
             {renew.isError && (
               <p role="alert" className="text-label text-danger">
-                {actionErrorText(t, renew.error, online)}
+                {actionErrorText(t, renew.error, online, me.data?.listing_cap)}
               </p>
             )}
           </Card>

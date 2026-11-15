@@ -2,14 +2,15 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
+import { useMe } from '../auth/useMe';
 import type { ListingInBody } from './api';
-import { LISTING_CAP } from './constants';
 import { ListingCard } from './ListingCard';
 import { OwnerPreferences } from './OwnerPreferences';
 import { RoomPreview } from './RoomPreview';
 
 /** What a failed publish shows above the button (401 and 403 redirect instead). */
-export type PublishError = 'capReached' | 'expired' | 'areaInactive' | 'invalid' | 'failed';
+export type PublishError =
+  'capReached' | 'expired' | 'removed' | 'areaInactive' | 'invalid' | 'failed';
 
 type Props = {
   body: ListingInBody;
@@ -28,6 +29,7 @@ const alertText = 'text-body-sm font-medium text-danger';
  * heading and hint are the wizard's. */
 export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDetails }: Props) {
   const { t } = useTranslation();
+  const me = useMe();
   return (
     <div className="flex flex-col gap-4">
       <ListingCard listing={body} today={today} coverUrl={coverUrl} />
@@ -35,7 +37,12 @@ export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDet
       <OwnerPreferences listing={body} />
       {error === 'capReached' && (
         <p role="alert" className={alertText}>
-          {t('listings.errors.capReached', { cap: LISTING_CAP })}
+          {t('listings.errors.capReached', { cap: me.data?.listing_cap })}
+        </p>
+      )}
+      {error === 'removed' && (
+        <p role="alert" className={alertText}>
+          {t('listings.errors.removed')}
         </p>
       )}
       {error === 'expired' && (
