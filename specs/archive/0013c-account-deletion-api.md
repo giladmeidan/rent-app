@@ -1,7 +1,7 @@
 ---
 id: 0013c
 title: "A person deletes their own account: their data goes, the people they talked to keep the thread, and an account homie acted against cannot sign up again"
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, security, qa]   # security: PII deletion, the keyed email hash, the auth flow; qa: every place a deleted account could still appear
 estimate: 1 coder run   # a long one, at the limit: three race tests (AC13-AC15) and the key's wiring in 4 places; coder Opus/high (data, migration, PII; Speed rule 6); the web half is 0013f
@@ -619,3 +619,29 @@ Applied by the orchestrator (2026-11-15):
 4. Step 1 reads `deleted_at, email, photo_key` as columns from the locked row and returns at once on a tombstone (204, nothing written); step 2 hashes step 1's email; AC13 runs two concurrent `DELETE /me`.
 5. `_lock_own_listing` reads `deleted_at` in a second statement after the lock and raises `ListingNotFoundError` (404 `not_found`, as every photo route maps it). Not the suggested `NOT EXISTS`: under READ COMMITTED a waiting lock keeps its old snapshot for `users`. The listings UPDATE moved to step 3, before the photo step, so an upload holding the lock commits first and is deleted too. API row, Blast radius, Risks (shared with 0013g), AC15.
 6. `Member.name: str | None` in Scope's Chat bullet; Blast radius names `get_thread` (both) and 0013f's `ChatThreadPage.tsx` members line, which already renders a null name as the placeholder.
+
+## Digest (merged, PR #107, bc31658)
+**Spec 0013c — A person deletes their own account   MERGED bc31658**
+- **Shipped:** `DELETE /me` turns the account into a scrubbed tombstone.
+  - Its PII, profile, likes, sessions and photos go. Others keep their chats with the account under a NULL name, and sending in those chats closes. Reports are kept.
+  - If homie ever suspended the account or hid one of its listings, a keyed HMAC of its email blocks signing up again.
+  - Migration `0026_account_deletion`.
+- **Demo (API; the web half is 0013f):**
+  1. Sign in on `make dev` and call `DELETE /me`: 204, signed out on every device.
+  2. Sign in as the chat partner: the thread is still there, with a null name and sending closed.
+  3. Suspend and unsuspend an account in admin, delete it, then sign up again with the same email: refused (`signup_blocked`).
+- **Tests:** +19 pytest (Postgres integration, including the three race tests AC13–AC15), +0 vitest, +0 e2e.
+  - Locally: pytest 827, vitest 738, lint green.
+- **CI** (run 43743726630, ~21 min, head 8b7f102):
+  - Lint, types, i18n-check, pytest, vitest and build all passed.
+  - e2e failed only on 5 known load-flaky tests: market ac18, people-market ac19, people ac10, photos ac5 and search ac9. None of them touches this spec.
+  - Merged without e2e on Gilad's call, with no rerun.
+- **Findings:** 1 blocker fixed, 0 majors, 4 minors fixed, 2 follow-ups logged, 0 waived.
+  - The blocker: a write racing the deletion left rows for the deleted account, which made lists answer 500.
+  - Follow-ups: AC13 does not exercise the lock-wait path; the seeker's applications list shows no sign that the owner was deleted (for 0013f).
+- **Changed in PRODUCT.md:** nothing.
+  - Gilad confirmed re-signup rule A: only an admin action blocks.
+  - Option D (a pending block for reported accounts) is logged in FOLLOWUPS for after launch.
+- **Next spec:** 0013f, the web half (delete button, placeholders, terms and privacy). It is already building from this branch.
+
+
