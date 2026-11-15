@@ -18,12 +18,14 @@ from sqlalchemy.engine import make_url
 
 ROLE = "homie_admin"
 
-# Column-level writes only: suspend / un-suspend / cap, ending sessions, hide / un-hide, resolve.
+# Column-level writes only: suspend / un-suspend / cap, ending sessions, hide / un-hide, resolve,
+# logging in and out (`admin_logins`: INSERT below, then only `ended_at`).
 _COLUMN_GRANTS = (
     ("users", ("suspended_at", "listing_cap")),
     ("sessions", ("revoked_at",)),
     ("listings", ("status", "removed_at")),
     ("reports", ("resolved_at",)),
+    ("admin_logins", ("ended_at",)),
 )
 
 
@@ -60,6 +62,7 @@ def apply_admin_role(database_url: str, password: str) -> None:
             "ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public"
             " GRANT SELECT ON TABLES TO {role}",
             "GRANT INSERT ON admin_actions TO {role}",
+            "GRANT INSERT ON admin_logins TO {role}",
         ):
             conn.execute(sql.SQL(statement).format(db=database, role=role))
         for table, columns in _COLUMN_GRANTS:
