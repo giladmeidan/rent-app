@@ -11,14 +11,19 @@ import he from '../../../locales/he.json';
 import {
   currentPath,
   deferred,
+  empty,
   json,
   mockApi,
+  networkError,
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
 import { RequireSeeker } from '../../auth/RequireSeeker';
 import { gushDan, seeker } from '../../listings/__tests__/fixtures';
 import { LIFESTYLE_KEYS } from '../../lifestyle/keys';
+import { readDraft, writeDraft } from '../../../app/drafts';
+import { markSeen, readSeen } from '../../listings/seen';
+import { ME_KEY } from '../../auth/useMe';
 import { ProfilePage } from '../ProfilePage';
 import { PROFILE_KEY } from '../useProfile';
 import { birthYearRange } from '../validate';
@@ -983,6 +988,7 @@ describe('ProfilePage', () => {
         he.profile.about.title,
         he.profile.sections.search,
         he.profile.people.title,
+        he.profile.delete.title, // the delete section, after the form (spec 0013f)
       ]);
       expect(
         screen.getByRole('heading', { level: 3, name: he.profile.sections.household }),
@@ -1265,6 +1271,124 @@ describe('ProfilePage', () => {
       save();
       expectError(radio(he.profile.room.fields.gender, he.profile.room.gender.woman), required);
       expect(api.calls(PUT)).toHaveLength(0);
+    });
+  });
+
+  describe('delete account (spec 0013f)', () => {
+    const DELETE = 'DELETE /me';
+    const LOGOUT = 'POST /auth/logout';
+
+    function Landed() {
+      return <output data-testid="landed">{useNavigationType()}</output>;
+    }
+    const tree = (
+      <Routes>
+        <Route element={<RequireSeeker />}>
+          <Route path="/me/profile" element={<ProfilePage />} />
+        </Route>
+        <Route path="/account-deleted" element={<Landed />} />
+        <Route path="/login" element={<p>login</p>} />
+      </Routes>
+    );
+    const openDialog = async () => {
+      await form();
+      const opener = screen.getByRole('button', { name: he.profile.delete.open });
+      opener.focus(); // a real click focuses it; fireEvent's does not
+      fireEvent.click(opener);
+      return screen.getByRole('dialog', { name: he.profile.delete.confirmTitle });
+    };
+    const confirmButton = (dialog: HTMLElement) =>
+      within(dialog).getByRole('button', { name: he.profile.delete.confirm });
+
+    it('ac1_delete_account', async () => {
+      const client = testQueryClient();
+      const gone = deferred();
+      const api = renderPage({ [DELETE]: [gone.promise] }, '/me/profile', { client, tree });
+      writeDraft('chat', 'c1', seeker.id, 'unsent');
+      markSeen('listing-1');
+
+      // The section sits after the form, with its link to what is kept.
+      await form();
+      const section = screen.getByRole('heading', { level: 2, name: he.profile.delete.title })
+        .parentElement as HTMLElement;
+      expect(section.closest('form')).toBeNull();
+      expect(
+        within(section).getByRole('link', { name: he.profile.delete.privacyLink }),
+      ).toHaveAttribute('href', '/privacy#deletion');
+
+      const dialog = await openDialog();
+      // Cancel is focused first; confirming sends one request and disables the button.
+      expect(within(dialog).getByRole('button', { name: he.common.cancel })).toHaveFocus();
+      fireEvent.click(confirmButton(dialog));
+      const pending = await within(dialog).findByRole('button', {
+        name: he.profile.delete.pending,
+      });
+      expect(pending).toBeDisabled();
+      fireEvent.click(pending);
+      expect(api.calls(DELETE)).toHaveLength(1);
+
+      gone.resolve(empty());
+      await vi.waitFor(() => {
+        expect(currentPath()).toBe('/account-deleted');
+      });
+      // replace: Back does not return to the profile.
+      expect(screen.getByTestId('landed')).toHaveTextContent('REPLACE');
+      expect(readDraft('chat', 'c1', seeker.id)).toBe('');
+      expect(readSeen().size).toBe(0);
+      expect(client.getQueryData(ME_KEY)).toBeNull();
+    });
+
+    it('ac2_reauth_required', async () => {
+      const client = testQueryClient();
+      const api = renderPage(
+        { [DELETE]: [() => json({ detail: 'reauth_required' }, 403)], [LOGOUT]: [() => empty()] },
+        '/me/profile',
+        { client, tree },
+      );
+      const dialog = await openDialog();
+      fireEvent.click(confirmButton(dialog));
+      expect(await within(dialog).findByText(he.profile.delete.reauth)).toBeVisible();
+      expect(within(dialog).queryByRole('button', { name: he.profile.delete.confirm })).toBeNull();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: he.profile.delete.reauthAction }));
+      await vi.waitFor(() => {
+        expect(currentPath()).toBe('/login?next=%2Fme%2Fprofile');
+      });
+      expect(api.calls(LOGOUT)).toHaveLength(1);
+      expect(client.getQueryData(ME_KEY)).toBeNull();
+    });
+
+    it('ac3_delete_failure_and_cancel', async () => {
+      const api = renderPage(
+        { [DELETE]: [() => json({ detail: 'boom' }, 500), networkError] },
+        '/me/profile',
+        { tree },
+      );
+      const dialog = await openDialog();
+
+      // Any other failure: an alert, the dialog stays, the button is usable again.
+      fireEvent.click(confirmButton(dialog));
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(he.profile.delete.failed);
+      expect(dialog).toHaveAttribute('open');
+      expect(confirmButton(dialog)).toBeEnabled();
+
+      // Offline, the request failing: "no connection" instead.
+      const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      fireEvent.click(confirmButton(dialog));
+      await vi.waitFor(() => {
+        expect(within(dialog).getByRole('alert')).toHaveTextContent(he.common.offline);
+      });
+      onLine.mockRestore();
+      expect(api.calls(DELETE)).toHaveLength(2);
+
+      // Cancel closes it, sends nothing and returns focus to the opener.
+      fireEvent.click(within(dialog).getByRole('button', { name: he.common.cancel }));
+      await vi.waitFor(() => {
+        expect(dialog).not.toHaveAttribute('open');
+      });
+      expect(screen.getByRole('button', { name: he.profile.delete.open })).toHaveFocus();
+      expect(api.calls(DELETE)).toHaveLength(2);
+      expect(currentPath()).toBe('/me/profile');
     });
   });
 });
