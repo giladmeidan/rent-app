@@ -27,6 +27,7 @@ from app.models import Session as SessionRow
 from app.models import User
 from app.redis_client import RedisClient
 from app.schemas.auth import ProfileIn
+from app.services import accounts  # a module import: accounts.py imports this module too
 from app.services.email import EmailSender, EmailUnavailable
 from app.services.rate_limit import count_or_raise
 
@@ -78,6 +79,11 @@ class ProfileRequiredError(Exception):
 
 class AccountSuspendedError(Exception):
     """Right code for a suspended account (spec 0012a): the code is consumed, nothing is written."""
+
+
+class SignupBlockedError(Exception):
+    """Right code for an email with no live account whose hash is in `blocked_emails` (spec
+    0013c): the code is consumed, nothing is written."""
 
 
 def normalise_email(email: str) -> str:
@@ -141,8 +147,8 @@ def verify_otp(
     db: Session, r: RedisClient, email: str, code: str, profile: ProfileIn | None
 ) -> tuple[User, bool]:
     """Check the code and return `(user, created)`, creating the account from `profile` on first
-    use. Raises `InvalidCodeError`, `ProfileRequiredError` or `AccountSuspendedError`. Commits; the
-    caller adds a session."""
+    use. Raises `InvalidCodeError`, `ProfileRequiredError`, `AccountSuspendedError` or
+    `SignupBlockedError`. Commits; the caller adds a session."""
     email = normalise_email(email)
     key = [otp_key(email)]
     reserved = _eval(r, _RESERVE_ATTEMPT, key, OTP_MAX_ATTEMPTS)
@@ -155,6 +161,11 @@ def verify_otp(
         raise InvalidCodeError
 
     user = _find_user(db, email)
+    # Before the refund below, so a blocked person learns at the first verify (spec 0013c).
+    if user is None and accounts.email_blocked(db, email):
+        # Claim the code outside the `try` below, so it stays consumed (0012a's suspended rule).
+        _eval(r, _SETTLE_CODE, key, stored, b"del")
+        raise SignupBlockedError
     if user is None and profile is None:
         _eval(r, _SETTLE_CODE, key, stored, b"refund")
         raise ProfileRequiredError
@@ -216,7 +227,8 @@ def revoke_session(db: Session, token: str) -> None:
 
 
 def resolve_session(db: Session, token: str) -> User | None:
-    """The user of a live session (not revoked, not expired, user not suspended), in one query."""
+    """The user of a live session (not revoked, not expired, user not suspended or deleted), in one
+    query."""
     return db.scalar(
         select(User)
         .join(SessionRow, SessionRow.user_id == User.id)
@@ -225,5 +237,18 @@ def resolve_session(db: Session, token: str) -> User | None:
             SessionRow.revoked_at.is_(None),
             SessionRow.expires_at > func.now(),
             User.suspended_at.is_(None),
+            # A login racing DELETE /me can add a session after its step 11 (spec 0013c AC14).
+            User.deleted_at.is_(None),
+        )
+    )
+
+
+def session_created_at(db: Session, token: str) -> dt.datetime | None:
+    """When the live session of `token` was created (DELETE /me's recent sign-in), else None."""
+    return db.scalar(
+        select(SessionRow.created_at).where(
+            SessionRow.token_hash == _token_hash(token),
+            SessionRow.revoked_at.is_(None),
+            SessionRow.expires_at > func.now(),
         )
     )

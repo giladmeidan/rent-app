@@ -6,13 +6,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.config import DEV_SECRET_KEY, DatabaseSettings, Settings
+from app.config import DEV_EMAIL_BLOCK_KEY, DEV_SECRET_KEY, DatabaseSettings, Settings
 
 _DSN = "postgresql+psycopg://rent:s3cret@localhost:5432/rent"
 _REDIS = "redis://:r3dis@localhost:6379/0"
 # What an https WEB_ORIGIN requires since 0001a (round 1, minor 6); unrelated to the origin rules.
 _HTTPS_READY: dict[str, Any] = {
     "secret_key": "p" * 32,
+    "email_block_key": "b" * 32,  # spec 0013c
     "cookie_secure": True,
     "email_backend": "file",
     "geocoder": "fake",
@@ -186,7 +187,9 @@ def test_https_web_origin_refuses_dev_defaults(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setenv("EMAIL_BACKEND", "file")  # from the environment counts as explicit
     monkeypatch.setenv("GEOCODER", "fake")
-    assert Settings(**https, **_PHOTO_ENV, secret_key=_SECRET, cookie_secure=True).cookie_secure
+    assert Settings(
+        **https, **_PHOTO_ENV, secret_key=_SECRET, email_block_key="b" * 32, cookie_secure=True
+    ).cookie_secure
     # Plain http (local dev) keeps the dev defaults working.
     assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=DEV_SECRET_KEY).secret_key
 
@@ -317,3 +320,30 @@ def test_ac13_rent_reference_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "secret" not in str(excinfo.value)
     with pytest.raises(ValidationError, match="rent_reference"):
         Settings(**required, rent_reference="on")
+
+
+def test_ac9_email_block_key_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 0013c AC9: EMAIL_BLOCK_KEY is required, at least 32 characters, and never the dev
+    value on https (the last https check); no error echoes the value."""
+    monkeypatch.delenv("EMAIL_BLOCK_KEY", raising=False)
+    required: dict[str, Any] = {"database_url": _DSN, "redis_url": _REDIS, "secret_key": _SECRET}
+
+    with pytest.raises(ValidationError, match="email_block_key"):
+        Settings(**required)
+    with pytest.raises(ValidationError, match="EMAIL_BLOCK_KEY must be at least 32") as excinfo:
+        Settings(**required, email_block_key="short-block-canary")
+    assert "short-block-canary" not in str(excinfo.value)
+    # Plain http (local dev) accepts the dev value.
+    assert Settings(**required, email_block_key=DEV_EMAIL_BLOCK_KEY).email_block_key
+
+    https: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "web_origin": "https://rent.example",
+        **_HTTPS_READY,
+    }
+    with pytest.raises(ValidationError, match="EMAIL_BLOCK_KEY must not be the dev value") as exc:
+        Settings(**{**https, "email_block_key": DEV_EMAIL_BLOCK_KEY})
+    assert DEV_EMAIL_BLOCK_KEY not in str(exc.value)
+    configured = Settings(**https)
+    assert "b" * 32 not in repr(configured)

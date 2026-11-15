@@ -238,16 +238,22 @@ async def encode_upload(data: bytes) -> Encoded:
 
 def _lock_own_listing(db: Session, owner_id: uuid.UUID, listing_id: uuid.UUID) -> None:
     """Lock the caller's listing `FOR NO KEY UPDATE` until the transaction ends;
-    `ListingNotFoundError` when it is unknown or another owner's, `ListingRemovedError` when homie
-    removed it (spec 0012a), `ListingExpiredError` when past `expires_at` (spec 0013g)."""
-    _raise_unless_open(
-        db.execute(
-            select(Listing.removed_at.is_not(None), Listing.expires_at <= func.now())
-            .where(Listing.id == listing_id, Listing.owner_id == owner_id)
-            # `key_share` without `read` renders `FOR NO KEY UPDATE` on PostgreSQL.
-            .with_for_update(key_share=True)
-        ).one_or_none()
-    )
+    `ListingNotFoundError` when it is unknown or another owner's, or its owner deleted the account
+    (spec 0013c), `ListingRemovedError` when homie removed it (spec 0012a), `ListingExpiredError`
+    when past `expires_at` (spec 0013g)."""
+    row = db.execute(
+        select(Listing.removed_at.is_not(None), Listing.expires_at <= func.now())
+        .where(Listing.id == listing_id, Listing.owner_id == owner_id)
+        # `key_share` without `read` renders `FOR NO KEY UPDATE` on PostgreSQL.
+        .with_for_update(key_share=True)
+    ).one_or_none()
+    # A second statement, after the lock: a lock that waited on `DELETE /me`'s listing UPDATE keeps
+    # its old snapshot of `users`, while a new statement sees the committed deletion (spec 0013c).
+    if row is not None and db.scalar(
+        select(User.deleted_at.is_not(None)).where(User.id == owner_id)
+    ):
+        raise ListingNotFoundError
+    _raise_unless_open(row)
 
 
 def _raise_unless_open(row: Any) -> None:
@@ -410,6 +416,8 @@ def set_user_photo(db: Session, store: PhotoStore, user: User, encoded: Encoded)
         store.put(names[0], encoded.small)
         store.put(names[1], encoded.large)
         old = _lock_photo_key(db, user.id)
+        # shortcut: a PUT /me/photo racing DELETE /me trips ck_users_deleted_scrubbed here (a 500,
+        # nothing lost; spec 0013c Risks), add deleted_at IS NULL to the lock if it is ever seen.
         _set_photo_key(db, user.id, key)
         db.commit()
     except BaseException:

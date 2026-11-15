@@ -26,6 +26,7 @@ export WEB_PORT          ?= 5173
 export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
+export EMAIL_BLOCK_KEY   ?= dev-only-email-block-key-0123456789abcdef
 # The admin dashboard (spec 0012b): its host port and its Postgres role's password. The test
 # fixture uses the same password: the role is cluster-wide, shared by `rent` and `rent_test`.
 export ADMIN_PORT        ?= 8001

@@ -36,6 +36,7 @@ from app.routers import (
     search,
 )
 from app.schemas.error import ErrorOut
+from app.services.accounts import AccountDeletedError
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +91,12 @@ class BodySizeLimit:
             return message
 
         await self.app(scope, capped_receive, send)
+
+
+async def _account_deleted(request: Request, exc: Exception) -> JSONResponse:
+    """A write whose account was deleted while it ran (spec 0013c): as a session that no longer
+    resolves."""
+    return JSONResponse(status_code=401, content={"detail": "unauthenticated"})
 
 
 async def _database_unavailable(request: Request, exc: Exception) -> JSONResponse:
@@ -169,6 +176,7 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(RequestValidationError, _request_invalid)
     app.add_exception_handler(OperationalError, _database_unavailable)
+    app.add_exception_handler(AccountDeletedError, _account_deleted)
     app.add_exception_handler(redis.exceptions.ConnectionError, _redis_unavailable)
     app.add_exception_handler(redis.exceptions.TimeoutError, _redis_unavailable)
     app.include_router(health.router)

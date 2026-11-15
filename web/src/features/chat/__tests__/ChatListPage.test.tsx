@@ -11,7 +11,7 @@ import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut } from '../api';
 import { ChatListPage } from '../ChatListPage';
 import { formatMessageTime } from '../format';
-import { conversation, directConversation } from './fixtures';
+import { type Conversation, conversation, directConversation } from './fixtures';
 import { settle } from './harness';
 
 afterEach(() => {
@@ -97,7 +97,7 @@ describe('ChatListPage', () => {
     const links = await screen.findAllByRole('link');
     expect(links).toHaveLength(4);
     links.forEach((link, i) => {
-      const c = all[i] as ConversationOut;
+      const c = all[i] as Conversation;
       expect(link).toHaveAttribute('href', `/chat/${c.id}`);
       expect(link).toHaveTextContent(c.other_name);
       expect(link).toHaveTextContent(titleOf(c));
@@ -157,8 +157,7 @@ describe('ChatListPage', () => {
       last_message: { body: 'bye now', mine: false, created_at: at },
     });
     const { view } = renderPage([json([unread, fresh, full])]);
-    const link = (c: ConversationOut) =>
-      screen.findByRole('link', { name: new RegExp(c.other_name) });
+    const link = (c: Conversation) => screen.findByRole('link', { name: new RegExp(c.other_name) });
     const unreadSentence = i18n.t('chat.list.unread', { count: 2 });
 
     // Unread: an accent badge (not the solid count), its sentence the accessible text.
@@ -293,8 +292,7 @@ describe('ChatListPage', () => {
     const flatmateItem = conversation({ my_role: 'flatmate', member_count: 3 });
     const plain = conversation();
     const flat = { listing: plain.listing, owner_name: 'רוני', joined_at: '2026-11-01T08:00:00Z' };
-    const link = (c: ConversationOut) =>
-      screen.getByRole('link', { name: new RegExp(c.other_name) });
+    const link = (c: Conversation) => screen.getByRole('link', { name: new RegExp(c.other_name) });
 
     let { view } = renderPage([() => json([flatmateItem, plain])], undefined, [() => json([flat])]);
     await heading();

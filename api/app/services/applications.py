@@ -87,6 +87,7 @@ from app.matching.score import match_columns
 from app.models import Application, Conversation, Listing, SeekerProfile, User
 from app.redis_client import RedisClient
 from app.schemas.application import ApplicantSort, ApplicantStatus
+from app.services import accounts
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
@@ -244,6 +245,7 @@ def apply(
     # Imported here: `services/people.py` imports this module.
     from app.services.people import flatmate_of
 
+    accounts.lock_live_account(db, seeker.id)  # spec 0013c: never an application by a tombstone
     gate = db.execute(
         select(
             # The looking part (spec 0010c): a personal-only profile counts as none.

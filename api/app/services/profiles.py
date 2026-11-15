@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Area, SeekerProfile, User
 from app.schemas.profile import SeekerProfileIn
+from app.services import accounts
 from app.services.listings import UnknownAreaError
 
 
@@ -76,10 +77,12 @@ def _check_areas(db: Session, area_ids: list[uuid.UUID]) -> None:
 def put_profile(db: Session, seeker: User, data: SeekerProfileIn) -> SeekerProfile:
     """Create or replace `seeker`'s profile with `data` (already validated by `SeekerProfileIn`)
     and return it: both parts, so a part left out is cleared (spec 0010c). Raises
-    `UnknownAreaError` (nothing written). Two statements: the area check (only when the looking
-    part is sent), then one `INSERT ... ON CONFLICT (user_id) DO UPDATE ... RETURNING`, so two
-    concurrent PUTs leave one row (the later one's values). Commits."""
+    `UnknownAreaError` (nothing written). The live-account lock (spec 0013c), then two
+    statements: the area check (only when the looking part is sent), then one `INSERT ... ON
+    CONFLICT (user_id) DO UPDATE ... RETURNING`, so two concurrent PUTs leave one row (the later
+    one's values). Commits."""
     try:
+        accounts.lock_live_account(db, seeker.id)  # spec 0013c: never a profile for a tombstone
         if data.area_ids is not None:
             _check_areas(db, data.area_ids)
         values = data.model_dump()
