@@ -1,7 +1,7 @@
 ---
 id: 0013d
 title: Before launch, `make screens` is green again, the five e2e tests that time out on a loaded Mac do less work, and the sign-up and map flakes wait on real signals
-status: verified
+status: in-review
 depends_on: []   # touches test code only (web/e2e, web/e2e/screens); the product-code minors of the same sweep are 0013g
 reviewers: [code, qa, ux]   # code: shared e2e helpers (19 signUp call sites); qa: the flake fixes and the e2e evidence; ux: the three new screens states (FOLLOWUPS 0010b, 0014b) are what ux never saw. No security: no product code
 estimate: 1 coder run   # coder Opus/medium: the flake fixes are verified only in CI (no local e2e), so the diagnosis has to be right first time (Speed rule 6, "when in doubt, the stronger one"); the screens mocks are mechanical
@@ -178,6 +178,10 @@ runs `make e2e`. `tsc` (in `make lint`) type-checks `web/e2e/`.
 
 ## Risks / open questions
 No open product question.
+- **Decided (orchestrator, 2026-11-15): eight shards.** `--list --shard=N/6` put 4, 7, 2, 8, 3 and 9 codes on
+  shards 1–6 (1 spare, not AC9's 2); seven shards put 10 on 4/7. `E2E_SHARDS ?= 8`: at most 7 codes (2/8 and
+  7/8), 3 spare; 6/8 is empty (map.spec fills 5/8), which Playwright allows (it counts tests before sharding).
+  AC9's cap of 8 stays.
 - **Blind e2e changes.** The house rule (no local e2e) means the coder cannot run the changed tests before the
   push. Two things lower the risk: the helpers are small, and each test keeps its assertions. If CI fails on a
   changed test, the one allowed fix push (rule 7) fixes it; the traces are uploaded on failure

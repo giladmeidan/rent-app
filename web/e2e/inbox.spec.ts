@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, postListing, putProfile, signUp } from './helpers';
+import { API, postListing, putProfile, signUpApi } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 const MESSAGE = 'Hi, we are a quiet couple';
@@ -23,13 +23,13 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // An owner (the default signUp name) posts a listing.
-  await signUp(page, 'owner');
+  await signUpApi(page, 'owner');
   const id = await postListing(page, street);
 
   // A seeker with another name, in a second context, applies through the API.
   const seekerContext = await newTileContext(browser);
   const seekerPage = await seekerContext.newPage();
-  await signUp(seekerPage, 'seeker', { name: SEEKER_NAME });
+  await signUpApi(seekerPage, 'seeker', { name: SEEKER_NAME });
   await putProfile(seekerPage); // applying needs a housing profile (0006a)
   const applied = await seekerPage.request.post(`${API}/listings/${id}/applications`, {
     data: { message: MESSAGE },
@@ -91,8 +91,9 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   await expect(ownerLog.getByText('Hello', { exact: true })).toBeVisible();
   await expect(page.getByLabel(he.chat.composer.label)).toHaveValue('');
 
-  // The seeker, after a reload: the header's pill, the owner's name in the list, the message.
-  await seekerPage.reload();
+  // The seeker, on a fresh load of their home (signUpApi does not navigate): the header's pill, the
+  // owner's name in the list, the message.
+  await seekerPage.goto('/search');
   const seekerChat = seekerPage
     .getByRole('navigation', { name: he.nav.label })
     .getByRole('link', { name: new RegExp(`^${he.header.chat}`) });

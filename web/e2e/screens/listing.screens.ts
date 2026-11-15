@@ -286,6 +286,34 @@ const STATES: State[] = [
     },
   },
   {
+    // Spec 0013d: the four 0014b facts and the protected space (0015a), all said.
+    name: 'apartment-facts',
+    spec: '0013d',
+    setup: {
+      listing: detail({
+        shelter: 'mamad',
+        balcony: true,
+        air_conditioning: true,
+        condition: 'renovated',
+      }),
+      seeker: false,
+    },
+    act: async (page) => {
+      const fact = (term: string, value: string) =>
+        expect(
+          page
+            .getByRole('term')
+            .filter({ has: page.getByText(term, { exact: true }) })
+            .locator('+ dd'),
+        ).toHaveText(value);
+      await fact(he.listings.fields.shelter, he.listings.shelter.mamad);
+      await fact(he.listings.room.balcony, he.listing.yes);
+      await fact(he.listings.fields.airConditioning, he.listing.yes);
+      await fact(he.listings.fields.condition, he.listings.condition.renovated);
+      await mapReady(page);
+    },
+  },
+  {
     name: 'applied',
     setup: { listing: APARTMENT_SEEKER, seeker: true, applications: [SUBMITTED] },
     act: async (page) => {

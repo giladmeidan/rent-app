@@ -69,7 +69,9 @@ function application(
   };
 }
 
-/** AC1's five: a submitted one with a three-line message, shortlisted, declined, withdrawn, mutual. */
+/** AC1's five apartments (`/me/applications` lists apartments only since 0010a; ROOM_APPLICATIONS
+ * maps them to rooms): a submitted one with a three-line message, shortlisted, declined, withdrawn,
+ * mutual. */
 export const FIVE_APPLICATIONS: MyApplicationOut[] = [
   application({
     message:
@@ -96,7 +98,7 @@ export const FIVE_APPLICATIONS: MyApplicationOut[] = [
     source: 'like',
     message: null,
     created_at: '2026-11-07T08:00:00Z',
-    listing: { listing_type: 'room', street: 'אלנבי', city: 'תל אביב', rooms: 4, price_ils: 3100 },
+    listing: { street: 'אלנבי', city: 'תל אביב', rooms: 4, price_ils: 3100 },
   }),
 ];
 

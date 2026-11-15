@@ -8,6 +8,7 @@ import {
   latestCode,
   postListing,
   putProfile,
+  requestCode,
   signUp,
   uniqueEmail,
 } from './helpers';
@@ -84,9 +85,7 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
   // is the market's, spec 0010b).
   const email = uniqueEmail();
   await flatmatePage.getByLabel(he.auth.email.label).fill(email);
-  await flatmatePage.getByRole('button', { name: he.auth.sendCode }).click();
-  const codeInput = flatmatePage.getByLabel(he.auth.code.label);
-  await expect(codeInput).toBeFocused();
+  const codeInput = await requestCode(flatmatePage);
   let code: string | null = null;
   await expect
     .poll(async () => (code = await latestCode(email)), { timeout: 10_000 })

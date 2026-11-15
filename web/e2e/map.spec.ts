@@ -251,6 +251,9 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   });
 
   await test.step('ac10_bubble_zooms_in', async () => {
+    // Reduced motion for this step only (FOLLOWUPS 0014c): MapLibre then skips the eased zoom, so a
+    // click never lands mid-animation and each "הקטנה" is a whole level; the bubble's zoom-in jumps.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     // Zoomed out to the minimum, the two points lie within ~40 px: one bubble of 2.
     const zoomOut = region.getByRole('button', { name: he.map.zoomOut });
     for (let i = 0; i < 20 && (await zoomOut.isEnabled()); i += 1) await zoomOut.click();
@@ -267,6 +270,7 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     await expect(region.getByRole('button', { name: other })).toBeVisible();
     await expect(bubble).toHaveCount(0);
     await expect(page.locator('[data-pin-id]:focus')).toHaveCount(1);
+    await page.emulateMedia({ reducedMotion: null }); // the later steps keep normal motion
   });
 
   await test.step('ac10_no_marker_exemption', async () => {
