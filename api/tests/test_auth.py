@@ -76,19 +76,6 @@ def _redis_keys() -> list[bytes]:
     return [*r.scan_iter(match="otp:*"), *r.scan_iter(match="rl:*")]
 
 
-@pytest.fixture
-def set_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
-    """Set environment variables and re-read the settings; restored after the test."""
-
-    def _set(**values: str) -> None:
-        for name, value in values.items():
-            monkeypatch.setenv(name, value)
-        get_settings.cache_clear()
-
-    yield _set
-    get_settings.cache_clear()
-
-
 def test_ac1_request_sends_code_and_stores_hmac(client: TestClient, outbox: Outbox) -> None:
     response = client.post("/auth/otp/request", json={"email": EMAIL})
 
@@ -397,7 +384,7 @@ def test_ac16_daily_email_rate_limit(client: TestClient, outbox: Outbox) -> None
 
     def reset_15_min_counters() -> None:
         # Both 15-min counters (email and this client's IP), so only the daily one accumulates.
-        r.delete(f"rl:otp:email:{EMAIL}", "rl:otp:ip:testclient")
+        r.delete(f"rl:otp:email:{EMAIL}:net:testclient", "rl:otp:ip:testclient")
 
     for _ in range(10):
         reset_15_min_counters()
@@ -410,6 +397,8 @@ def test_ac16_daily_email_rate_limit(client: TestClient, outbox: Outbox) -> None
     assert response.json() == {"detail": "rate_limited"}
     assert int(response.headers["retry-after"]) > 900  # the daily window tripped
     assert len(outbox.messages) == 10
+    assert r.get(f"rl:otp:email:all:day:{EMAIL}") == b"10"
+    assert r.get("rl:otp:ip:day:testclient") == b"10"
 
 
 def test_ac17_email_failure_is_503_and_counted(client: TestClient, outbox: Outbox) -> None:
@@ -425,9 +414,11 @@ def test_ac17_email_failure_is_503_and_counted(client: TestClient, outbox: Outbo
     assert response.json() == {"detail": "email_unavailable"}
     r = get_redis()
     assert r.exists(f"otp:{EMAIL}") == 0
-    assert r.get(f"rl:otp:email:{EMAIL}") == b"1"
-    assert r.get(f"rl:otp:email:day:{EMAIL}") == b"1"
+    assert r.get(f"rl:otp:email:{EMAIL}:net:testclient") == b"1"
+    assert r.get(f"rl:otp:email:day:{EMAIL}:net:testclient") == b"1"
+    assert r.get(f"rl:otp:email:all:day:{EMAIL}") == b"1"
     assert r.get("rl:otp:ip:testclient") == b"1"
+    assert r.get("rl:otp:ip:day:testclient") == b"1"
 
 
 def test_nf1_code_never_logged(
@@ -540,9 +531,13 @@ def test_ac16_burst_of_429s_does_not_consume_daily_budget(
 
     assert statuses == [204] * 3 + [429] * 7
     r = get_redis()
-    assert r.get(f"rl:otp:email:day:{EMAIL}") == b"3"
+    assert r.get(f"rl:otp:email:day:{EMAIL}:net:testclient") == b"3"
+    assert r.get(f"rl:otp:email:all:day:{EMAIL}") == b"3"
     assert r.get("rl:otp:ip:testclient") == b"3"
-    r.delete(f"rl:otp:email:{EMAIL}", "rl:otp:ip:testclient")  # the 15-min window has passed
+    assert r.get("rl:otp:ip:day:testclient") == b"3"
+    r.delete(
+        f"rl:otp:email:{EMAIL}:net:testclient", "rl:otp:ip:testclient"
+    )  # the 15-min window has passed
     assert client.post("/auth/otp/request", json={"email": EMAIL}).status_code == 204
 
 
@@ -558,8 +553,16 @@ def test_ac7_ip_limited_requests_do_not_count_against_email(
 
     assert response.status_code == 429
     r = get_redis()
-    assert r.exists(f"rl:otp:email:{EMAIL}", f"rl:otp:email:day:{EMAIL}") == 0
+    assert (
+        r.exists(
+            f"rl:otp:email:{EMAIL}:net:testclient",
+            f"rl:otp:email:day:{EMAIL}:net:testclient",
+            f"rl:otp:email:all:day:{EMAIL}",
+        )
+        == 0
+    )
     assert r.get("rl:otp:ip:testclient") == b"10"
+    assert r.get("rl:otp:ip:day:testclient") == b"10"
 
 
 def test_otp_single_use_under_concurrency(
@@ -705,3 +708,130 @@ def test_ac9_role_read_only_for_apartments() -> None:
         if _ROLE_READ.search(line)
     }
     assert reads == _ROLE_READS_ALLOWED
+
+
+# Spec 0013b: OTP limits per (email, network), the per-email ceiling, the network day cap, IPv6.
+NET_A = "203.0.113.7"
+NET_B = "198.51.100.9"
+NET_C = "198.51.100.77"
+
+
+def _otp_from(client: TestClient, network: str, email: str = EMAIL) -> httpx.Response:
+    response: httpx.Response = client.post(
+        "/auth/otp/request", json={"email": email}, headers={"Fly-Client-IP": network}
+    )
+    return response
+
+
+def _reset_15_min(email: str, network: str) -> None:
+    get_redis().delete(f"rl:otp:email:{email}:net:{network}", f"rl:otp:ip:{network}")
+
+
+def test_ac2_email_limit_is_per_network(
+    client: TestClient, outbox: Outbox, set_env: Callable[..., None]
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    for _ in range(3):
+        assert _otp_from(client, NET_A).status_code == 204
+
+    refused = _otp_from(client, NET_A)
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "rate_limited"}
+    assert int(refused.headers["retry-after"]) >= 1
+    assert _otp_from(client, NET_B).status_code == 204
+
+
+def test_ac3_daily_email_limit_is_per_network(
+    client: TestClient, outbox: Outbox, set_env: Callable[..., None]
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    for _ in range(10):
+        _reset_15_min(EMAIL, NET_A)
+        assert _otp_from(client, NET_A).status_code == 204
+    _reset_15_min(EMAIL, NET_A)
+
+    refused = _otp_from(client, NET_A)
+
+    assert refused.status_code == 429
+    assert int(refused.headers["retry-after"]) > 900
+    assert _otp_from(client, NET_B).status_code == 204
+
+
+def test_ac4_email_ceiling_across_networks(
+    client: TestClient, outbox: Outbox, set_env: Callable[..., None]
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    for network in (NET_A, NET_B):
+        for _ in range(10):
+            _reset_15_min(EMAIL, network)
+            assert _otp_from(client, network).status_code == 204
+
+    refused = _otp_from(client, NET_C)
+
+    assert refused.status_code == 429
+    assert int(refused.headers["retry-after"]) > 900
+    assert get_redis().get(f"rl:otp:email:all:day:{EMAIL}") == b"20"
+    assert [k for k in get_redis().scan_iter(match="rl:otp:*") if NET_C.encode() in k] == []
+
+
+def test_ac5_network_daily_cap(
+    client: TestClient, outbox: Outbox, set_env: Callable[..., None]
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    for i in range(50):
+        if i % 10 == 0:
+            get_redis().delete(f"rl:otp:ip:{NET_A}")
+        assert _otp_from(client, NET_A, f"u{i}@example.com").status_code == 204
+    get_redis().delete(f"rl:otp:ip:{NET_A}")
+
+    refused = _otp_from(client, NET_A, "new@example.com")
+
+    assert refused.status_code == 429
+    assert int(refused.headers["retry-after"]) > 900
+    assert _otp_from(client, NET_B, "new@example.com").status_code == 204
+
+
+def test_ac6_ipv6_counted_per_64(
+    client: TestClient, outbox: Outbox, set_env: Callable[..., None]
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    for i, address in enumerate(("2001:db8:1:2::a", "2001:db8:1:2::b", "2001:db8:1:3::a")):
+        assert _otp_from(client, address, f"v{i}@example.com").status_code == 204
+
+    r = get_redis()
+    assert r.get("rl:otp:ip:2001:db8:1:2::/64") == b"2"
+    assert r.get("rl:otp:ip:2001:db8:1:3::/64") == b"1"
+    assert r.get("rl:otp:ip48:2001:db8:1::/48") == b"3"
+    assert r.get("rl:otp:ip48:day:2001:db8:1::/48") == b"3"
+
+
+def test_ac6_ipv6_counted_per_48(
+    client: TestClient,
+    outbox: Outbox,
+    set_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import client_ip
+
+    set_env(TRUST_PROXY="fly")
+    monkeypatch.setattr(client_ip, "PREFIX48_FACTOR", 1)
+    for j, address in enumerate(("2001:db8:1:2::a", "2001:db8:1:3::a")):
+        for i in range(5):
+            assert _otp_from(client, address, f"n{j}x{i}@example.com").status_code == 204
+
+    refused = _otp_from(client, "2001:db8:1:4::a", "fresh@example.com")
+
+    assert refused.status_code == 429
+    assert int(refused.headers["retry-after"]) >= 1
+    keys = [k.decode() for k in get_redis().scan_iter(match="rl:otp:*")]
+    assert [k for k in keys if "2001:db8:1:4::/64" in k or "fresh@example.com" in k] == []
+    assert _otp_from(client, "2001:db8:2:1::a", "fresh@example.com").status_code == 204
+
+
+def test_nf2_guess_bound() -> None:
+    assert auth_service.OTP_MAX_ATTEMPTS * auth_service.OTP_RATE_LIMIT_EMAIL_ALL_DAY <= 100
+    assert auth_service.OTP_RATE_LIMIT_EMAIL_DAY < auth_service.OTP_RATE_LIMIT_EMAIL_ALL_DAY
+    doc = " ".join((auth_service.__doc__ or "").split())
+    assert "at most 100 guesses a day" in doc
+    assert "10 from any one" in doc

@@ -322,6 +322,19 @@ def test_ac13_rent_reference_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         Settings(**required, rent_reference="on")
 
 
+def test_ac1_trust_proxy_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 0013b: `TRUST_PROXY` defaults to `none` and accepts only `none` or `fly`."""
+    monkeypatch.delenv("TRUST_PROXY", raising=False)
+    assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET).trust_proxy == "none"
+
+    monkeypatch.setenv("TRUST_PROXY", "fly")
+    assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET).trust_proxy == "fly"
+
+    monkeypatch.setenv("TRUST_PROXY", "evil")
+    with pytest.raises(ValidationError):
+        Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET)
+
+
 def test_ac9_email_block_key_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     """Spec 0013c AC9: EMAIL_BLOCK_KEY is required, at least 32 characters, and never the dev
     value on https (the last https check); no error echoes the value."""
