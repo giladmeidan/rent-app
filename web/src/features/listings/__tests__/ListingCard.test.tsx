@@ -328,11 +328,10 @@ describe('ListingCard', () => {
     );
     const card = screen.getByRole('article');
     expect(card).toHaveAttribute('data-layout', 'compact');
-    // The photo box: first in the row, 16:10, w-24, with the same placeholder and the room pill.
-    const pill = within(card).getByText(he.listings.card.room);
-    const photo = pill.parentElement as HTMLElement;
+    // The photo box: first in the row, 16:10, w-24, with the same placeholder and no room pill.
+    expect(within(card).queryByText(he.listings.card.room)).toBeNull();
+    const photo = card.querySelector('svg[aria-hidden="true"]')?.parentElement as HTMLElement;
     expect(photo).toHaveClass('aspect-[16/10]', 'w-24', 'shrink-0');
-    expect(photo.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     const row = photo.parentElement as HTMLElement;
     expect(row.firstElementChild).toBe(photo);
     expect(row).toHaveClass('flex-row');
