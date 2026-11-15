@@ -14,6 +14,7 @@ email cannot sign up again (`email_blocked`, checked by `services/auth.py::verif
 import hashlib
 import hmac
 import logging
+import uuid
 
 from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -40,6 +41,32 @@ from app.services.photo_store import PhotoStore
 from app.services.photos import _discard, object_names
 
 log = logging.getLogger(__name__)
+
+
+class AccountDeletedError(Exception):
+    """The caller's account was deleted while the request ran (`app/main.py`: 401
+    `unauthenticated`, as for any session that no longer resolves)."""
+
+
+def is_deleted(db: Session, user_id: uuid.UUID) -> bool:
+    """Whether `user_id` is a deleted account (read now, not from the identity map)."""
+    return db.scalar(select(User.deleted_at.is_not(None)).where(User.id == user_id)) is True
+
+
+def lock_live_account(db: Session, user_id: uuid.UUID) -> None:
+    """First statement of a write that adds rows for `user_id` (profile, apply, flatmate join,
+    likes): `FOR KEY SHARE` on the live row, so a racing `DELETE /me` either waits for this write
+    (and then deletes its rows) or commits first, and this lock, re-checking its WHERE after the
+    wait (READ COMMITTED), finds no live row: `AccountDeletedError`."""
+    if (
+        db.scalar(
+            select(User.id)
+            .where(User.id == user_id, User.deleted_at.is_(None))
+            .with_for_update(read=True, key_share=True)
+        )
+        is None
+    ):
+        raise AccountDeletedError
 
 
 def email_hmac(email: str) -> str:
@@ -72,7 +99,18 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             db.rollback()
             return
         my_listings = select(Listing.id).where(Listing.owner_id == me).scalar_subquery()
-        # 2. The re-signup block.
+        # 3. Listings off the site, before the photos: its row locks wait for a photo write that
+        # holds `_lock_own_listing`, so step 4 sees that write's committed row.
+        db.execute(
+            update(Listing)
+            .where(Listing.owner_id == me)
+            .values(
+                status="paused", description=None, flatmate_invite_hash=None, updated_at=func.now()
+            )
+            .execution_options(synchronize_session=False)
+        )
+        # 2. The re-signup block, after step 3: an admin `hide_listings` that committed while
+        # step 3 waited on its listing lock is seen by this new statement.
         acted_against = exists().where(
             or_(
                 and_(
@@ -94,16 +132,6 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
                 .values(email_hmac=email_hmac(locked.email))
                 .on_conflict_do_nothing()
             )
-        # 3. Listings off the site, before the photos: its row locks wait for a photo write that
-        # holds `_lock_own_listing`, so step 4 sees that write's committed row.
-        db.execute(
-            update(Listing)
-            .where(Listing.owner_id == me)
-            .values(
-                status="paused", description=None, flatmate_invite_hash=None, updated_at=func.now()
-            )
-            .execution_options(synchronize_session=False)
-        )
         # 4. Listing photos; the objects go after the commit.
         keys = list(
             db.scalars(
@@ -124,11 +152,17 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             )
             .execution_options(synchronize_session=False)
         )
-        # 6. The rest have a chat: withdrawn, so their owners no longer see them.
+        # 6. The rest have a chat: withdrawn without their message, so their owners no longer
+        # see them.
         db.execute(
             update(Application)
-            .where(Application.seeker_id == me, Application.status != "withdrawn")
-            .values(status="withdrawn", updated_at=func.now())
+            .where(
+                Application.seeker_id == me,
+                or_(Application.status != "withdrawn", Application.message.is_not(None)),
+            )
+            # The message is the seeker's free text (it may hold a phone number), as the
+            # description; NULL is allowed on a withdrawn application (ck_applications_message).
+            .values(status="withdrawn", message=None, updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
         # 7.-11. Likes, matches, flats I joined, read markers, profile, every session.

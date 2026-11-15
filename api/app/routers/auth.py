@@ -170,6 +170,10 @@ def delete_me(
     """Delete the caller's account for good and sign out every device (spec 0013c)."""
     token = request.cookies[COOKIE_NAME]  # `current_user` resolved it
     created_at = auth_service.session_created_at(db, token)
+    # The session went after `current_user` passed: a racing DELETE /me of this account (its
+    # step 11) answers as the spec's no-op second call, 204.
+    if created_at is None and accounts.is_deleted(db, user.id):
+        return _signed_out()
     if created_at is None or dt.datetime.now(dt.UTC) - created_at > dt.timedelta(
         seconds=DELETE_REAUTH_S
     ):

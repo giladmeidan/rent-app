@@ -416,17 +416,19 @@ def test_ac5_room_apply_gate(
     woman_any.get("/me")  # warm-up: a first connect sends its own setup statements
     statements.clear()
     assert _apply(woman_any, m).status_code == 409
-    assert len(statements) == 3, statements  # session, profile check, listing row
-    assert "FROM listings" in statements[2], statements
+    # session, the live-account lock (spec 0013c), profile check, listing row
+    assert len(statements) == 4, statements
+    assert "FOR KEY SHARE" in statements[1] and "FROM users" in statements[1], statements
+    assert "FROM listings" in statements[3], statements
     statements.clear()
     applied(woman_any, fresh)
     # Plus apply taking the (listing, seeker) key and reading the pair's invite under its lock
     # (spec 0010l: both before the application row; no pair here, so no UPDATE), then the upsert.
-    assert len(statements) == 6, statements
-    assert "pg_advisory_xact_lock" in statements[3], statements
-    assert statements[4].lstrip().startswith("SELECT room_pairs.id"), statements
-    assert "FOR UPDATE OF room_pairs" in statements[4], statements
-    assert statements[5].lstrip().startswith("INSERT INTO applications"), statements
+    assert len(statements) == 7, statements
+    assert "pg_advisory_xact_lock" in statements[4], statements
+    assert statements[5].lstrip().startswith("SELECT room_pairs.id"), statements
+    assert "FOR UPDATE OF room_pairs" in statements[5], statements
+    assert statements[6].lstrip().startswith("INSERT INTO applications"), statements
 
 
 def test_ac6_listing_type_snapshot_on_apply_and_reapply(

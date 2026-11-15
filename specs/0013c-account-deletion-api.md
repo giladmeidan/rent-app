@@ -163,7 +163,9 @@ the number):
   `display_name: Mapped[str | None]`. `routers/auth.py::user_out` (always a live account) asserts both
   are not None.
 
-**What `delete_account` does, one transaction, in this order** (`me` = the caller):
+**What `delete_account` does, one transaction, in this order** (`me` = the caller). Step 2 runs
+**after** step 3 (review round, 2026-11-15): with step 3's listing locks held, its new statement sees an
+admin `hide_listings` that committed while step 3 waited on that listing.
 
 | # | Table | Statement | Why |
 | --- | --- | --- | --- |
@@ -172,7 +174,7 @@ the number):
 | 3 | `listings` | `UPDATE … SET status = 'paused', description = NULL, flatmate_invite_hash = NULL, updated_at = now() WHERE owner_id = :me` | Off the public site (only `active` is public), the invite preview 404s, free text (which may hold phone numbers) is gone. The row stays for the threads and the price history. **Before the photo rows:** its row locks wait for a photo write that holds `_lock_own_listing`, so step 4 sees that write's committed row |
 | 4 | `listing_photos` | Collect `key` of my listings' photos, plus step 1's `photo_key`; then `DELETE … WHERE listing_id IN (my listings)` | Objects deleted after commit (step 13). A photo write that reaches `_lock_own_listing` after step 3 is refused there (API) |
 | 5 | `applications` (made by me) | `DELETE … WHERE seeker_id = :me AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.application_id = applications.id)` | Nobody's thread hangs on them |
-| 6 | `applications` (made by me) | `UPDATE … SET status = 'withdrawn', updated_at = now() WHERE seeker_id = :me AND status <> 'withdrawn'` | The rest have a chat: a withdrawn application is invisible to its owner (0004c) and no transition starts from it; its chat stays |
+| 6 | `applications` (made by me) | `UPDATE … SET status = 'withdrawn', message = NULL, updated_at = now() WHERE seeker_id = :me AND (status <> 'withdrawn' OR message IS NOT NULL)`; the message is the seeker's free text, as the description (review round: `ck_applications_message` allows NULL on a withdrawn application, migration 0025) | The rest have a chat: a withdrawn application is invisible to its owner (0004c) and no transition starts from it; its chat stays |
 | 7 | `room_pairs` | `DELETE … WHERE seeker_id = :me OR listing_id IN (my listings)` | My room likes and the browse history of my rooms |
 | 8 | `person_pairs` | `DELETE … WHERE :me IN (user_low, user_high)` | My market likes and matches. The direct chat row stays |
 | 9 | `listing_flatmates`, `conversation_reads` | `DELETE … WHERE user_id = :me` | I leave every flat I joined; my read markers go. Other people's memberships of **my** flats stay (they keep the room chats) |
@@ -468,9 +470,15 @@ From `graphify affected` on `main` (84b6fef), checked with grep:
     encode and would otherwise leave two public objects on the paused listing for good.
 
   Listing create and resume still wait on step 1's row lock, then run against the tombstone. A listing
-  created that way would be live under a deleted owner, until it expires or the admin hides it. This is
-  accepted: the caller is deleting themselves, and the window is one short request.
-  `shortcut: not checked in create; add deleted_at IS NULL to the 0002a cap lock if it is ever seen.`
+  created that way is never public: `search.owner_not_suspended` also excludes deleted owners (review
+  round). `shortcut: not checked in create; add deleted_at IS NULL to the 0002a cap lock if such rows
+  are ever seen.`
+- **Review round (2026-11-15), a write racing the deletion:** `PUT /me/profile`, apply, flatmate join
+  and the two like writes start with `accounts.lock_live_account` (`SELECT … WHERE id = :me AND
+  deleted_at IS NULL FOR KEY SHARE`): a write queued behind the deletion's row lock re-checks the WHERE
+  and answers 401 `unauthenticated`, so no row is added for a tombstone. The readers' `not_suspended`
+  also excludes deleted accounts, and the room's flatmates list filters `deleted_at`. A second
+  `DELETE /me` whose session went after `current_user` passed answers 204, not 403.
 - **An SSE stream** already open on another device is checked at connect only (0012a). It ends within
   `STREAM_MAX_S` + jitter, and its reconnect gets 401. What can reach it meanwhile is at most an
   application-status event (ids only), since every chat it is a party of is closed.

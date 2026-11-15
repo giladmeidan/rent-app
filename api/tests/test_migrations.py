@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models import Base
 from app.models import admin_action as admin_action_model
+from app.models import application as application_model
 from app.models import blocked_email as blocked_email_model
 from app.models import report as report_model
 from app.models import user as user_model
@@ -3296,6 +3297,7 @@ def test_0025_downgrade_keeps_tombstones(migration_db_url: str) -> None:
             for name, table, model_text in (
                 ("ck_users_deleted_scrubbed", "users", user_model.DELETED_SCRUBBED_CHECK),
                 ("ck_blocked_emails_hmac", "blocked_emails", blocked_email_model.HMAC_CHECK),
+                ("ck_applications_message", "applications", application_model.MESSAGE_CHECK),
             ):
                 conn.execute(
                     text(
@@ -3343,6 +3345,32 @@ def test_0025_downgrade_keeps_tombstones(migration_db_url: str) -> None:
                 ),
                 {"id": gone},
             )
+            # A deleted seeker's scrubbed apartment application (withdrawn, no message).
+            area = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            listing = conn.execute(
+                text(
+                    "INSERT INTO listings (owner_id, area_id, listing_type, city, street, rooms,"
+                    " floor, size_sqm, price_ils, available_from, elevator, furnished,"
+                    " pets_allowed, expires_at) VALUES (:owner, :area, 'apartment', 'city',"
+                    " 'street', 3, 1, 60, 7000, current_date, false, 'none', false,"
+                    " now() + interval '90 days') RETURNING id"
+                ),
+                {"owner": live, "area": area},
+            ).scalar_one()
+            application = conn.execute(
+                text(
+                    "INSERT INTO applications (listing_id, seeker_id, message, status,"
+                    " price_ils_at_apply, area_id_at_apply, listing_type_at_apply)"
+                    " VALUES (:l, :s, NULL, 'withdrawn', 7000, :a, 'apartment') RETURNING id"
+                ),
+                {"l": listing, "s": gone, "a": area},
+            ).scalar_one()
         # A deleted row keeps no email; a hash is 64 lowercase hex digits.
         with pytest.raises(IntegrityError, match="ck_users_deleted_scrubbed"), engine.begin() as c:
             c.execute(
@@ -3364,6 +3392,12 @@ def test_0025_downgrade_keeps_tombstones(migration_db_url: str) -> None:
             assert tuple(row) == (f"{gone}@deleted.invalid", "deleted")
             assert conn.execute(text("SELECT count(*) FROM messages")).scalar_one() == 1
             assert conn.execute(text("SELECT count(*) FROM reports")).scalar_one() == 1
+            assert (
+                conn.execute(
+                    text("SELECT message FROM applications WHERE id = :id"), {"id": application}
+                ).scalar_one()
+                == "(deleted)"
+            )
     finally:
         engine.dispose()
 

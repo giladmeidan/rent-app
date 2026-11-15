@@ -4,12 +4,15 @@ A deleted account stays as a scrubbed tombstone, so every FK to it (threads, rep
 stays valid: `users.deleted_at` (NULL = live), `email` and `display_name` become nullable, and
 `ck_users_deleted_scrubbed` makes a deleted row have no email, name or photo. The partial index
 `ix_users_deleted` covers the few deleted ids. `blocked_emails` holds the keyed hash of each email
-that may not sign up again. Existing rows all satisfy the CHECK: no backfill.
+that may not sign up again. `ck_applications_message` also allows a NULL message on a withdrawn
+application, so the deletion can scrub a seeker's text. Existing rows all satisfy both CHECKs: no
+backfill.
 
 Downgrade keeps the data: the CHECK and index go first (the CHECK would refuse the UPDATE), each
 tombstone gets `<id>@deleted.invalid` / `deleted` (RFC 2606: no code can reach it), then
 `deleted_at` goes, the columns become NOT NULL again, and `blocked_emails` is dropped (**the
-re-signup blocks are lost**). Kept threads and reports survive.
+re-signup blocks are lost**). A scrubbed apartment application's message becomes `(deleted)` so
+0018's message CHECK holds again. Kept threads and reports survive.
 
 Revision ID: 0025
 Revises: 0024
@@ -34,6 +37,14 @@ _DELETED_SCRUBBED = (
     " AND photo_key IS NULL)"
 )
 _HMAC = "email_hmac ~ '^[0-9a-f]{64}$'"
+_MESSAGE_0018 = (
+    "(message IS NULL OR char_length(message) BETWEEN 1 AND 500)"
+    " AND (message IS NOT NULL OR listing_type_at_apply = 'room')"
+)
+_MESSAGE = (
+    "(message IS NULL OR char_length(message) BETWEEN 1 AND 500)"
+    " AND (message IS NOT NULL OR listing_type_at_apply = 'room' OR status = 'withdrawn')"
+)
 
 
 def upgrade() -> None:
@@ -55,9 +66,17 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(_HMAC, name="ck_blocked_emails_hmac"),
     )
+    op.drop_constraint("ck_applications_message", "applications", type_="check")
+    op.create_check_constraint("ck_applications_message", "applications", _MESSAGE)
 
 
 def downgrade() -> None:
+    op.execute(
+        "UPDATE applications SET message = '(deleted)'"
+        " WHERE message IS NULL AND listing_type_at_apply <> 'room'"
+    )
+    op.drop_constraint("ck_applications_message", "applications", type_="check")
+    op.create_check_constraint("ck_applications_message", "applications", _MESSAGE_0018)
     op.drop_constraint("ck_users_deleted_scrubbed", "users", type_="check")
     op.drop_index("ix_users_deleted", table_name="users")
     op.execute(

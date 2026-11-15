@@ -47,6 +47,7 @@ from tests.conftest import (
 )
 from tests.test_listings import _body
 from tests.test_moderation import _request_code, _verify
+from tests.test_profiles import _p
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -267,7 +268,9 @@ def _world(client: TestClient, engine: Engine, store: FilePhotoStore, area: uuid
     )
     u_room_pair = make_pair(engine, o2_room, u, price_ils_seen=7200)
     make_pair(engine, room, x, price_ils_seen=7200)
+    make_card(engine, p, area, gender="woman")
     make_person_like(engine, u, p)
+    make_person_like(engine, p, u)  # a match: U shows on P's people-likes
     make_person_like(engine, x, u)
     _report(engine, u, p, direct)
     _report(engine, p, u, direct)
@@ -395,6 +398,9 @@ def test_ac3_footprint_after_deletion(
     assert _scalar(db_engine, "SELECT status FROM applications WHERE id = :id", id=w.u_chat) == (
         "withdrawn"
     )
+    assert (
+        _scalar(db_engine, "SELECT message FROM applications WHERE id = :id", id=w.u_chat) is None
+    )
     # Applications received on U's listings stay as they were.
     assert _scalar(
         db_engine, "SELECT status FROM applications WHERE id = :id", id=w.received_chat
@@ -486,6 +492,7 @@ def test_ac5_deleted_account_is_gone_everywhere(
     visitor = TestClient(client.app)
     x = _session(client, db_engine, w.x)
     o2 = _session(client, db_engine, w.o2)
+    p = _session(client, db_engine, w.p)
     bbox = {"west": 34.7, "south": 32.0, "east": 34.9, "north": 32.2}
     calls: list[tuple[TestClient, str, str, dict[str, Any] | None]] = [
         (caller, "GET", "/listings", params)
@@ -498,6 +505,7 @@ def test_ac5_deleted_account_is_gone_everywhere(
         for listing in (w.apartment, w.room, w.o2_room)
     ]
     calls += [(x, "GET", path, None) for path in ("/people", "/me/likes", "/me/people-likes")]
+    calls += [(p, "GET", "/me/people-likes", None)]  # U and P matched
     calls += [
         (o2, "GET", f"/listings/{w.o2_room}/people", None),
         (o2, "GET", f"/listings/{w.o2_room}/flatmates", None),
@@ -524,7 +532,7 @@ def test_ac5_deleted_account_is_gone_everywhere(
 
     before = "\n".join(texts())
     # The check is not vacuous: U shows up on these before the deletion.
-    for marker in (str(w.apartment), str(w.u_chat), str(w.u_no_chat_app), U_NAME):
+    for marker in (str(w.apartment), str(w.u_chat), str(w.u_no_chat_app), str(w.u_card), U_NAME):
         assert marker in before, marker
 
     _deleted(client, db_engine, w.u)
@@ -752,6 +760,81 @@ def test_ac14_late_login_session_is_refused(
         0
     ]
     assert tuple(row) == (None, None, None)
+
+
+def test_ac14_write_racing_deletion_adds_nothing(
+    client: TestClient,
+    db_engine: Engine,
+    photo_store: FilePhotoStore,
+    gush_dan: uuid.UUID,
+) -> None:
+    """Review blocker: a PUT /me/profile that resolved its session before DELETE /me committed
+    waits on the deletion's row lock (`accounts.lock_live_account`), then answers 401 and writes
+    no profile; the people browse stays a 200 without U."""
+    u = make_owner(db_engine, U_EMAIL)
+    u_card = make_card(db_engine, u, gush_dan, gender="woman")
+    x = make_seeker(db_engine, "x@example.com")
+    make_card(db_engine, x, gush_dan, gender="woman")
+    body = _p(gush_dan, gender="woman", birth_year=1995, people_visible=True, about_me="שלום")
+    assert _session(client, db_engine, x).put("/me/profile", json=body).status_code == 200
+    writer, deleter = _session(client, db_engine, u), _session(client, db_engine, u)
+    held = threading.Event()
+    results: list[httpx.Response] = []
+
+    def hold(_conn: Any, _cursor: Any, statement: str, *_: Any) -> None:
+        # Inside DELETE /me, its users row locked: wait until the profile write waits on it.
+        if statement.startswith("DELETE FROM listing_photos") and not held.is_set():
+            held.set()
+            _wait_for_lock_waiter(db_engine)
+
+    def write() -> None:
+        assert held.wait(20)
+        results.append(writer.put("/me/profile", json=body))
+
+    event.listen(db_engine, "before_cursor_execute", hold)
+    try:
+        _in_threads(lambda: results.append(_delete(deleter)), write)
+    finally:
+        event.remove(db_engine, "before_cursor_execute", hold)
+
+    assert sorted((r.status_code, r.content) for r in results) == [
+        (204, b""),
+        (401, b'{"detail":"unauthenticated"}'),
+    ]
+    assert _count(db_engine, "seeker_profiles WHERE user_id = :u", u=u) == 0
+    people = _session(client, db_engine, x).get("/people")
+    assert people.status_code == 200
+    assert str(u_card) not in people.text
+
+
+def test_ac13_second_delete_without_its_session_is_204(
+    client: TestClient,
+    db_engine: Engine,
+    photo_store: FilePhotoStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review minor: the second of two racing DELETE /me passed `current_user`, then the first
+    committed (deleting its session too) before its `session_created_at`: 204, not 403."""
+    u = make_seeker(db_engine, U_EMAIL)
+    first, second = _session(client, db_engine, u), _session(client, db_engine, u)
+    real = auth_service.session_created_at
+
+    def first_wins(db: Session, token: str) -> dt.datetime | None:
+        monkeypatch.setattr(auth_service, "session_created_at", real)
+        assert _delete(first).status_code == 204
+        return real(db, token)
+
+    monkeypatch.setattr(auth_service, "session_created_at", first_wins)
+    response = _delete(second)
+
+    assert response.status_code == 204
+    assert response.headers["set-cookie"].startswith('rent_session=""')
+    # Nothing but the session check: a session that is simply gone still answers 403.
+    other = make_seeker(db_engine, "other@example.com")
+    live = _session(client, db_engine, other)
+    monkeypatch.setattr(auth_service, "session_created_at", lambda db, token: None)
+    refused = _delete(live)
+    assert (refused.status_code, refused.json()) == (403, {"detail": "reauth_required"})
 
 
 def _upload(caller: TestClient, listing_id: uuid.UUID) -> httpx.Response:

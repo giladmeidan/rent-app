@@ -87,8 +87,9 @@ def _check_area(db: Session, area_id: uuid.UUID) -> None:
 
 def _lock_owner_cap(db: Session, owner_id: uuid.UUID) -> int:
     """Lock the owner's `users` row until the transaction ends and return its `listing_cap`."""
-    # shortcut: not checked in create; add deleted_at IS NULL to the 0002a cap lock if it is ever
-    # seen (spec 0013c: a create that waited here on DELETE /me runs against the tombstone).
+    # shortcut: not checked in create; a create that waited here on DELETE /me inserts a listing
+    # for the tombstone, which no public read shows (`search.owner_not_suspended` excludes deleted
+    # owners, spec 0013c); add deleted_at IS NULL to this lock if such rows are ever seen.
     return db.execute(
         select(User.listing_cap).where(User.id == owner_id).with_for_update()
     ).scalar_one()

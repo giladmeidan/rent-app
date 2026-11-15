@@ -71,6 +71,7 @@ from app.models import (
     User,
 )
 from app.redis_client import RedisClient
+from app.services import accounts
 from app.services.applications import AlreadyAppliedError
 from app.services.auth import _token_hash
 from app.services.listings import ListingNotFoundError
@@ -191,6 +192,7 @@ def join(db: Session, r: RedisClient, me: User, token: str, shown: bool) -> uuid
     Commits."""
     _count_attempt(r, me)
     try:
+        accounts.lock_live_account(db, me.id)  # spec 0013c: never a membership for a tombstone
         listing = db.execute(
             select(Listing.id, Listing.owner_id)
             .where(
@@ -420,6 +422,7 @@ def shown_people(db: Session, listing: Listing, viewer_id: uuid.UUID) -> Sequenc
             ListingFlatmate.listing_id == listing.id,
             ListingFlatmate.shown.is_(True),
             User.suspended_at.is_(None),
+            User.deleted_at.is_(None),
             _fits_room(listing, viewer_id),
             _fits_viewer(flatmate_profile, viewer_id),
         )

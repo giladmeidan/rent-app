@@ -870,11 +870,13 @@ def test_ac13_statement_counts_and_plan(
     assert len(measure(lambda: _browse(a.caller))) == 3  # session, viewer, page
     assert len(measure(lambda: a.caller.get("/me/people-likes"))) == 3  # session, viewer, list
     liked = measure(lambda: _like(a.caller, b.card))
-    assert len(liked) == 3, liked  # session, viewer, the checking upsert
-    assert liked[2].startswith("INSERT INTO person_pairs")
+    # session, the live-account lock (spec 0013c), viewer, the checking upsert
+    assert len(liked) == 4, liked
+    assert "FOR KEY SHARE" in liked[1], liked
+    assert liked[3].startswith("INSERT INTO person_pairs")
     mutual = measure(lambda: _like(b.caller, a.card))
-    assert len(mutual) == 4, mutual  # plus `open_direct`
-    assert mutual[3].startswith("INSERT INTO conversations")
+    assert len(mutual) == 5, mutual  # plus `open_direct`
+    assert mutual[4].startswith("INSERT INTO conversations")
 
     with Session(db_engine) as db:
         user = db.get(User, a.id)

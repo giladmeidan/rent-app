@@ -59,8 +59,8 @@ from app.matching.fit import person_fit
 from app.models import Conversation, PersonPair, SeekerProfile, User
 from app.redis_client import RedisClient
 from app.schemas.people import PEOPLE_LIMIT
+from app.services import accounts, chat_events
 from app.services import chat as chat_service
-from app.services import chat_events
 from app.services.people import CARD_COLUMNS, count_like
 from app.services.rate_limit import count_or_raise
 from app.services.search import not_suspended
@@ -261,12 +261,13 @@ def like(db: Session, r: RedisClient, me: User, card_id: uuid.UUID) -> uuid.UUID
     a visible card), then one INSERT ... SELECT ... ON CONFLICT DO UPDATE that checks the target is
     a candidate in its own snapshot and sets my side's like, keeping an earlier one
     (`NotFoundError` when it returns no row: unknown, own, hidden, a misfit, already a match).
-    Mutual: `open_direct` in the same transaction. One commit, then a `status` event to both. Two
-    statements, three when mutual."""
+    Mutual: `open_direct` in the same transaction. One commit, then a `status` event to both. Three
+    statements (the first the live-account lock, spec 0013c), four when mutual."""
     conversation_id: uuid.UUID | None = None
     other: uuid.UUID | None = None
     try:
         count_like(r, me)
+        accounts.lock_live_account(db, me.id)  # spec 0013c: never a like by a tombstone
         viewer = _viewer(db, me)
         if not viewer.people_visible:
             raise CardRequiredError
