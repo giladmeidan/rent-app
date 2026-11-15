@@ -92,9 +92,25 @@ describe('LegalPage', () => {
     for (const line of [s1.i13, ...Object.values(s5), ...Object.values(s6)]) {
       expect(line).not.toContain('[');
     }
-    for (const period of ['12 חודשים', '24 חודשים', '3 שנים', '5 שנים', '30 יום']) {
-      expect(page).toContain(period);
+    // Each rule's period is in its own line.
+    const periods: [string, string[]][] = [
+      [s5.i3, ['12 חודשים']],
+      [s5.i4, ['24 חודשים']],
+      [s5.i5, ['3 שנים']],
+      [s5.i6, ['12 חודשים']],
+      [s5.i8, ['30 יום']],
+      [s5.i9, ['30 יום']],
+      [s5.i10, ['3 שנים', '12 חודשים']],
+      [s5.i11, ['3 שנים']],
+      [s5.i12, ['5 שנים']],
+      [s6.i7, ['5 שנים']],
+      [s1.i13, ['30 יום']],
+    ];
+    for (const [line, expected] of periods) {
+      for (const period of expected) expect(line).toContain(period);
     }
-    expect(page).toContain(s5.i9);
+    // The terms point to section 5.
+    expect(he.legal.terms.s9.p1).toContain('סעיף 5');
+    expect(he.legal.terms.s9.p1).toContain(s5.title.replace(/^5\. /, ''));
   });
 });
