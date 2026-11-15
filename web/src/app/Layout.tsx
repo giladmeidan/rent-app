@@ -10,6 +10,7 @@ import { ChatStreamProvider } from '../features/chat/ChatStreamProvider';
 import { RouteFocus } from './RouteFocus';
 import { setSide, sideOf } from './side';
 import { SideSwitch } from './SideSwitch';
+import { SiteFooter } from './SiteFooter';
 
 /**
  * The shell on every route: one header row (the homie lockup at the inline start, the side switch
@@ -18,7 +19,8 @@ import { SideSwitch } from './SideSwitch';
  * its own (`data-side-switch-row`): the lockup and logout already fill a phone's width. A side
  * page records its side, so shared pages (a listing, chat) keep the last one. Nothing here takes `transform`, `filter` or `backdrop-filter`: the tab bar
  * below `lg` is `position: fixed` to the viewport. The chat event stream (one per tab) wraps both
- * the header (its chat count) and the page.
+ * the header (its chat count) and the page. The footer (spec 0013f) follows `<main>` on every route
+ * but the landing (still no footer, "Landing v2") and chat, whose panes fill the viewport.
  */
 export function Layout() {
   const { pathname } = useLocation();
@@ -26,6 +28,8 @@ export function Layout() {
     const side = sideOf(pathname);
     if (side) setSide(side);
   }, [pathname]);
+
+  const footer = pathname !== '/' && pathname !== '/chat' && !pathname.startsWith('/chat/');
 
   return (
     <ChatStreamProvider>
@@ -51,6 +55,7 @@ export function Layout() {
       <main id="main" tabIndex={-1} className="pb-8 pt-6 focus:outline-none">
         <Outlet />
       </main>
+      {footer && <SiteFooter />}
     </ChatStreamProvider>
   );
 }

@@ -36,6 +36,7 @@ import type {
   SeekerProfileIn,
   SeekerProfileOut,
 } from './api';
+import { DeleteAccountSection } from './DeleteAccountSection';
 import { PersonPhoto } from './PersonPhoto';
 import { useProfile } from './useProfile';
 import { useSaveProfile } from './useSaveProfile';
@@ -730,6 +731,7 @@ export function ProfilePage() {
           <p className={mutedNote}>{t('profile.privacy')}</p>
         </div>
         {body}
+        <DeleteAccountSection className="lg:col-start-2" />
       </div>
     </PageContainer>
   );

@@ -332,11 +332,18 @@ describe('LandingPage', () => {
     // No turtle on ink.
     expect(band.querySelector('img')).toBeNull();
 
-    // The band ends the page: no footer, no footer links.
+    // The band ends the page: no footer, no contact link. Under it, only the two legal links
+    // (spec 0013f), outside every landmark.
     expect(document.querySelector('footer')).toBeNull();
-    for (const name of ['תנאי שימוש', 'פרטיות', 'צור קשר']) {
-      expect(screen.queryByRole('link', { name })).toBeNull();
+    const legal = [he.footer.terms, he.footer.privacy].map((name) =>
+      screen.getByRole('link', { name }),
+    );
+    expect(legal.map((a) => a.getAttribute('href'))).toEqual(['/terms', '/privacy']);
+    for (const a of legal) {
+      expect(band.contains(a)).toBe(false);
+      expect(a.closest('nav,footer,section')).toBeNull();
     }
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 
   it('ac9_headings', async () => {

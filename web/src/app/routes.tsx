@@ -23,6 +23,8 @@ import { MarketMinePage } from '../features/market/MarketMinePage';
 import { NewListingPage } from '../features/listings/NewListingPage';
 import { MarketPeoplePage } from '../features/people/MarketPeoplePage';
 import { PeoplePage } from '../features/people/PeoplePage';
+import { LegalPage } from '../features/legal/LegalPage';
+import { AccountDeletedPage } from '../features/profile/AccountDeletedPage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { SearchPage } from '../features/search/SearchPage';
 import { PageContainer } from '../components/PageContainer';
@@ -55,6 +57,10 @@ export function AppRoutes() {
         <Route index element={<HomeRoute />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="signup" element={<SignupPage />} />
+        {/* Public and static (spec 0013f): the legal text, and where a deleted person lands. */}
+        <Route path="terms" element={<LegalPage kind="terms" />} />
+        <Route path="privacy" element={<LegalPage kind="privacy" />} />
+        <Route path="account-deleted" element={<AccountDeletedPage />} />
         {/* One search per side (spec 0010a); the keys keep the two pages' state apart. */}
         <Route path="search" element={<SearchPage key="apartment" type="apartment" />} />
         <Route path="market" element={<SearchPage key="room" type="room" />} />

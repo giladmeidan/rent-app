@@ -1,17 +1,19 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router';
 
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { clearDraftsExcept } from '../../app/drafts';
+import { CONTACT_EMAIL_INLINE } from '../../app/contact';
 import { sideOf } from '../../app/side';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { ErrorState } from '../../components/ErrorState';
 import { Field } from '../../components/Field';
+import { focusRing } from '../../components/focusRing';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
 import { TextInput } from '../../components/TextInput';
 import { useOnline } from '../../components/useOnline';
@@ -54,10 +56,14 @@ type VerifyResult =
   | { kind: 'invalidCode' }
   | { kind: 'profileRequired' }
   | { kind: 'suspended' }
+  | { kind: 'signupBlocked' }
   | { kind: 'failed' };
 
 /** True only for a body that is exactly `{"detail": <detail>}`. */
-function hasDetail(body: unknown, detail: 'profile_required' | 'account_suspended'): boolean {
+function hasDetail(
+  body: unknown,
+  detail: 'profile_required' | 'account_suspended' | 'signup_blocked',
+): boolean {
   return (
     typeof body === 'object' &&
     body !== null &&
@@ -78,6 +84,10 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
     if (response.status === 403 && hasDetail(error, 'account_suspended')) {
       return { kind: 'suspended' };
     }
+    // A new account refused for an email Homie blocked (0013c).
+    if (response.status === 403 && hasDetail(error, 'signup_blocked')) {
+      return { kind: 'signupBlocked' };
+    }
     if (response.status === 422 && hasDetail(error, 'profile_required')) {
       return { kind: 'profileRequired' };
     }
@@ -95,6 +105,22 @@ function nextPath(next: string): string {
 /** The request errors' line (too many, a failed verify): the kit `Field`'s error text. */
 const errorText = 'text-body-sm text-danger';
 
+/** One of the consent line's two links: a new tab, announced as such to screen readers. */
+function ConsentLink({ to, children }: { to: string; children?: ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <Link
+      to={to}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`rounded-sm font-medium text-accent underline underline-offset-4 ${focusRing}`}
+    >
+      {children}
+      <span className="sr-only"> {t('common.newTab')}</span>
+    </Link>
+  );
+}
+
 type Props = {
   /** Signup: step 1 collects role and name too. Login: email only; the profile is asked for only
    * when verify answers `profile_required`. Started from the market (`next` on the market side,
@@ -107,7 +133,12 @@ type Props = {
 
 type Step1Error = TooMany | { kind: 'failed' } | null;
 type Step2Error =
-  TooMany | { kind: 'invalidCode' } | { kind: 'suspended' } | { kind: 'failed' } | null;
+  | TooMany
+  | { kind: 'invalidCode' }
+  | { kind: 'suspended' }
+  | { kind: 'signupBlocked' }
+  | { kind: 'failed' }
+  | null;
 
 /**
  * Two-step email-code form shared by /signup and /login. The email and code live in this
@@ -260,10 +291,10 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
             setProfileNeeded(true);
             return;
           }
-          if (result.kind === 'suspended') {
-            // The code was right and is now used up: a cleared field, and the alert (0012a).
+          if (result.kind === 'suspended' || result.kind === 'signupBlocked') {
+            // The code was right and is now used up: a cleared field, and the alert (0012a, 0013c).
             setCode('');
-            setStep2Error({ kind: 'suspended' });
+            setStep2Error({ kind: result.kind });
           } else {
             setStep2Error({ kind: result.kind === 'invalidCode' ? 'invalidCode' : 'failed' });
           }
@@ -443,9 +474,11 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
             ? tooManyText(step2Error)
             : step2Error.kind === 'suspended'
               ? t('auth.errors.suspended')
-              : online
-                ? t('common.error')
-                : t('common.offline')}
+              : step2Error.kind === 'signupBlocked'
+                ? t('auth.errors.signupBlocked', { email: CONTACT_EMAIL_INLINE })
+                : online
+                  ? t('common.error')
+                  : t('common.offline')}
         </p>
       )}
       {profileNeeded && (
@@ -456,6 +489,19 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
         </Card>
       )}
       <div className="flex flex-col gap-1.5">
+        {askProfile && (
+          // The verify that sends the profile creates the account. New tab: this form's email and
+          // code live in its state only, and a link in this tab would lose them.
+          <p className="text-body-sm text-ink-muted">
+            <Trans
+              i18nKey="auth.signup.consent"
+              components={{
+                terms: <ConsentLink to="/terms" />,
+                privacy: <ConsentLink to="/privacy" />,
+              }}
+            />
+          </p>
+        )}
         <Button
           variant="primary"
           size="lg"
