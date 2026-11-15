@@ -151,6 +151,33 @@ describe('MyLikesPage', () => {
     expect(api.calls(LIKES)).toHaveLength(0);
   });
 
+  it('people_lists_scroll_in_a_row_with_arrows', async () => {
+    const many = ['A', 'B', 'C', 'D'].map((n) =>
+      personCard({ display_name: n, liked_by_me: true }),
+    );
+    const one = personCard({ display_name: 'Ada', liked_me: true });
+    render({ [PEOPLE_LIKES]: [json({ liked_me: [one], mine: many, matches: [] })] });
+    const mine = within(await screen.findByRole('region', { name: he.likes.people.mine }));
+    expect(mine.getByRole('list')).toHaveClass('grid-flow-col', 'overflow-x-auto');
+    const next = mine.getByRole('button', {
+      name: he.likes.scrollNext.replace('{{section}}', he.likes.people.mine),
+    });
+    // 4 cards: the arrows show from md and at xl (more than 3).
+    expect(next.parentElement).toHaveClass('hidden', 'md:flex');
+    expect(next.parentElement).not.toHaveClass('xl:hidden');
+    const scrollBy = vi.fn();
+    mine.getByRole('list').scrollBy = scrollBy;
+    fireEvent.click(next);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    // One card fits at every width: no arrows.
+    const likedMe = within(section(he.likes.people.likedMe));
+    const prev = likedMe.getByRole('button', {
+      name: he.likes.scrollPrev.replace('{{section}}', he.likes.people.likedMe),
+      hidden: true,
+    });
+    expect(prev.parentElement).not.toHaveClass('md:flex');
+  });
+
   it('ac17_people_empty_states', async () => {
     const api = render({});
     expect(await screen.findByText(he.likes.people.likedMeEmpty)).toBeVisible();
