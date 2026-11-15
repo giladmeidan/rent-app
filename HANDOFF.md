@@ -14,31 +14,38 @@ as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
 Overall: MVP feature work done through Slice 11 (Trust basics); Slice 14 (rent estimate) done through `0014d`.
-Next: Slice 12 (admin) and `0015a`, all still `draft`.
+Next: build Slice 12 (`0012a`, `0012b`) and `0015a`, all three `verified`; none started.
 
 - **Slice 11 done** (all archived with digests): `0011a` listing renewal (PR #93), `0011b` report a listing or a
   person (PR #94, `reports` table, migration `0022_reports`), `0011c` rate limits + request hardening (PR #95),
   `0011e` listing views off the request path (PR #96, Redis + worker flush), `0011d` report button in chats, the
   owner's inbox and a room's people page (PR #97, web only, merged 2026-11-15).
-- **Drafts on `main`, not verified, no worktree:** `0012a` moderation data (suspend account, listing removed by homie,
-  per-account listing cap), `0012b` admin dashboard (`depends_on: [0012a]`), `0015a` listing protected space
-  (ממ״ד / ממ״ק / מקלט / none, card + page + filter). Written by a separate chat of Gilad's working in
-  `../rent-app-orch`; check with Gilad whether it is still editing them before touching them.
+- **Verified on `main`, not started, no worktree:**
+  - `0012a` moderation data: suspend an account, a listing removed by homie, the per-account cap from `GET /me`.
+    It holds all of Slice 12's schema (`users.suspended_at`, `listings.removed_at`, `reports.resolved_at`,
+    `admin_actions`). Reviewers: code, security, qa, perf, ux.
+  - `0012b` admin dashboard, `depends_on: [0012a]`: SQLAdmin in `api/admin/`, `make admin` on `127.0.0.1:8001`,
+    password + `homie_admin` cookie (Strict, path `/admin`) + Host allowlist + `Sec-Fetch-Site` guard, Postgres role
+    `homie_admin` with column-level grants. Reviewers: code, security, qa.
+  - `0015a` listing protected space (ממ״ד / ממ״ק / מקלט / none, card + page + filter).
+  - **Migration clash:** `0012a` and `0015a` both plan `0023`; whichever merges second renames (both specs say so).
+  - Each spec's digest is in its `## Digest`; one verifier round each, findings applied by the orchestrator.
 - Alembic head `0022`. No open PRs, no spec worktrees, no spec stacks. Merging was delegated for Slices 7–11 and 14;
-  **ask Gilad again for Slice 12+**.
+  **not for Slice 12** (Gilad 2026-11-15): green PRs go to Gilad to merge.
 - Main checkout `../rent-app` is on `main`, **96 commits behind `origin/main`**, with uncommitted `Makefile` and
   `.gitignore` edits and untracked seed/promo work (`api/scripts/seed_demo.py`, `seed_promo.py`, `promo/`,
   `promo-video/`, `web/e2e/promo/`); its own compose stack (`rent-app`, 5 containers) is running. A `git pull` there
   also rebuilds the graph, which is stale (pre-Slice 14).
 - `../rent-app-orch` is the docs worktree (detached on `origin/main` between uses).
 
-Last updated: 2026-11-15 (Slice 11 done: 0011d merged, PR #97).
+Last updated: 2026-11-15 (0012a, 0012b verified; Slice 12 merging not delegated).
 
 ## Next Steps
-1. **Slice 12 + `0015a`:** once Gilad's spec chat is done with the drafts, run the spec-verifier (Opus/high) on
-   `0012a`, `0012b` and `0015a`, then build every `verified` one whose `depends_on` is met (`0012a` and `0015a` can
-   build in parallel; `0012b` after `0012a`'s PR is open). Ask Gilad whether merging is delegated for Slice 12.
-   Worktrees get the next free ports below; pre-start build sessions in a turn Gilad wrote.
+1. **Build Slice 12 + `0015a`** when Gilad says go: `0012a` and `0015a` in parallel, `0012b` from `0012a`'s
+   branch once its PR is open. Coders Opus/high for all three. Worktrees get the next free ports below;
+   pre-start build sessions in a turn Gilad wrote. Green PRs: tell Gilad (merging not delegated for Slice 12).
+   `0012b`'s build session does one manual `make admin` pass (log in, every action once, check `sqladmin` is
+   not importable in the API image) and names it in the PR.
 2. After Slice 12: 13 Launch readiness (deploy, one registrable domain, SMS, real client IPs → OTP lockout per email
    + network, Gilad 2026-11-14 Q1 (a); read nadlan.gov.il's terms before `RENT_REFERENCE=nadlan` in production).
 3. Rest of the rent estimate waits for homie's own listings after launch (adjustments, comparables, learned model;
@@ -81,7 +88,11 @@ Last updated: 2026-11-15 (Slice 11 done: 0011d merged, PR #97).
 - Rent estimate (PRODUCT.md "Rent price estimate"): a range with confidence and source, never one number, nothing at
   low confidence; official data + homie's own listings only; the engine takes facts, not a listing id.
 - Admin (PRODUCT.md "Admin (Slice 12)", Gilad 2026-11-15): a separate dashboard for Gilad only, built with SQLAdmin
-  in `api/admin/` (own image and deploy; the public API holds no admin code or route), no public address.
+  in `api/admin/` (own image and deploy; the public API cannot import it), English, no public address (local:
+  compose on loopback; production: a Fly app with no public IP via `fly proxy`, Slice 13). Reported chats only are
+  readable, each open logged; a suspended account is told "suspended", its listings/card/flatmate spots hidden, its
+  sessions revoked (orchestrator's safer default), chats and applications stay; a removed listing reads "הוסרה על
+  ידי הומי" to its owner and frees its cap slot.
 - Protected space (PRODUCT.md, Gilad 2026-11-15, spec `0015a`): a listing states its protected space as a type, not
   yes/no.
 
