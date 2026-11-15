@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.auth import COOKIE_NAME, current_user
+from app.client_ip import client_network
 from app.config import get_settings
 from app.db import get_session
 from app.models import User
@@ -68,9 +69,8 @@ def request_otp(
     r: RedisDep,
     sender: Annotated[EmailSender, Depends(get_email_sender)],
 ) -> Response:
-    ip = request.client.host if request.client else "unknown"
     try:
-        auth_service.request_otp(r, sender, body.email, ip)
+        auth_service.request_otp(r, sender, body.email, client_network(request))
     except RateLimitedError as exc:
         raise HTTPException(
             status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}

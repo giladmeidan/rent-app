@@ -9,10 +9,11 @@ echoes the note."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.auth import current_user
+from app.client_ip import client_network
 from app.db import get_session
 from app.models import User
 from app.redis_client import RedisClient, get_redis
@@ -46,10 +47,10 @@ RedisDep = Annotated[RedisClient, Depends(get_redis)]
     },
 )
 def create_report(
-    body: ReportIn, response: Response, user: UserDep, db: DbDep, r: RedisDep
+    body: ReportIn, request: Request, response: Response, user: UserDep, db: DbDep, r: RedisDep
 ) -> ReportOut:
     try:
-        stored = reports_service.report(db, r, user, body)
+        stored = reports_service.report(db, r, user, body, client_network(request))
     except RateLimitedError as exc:
         raise _rate_limited(exc) from None
     except reports_service.NotFoundError:

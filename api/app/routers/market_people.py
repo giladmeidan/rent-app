@@ -25,12 +25,13 @@ reveals an account in a URL."""
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
 from app import limits
 from app.auth import current_user
+from app.client_ip import client_network
 from app.db import get_session
 from app.models import User
 from app.redis_client import RedisClient, get_redis
@@ -99,10 +100,14 @@ def _card_out(row: Row[Any]) -> PersonCardOut:
     responses={**_SESSION, **_CARD_REQUIRED, **_RATE_LIMITED},
 )
 def browse_people(
-    params: Annotated[PeopleBrowseParams, Query()], user: UserDep, db: DbDep, r: RedisDep
+    params: Annotated[PeopleBrowseParams, Query()],
+    request: Request,
+    user: UserDep,
+    db: DbDep,
+    r: RedisDep,
 ) -> PeopleBrowseOut:
     try:
-        rows, total = market_service.browse(db, r, user, params.offset)
+        rows, total = market_service.browse(db, r, user, params.offset, client_network(request))
     except RateLimitedError as exc:
         raise _rate_limited(exc) from None
     except market_service.CardRequiredError:
@@ -184,9 +189,9 @@ def remove_match(conversation_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisD
     response_model=MyPeopleLikesOut,
     responses={**_SESSION, **_CARD_REQUIRED, **_RATE_LIMITED},
 )
-def my_people_likes(user: UserDep, db: DbDep, r: RedisDep) -> MyPeopleLikesOut:
+def my_people_likes(request: Request, user: UserDep, db: DbDep, r: RedisDep) -> MyPeopleLikesOut:
     try:
-        rows = market_service.my_people_likes(db, r, user)
+        rows = market_service.my_people_likes(db, r, user, client_network(request))
     except RateLimitedError as exc:
         raise _rate_limited(exc) from None
     except market_service.CardRequiredError:

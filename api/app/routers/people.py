@@ -25,12 +25,13 @@ answers it (`routers/applications.py` publishes that chat event). The unlike cou
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
 from app import limits
 from app.auth import current_user
+from app.client_ip import client_network
 from app.db import get_session
 from app.matching.score import explain_row
 from app.models import User
@@ -111,13 +112,14 @@ def _person_out(row: Row[Any]) -> PersonOut:
 def list_people(
     listing_id: uuid.UUID,
     params: Annotated[PeopleParams, Query()],
+    request: Request,
     user: UserDep,
     db: DbDep,
     r: RedisDep,
 ) -> PeoplePageOut:
     # Spec 0010h: one browse counter for both people surfaces, counted before anything else.
     try:
-        market_people_service.count_browse(r, user)
+        market_people_service.count_browse(r, user, client_network(request))
     except RateLimitedError as exc:
         raise _rate_limited(exc) from None
     try:

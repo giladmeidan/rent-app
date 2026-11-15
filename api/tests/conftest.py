@@ -10,7 +10,7 @@ import os
 import re
 import secrets
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -44,6 +44,7 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import redis_client  # noqa: E402
 from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -160,6 +161,39 @@ def views_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     """Listing views use `test-views:` (spec 0011e): the spec stack's own worker drains
     `views:pending` on the same Redis every minute."""
     monkeypatch.setattr(listing_views, "KEY_PREFIX", "test-views:")
+
+
+@pytest.fixture(autouse=True)
+def soft_window_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One test's simulated Redis failure never skips another test's `soft` calls (spec 0013b)."""
+    monkeypatch.setattr(redis_client, "_soft_skip_until", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def testclient_ip_counters_clean() -> None:
+    """Every TestClient request is the one network `testclient`: reset its per-network read, browse
+    and report counters (spec 0013b) so the suite never trips them. OTP counters stay with
+    `redis_clean`."""
+    get_redis().delete(
+        "rl:read:ip:testclient",
+        "rl:read:ip:hour:testclient",
+        "rl:browse:ip:testclient",
+        "rl:report:ip:testclient",
+        "rl:report:ip:day:testclient",
+    )
+
+
+@pytest.fixture
+def set_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
+    """Set environment variables and re-read the settings; restored after the test."""
+
+    def _set(**values: str) -> None:
+        for name, value in values.items():
+            monkeypatch.setenv(name, value)
+        get_settings.cache_clear()
+
+    yield _set
+    get_settings.cache_clear()
 
 
 @pytest.fixture

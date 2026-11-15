@@ -179,6 +179,10 @@ def create_app() -> FastAPI:
     app.add_exception_handler(AccountDeletedError, _account_deleted)
     app.add_exception_handler(redis.exceptions.ConnectionError, _redis_unavailable)
     app.add_exception_handler(redis.exceptions.TimeoutError, _redis_unavailable)
+    # a full noeviction Redis refuses writes with OutOfMemoryError (a ResponseError; redis-py
+    # has it, its type stubs do not)
+    oom = redis.exceptions.OutOfMemoryError  # type: ignore[attr-defined]
+    app.add_exception_handler(oom, _redis_unavailable)
     app.include_router(health.router)
     app.include_router(areas.router)
     app.include_router(auth.router)

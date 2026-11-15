@@ -1,7 +1,7 @@
 ---
 id: 0013b
 title: "homie's limits see the visitor's real network: the OTP lockout is per email and network with a per-email ceiling, the public listing reads, the people browse and reports have per-network limits, and listing views dedupe per network within a memory budget"
-status: verified
+status: done
 depends_on: []   # 0013a (deploy) sets TRUST_PROXY=fly in its Fly config; 0013c (account deletion) and 0013e (admin hardening) build in parallel; see Risks for the shared files
 reviewers: [code, security, qa, perf]   # security: auth rate limits, client-IP trust, Redis memory; qa: new 429s on the public reads the web calls (verifier rule 8); perf (Sonnet/medium): every search and listing read gains a Redis EVAL and the view write becomes a Lua script; no ux: no screen change
 estimate: 1 coder run   # coder Opus/high (auth and abuse limits, Speed rule 6); cross-cutting but mechanical: one helper wired into ~8 call sites
@@ -490,3 +490,6 @@ Applied by the orchestrator (2026-11-15):
 5. AC8 names `redis.exceptions.ConnectionError` and `limits.count_or_raise`; AC14 overrides `limits.read_limit`.
 6. `reviewers: [code, security, qa, perf]`, with the reason in the frontmatter comment and the Digest.
 Also: the worker log level and the web's `Retry-After` copy point to `0013g-review-minors.md`, not 0013d.
+
+## Digest (merged, PR #106, 4743331)
+Merged with e2e skipped (`skip-e2e`, Gilad 2026-11-15); ci green on `ee0d322`. Full review and merged digest on the PR.
