@@ -1,7 +1,7 @@
 ---
 id: 0013d
 title: Before launch, `make screens` is green again, the five e2e tests that time out on a loaded Mac do less work, and the sign-up and map flakes wait on real signals
-status: verified
+status: in-review
 depends_on: []   # touches test code only (web/e2e, web/e2e/screens); the product-code minors of the same sweep are 0013g
 reviewers: [code, qa, ux]   # code: shared e2e helpers (19 signUp call sites); qa: the flake fixes and the e2e evidence; ux: the three new screens states (FOLLOWUPS 0010b, 0014b) are what ux never saw. No security: no product code
 estimate: 1 coder run   # coder Opus/medium: the flake fixes are verified only in CI (no local e2e), so the diagnosis has to be right first time (Speed rule 6, "when in doubt, the stronger one"); the screens mocks are mechanical
@@ -178,6 +178,11 @@ runs `make e2e`. `tsc` (in `make lint`) type-checks `web/e2e/`.
 
 ## Risks / open questions
 No open product question.
+- **Open (coder, 2026-11-15): six shards do not meet AC9's "at most 8".** `--list --shard=N/6` puts 4, 7, 2, 8,
+  3 and **9** codes on shards 1–6 (6/6: `people-market` 2, `people` 2, `photos` 2, `reports` 2, `search` 1).
+  9 fits the limit of 10 (the 429s stop) but leaves 1 spare, not 2. Seven shards: 4/7 holds 10 (no spare).
+  Eight shards: at most 7 (2/8 and 7/8). The branch sets `E2E_SHARDS ?= 6` (the orchestrator's choice) with
+  the real count in the `shortcut:` comment; `?= 8` is the one-line change if AC9's bound wins.
 - **Blind e2e changes.** The house rule (no local e2e) means the coder cannot run the changed tests before the
   push. Two things lower the risk: the helpers are small, and each test keeps its assertions. If CI fails on a
   changed test, the one allowed fix push (rule 7) fixes it; the traces are uploaded on failure
