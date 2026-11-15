@@ -225,7 +225,7 @@ export function ListingCard({
               <path d="M21 16l-5-5-8 8" />
             </svg>
           )}
-          {isRoom && (
+          {isRoom && !compact && (
             <Tag size="sm" className="absolute start-2 top-2">
               {t('listings.card.room')}
             </Tag>
