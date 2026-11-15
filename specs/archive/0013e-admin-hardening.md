@@ -1,7 +1,7 @@
 ---
 id: 0013e
 title: "Gilad's admin login lives in Postgres: logging out ends the session even for a copied cookie, the wrong-password lock survives restarts, and every admin write needs a browser's same-origin proof"
-status: in-review
+status: done
 depends_on: []   # builds beside 0013b (public API limits) and 0013c (account deletion); see Risks for the migration number
 reviewers: [code, security, qa]   # security: admin authentication, a new table with grants; qa: login, lock and write refusals change behaviour, AC6–AC8 are 0012b's qa edges; no ux: SQLAdmin's own login page, unchanged
 estimate: 1 coder run   # coder Opus/high (auth + migration, Speed rule 6)
@@ -247,3 +247,9 @@ Applied by the orchestrator (2026-11-15): 1 → `conftest.py::db_engine` TRUNCAT
 Blast radius line); the late-bodies test takes `db_engine` and `admin_role`. 2 → `logout` guards a missing `sid`, the API
 row says public, AC1 adds the no-cookie case. 3 → reviewers `[code, security, qa]`. 4 → Shared files bullet completed.
 Status set to `verified`.
+
+## Digest (merged, PR #105, 47dc590)
+Shipped: Gilad's logout kills every copy of the admin cookie; the 5-wrong-tries lock survives restarts and a second machine; no admin write runs without `Sec-Fetch-Site: same-origin`. Migration `0025_admin_logins`.
+Tests: +7 integration (net), 3 AC3 tests rebuilt on a real engine, nf2/nf3 extended. CI green on `c9e0831` (11m52s).
+Findings: 0 blockers, 0 majors, 2 minors fixed (docstring lines), 2 follow-ups logged. Full review digest on the PR.
+Changed in PRODUCT.md: nothing.
