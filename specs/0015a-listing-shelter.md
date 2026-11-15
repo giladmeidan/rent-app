@@ -1,7 +1,7 @@
 ---
 id: 0015a
 title: "A lister says what protected space the flat has (ממ״ד, ממ״ק, מקלט בבניין or none), seekers see it on the card and the listing page, and can filter for it"
-status: in-progress
+status: in-review
 depends_on: []
 reviewers: [code, qa, ux]   # qa: API + every place a listing is shown; ux: wizard field, card tag, filter
 estimate: 1 coder run       # coder Opus/high (migration; Speed rule 6)
