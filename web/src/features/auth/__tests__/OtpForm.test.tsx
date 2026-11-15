@@ -1,8 +1,9 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
+import { CONTACT_EMAIL_INLINE } from '../../../app/contact';
 import { OtpForm } from '../OtpForm';
 import { readDraft, writeDraft } from '../../../app/drafts';
 import { deferred, empty, json, mockApi, noa, renderAt } from './harness';
@@ -515,5 +516,117 @@ describe('OtpForm', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  describe('the account-creating verify (spec 0013f)', () => {
+    const request = async () => {
+      fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+        target: { value: 'dana@example.com' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+      await flush();
+    };
+    /** The sign-up page's form, on its verify step with the code typed. */
+    const signupVerify = async () => {
+      mockApi({
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [json({ detail: 'signup_blocked' }, 403)],
+      });
+      renderAt('/signup', <OtpForm withProfile initialRole="seeker" />);
+      fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'דנה' } });
+      await request();
+      fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+    };
+    it('ac6_signup_blocked', async () => {
+      // The sign-up page: the alert names the contact address; the used-up code is cleared.
+      await signupVerify();
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        he.auth.errors.signupBlocked.replace('{{email}}', CONTACT_EMAIL_INLINE),
+      );
+      expect(screen.getByLabelText(he.auth.code.label)).toHaveValue('');
+      expect(screen.getByTestId('location')).toHaveTextContent('/signup');
+      cleanup();
+      vi.unstubAllGlobals();
+
+      // The login page: after `profile_required`, the same alert; a 403 `account_suspended`
+      // still shows the suspended line.
+      mockApi({
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [
+          json({ detail: 'profile_required' }, 422),
+          json({ detail: 'signup_blocked' }, 403),
+          json({ detail: 'account_suspended' }, 403),
+        ],
+      });
+      renderAt('/login', <OtpForm withProfile={false} initialRole="seeker" />);
+      await request();
+      const code = screen.getByLabelText(he.auth.code.label);
+      fireEvent.change(code, { target: { value: '123456' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'דנה' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        he.auth.errors.signupBlocked.replace('{{email}}', CONTACT_EMAIL_INLINE),
+      );
+      expect(code).toHaveValue('');
+
+      fireEvent.change(code, { target: { value: '654321' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(screen.getByRole('alert')).toHaveTextContent(he.auth.errors.suspended);
+      expect(screen.getByRole('alert')).not.toHaveTextContent(CONTACT_EMAIL_INLINE);
+    });
+
+    it('ac7_consent_line', async () => {
+      const consent = () =>
+        screen.queryByText(
+          (_, el) => el?.tagName === 'P' && el.textContent?.startsWith('בהרשמה מאשרים') === true,
+        );
+
+      // Sign-up: none on the request step (sending a code creates nothing); on the verify step it
+      // sits directly above the button that creates the account.
+      mockApi({ 'POST /auth/otp/request': [empty(204)] });
+      renderAt('/signup', <OtpForm withProfile initialRole="seeker" />);
+      expect(consent()).toBeNull();
+      fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'דנה' } });
+      await request();
+      const line = consent() as HTMLElement;
+      expect(line).not.toBeNull();
+      expect(screen.getByRole('button', { name: he.auth.verify }).previousElementSibling).toBe(
+        line,
+      );
+      const links = within(line).getAllByRole('link');
+      expect(links.map((a) => a.getAttribute('href'))).toEqual(['/terms', '/privacy']);
+      for (const a of links) {
+        expect(a).toHaveAttribute('target', '_blank');
+        expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+        expect(a).toHaveTextContent(he.common.newTab);
+      }
+      expect(links[0]).toHaveTextContent('תנאי השימוש');
+      expect(links[1]).toHaveTextContent('מדיניות הפרטיות');
+      cleanup();
+      vi.unstubAllGlobals();
+
+      // Login: none on the plain steps; it appears with the profile fields (`profile_required`).
+      mockApi({
+        'POST /auth/otp/request': [empty(204)],
+        'POST /auth/otp/verify': [json({ detail: 'profile_required' }, 422)],
+      });
+      renderAt('/login', <OtpForm withProfile={false} initialRole="seeker" />);
+      expect(consent()).toBeNull();
+      await request();
+      expect(consent()).toBeNull();
+      fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+      fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+      await flush();
+      expect(screen.getByText(he.auth.noAccountYet)).toBeVisible();
+      expect(screen.getByRole('button', { name: he.auth.verify }).previousElementSibling).toBe(
+        consent(),
+      );
+    });
   });
 });

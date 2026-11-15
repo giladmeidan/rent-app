@@ -56,6 +56,8 @@ function ConversationRow({
   const flatmate = conversation.my_role === 'flatmate';
   const group = conversation.member_count > 2;
   const closed = !conversation.can_send;
+  // null = a deleted account (spec 0013c)
+  const otherName = conversation.other_name ?? t('account.deletedName');
 
   return (
     <Card as="li" padding="none" variant={selected ? 'selected' : 'default'}>
@@ -63,17 +65,11 @@ function ConversationRow({
         to={`/chat/${conversation.id}`}
         className={() => cx('flex min-h-tap items-start gap-3 rounded-lg p-3.5', focusRing)}
       >
-        <Avatar
-          // null = a deleted account (spec 0013c); 0013f names it with the placeholder
-          name={conversation.other_name ?? ''}
-          photoUrl={conversation.other_photo_url}
-          size="md"
-          tone="accent"
-        />
+        <Avatar name={otherName} photoUrl={conversation.other_photo_url} size="md" tone="accent" />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex min-w-0 items-center gap-2">
             <span dir="auto" className="min-w-0 flex-1 truncate text-h3 font-medium">
-              {conversation.other_name}
+              {otherName}
             </span>
             {mark}
           </span>

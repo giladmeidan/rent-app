@@ -34,6 +34,9 @@ const PAGES: Record<string, { file: string; width: TableWidth }> = {
   MarketPeoplePage: { file: 'features/people/MarketPeoplePage.tsx', width: 'wide' },
   MyLikesPage: { file: 'features/likes/MyLikesPage.tsx', width: 'wide' },
   ProfilePage: { file: 'features/profile/ProfilePage.tsx', width: 'wide' },
+  // Static pages (spec 0013f).
+  LegalPage: { file: 'features/legal/LegalPage.tsx', width: 'narrow' },
+  AccountDeletedPage: { file: 'features/profile/AccountDeletedPage.tsx', width: 'narrow' },
   // The phone's column and the desktop's two panes (spec 0009s); the pages sit inside it.
   ChatLayout: { file: 'features/chat/ChatLayout.tsx', width: ['default', 'wide'] },
   ChatListPage: { file: 'features/chat/ChatListPage.tsx', width: 'inLayout' },

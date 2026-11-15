@@ -96,7 +96,7 @@ function FlatRow({
           {cardTitle(t, flat.listing)}
         </span>
         <span dir="auto" className="text-caption text-ink-muted">
-          {t('flatmates.mine.owner', { name: flat.owner_name })}
+          {t('flatmates.mine.owner', { name: flat.owner_name ?? t('account.deletedName') })}
         </span>
         <span className="text-caption text-ink-muted">
           {t('flatmates.mine.joinedAt', { date: formatDay(flat.joined_at) })}

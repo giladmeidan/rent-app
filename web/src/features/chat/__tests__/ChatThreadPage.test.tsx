@@ -1177,4 +1177,52 @@ describe('ChatThreadPage', () => {
     expect(screen.queryByRole('button', { name })).toBeNull();
     reset(view);
   });
+
+  it('ac4_deleted_member', async () => {
+    // A room chat closed by a deleted owner (spec 0013c/0013f): `null` names arrive from the API.
+    const DELETED = he.account.deletedName;
+    const T = thread({
+      other_name: null,
+      can_send: false,
+      members: [
+        { name: null, photo_url: null, role: 'owner', is_me: false },
+        { name: null, photo_url: null, role: 'flatmate', is_me: false },
+        { name: 'דנה', photo_url: null, role: 'seeker', is_me: true },
+      ],
+      messages: [
+        message({ body: 'first', sender_name: null }),
+        message({ body: 'second', mine: true }),
+        message({ body: 'third', sender_name: null }),
+      ],
+    }) as ThreadOut;
+    renderThread(T, [json(T)]);
+
+    // The header and the tab's title.
+    expect(await h1(DELETED)).toBeVisible();
+    expect(document.title).toContain(DELETED);
+    // The members line.
+    const members = screen.getByRole('group', { name: he.chat.members });
+    expect(members).toHaveTextContent(
+      i18n.t('chat.memberWithRole', { name: DELETED, role: he.chat.roles.owner }),
+    );
+    expect(members).toHaveTextContent(
+      i18n.t('chat.memberWithRole', { name: DELETED, role: he.chat.roles.flatmate }),
+    );
+    // Each message's sender, for the eye and for a screen reader.
+    expect(screen.getAllByTestId('sender-name').map((n) => n.textContent)).toEqual([
+      DELETED,
+      DELETED,
+    ]);
+    expect(bubbles()[0]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: DELETED }));
+    // The report dialog's title and hint name the placeholder.
+    expect(
+      screen.getByRole('button', { name: i18n.t('report.title.person', { name: DELETED }) }),
+    ).toBeVisible();
+    // Closed: the deleted-account line, and no composer.
+    expect(screen.getByText(he.chat.thread.closedDeleted)).toBeVisible();
+    expect(screen.queryByText(he.chat.thread.closed)).toBeNull();
+    expect(screen.queryByRole('textbox', { name: he.chat.composer.label })).toBeNull();
+    // `null` never reaches the page as text.
+    expect(document.body).not.toHaveTextContent('null');
+  });
 });

@@ -7,11 +7,12 @@ import { Faq } from './Faq';
 import { Hero } from './Hero';
 import { HowItWorks } from './HowItWorks';
 import { LatestListings } from './LatestListings';
+import { LegalLinks } from './LegalLinks';
 
 /**
  * The visitor's `/` (design/screens-v2/Main.html, spec 0009z): the hero, four doors into the site,
  * the newest listings (only with three or more), "איך זה עובד" for both sides, five questions and
- * the closing band. One column below `lg`. The one request it makes is the listings query.
+ * the closing band and, under it, two small legal links (spec 0013f; no footer). One column below `lg`. The one request it makes is the listings query.
  */
 export function LandingPage() {
   usePageTitle(undefined);
@@ -25,6 +26,7 @@ export function LandingPage() {
       <HowItWorks />
       <Faq />
       <ClosingBand />
+      <LegalLinks />
     </PageContainer>
   );
 }

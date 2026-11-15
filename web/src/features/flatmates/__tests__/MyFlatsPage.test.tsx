@@ -342,4 +342,15 @@ describe('MyFlatsPage', () => {
     expect(api.calls(leaveRoute(A))).toHaveLength(1);
     expect(confirm).not.toHaveBeenCalled();
   });
+
+  it('ac5_owner_deleted', async () => {
+    // `owner_name` is null once the owner's account is deleted (spec 0013c).
+    const { view } = renderPage([json([{ ...A, owner_name: null }])]);
+    await title();
+    expect(
+      await screen.findByText(i18n.t('flatmates.mine.owner', { name: he.account.deletedName })),
+    ).toBeVisible();
+    expect(document.body).not.toHaveTextContent('null');
+    reset(view);
+  });
 });
