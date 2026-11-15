@@ -30,15 +30,21 @@ Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done t
 - Alembic head `0026`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
 - `specs/0015b-shelter-preference.md` (`status: verified`) appeared on `main` from another chat (commit `d840e0e`);
   not built, not this orchestrator's queue unless Gilad says so.
-- Main checkout `../rent-app` is behind `origin/main` (`git pull` there, then graphify rebuilds), still with Gilad's
-  uncommitted `Makefile` / `.gitignore` edits and seed/promo work.
+- Main checkout `../rent-app` is on `main` at `f30feeb`, 54 commits behind `origin/main`, still with Gilad's
+  uncommitted `Makefile` / `.gitignore` edits and untracked seed/promo work. Its stack (`rent-app`, 6 containers incl.
+  `admin`) runs the old code and has not run migrations `0025`/`0026` (Next Steps 3).
 
-Last updated: 2026-11-15 (Slice 13 built and merged, `0013a` parked).
+Last updated: 2026-11-15 (handoff refreshed after Slice 13; verified against `origin/main` `029d110`).
 
 ## Current Work
 Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
 5550/6500/8120/8121/5260) waits for Gilad's go on paid hosting (~$55/month). Building it costs nothing (configs,
 `make deploy-*`, `infra/DEPLOY.md`); deploying does.
+
+## Completed
+- [x] Slices 1–12 (MVP features, trust, admin), Slice 14 through `0014d` (rent estimate), `0015a` (protected space).
+- [x] Slice 13 launch readiness except `0013a`: real client networks for limits, account deletion (API + web),
+  admin sessions in Postgres, terms/privacy pages (draft text), review minors, `make screens` green, stable e2e.
 
 ## Decisions (Gilad, 2026-11-15, during the build)
 - Re-signup after self-deletion: rule **A**, only an admin action blocks (as PRODUCT.md). The gap (a reported account
@@ -56,8 +62,10 @@ Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../r
    `legal.terms.s11.p1` (Tel Aviv-Yafo courts) to confirm; `legal.privacy.s1.i13` + `s5.i9` (log retention);
    `legal.privacy.s3.i2` (hosting/DB, server location, photo/site storage, email providers); `legal.privacy.s3.i5`
    (countries). Production web build needs `VITE_CONTACT_EMAIL`.
-3. Post-slice, in the main checkout: `git pull`, then `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label .
-   --backend=claude-cli` (owed for Slices 12 and 13).
+3. Main checkout (Gilad's uncommitted edits stay; never `git stash` there): `git pull`, `make migrate` (`0025`
+   admin_logins, `0026` account deletion), re-apply the admin role grants (`api/scripts/admin_role.py`, as after
+   every migration that adds a table the admin reads), restart the stack, `make client`; then
+   `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label . --backend=claude-cli` (owed for Slices 12 and 13).
 4. FOLLOWUPS from Slice 13 (all minors): 0013f's `account.spec.ts:41-43` brings back the inline send-code pattern
    0013d removed; applications ac9 "טוען…" timeout; 0013b's duplicate `Fly-Client-IP`, silent view budget, Redis-hang
    threadpool burst; 0013e re-login leaves the old admin row live ≤ 8 h; option D above.
@@ -68,8 +76,10 @@ Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../r
 ## Admin dashboard (local)
 `make admin` in the main checkout (needs `ADMIN_PASSWORD` 16+ and `ADMIN_SECRET_KEY` 32+ in `.env`; names only,
 never write values here) → http://127.0.0.1:8001/admin, password only (username ignored). Wrong passwords lock the
-login until the admin container restarts (`docker restart rent-app-admin-1`; `0013e` makes the lock persistent).
-Must be `127.0.0.1` (Host allowlist).
+login in Postgres (`admin_logins`, 0013e): it survives restarts. To lift it, as the DB owner role (the admin role
+cannot DELETE): `DELETE FROM admin_logins WHERE locks_until > now()`. Logout ends every copy of the session cookie.
+Admin writes need the browser's `Sec-Fetch-Site: same-origin`, so reach it on `127.0.0.1` (Host allowlist) or, in
+production, via `fly proxy` / https.
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → 503, 422 never echoes
@@ -80,16 +90,22 @@ Must be `127.0.0.1` (Host allowlist).
   `schemas/_text.py::visible_characters_only` is the one user-text rule), `matching/`, thin `routers/`, logic in
   `services/` (`search.py::_public_listings()` is the only definition of "public"; `rent_reference.py` the official
   import; `rent_estimate.py` the engine + backtest; reports in `reports.py`), `worker.py` (geocoding, the monthly
-  rent import (off by default), the per-minute listing-view flush).
+  rent import (off by default), the per-minute listing-view flush). Since Slice 13: `services/visibility.py` holds the
+  suspended/deleted-owner filters (`not_suspended` and friends); per-network limits key on the client network
+  (`TRUST_PROXY=fly` reads `Fly-Client-IP`; IPv4 address or IPv6 /64, plus a /48 counter); `DELETE /me` turns an
+  account into a scrubbed tombstone and, after an admin action, writes an `EMAIL_BLOCK_KEY` HMAC to `blocked_emails`
+  (`signup_blocked` 403 at OTP verify).
 - `api/admin/`: the SQLAdmin dashboard (0012b), its own image, compose profile `admin` and Postgres role
   `homie_admin` (column-level grants, `scripts/admin_role.py`); `app/` never imports `admin`.
-- Migrations `api/alembic/versions/0001`–`0024`. Photos on Cloudflare R2 behind unguessable keys (0010d/j).
+- Migrations `api/alembic/versions/0001`–`0026` (`0025_admin_logins`, `0026_account_deletion`). Photos on Cloudflare R2 behind unguessable keys (0010d/j).
 - `web/src/`: `app/` (routes, layout, side switch), `features/<domain>/`, `components/` (UI kit), `locales/he.json`,
   generated `api/schema.d.ts` (`make client`, git-ignored). `web/e2e/` Playwright (CI only), `web/e2e/screens/` the
-  mocked screenshot check (`make screens`, local).
+  mocked screenshot check (`make screens`, local). `/terms`, `/privacy` (legal text in `he.json` under `legal.*`,
+  with `[…]` placeholders), `/account-deleted`; footer on every page except `/` and `/chat`.
 - `infra/docker-compose.yml`: db, redis, api, worker, web on `127.0.0.1`; ports via `DB_PORT`/`REDIS_PORT`/
   `API_PORT`/`WEB_PORT`; `COMPOSE_PROJECT_NAME` isolates a worktree's stack. No production deploy yet (`0013a`).
-- CI: one `ci` job on the self-hosted Mac runner, only on PRs labelled `ready-to-merge`; docs-only PRs run nothing.
+- CI: one `ci` job on the self-hosted Mac runner, only on PRs labelled `ready-to-merge`; docs-only PRs run nothing;
+  a PR also labelled `skip-e2e` skips the smoke suite (label on before the run starts). e2e: `E2E_SHARDS ?= 8`.
 
 ## Important Decisions
 - Launch (PRODUCT.md "Launch (Slice 13)", Gilad 2026-11-15): see Current Status; paid hosting approved (~$50–55/month).
@@ -104,7 +120,8 @@ Must be `127.0.0.1` (Host allowlist).
 ## Constraints
 - Orchestrator never writes application code; agents never push to `main` (orchestrator docs commits excepted).
 - Never `git stash` in a shared checkout; never start/stop another checkout's compose stack.
-- e2e only in CI; merge only with `make merge PR=N`; at most 3 builds at once; **no docs push to `main` while any
+- e2e only in CI; merge only with `make merge PR=N` (Slice 13 exception: a run where only e2e failed, or a head
+  that differs from the green one only by `main` and docs, merged with `gh pr merge --match-head-commit`); at most 3 builds at once; **no docs push to `main` while any
   PR waits on CI or is green and about to merge** (it falls behind and CI reruns).
 - When writing specs through the shell, `\uXXXX` escapes get decoded into real characters; check files for
   invisible characters afterwards.
@@ -122,8 +139,13 @@ Must be `127.0.0.1` (Host allowlist).
   `git log origin/main..spec/NNNN-…`.
 - Adding the `ready-to-merge` label at PR creation starts two `ci` runs; one is cancelled at once. Watchers must skip
   cancelled runs and match the PR's head sha.
-- e2e OTP budget: `make e2e` clears `rl:*` only per shard, and the OTP limit is 10 per IP per 15 min; shard 4 needs
-  about 12 codes (likely cause of the "flaky" sign-ups; `0013d` settles it).
+- e2e OTP budget: `make e2e` clears `rl:*` only per shard and each network gets at most 10 codes per 15 min; with
+  8 shards the busiest needs 7 (the `Makefile` comment by `E2E_SHARDS` lists them). A spec adding sign-ups to e2e
+  must re-check the per-shard count. `0013f`'s `account.spec.ts:41-43` brings back the inline send-code pattern
+  `0013d` removed (FOLLOWUPS).
+- No e2e has run with `0013f`'s sign-up/consent changes and `0013d`'s shard changes together on `main`.
+- Planner-shape asserts are brittle on the CI Mac (`test_nf1_owner_check_is_one_pass` failed 3 PRs until #106):
+  assert loops/indexes, not parent node types.
 - `/areas` blocks on a *hung* Postgres via pooled connections; why `GET /areas` is slow on CI runners is unconfirmed.
 - Join, leave and remove publish no chat event; open threads refresh members on window focus only.
 - GitGuardian incident 40007526 (fake fixture token) flags every PR that merges `main`; merge on green `ci` anyway.
@@ -133,11 +155,12 @@ Must be `127.0.0.1` (Host allowlist).
 ## Environment & Commands
 Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; the shell default v20 crashes vitest, so prefix
 `PATH=/Users/giladmeidan/.nvm/versions/node/v22.23.2/bin:$PATH`) + `pnpm`, `gh` logged in. `0013a` adds flyctl
-(and possibly wrangler) as deploy tools.
+(and possibly wrangler) as deploy tools. Production also needs (names only): `EMAIL_BLOCK_KEY` (32+, never
+rotated, not the dev value), `TRUST_PROXY=fly`, `VITE_CONTACT_EMAIL` (web build), besides `.env.example`'s list.
 Commands: see `CLAUDE.md` → Commands and the `##` comments in the `Makefile`.
 
-A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5553,
-Redis 6430–6503, API/admin 8050–8127, web 5191–5263: start above those). The main checkout's stack runs on
+A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5556,
+Redis 6430–6506, API/admin 8050–8133, web 5191–5266: start above those). The main checkout's stack runs on
 5434/6380/8000 (set in its `.env`), web 5180, admin 8001. Web at http://localhost:$WEB_PORT (must be `localhost` for
 CORS). Local login code: newest `.outbox/*.json`.
 
