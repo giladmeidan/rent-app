@@ -317,3 +317,16 @@ def test_ac13_rent_reference_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "secret" not in str(excinfo.value)
     with pytest.raises(ValidationError, match="rent_reference"):
         Settings(**required, rent_reference="on")
+
+
+def test_ac1_trust_proxy_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 0013b: `TRUST_PROXY` defaults to `none` and accepts only `none` or `fly`."""
+    monkeypatch.delenv("TRUST_PROXY", raising=False)
+    assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET).trust_proxy == "none"
+
+    monkeypatch.setenv("TRUST_PROXY", "fly")
+    assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET).trust_proxy == "fly"
+
+    monkeypatch.setenv("TRUST_PROXY", "evil")
+    with pytest.raises(ValidationError):
+        Settings(database_url=_DSN, redis_url=_REDIS, secret_key=_SECRET)

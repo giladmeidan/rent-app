@@ -5,7 +5,7 @@ autouse `views_prefix`), so the spec stack's own worker never drains these tests
 import logging
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
@@ -15,6 +15,7 @@ from sqlalchemy import Engine, event, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.db import get_sessionmaker
 from app.redis_client import get_redis
 from app.services import listing_views
@@ -161,17 +162,127 @@ def test_ac4_view_count_never_fails_the_page(
 ) -> None:
     listing = make_listing(db_engine, owner_id, gush_dan)
     usual = client.get(f"/listings/{listing}").json()
+    # The read limit runs first on the same client; without this its `eval` would fail instead.
+    client.app.dependency_overrides[limits.read_limit] = lambda: None  # type: ignore[attr-defined]
 
     def down(*args: Any, **kwargs: Any) -> Any:
         raise redis.ConnectionError("Error connecting to redis")
 
-    monkeypatch.setattr(redis.Redis, "set", down)
-    with caplog.at_level(logging.WARNING, logger="app.services.listing_views"):
+    monkeypatch.setattr(redis.Redis, "eval", down)
+    with caplog.at_level(logging.WARNING, logger="app.redis_client"):
         response = client.get(f"/listings/{listing}")
 
     assert response.status_code == 200
     assert response.json() == usual
-    (record,) = [rec for rec in caplog.records if rec.name == "app.services.listing_views"]
+    (record,) = [rec for rec in caplog.records if rec.name == "app.redis_client"]
     assert record.levelno == logging.WARNING
     assert "ConnectionError" in record.getMessage()
     assert "testclient" not in caplog.text
+
+
+# Spec 0013b: anonymous viewers per network, the seen-key budget, malformed pending fields.
+ADDRESSES = ("203.0.113.7", "198.51.100.9", "2001:db8:1:2::a", "2001:db8:1:2::b")
+
+
+def test_ac11_anonymous_views_per_network(
+    client: TestClient,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    set_env: Callable[..., None],
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    listing = make_listing(db_engine, owner_id, gush_dan)
+    before, _ = _row(db_engine, listing)
+    for address in ADDRESSES:
+        response = client.get(f"/listings/{listing}", headers={"Fly-Client-IP": address})
+        assert response.status_code == 200
+
+    r = get_redis()
+    stored = [k.decode() for k in r.scan_iter(match="test-views:*")]
+    stored += [f.decode() for f in r.hkeys(PENDING)]
+    stored += [v.decode() for v in r.hvals(PENDING)]
+    for text_ in stored:
+        assert not any(part in text_ for part in ("203.0.113", "198.51.100", "2001:db8")), text_
+    with get_sessionmaker()() as db:
+        assert listing_views.flush_views(db, r) == 3
+    assert _row(db_engine, listing)[0] == before + 3
+
+
+def test_ac12_seen_key_budget(
+    client: TestClient,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    set_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(TRUST_PROXY="fly")
+    monkeypatch.setattr(listing_views, "SEEN_BUDGET_PER_HOUR", 2)
+    listing = make_listing(db_engine, owner_id, gush_dan)
+
+    pages = [
+        client.get(f"/listings/{listing}", headers={"Fly-Client-IP": address})
+        for address in ADDRESSES[:3]
+    ]
+
+    assert [page.status_code for page in pages] == [200, 200, 200]
+    assert pages[2].json() == pages[0].json()
+    assert _pending(listing) == 2
+    r = get_redis()
+    assert len(list(r.scan_iter(match="test-views:seen:*"))) == 2
+    assert r.get("test-views:budget") == b"2"
+    assert 0 < r.ttl("test-views:budget") <= 3600
+
+
+def test_ac13_flush_skips_malformed_fields(
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    a = make_listing(db_engine, owner_id, gush_dan)
+    b = make_listing(db_engine, owner_id, gush_dan)
+    bad_value = uuid.uuid4()
+    before_a, _ = _row(db_engine, a)
+    before_b, _ = _row(db_engine, b)
+    r = get_redis()
+    r.hset(PENDING, mapping={str(a): 2, str(b): 3, "not-a-uuid": 4, str(bad_value): "x"})
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.services.listing_views"),
+        get_sessionmaker()() as db,
+    ):
+        assert listing_views.flush_views(db, r) == 5
+
+    assert _row(db_engine, a)[0] == before_a + 2
+    assert _row(db_engine, b)[0] == before_b + 3
+    assert not r.exists(PENDING)
+    (record,) = [rec for rec in caplog.records if rec.name == "app.services.listing_views"]
+    assert record.getMessage() == "view flush skipped 2 malformed field(s)"
+    assert "not-a-uuid" not in caplog.text and str(bad_value) not in caplog.text
+
+
+def test_ac14_view_skips_redis_after_error(
+    client: TestClient,
+    owner_id: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    listing = make_listing(db_engine, owner_id, gush_dan)
+    client.app.dependency_overrides[limits.read_limit] = lambda: None  # type: ignore[attr-defined]
+    calls: list[int] = []
+
+    def hangs(*args: Any, **kwargs: Any) -> Any:
+        calls.append(1)
+        raise redis.exceptions.TimeoutError("Timeout reading from socket")
+
+    monkeypatch.setattr(get_redis(), "eval", hangs)
+    with caplog.at_level(logging.WARNING, logger="app.redis_client"):
+        statuses = [client.get(f"/listings/{listing}").status_code for _ in range(3)]
+
+    assert statuses == [200, 200, 200]
+    assert len(calls) == 1
+    assert len([rec for rec in caplog.records if rec.name == "app.redis_client"]) == 1

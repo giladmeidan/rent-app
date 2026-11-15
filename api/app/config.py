@@ -65,6 +65,9 @@ class Settings(DatabaseSettings):
     smtp_url: SecretStr | None = None
     email_from: str = "noreply@localhost"
     cookie_secure: bool = False
+    # Spec 0013b: `fly` reads the client address from `Fly-Client-IP` (only behind Fly's proxy);
+    # `none` uses the socket peer (`app/client_ip.py`).
+    trust_proxy: Literal["none", "fly"] = "none"
     # Geocoding (spec 0003c), worker only. `fake` = deterministic points, no network (dev, CI, e2e);
     # `nominatim` = NOMINATIM_URL, which wants an identifying User-Agent (never an email in it).
     geocoder: Literal["fake", "nominatim"] = "fake"

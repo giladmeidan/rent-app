@@ -71,6 +71,9 @@ BROWSE_RATE_LIMIT_HOUR = 300
 BROWSE_RATE_WINDOW_S = 3600
 BROWSE_RATE_LIMIT_DAY = 1500
 BROWSE_RATE_DAY_S = 86_400
+# Per network (spec 0013b): two accounts' worth of the hourly limit; no day window, so the key
+# lives at most an hour.
+BROWSE_RATE_LIMIT_IP_HOUR = 600
 
 # shortcut: each list capped at 100 rows (the like limit is 100 a day); page it with /me/likes
 # (FOLLOWUPS:160)
@@ -111,14 +114,15 @@ _MATCHED = aliased(PersonPair, name="matched_pair")
 _Pair = type[PersonPair] | AliasedClass[PersonPair]
 
 
-def count_browse(r: RedisClient, user: User) -> None:
-    """Count one browse page of `user` (`rl:browse:user:{id}`, `rl:browse:user:day:{id}`). Raises
-    `RateLimitedError`."""
+def count_browse(r: RedisClient, user: User, network: str) -> None:
+    """Count one browse page of `user` on `network` (`rl:browse:user:{id}`,
+    `rl:browse:user:day:{id}`, `rl:browse:ip:{network}`, spec 0013b). Raises `RateLimitedError`."""
     count_or_raise(
         r,
         (
             (f"rl:browse:user:{user.id}", BROWSE_RATE_LIMIT_HOUR, BROWSE_RATE_WINDOW_S),
             (f"rl:browse:user:day:{user.id}", BROWSE_RATE_LIMIT_DAY, BROWSE_RATE_DAY_S),
+            (f"rl:browse:ip:{network}", BROWSE_RATE_LIMIT_IP_HOUR, BROWSE_RATE_WINDOW_S),
         ),
     )
 
@@ -232,13 +236,15 @@ def browse_statement(viewer: Viewer, offset: int) -> Select[Any]:
     )
 
 
-def browse(db: Session, r: RedisClient, me: User, offset: int) -> tuple[Sequence[Row[Any]], int]:
+def browse(
+    db: Session, r: RedisClient, me: User, offset: int, network: str
+) -> tuple[Sequence[Row[Any]], int]:
     """One page (`PEOPLE_LIMIT`) of `me`'s candidates and their total (`browse_statement`). The
     limiter counts first, so every authenticated attempt counts, a refused one included
     (`RateLimitedError`); then the viewer (`CardRequiredError` without a visible card), then the
     page: two statements after the session lookup. An empty page past the start (`offset > 0`)
     needs one more, the count. A read: no commit."""
-    count_browse(r, me)
+    count_browse(r, me, network)
     viewer = _viewer(db, me)
     if not viewer.people_visible:
         raise CardRequiredError
@@ -453,12 +459,12 @@ def likes_statement(viewer: Viewer) -> Select[Any]:
     )
 
 
-def my_people_likes(db: Session, r: RedisClient, me: User) -> Sequence[Row[Any]]:
+def my_people_likes(db: Session, r: RedisClient, me: User, network: str) -> Sequence[Row[Any]]:
     """`me`'s people likes (`likes_statement`'s rows). The browse limiter counts first, as in
     `browse` (spec 0011c: every authenticated attempt counts, `RateLimitedError`); then the viewer
     (`CardRequiredError` without a visible card), then the list: two statements after the session
     lookup."""
-    count_browse(r, me)
+    count_browse(r, me, network)
     viewer = _viewer(db, me)
     if not viewer.people_visible:
         raise CardRequiredError

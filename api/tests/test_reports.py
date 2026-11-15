@@ -396,7 +396,11 @@ def test_ac7_repeat_is_already_reported(
             assert user is not None
             start.wait()
             try:
-                outcomes.append(201 if reports_service.report(db, get_redis(), user, body) else 200)
+                outcomes.append(
+                    201
+                    if reports_service.report(db, get_redis(), user, body, "testclient")
+                    else 200
+                )
             except Exception as exc:  # pragma: no cover - reported by the assertion below
                 outcomes.append(repr(exc))
 
@@ -462,13 +466,14 @@ def test_ac9_rate_limit(
     assert 0 < int(refused.headers["Retry-After"]) <= 3600
     assert _count(db_engine) == 1
 
-    # After the hour window, the day limit of 30 applies the same way (refusals never count).
+    # After the hour window, the day limit of 30 applies the same way (refusals never count). The
+    # hour window passes for the network's counter too (spec 0013b).
     r = get_redis()
     for _ in range(2):
-        r.delete(f"rl:report:user:{seeker_id}")
+        r.delete(f"rl:report:user:{seeker_id}", "rl:report:ip:testclient")
         for _ in range(10):
             assert _report(seeker, "listing", uuid.uuid4()).status_code == 404
-    r.delete(f"rl:report:user:{seeker_id}")
+    r.delete(f"rl:report:user:{seeker_id}", "rl:report:ip:testclient")
     refused = _report(seeker, "listing", fresh)
     assert refused.status_code == 429
     assert refused.json() == {"detail": "rate_limited"}

@@ -30,6 +30,9 @@ REPORT_RATE_LIMIT_HOUR = 10
 REPORT_RATE_WINDOW_S = 3600
 REPORT_RATE_LIMIT_DAY = 30
 REPORT_RATE_DAY_S = 86_400
+# Per network (spec 0013b): two accounts' worth of the per-account limits.
+REPORT_RATE_LIMIT_IP_HOUR = 20
+REPORT_RATE_LIMIT_IP_DAY = 60
 
 
 class NotFoundError(Exception):
@@ -47,26 +50,29 @@ _LOOKUPS: dict[ReportTargetType, Callable[[Session, User, uuid.UUID], uuid.UUID 
 }
 
 
-def count_report(r: RedisClient, user: User) -> None:
-    """Count one report attempt of `user` (`rl:report:user:{id}`, `rl:report:user:day:{id}`).
+def count_report(r: RedisClient, user: User, network: str) -> None:
+    """Count one report attempt of `user` on `network` (`rl:report:user:{id}`,
+    `rl:report:user:day:{id}`, `rl:report:ip:{network}`, `rl:report:ip:day:{network}`, spec 0013b).
     Raises `RateLimitedError`."""
     count_or_raise(
         r,
         (
             (f"rl:report:user:{user.id}", REPORT_RATE_LIMIT_HOUR, REPORT_RATE_WINDOW_S),
             (f"rl:report:user:day:{user.id}", REPORT_RATE_LIMIT_DAY, REPORT_RATE_DAY_S),
+            (f"rl:report:ip:{network}", REPORT_RATE_LIMIT_IP_HOUR, REPORT_RATE_WINDOW_S),
+            (f"rl:report:ip:day:{network}", REPORT_RATE_LIMIT_IP_DAY, REPORT_RATE_DAY_S),
         ),
     )
 
 
-def report(db: Session, r: RedisClient, me: User, body: ReportIn) -> bool:
+def report(db: Session, r: RedisClient, me: User, body: ReportIn, network: str) -> bool:
     """Store `me`'s report. True when stored now, False when `me` had already reported this
     target (nothing changed). In order: the limiter (every authenticated, well-formed attempt
     counts, a 404 and a repeat too; a 422 is refused before it; `RateLimitedError`), the target's
     lookup (`NotFoundError` for None or `me`), one INSERT ... ON CONFLICT DO NOTHING. One
     commit."""
     try:
-        count_report(r, me)
+        count_report(r, me, network)
         reported = _LOOKUPS[body.target_type](db, me, body.target_id)
         if reported is None or reported == me.id:
             raise NotFoundError

@@ -21,7 +21,8 @@ account on a room it does not own also gets the listing page's `like` (spec 0008
 between them and the room. A seeker on a room that fits them (`room_fit` not false) also gets the
 listing page's `people` (spec 0010f, `services/flatmates.py::shown_people`): the lister when they
 live there and the flatmates who chose to be shown (on a gendered room, only to a viewer of the
-room's gender); everyone else gets `[]`."""
+room's gender); everyone else gets `[]`. Both routes share one per-network read budget
+(`limits.read_limit`, spec 0013b), counted before the handler, a 404 included."""
 
 import uuid
 from typing import Annotated, Any
@@ -30,7 +31,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import COOKIE_NAME, optional_user
+from app.client_ip import client_network
 from app.db import get_session
 from app.models import Listing, User
 from app.redis_client import RedisClient, get_redis
@@ -78,7 +81,12 @@ def _private_if_cookie(request: Request, response: Response) -> None:
         response.headers["Cache-Control"] = "private"
 
 
-@router.get("/listings", response_model=ListingSearchOut, responses=_DB_DOWN)
+@router.get(
+    "/listings",
+    response_model=ListingSearchOut,
+    responses={**_DB_DOWN, **limits.RATE_LIMITED},
+    dependencies=[Depends(limits.read_limit)],
+)
 def search_listings(
     params: Annotated[SearchParams, Query()],
     db: DbDep,
@@ -106,11 +114,11 @@ def search_listings(
     return ListingSearchOut(items=items, total=total, sort=sort)
 
 
-def _browse_allowed(r: RedisClient, user: User) -> bool:
+def _browse_allowed(r: RedisClient, user: User, network: str) -> bool:
     """Count one people-browse page for `user`; False when they are over the limit or Redis is
     unavailable (fail closed: the page is served without people, never a 503)."""
     try:
-        market_people_service.count_browse(r, user)
+        market_people_service.count_browse(r, user, network)
     except (RateLimitedError, RedisError):
         return False
     return True
@@ -125,7 +133,9 @@ def _browse_allowed(r: RedisClient, user: User) -> bool:
             "description": "not_found: unknown id, or a paused, expired or inactive-area listing",
         },
         **_DB_DOWN,
+        **limits.RATE_LIMITED,
     },
+    dependencies=[Depends(limits.read_limit)],
 )
 def get_listing(
     listing_id: uuid.UUID,
@@ -138,7 +148,8 @@ def get_listing(
     """A public listing with its applicant count, the caller's match, room fit and like state
     (spec 0008a; 0010b: any signed-in account on a room, not their own), `is_mine` and, for a
     seeker on a room that fits them, the flat's people (spec 0010f). Read-only: a view is counted
-    in Redis, once per viewer per listing per hour, and the worker flushes the counts into
+    in Redis, once per viewer per listing per hour (anonymous viewers per network, `client_ip.py`;
+    within a key budget, spec 0013b), and the worker flushes the counts into
     `listings.view_count` every minute (spec 0011e). A 404 counts nothing.
 
     The flat's people count one page against the caller's people-browse limit (spec 0010h,
@@ -154,8 +165,8 @@ def get_listing(
     except ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     count = applications_service.applicant_count(db, listing.id)
-    host = request.client.host if request.client else "unknown"
-    listing_views.count_view(r, listing.id, f"u:{user.id}" if user else f"ip:{host}")
+    network = client_network(request)
+    listing_views.count_view(r, listing.id, f"u:{user.id}" if user else f"ip:{network}")
     mine = _is_mine(user, listing)
     like = None
     if user is not None and listing.listing_type == "room" and listing.owner_id != user.id:
@@ -168,7 +179,7 @@ def get_listing(
         and seeker
         and listing.listing_type == "room"
         and room_fit is not False
-        and _browse_allowed(r, user)
+        and _browse_allowed(r, user, network)
     ):
         people = [
             FlatPersonOut(

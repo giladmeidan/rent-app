@@ -1,11 +1,17 @@
-"""Email one-time-code login and cookie sessions (spec 0001a).
+"""Email one-time-code login and cookie sessions (spec 0001a; limits per network, spec 0013b).
 
 Brute-force bound (NF2), per targeted email: a code allows `OTP_MAX_ATTEMPTS` (5) guesses, and at
-most `OTP_RATE_LIMIT_EMAIL` (3) codes per 15 min and `OTP_RATE_LIMIT_EMAIL_DAY` (10) codes per 24 h
-are issued, so an attacker gets at most 50 guesses a day against a 10**6 code space: about 0.005 %
-a day, about 0.15 % over a month of continuous attack. Attempts are reserved atomically in Redis
-before the comparison, so concurrent guesses cannot exceed the bound, and a right code is claimed
-(compare-and-delete) before it is used, so one code yields at most one session.
+most 20 codes per email (`OTP_RATE_LIMIT_EMAIL_ALL_DAY`) are issued per 24 h across all networks
+(10 from any one network, `OTP_RATE_LIMIT_EMAIL_DAY`), so an attacker gets at most 100 guesses a day
+against a 10**6 code space: 0.01 % a day, about 0.3 % over a month of continuous attack. The ceiling
+is the one counter not scoped per network: 20 requests from two or more networks (one IPv6
+connection holds many /64s) stop an email getting new codes for a day; its signed-in sessions are
+unaffected. Attempts are reserved atomically in Redis before the comparison, so concurrent guesses
+cannot exceed the bound, and a right code is claimed (compare-and-delete) before it is used, so one
+code yields at most one session.
+
+A network is `client_ip.client_network` (an IPv4 address or an IPv6 /64); an IPv6 network's /48 is
+also counted, at `client_ip.PREFIX48_FACTOR` times the per-network limits.
 
 OTP codes and rate-limit counters live in Redis with TTLs; only the HMAC of a code is stored, and
 only the sha256 of a session token reaches Postgres.
@@ -21,6 +27,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app import client_ip
 from app.config import get_settings
 from app.i18n import he
 from app.models import Session as SessionRow
@@ -35,8 +42,10 @@ OTP_MAX_ATTEMPTS = 5
 OTP_RATE_LIMIT_EMAIL = 3
 OTP_RATE_WINDOW_S = 900
 OTP_RATE_LIMIT_EMAIL_DAY = 10
+OTP_RATE_LIMIT_EMAIL_ALL_DAY = 20
 OTP_RATE_DAY_S = 86_400
 OTP_RATE_LIMIT_IP = 10
+OTP_RATE_LIMIT_IP_DAY = 50
 SESSION_TTL_S = 30 * 24 * 3600
 
 # Reserve one attempt: nil when no code is pending (never creates a key, so never one without a
@@ -97,23 +106,32 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _count_request(r: RedisClient, email: str, ip: str) -> None:
-    """Count this request against all three limits; raise `RateLimitedError` (counting nothing)
-    if any is already at its limit (`services/rate_limit.py`)."""
-    count_or_raise(
-        r,
-        (
-            (f"rl:otp:email:{email}", OTP_RATE_LIMIT_EMAIL, OTP_RATE_WINDOW_S),
-            (f"rl:otp:email:day:{email}", OTP_RATE_LIMIT_EMAIL_DAY, OTP_RATE_DAY_S),
-            (f"rl:otp:ip:{ip}", OTP_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
-        ),
-    )
+def _count_request(r: RedisClient, email: str, network: str) -> None:
+    """Count this request against every limit of `email` and `network` (and an IPv6 network's
+    /48, first); raise `RateLimitedError` (counting nothing) if any is already at its limit
+    (`services/rate_limit.py`)."""
+    counters: list[tuple[str, int, int]] = []
+    p = client_ip.network48(network)
+    if p is not None:
+        factor = client_ip.PREFIX48_FACTOR
+        counters += [
+            (f"rl:otp:ip48:{p}", factor * OTP_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
+            (f"rl:otp:ip48:day:{p}", factor * OTP_RATE_LIMIT_IP_DAY, OTP_RATE_DAY_S),
+        ]
+    counters += [
+        (f"rl:otp:email:{email}:net:{network}", OTP_RATE_LIMIT_EMAIL, OTP_RATE_WINDOW_S),
+        (f"rl:otp:email:day:{email}:net:{network}", OTP_RATE_LIMIT_EMAIL_DAY, OTP_RATE_DAY_S),
+        (f"rl:otp:email:all:day:{email}", OTP_RATE_LIMIT_EMAIL_ALL_DAY, OTP_RATE_DAY_S),
+        (f"rl:otp:ip:{network}", OTP_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
+        (f"rl:otp:ip:day:{network}", OTP_RATE_LIMIT_IP_DAY, OTP_RATE_DAY_S),
+    ]
+    count_or_raise(r, counters)
 
 
-def request_otp(r: RedisClient, sender: EmailSender, email: str, ip: str) -> None:
+def request_otp(r: RedisClient, sender: EmailSender, email: str, network: str) -> None:
     """Issue a code for `email` and send it. Same outcome whether or not an account exists."""
     email = normalise_email(email)
-    _count_request(r, email, ip)
+    _count_request(r, email, network)
     code = f"{secrets.randbelow(10**6):06d}"
     key = otp_key(email)
     pipe = r.pipeline(transaction=True)
