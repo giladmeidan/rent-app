@@ -167,6 +167,20 @@ Risks: starts from 0011b's branch once its PR is open; merges `origin/main` afte
 Reviewers: code, qa, ux   Estimated: 1 coder run (Sonnet/high), 1 review round
 Links: `specs/0011d-report-chat-inbox.md` · `specs/0011b-report-button.md` · PRODUCT.md "Trust (MVP)"
 
+Spec 0011d — Report from chat, the inbox and a room's people   PR #97 (head 25d5c61, ci green; merged as c4314cb)
+Shipped: 0011b's report button now appears in every chat (application, room group, direct, open or closed;
+listing chats get six reasons, direct chats five, group chats a hint naming the other side), on the owner's inbox
+phone card for every status and on the desktop pane (not on compact cards), and on each person card on a room's
+people page. The deposit warning is unchanged. Web only, one new i18n key (`report.groupHint`).
+Demo: make dev → as a seeker open an application chat → "דיווח" in the caption row → pick a reason, send →
+"sent". As the owner open the inbox → the applicant's "דיווח". Open a room's people page → "דיווח" beside the invite button.
+Tests: +4 vitest (ac1 chat, ac2 pane + phone card, ac3 room person), `buttonsOf` lists amended, +0 e2e (AC4 step
+added to `inbox ac12`)   CI: green in 8m42s (Flaky e2e warning: `market ac18` passed on retry, unrelated, logged)
+Findings: 0 blockers, 0 majors, 3 minors fixed (test placement/order asserts; 2 duplicates), 4 nits dropped;
+FOLLOWUPS: 1 added (the flaky `market ac18`).
+Changed in PRODUCT.md: nothing.
+Next spec I propose: none in Slice 11 (0011d was its last spec).
+
 ## Verifier findings
 One round (2026-11-14). Rejected on checklist item 7: the deposit-line change contradicts PRODUCT.md "Trust
 (MVP)": the deposit warning is "**already shipped** by 0005b (`chat.thread.warning`, above the messages of every
