@@ -1,7 +1,7 @@
 ---
 id: 0012b
 title: "Gilad works the report queue, suspends accounts, hides listings and raises a listing cap from a separate admin dashboard that only he can reach"
-status: in-review
+status: done
 depends_on: [0012a]   # the columns and admin_actions table it writes; the public app's reaction to them
 reviewers: [code, security, qa]   # security: a new app with write access to production data; no ux (SQLAdmin's own UI, Gilad-only, English)
 estimate: 1 coder run   # coder Opus/high (security; Speed rule 6)

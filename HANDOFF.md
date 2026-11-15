@@ -13,52 +13,53 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
-Overall: MVP feature work done through Slice 11 (Trust basics); Slice 14 (rent estimate) done through `0014d`.
-Next: build Slice 12 (`0012a`, `0012b`) and `0015a`, all three `verified`; none started.
+Overall: MVP feature work done through Slice 12 (Admin minimal); Slice 14 (rent estimate) done through `0014d`;
+`0015a` (protected space) done. Next: Slice 13 (Launch readiness), not specced yet.
 
-- **Slice 11 done** (all archived with digests): `0011a` listing renewal (PR #93), `0011b` report a listing or a
-  person (PR #94, `reports` table, migration `0022_reports`), `0011c` rate limits + request hardening (PR #95),
-  `0011e` listing views off the request path (PR #96, Redis + worker flush), `0011d` report button in chats, the
-  owner's inbox and a room's people page (PR #97, web only, merged 2026-11-15).
-- **Verified on `main`, not started, no worktree:**
-  - `0012a` moderation data: suspend an account, a listing removed by homie, the per-account cap from `GET /me`.
-    It holds all of Slice 12's schema (`users.suspended_at`, `listings.removed_at`, `reports.resolved_at`,
-    `admin_actions`). Reviewers: code, security, qa, perf, ux.
-  - `0012b` admin dashboard, `depends_on: [0012a]`: SQLAdmin in `api/admin/`, `make admin` on `127.0.0.1:8001`,
-    password + `homie_admin` cookie (Strict, path `/admin`) + Host allowlist + `Sec-Fetch-Site` guard, Postgres role
-    `homie_admin` with column-level grants. Reviewers: code, security, qa.
-  - `0015a` listing protected space (ממ״ד / ממ״ק / מקלט / none, card + page + filter).
-  - **Migration clash:** `0012a` and `0015a` both plan `0023`; whichever merges second renames (both specs say so).
-  - Each spec's digest is in its `## Digest`; one verifier round each, findings applied by the orchestrator.
-- Alembic head `0022`. No open PRs, no spec worktrees, no spec stacks. Merging was delegated for Slices 7–11 and 14;
-  **not for Slice 12** (Gilad 2026-11-15): green PRs go to Gilad to merge.
-- Main checkout `../rent-app` is on `main`, **96 commits behind `origin/main`**, with uncommitted `Makefile` and
-  `.gitignore` edits and untracked seed/promo work (`api/scripts/seed_demo.py`, `seed_promo.py`, `promo/`,
-  `promo-video/`, `web/e2e/promo/`); its own compose stack (`rent-app`, 5 containers) is running. A `git pull` there
-  also rebuilds the graph, which is stale (pre-Slice 14).
+- **Slice 12 done** (archived with digests): `0012a` moderation data (PR #100: suspension, removed-by-homie
+  listings, per-account cap from `GET /me`, `reports.resolved_at`, `admin_actions`, migration
+  `0024_admin_moderation` with Gilad's partial index `ix_users_suspended`), `0012b` admin dashboard (PR #101:
+  SQLAdmin app in `api/admin/`, `make admin` on `127.0.0.1:8001`). Gilad merged-by-delegation per PR ("You merge
+  it") for both; Slice 13 merging not delegated yet.
+- `0015a` listing protected space (PR #98, migration `0023_listing_shelter`, replaced `safe_room`) done.
+- Alembic head `0024`. No open PRs. No spec stacks of ours.
+- Main checkout `../rent-app` is on `main` = `origin/main` (pulled 2026-11-15), still with Gilad's uncommitted
+  `Makefile` (`seed-demo`, `promo`, the `DESTROY_MAIN` guard on `make down`, merged by hand with 0012b's admin
+  targets) and `.gitignore` edits and untracked seed/promo work. Its `.env` now holds `ADMIN_PASSWORD` and
+  `ADMIN_SECRET_KEY`; its stack (`rent-app`) runs 6 containers including `admin`.
 - `../rent-app-orch` is the docs worktree (detached on `origin/main` between uses).
 
-Last updated: 2026-11-15 (0012a, 0012b verified; Slice 12 merging not delegated).
+Last updated: 2026-11-15 (Slice 12 merged; admin set up in the main checkout).
+
+## Current Work
+- **`0016a` landing polish** (`status: draft`) is being written by another chat in `../rent-app-0016a`
+  (branch `spec/0016a-landing-polish`, uncommitted `specs/0016a-landing-polish.md`, `design/screens-v3/`,
+  `design/README.md`, `specs/PRODUCT.md`). Not this orchestrator's; do not touch that worktree.
+- Nothing else in flight.
 
 ## Next Steps
-1. **Build Slice 12 + `0015a`** when Gilad says go: `0012a` and `0015a` in parallel, `0012b` from `0012a`'s
-   branch once its PR is open. Coders Opus/high for all three. Worktrees get the next free ports below;
-   pre-start build sessions in a turn Gilad wrote. Green PRs: tell Gilad (merging not delegated for Slice 12).
-   `0012b`'s build session does one manual `make admin` pass (log in, every action once, check `sqladmin` is
-   not importable in the API image) and names it in the PR.
-2. After Slice 12: 13 Launch readiness (deploy, one registrable domain, SMS, real client IPs → OTP lockout per email
-   + network, Gilad 2026-11-14 Q1 (a); read nadlan.gov.il's terms before `RENT_REFERENCE=nadlan` in production).
-3. Rest of the rent estimate waits for homie's own listings after launch (adjustments, comparables, learned model;
-   each kept only if the backtest says it is better). The open estimate tab and the seekers' "fair price" badge wait
-   for Gilad.
-4. Pull the main checkout; commit or drop its uncommitted seed/promo work (ask Gilad).
-5. Digests still owed to Gilad: Slice 9, 9c, 10. Slice 11's digests are in each archived spec.
-6. FOLLOWUPS worth a sweep before launch: `make screens` failures (~20 states red), the Slice 11 review minors (view
-   keys growing with real IPs, worker INFO logs hidden, Redis-down wait on the listing GET), flaky e2e (people /
-   people-market tests failed under Mac load on PR #94, green on the next run; `market ac18` sign-in focus on PR
-   #97), Slice 13 deploy items.
+1. Spec Slice 13 Launch readiness with Gilad: deploy (Fly; the admin as a separate Fly app with no public
+   services via `fly proxy`, FOLLOWUPS 0012b), one registrable domain, SMS, real client IPs → OTP lockout per
+   email + network (Gilad 2026-11-14 Q1 (a)) and edge per-IP limits (FOLLOWUPS 0011c/0011e), terms of use (reported
+   chats are readable and logged, FOLLOWUPS 0012b), read nadlan.gov.il's and CBS's terms before `RENT_REFERENCE=nadlan`
+   / `CBS_RENT=cbs` in production. Ask Gilad whether merging is delegated for Slice 13.
+2. Slice 13 security items from 0012b's review: server-side admin session nonce (copied cookie survives logout),
+   per-session CSRF token for browsers without `Sec-Fetch-*`, a login lock that survives restarts.
+3. In the main checkout: `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label . --backend=claude-cli` (post-slice step
+   not yet run for Slice 12); ask Gilad to commit or drop his `Makefile` / `.gitignore` / seed / promo work.
+4. Rest of the rent estimate waits for homie's own listings after launch. The open estimate tab and the seekers'
+   "fair price" badge wait for Gilad.
+5. Digests still owed to Gilad: Slice 9, 9c, 10.
+6. FOLLOWUPS sweep before launch: `make screens` failures (~20 states red), Slice 11 review minors, 0012a/0012b
+   minors (match-sort page 69–71 ms at 10k listings, `not_suspended` belongs in a neutral module, more admin test
+   edges), flaky e2e (people / people-market under Mac load; `market ac18`).
 7. Housekeeping: Gilad to mark GitGuardian incident 40007526 a false positive; Gilad's open decisions in FOLLOWUPS
    (person-card score inference, re-apply after decline, 0010l invite expiry).
+
+## Admin dashboard (local)
+`make admin` in the main checkout (needs `ADMIN_PASSWORD` 16+ and `ADMIN_SECRET_KEY` 32+ in `.env`; names only,
+never write values here) → http://127.0.0.1:8001/admin, password only (username ignored). Wrong passwords lock the
+login until the admin container restarts (`docker restart rent-app-admin-1`). Must be `127.0.0.1` (Host allowlist).
 
 ## Architecture
 - `api/app/`: `main.py` (app factory, exact-origin CORS with credentials, DB/Redis errors → 503, 422 never echoes
@@ -70,7 +71,11 @@ Last updated: 2026-11-15 (0012a, 0012b verified; Slice 12 merging not delegated)
   `services/` (`search.py::_public_listings()` is the only definition of "public"; `rent_reference.py` the official
   import; `rent_estimate.py` the engine + backtest; reports in `reports.py`), `worker.py` (geocoding, the monthly
   rent import (off by default), the per-minute listing-view flush).
-- Migrations `api/alembic/versions/0001`–`0022`. Photos on Cloudflare R2 behind unguessable keys (0010d/j).
+- `api/admin/`: the SQLAdmin dashboard (0012b), its own image, compose profile `admin` and Postgres role
+  `homie_admin` (column-level grants, `scripts/admin_role.py`); `app/` never imports `admin`. Each action is one
+  UPDATE plus one `admin_actions` row. The public app's reaction to suspension / removal lives in 0012a's
+  `services/search.py::not_suspended` and friends.
+- Migrations `api/alembic/versions/0001`–`0024`. Photos on Cloudflare R2 behind unguessable keys (0010d/j).
 - `web/src/`: `app/` (routes, layout, side switch), `features/<domain>/`, `components/` (UI kit, 0009d; shared
   `ReportDialog` / `ReportButton` from 0011b), `locales/he.json`, generated `api/schema.d.ts` (`make client`,
   git-ignored). `web/e2e/` Playwright (CI only), `web/e2e/screens/` the mocked screenshot check (`make screens`).
@@ -130,7 +135,13 @@ Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; the shell def
 Commands: see `CLAUDE.md` → Commands and the `##` comments in the `Makefile` (incl. `make rent-import`,
 `make rent-backtest`).
 
-A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5540,
-Redis 6430–6490, API 8050–8110, web 5191–5250: start above those). The main checkout's stack runs on 5434/6380/8000
-with no `.env`, so pass `DB_PORT=5434 REDIS_PORT=6380` to `make migrate` there. Web at http://localhost:$WEB_PORT
+A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5543,
+Redis 6430–6493, API 8050–8113, web 5191–5253: start above those). The main checkout's stack runs on 5434/6380/8000
+(set in its `.env`), web 5180, admin 8001. Web at http://localhost:$WEB_PORT
 (must be `localhost` for CORS). Local login code: newest `.outbox/*.json`.
+
+## Session History
+- 2026-11-15: Slice 12 built and merged (`0012a` PR #100, `0012b` PR #101; one review round each; Gilad chose the
+  partial index on suspended users). `0015a` merged (PR #98) by another chat. Main checkout pulled, admin set up.
+- 2026-11-15: Slice 11 finished (`0011d` PR #97); Slice 12 and `0015a` specced and verified.
+- 2026-11-14: Slice 11 `0011a`/`b`/`c`/`e` and Slice 14 `0014d` merged.

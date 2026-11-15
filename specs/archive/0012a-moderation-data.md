@@ -1,7 +1,7 @@
 ---
 id: 0012a
 title: "A suspended account is signed out and hidden, a listing removed by homie stays off the site, and an account's own listing cap shows in the app"
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, security, qa, perf, ux]   # security: login and session rule; qa: every place a listing or card is shown; perf: the search, browse and likes hot paths (Sonnet/medium); ux: the new states (login, my listings, edit page)
 estimate: 1 coder run   # coder Opus/high (auth + migration; Speed rule 6); on the large side
