@@ -16,8 +16,8 @@ import {
   testQueryClient,
 } from '../../auth/__tests__/harness';
 import { seeker } from '../../listings/__tests__/fixtures';
-import type { ConversationOut, ThreadOut } from '../api';
-import { conversation, message, thread } from './fixtures';
+import type { ThreadOut } from '../api';
+import { type Conversation, conversation, message, thread } from './fixtures';
 import { chatRoutes, openStream, settle } from './harness';
 
 afterEach(() => {
@@ -80,8 +80,7 @@ function pair(name: string, overrides: Partial<ThreadOut> = {}) {
 
 const h1 = (name: string) => screen.findByRole('heading', { level: 1, name });
 const pane = () => screen.getByRole('region', { name: he.chat.list.title });
-const rowLink = (c: ConversationOut) =>
-  screen.queryByRole('link', { name: new RegExp(c.other_name) });
+const rowLink = (c: Conversation) => screen.queryByRole('link', { name: new RegExp(c.other_name) });
 const paneHeading2 = () => screen.queryByRole('heading', { level: 2, name: he.chat.list.title });
 const textarea = () => screen.getByRole('textbox', { name: he.chat.composer.label });
 const sendButton = () => screen.getByRole('button', { name: he.chat.composer.send });

@@ -1,7 +1,7 @@
 ---
 id: 0013c
 title: "A person deletes their own account: their data goes, the people they talked to keep the thread, and an account homie acted against cannot sign up again"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa]   # security: PII deletion, the keyed email hash, the auth flow; qa: every place a deleted account could still appear
 estimate: 1 coder run   # a long one, at the limit: three race tests (AC13-AC15) and the key's wiring in 4 places; coder Opus/high (data, migration, PII; Speed rule 6); the web half is 0013f
@@ -58,7 +58,7 @@ placeholders, the terms and privacy pages and their Hebrew text.
 ## Scope
 **In:**
 - **Migration and models:**
-  - `0025_account_deletion` (Data);
+  - `0026_account_deletion` (Data);
   - `api/app/models/user.py`: `deleted_at`, nullable `email` / `display_name`, the CHECK and the
     partial index;
   - a new `api/app/models/blocked_email.py` (`BlockedEmail`), exported from `app/models/__init__.py`.
@@ -133,7 +133,7 @@ placeholders, the terms and privacy pages and their Hebrew text.
 **New dependencies:** none (`hmac` / `hashlib` from the standard library).
 
 ## Data
-Migration `api/alembic/versions/0025_account_deletion.py` (`down_revision` 0024, `0012a`'s; see Risks for
+Migration `api/alembic/versions/0026_account_deletion.py` (`down_revision` 0025, `0013e`'s; see Risks for
 the number):
 
 | Table | Change | Rule |
@@ -163,7 +163,9 @@ the number):
   `display_name: Mapped[str | None]`. `routers/auth.py::user_out` (always a live account) asserts both
   are not None.
 
-**What `delete_account` does, one transaction, in this order** (`me` = the caller):
+**What `delete_account` does, one transaction, in this order** (`me` = the caller). Step 2 runs
+**after** step 3 (review round, 2026-11-15): with step 3's listing locks held, its new statement sees an
+admin `hide_listings` that committed while step 3 waited on that listing.
 
 | # | Table | Statement | Why |
 | --- | --- | --- | --- |
@@ -172,7 +174,7 @@ the number):
 | 3 | `listings` | `UPDATE … SET status = 'paused', description = NULL, flatmate_invite_hash = NULL, updated_at = now() WHERE owner_id = :me` | Off the public site (only `active` is public), the invite preview 404s, free text (which may hold phone numbers) is gone. The row stays for the threads and the price history. **Before the photo rows:** its row locks wait for a photo write that holds `_lock_own_listing`, so step 4 sees that write's committed row |
 | 4 | `listing_photos` | Collect `key` of my listings' photos, plus step 1's `photo_key`; then `DELETE … WHERE listing_id IN (my listings)` | Objects deleted after commit (step 13). A photo write that reaches `_lock_own_listing` after step 3 is refused there (API) |
 | 5 | `applications` (made by me) | `DELETE … WHERE seeker_id = :me AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.application_id = applications.id)` | Nobody's thread hangs on them |
-| 6 | `applications` (made by me) | `UPDATE … SET status = 'withdrawn', updated_at = now() WHERE seeker_id = :me AND status <> 'withdrawn'` | The rest have a chat: a withdrawn application is invisible to its owner (0004c) and no transition starts from it; its chat stays |
+| 6 | `applications` (made by me) | `UPDATE … SET status = 'withdrawn', message = NULL, updated_at = now() WHERE seeker_id = :me AND (status <> 'withdrawn' OR message IS NOT NULL)`; the message is the seeker's free text, as the description (review round: `ck_applications_message` allows NULL on a withdrawn application, migration 0026) | The rest have a chat: a withdrawn application is invisible to its owner (0004c) and no transition starts from it; its chat stays |
 | 7 | `room_pairs` | `DELETE … WHERE seeker_id = :me OR listing_id IN (my listings)` | My room likes and the browse history of my rooms |
 | 8 | `person_pairs` | `DELETE … WHERE :me IN (user_low, user_high)` | My market likes and matches. The direct chat row stays |
 | 9 | `listing_flatmates`, `conversation_reads` | `DELETE … WHERE user_id = :me` | I leave every flat I joined; my read markers go. Other people's memberships of **my** flats stay (they keep the room chats) |
@@ -329,11 +331,11 @@ None in this spec (`0013f`).
   lists reports and opens the chat, Then the report shows `deleted account (<id>)`, the transcript shows
   `(deleted account)` for U's messages and member, and nothing errors —
   `api/tests/test_admin.py::test_deleted_account_in_reports_and_chat`
-- [ ] AC11 Migration `0025` upgrades and downgrades cleanly. Given a tombstone as `delete_account` leaves
+- [ ] AC11 Migration `0026` upgrades and downgrades cleanly. Given a tombstone as `delete_account` leaves
   it (`deleted_at` set; NULL email, name and photo) with messages and a report, When downgrading to 0024,
   Then the downgrade succeeds, the row has `<id>@deleted.invalid` / `deleted`, and its messages and report
   are kept; upgrading again works. Autogenerate sees no diff — `api/tests/test_migrations.py` (the existing
-  round-trip and no-diff tests, plus `test_0025_downgrade_keeps_tombstones`)
+  round-trip and no-diff tests, plus `test_0026_downgrade_keeps_tombstones`)
 - [ ] AC12 `("DELETE", "/me")` is in `EXEMPT`, and `test_hardening.py::test_ac1_every_write_route_has_a_limit`
   passes — `test_hardening.py`
 - [ ] AC13 Given U with a `suspend` then `unsuspend` (so step 2 writes) and two fresh sessions, When both
@@ -468,9 +470,15 @@ From `graphify affected` on `main` (84b6fef), checked with grep:
     encode and would otherwise leave two public objects on the paused listing for good.
 
   Listing create and resume still wait on step 1's row lock, then run against the tombstone. A listing
-  created that way would be live under a deleted owner, until it expires or the admin hides it. This is
-  accepted: the caller is deleting themselves, and the window is one short request.
-  `shortcut: not checked in create; add deleted_at IS NULL to the 0002a cap lock if it is ever seen.`
+  created that way is never public: `search.owner_not_suspended` also excludes deleted owners (review
+  round). `shortcut: not checked in create; add deleted_at IS NULL to the 0002a cap lock if such rows
+  are ever seen.`
+- **Review round (2026-11-15), a write racing the deletion:** `PUT /me/profile`, apply, flatmate join
+  and the two like writes start with `accounts.lock_live_account` (`SELECT … WHERE id = :me AND
+  deleted_at IS NULL FOR KEY SHARE`): a write queued behind the deletion's row lock re-checks the WHERE
+  and answers 401 `unauthenticated`, so no row is added for a tombstone. The readers' `not_suspended`
+  also excludes deleted accounts, and the room's flatmates list filters `deleted_at`. A second
+  `DELETE /me` whose session went after `current_user` passed answers 204, not 403.
 - **An SSE stream** already open on another device is checked at connect only (0012a). It ends within
   `STREAM_MAX_S` + jitter, and its reconnect gets 401. What can reach it meanwhile is at most an
   application-status event (ids only), since every chat it is a party of is closed.
@@ -486,6 +494,12 @@ From `graphify affected` on `main` (84b6fef), checked with grep:
   the api and the worker, from `openssl rand -hex 32`, kept in Gilad's password manager. Losing it voids
   every block. The settings refuse the dev value on https, so a deploy that copied it from `.env.example`
   fails to start instead of hashing with a public key.
+- **Coder, 2026-11-15: a type-only web change, so this PR's `make lint` is green.** After `make client` the
+  nullable names failed `tsc` in `ChatThreadPage.tsx` (the page title), `ConversationsPane.tsx` (the
+  avatar's initial) and 34 chat test lines. This PR adds `?? undefined` / `?? ''` at the two source sites
+  (a deleted account's chat shows no name until 0013f's placeholder replaces them) and narrows the chat
+  test fixtures' return types (`fixtures.ts`, plus two helper signatures). No text, no i18n key, no
+  behaviour for a live account. 0013f swaps both sites for `t('account.deletedName')`.
 - **The kept listing rows** hold the property's address and price, no longer linked to anyone
   identifiable. The privacy text (0013f) says they are kept for the threads and anonymous statistics.
 

@@ -35,7 +35,9 @@ Rules (PRODUCT.md "Chat", "Flatmates", "שוק השותפים"):
   marker to `now()` only when something is new, so a poll with nothing new writes nothing (NF3).
 - Sending is rate limited per user (`CHAT_RATE_LIMIT_MINUTE`, `CHAT_RATE_LIMIT_DAY`); every
   authenticated, body-valid attempt counts, a refused one does not (as `apply`).
-- Members are known by `users.display_name` only (NF2): no query loads the `User`.
+- Members are known by `users.display_name` only (NF2): no query loads the `User`. A deleted
+  account's name is NULL (spec 0013c): its messages stay, and sending closes when it is the owner or
+  the seeker (`_can_send`); a deleted flatmate already left the flat.
 - Events (spec 0005c) go to every member: a send returns the member ids from its own UPDATE (no
   extra statement); a status change of a room application reads them with `member_ids` (one
   SELECT), of an apartment application they are the owner and the seeker the router already holds
@@ -121,7 +123,7 @@ class ChatClosedError(Exception):
 class Member:
     """One member of a thread, as `ThreadOut.members` lists them."""
 
-    name: str
+    name: str | None  # None = a deleted account (spec 0013c)
     photo_key: str | None  # their person photo's key (spec 0010j)
     role: Role
     is_me: bool
@@ -212,10 +214,20 @@ def _my_role(me: User) -> Any:
 
 def _can_send() -> Any:
     """Sending is open: an application chat while its application is `shortlisted`, a direct chat
-    while it is not closed. The statement must outer-join `Application`."""
-    return case(
-        (Conversation.application_id.is_(None), Conversation.closed_at.is_(None)),
-        else_=Application.status == "shortlisted",
+    while it is not closed, and in both only while neither the owner nor the seeker deleted their
+    account (spec 0013c; a `NOT EXISTS` over an anonymous alias reading `ix_users_deleted`, so it
+    adds no statement and never correlates with a `users` the statement joins). The statement must
+    outer-join `Application`."""
+    deleted = aliased(User)
+    return and_(
+        case(
+            (Conversation.application_id.is_(None), Conversation.closed_at.is_(None)),
+            else_=Application.status == "shortlisted",
+        ),
+        ~exists().where(
+            deleted.id.in_([Conversation.owner_id, Conversation.seeker_id]),
+            deleted.deleted_at.is_not(None),
+        ),
     )
 
 

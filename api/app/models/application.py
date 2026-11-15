@@ -25,17 +25,19 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
 
+MESSAGE_CHECK = (
+    "(message IS NULL OR char_length(message) BETWEEN 1 AND 500)"
+    " AND (message IS NOT NULL OR listing_type_at_apply = 'room' OR status = 'withdrawn')"
+)
+
 
 class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
-        # NULL or 1-500 characters, and NULL only on a room application (migration 0018); neither
-        # term can evaluate to NULL, so no NULL slips through.
-        CheckConstraint(
-            "(message IS NULL OR char_length(message) BETWEEN 1 AND 500)"
-            " AND (message IS NOT NULL OR listing_type_at_apply = 'room')",
-            name="ck_applications_message",
-        ),
+        # NULL or 1-500 characters, and NULL only on a room application (migration 0018) or a
+        # withdrawn one (a deleted seeker's, scrubbed by spec 0013c, migration 0026); no term can
+        # evaluate to NULL, so no NULL slips through.
+        CheckConstraint(MESSAGE_CHECK, name="ck_applications_message"),
         CheckConstraint("source IN ('apply', 'like')", name="ck_applications_source"),
         CheckConstraint(
             "status IN ('submitted', 'shortlisted', 'declined', 'withdrawn')",

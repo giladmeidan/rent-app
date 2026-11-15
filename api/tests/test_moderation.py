@@ -567,7 +567,8 @@ def test_nf1_owner_check_is_one_pass(
     client: TestClient, db_engine: Engine, gush_dan: uuid.UUID
 ) -> None:
     """The search's "owner not suspended" check is one filtered pass over the suspended users
-    (served by the partial index `ix_users_suspended`), or a `users_pkey` probe; never a scan of
+    (served by the partial index `ix_users_suspended`; the deleted ones by `ix_users_deleted`,
+    spec 0013c), or a `users_pkey` probe; never a scan of
     `users` once per listing. EXPLAIN ANALYZEd at 2,000 owners with a live apartment each, with
     fresh statistics, sequential scans priced out."""
     _execute(
@@ -621,8 +622,12 @@ def test_nf1_owner_check_is_one_pass(
         for parent, scan in scans:
             dump = json.dumps(plan)
             probe = scan["Index Name"] == "users_pkey" and "Index Cond" in scan
-            partial = scan["Index Name"] == "ix_users_suspended"
-            filtered = "suspended_at IS NOT NULL" in scan.get("Filter", "")
+            # Spec 0013c: a second NOT EXISTS for deleted owners, on its own partial index.
+            partial = scan["Index Name"] in ("ix_users_suspended", "ix_users_deleted")
+            filtered = any(
+                f"{column} IS NOT NULL" in scan.get("Filter", "")
+                for column in ("suspended_at", "deleted_at")
+            )
             assert probe or partial or filtered, dump
             if not probe:
                 # One pass, built once for the whole statement: not re-run per listing.
