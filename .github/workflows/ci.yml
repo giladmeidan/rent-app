@@ -86,7 +86,10 @@ jobs:
         run: make build-web
       - name: Build check (manifest, icons, head tags, service-worker policy)
         run: make build-check
+      # A PR labelled `skip-e2e` skips the smoke suite (Gilad, 2026-11-15: Slice 13 specs that barely touch
+      # what e2e covers). The label must be on the PR before the run starts.
       - name: Smoke suite (playwright; a shard's failed tests run once more)
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-e2e') }}
         run: make e2e
       # The failed tests' traces (playwright.config.ts: trace retain-on-failure); open with `playwright show-trace`.
       - name: Upload Playwright traces
