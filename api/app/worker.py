@@ -14,6 +14,7 @@ from app.services.cbs_rent import run_cbs_import
 from app.services.geocoding import geocode_pending, get_geocoder
 from app.services.listing_views import flush_views
 from app.services.rent_reference import run_rent_import
+from app.services.retention import purge_expired
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +71,19 @@ async def import_cbs_rent_job(ctx: dict[str, Any]) -> dict[str, int]:
     return await asyncio.to_thread(run_cbs_import)
 
 
+def _purge() -> dict[str, int]:
+    with get_sessionmaker()() as db:
+        return purge_expired(db)
+
+
+async def purge_expired_job(ctx: dict[str, Any]) -> dict[str, int]:
+    """The nightly retention purge (spec 0013h), off the event loop. Logs the counts only, never
+    an id or a value."""
+    counts = await asyncio.to_thread(_purge)
+    log.info("retention purge: %s", counts)
+    return counts
+
+
 async def on_startup(ctx: dict[str, Any]) -> None:
     """Show the `app` loggers' INFO lines (spec 0013g). arq's CLI configures only its own logger
     and leaves the root at WARNING, so `view flush` and `geocode sweep` would never be written.
@@ -94,5 +108,6 @@ class WorkerSettings:
         cron(import_rent_reference_job, day=5, hour=3, minute=10, unique=True, timeout=1800),
         # At most six requests: arq's default timeout is enough.
         cron(import_cbs_rent_job, day=16, hour=3, minute=40, unique=True),
+        cron(purge_expired_job, hour=3, minute=25, unique=True),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url.get_secret_value())

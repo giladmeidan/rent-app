@@ -77,6 +77,28 @@ def test_ac12_rent_import_cron_registered() -> None:
     assert job.timeout_s == 1800
 
 
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("httpx_log_level")
+async def test_ac11_purge_cron_registered(
+    db_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Spec 0013h: the nightly retention purge, its counts logged and nothing else.
+    from app import worker
+
+    importlib.reload(worker)
+    (job,) = (j for j in worker.WorkerSettings.cron_jobs if j.coroutine is worker.purge_expired_job)
+    assert (job.hour, job.minute) == (3, 25)
+    assert job.unique is True
+
+    with caplog.at_level(logging.INFO, logger="app.worker"):
+        counts = await worker.purge_expired_job({})
+
+    assert set(counts.values()) == {0}
+    assert [r.getMessage() for r in caplog.records if r.name == "app.worker"] == [
+        f"retention purge: {counts}"
+    ]
+
+
 @pytest.fixture
 def app_logger_restored() -> Iterator[None]:
     app_logger = logging.getLogger("app")
