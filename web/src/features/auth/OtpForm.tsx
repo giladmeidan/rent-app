@@ -56,14 +56,14 @@ type VerifyResult =
   | { kind: 'suspended' }
   | { kind: 'failed' };
 
-/** True only for a body that is exactly `{"detail": "profile_required"}`. */
-function isProfileRequired(body: unknown): body is { detail: 'profile_required' } {
+/** True only for a body that is exactly `{"detail": <detail>}`. */
+function hasDetail(body: unknown, detail: 'profile_required' | 'account_suspended'): boolean {
   return (
     typeof body === 'object' &&
     body !== null &&
     Object.keys(body).length === 1 &&
     'detail' in body &&
-    body.detail === 'profile_required'
+    body.detail === detail
   );
 }
 
@@ -74,8 +74,13 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
       return { kind: 'ok', user: data };
     }
     if (response.status === 401) return { kind: 'invalidCode' };
-    if (response.status === 403) return { kind: 'suspended' }; // account_suspended (0012a)
-    if (response.status === 422 && isProfileRequired(error)) return { kind: 'profileRequired' };
+    // A suspended account (0012a); any other 403 is a plain failure.
+    if (response.status === 403 && hasDetail(error, 'account_suspended')) {
+      return { kind: 'suspended' };
+    }
+    if (response.status === 422 && hasDetail(error, 'profile_required')) {
+      return { kind: 'profileRequired' };
+    }
     return { kind: 'failed' };
   } catch {
     return { kind: 'failed' }; // network error

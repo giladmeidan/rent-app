@@ -31,7 +31,10 @@ export function actionErrorText(
   cap: number | undefined,
 ): string {
   const detail = error instanceof ApiError ? error.detail : undefined;
-  if (detail === 'listing_cap_reached') return t('listings.errors.capReached', { cap });
+  // Without the cap (`/me` not loaded or failed) the generic text, never a bare `{{cap}}`.
+  if (detail === 'listing_cap_reached' && cap !== undefined) {
+    return t('listings.errors.capReached', { cap });
+  }
   if (detail === 'listing_removed') return t('listings.errors.removed');
   if (detail === 'renewal_not_open') return t('listings.renew.notOpen');
   if (detail === 'listing_expired') return t('listings.errors.expired');

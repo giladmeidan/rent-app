@@ -37,7 +37,10 @@ export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDet
       <OwnerPreferences listing={body} />
       {error === 'capReached' && (
         <p role="alert" className={alertText}>
-          {t('listings.errors.capReached', { cap: me.data?.listing_cap })}
+          {/* Without the cap (`/me` not loaded or failed) the generic text, never a bare `{{cap}}`. */}
+          {me.data == null
+            ? t('common.error')
+            : t('listings.errors.capReached', { cap: me.data.listing_cap })}
         </p>
       )}
       {error === 'removed' && (

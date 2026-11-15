@@ -27,7 +27,8 @@ import { formatDate, todayInIsrael } from '../format';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { usePatchListing } from '../usePatchListing';
 import { MyListingsPage } from '../MyListingsPage';
-import type { MyListingOut } from '../api';
+import { ApiError, type MyListingOut } from '../api';
+import { actionErrorText } from '../useRenewListing';
 import { listing, owner, withoutCounts } from './fixtures';
 
 afterEach(() => {
@@ -996,12 +997,23 @@ describe('MyListingsPage', () => {
     harnessMockApi({ 'GET /me': [me.promise], 'GET /me/listings': [json([listing()])] });
     render();
     await screen.findByRole('article');
-    expect(screen.queryByText(/מודעות פעילות/)).toBeNull(); // no count line, so never a 3
+    // No count line at all (its fixed tail, from he.json), so never a 3.
+    const countTail = he.listings.mine.count.split('}}').pop()?.trim() ?? '';
+    expect(screen.queryByText(new RegExp(countTail))).toBeNull();
     me.resolve(json({ ...owner, listing_cap: 10 }));
     expect(
       await screen.findByText(i18n.t('listings.mine.count', { live: 1, cap: 10 })),
     ).toBeVisible();
     expect(screen.queryByText(i18n.t('listings.mine.count', { live: 1, cap: 3 }))).toBeNull();
+
+    // A row's cap error without the cap (`/me` failed): the generic text, never a bare `{{cap}}`.
+    const capError = new ApiError('POST', '/listings/x/renew', 409, {
+      detail: 'listing_cap_reached',
+    });
+    expect(actionErrorText(i18n.t, capError, true, undefined)).toBe(he.common.error);
+    expect(actionErrorText(i18n.t, capError, true, 10)).toBe(
+      i18n.t('listings.errors.capReached', { cap: 10 }),
+    );
   });
 
   it('ac10_renew_button_in_window', async () => {
