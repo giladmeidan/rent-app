@@ -52,10 +52,11 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import Mapped, column_property, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
 from app.models import Base
 from app.models._checks import LIFESTYLE_CHECK
+from app.models.user import User
 
 # Plain `::geometry` (no typmod): the cast `ix_listings_location` is built on. A typmod'd cast such
 # as `geometry(POINT,4326)` is a different expression, and the planner would not use the index.
@@ -177,6 +178,8 @@ class Listing(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    # For the admin dashboard (spec 0012b) only: model-only, loaded only when a query asks.
+    owner: Mapped[User] = relationship(User, foreign_keys=[owner_id], viewonly=True, lazy="raise")
     # Must be an `is_active` area at create/update time (checked in services/listings.py).
     area_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("areas.id", ondelete="RESTRICT"), nullable=False

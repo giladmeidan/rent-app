@@ -1,7 +1,7 @@
 ---
 id: 0012b
 title: "Gilad works the report queue, suspends accounts, hides listings and raises a listing cap from a separate admin dashboard that only he can reach"
-status: verified
+status: in-review
 depends_on: [0012a]   # the columns and admin_actions table it writes; the public app's reaction to them
 reviewers: [code, security, qa]   # security: a new app with write access to production data; no ux (SQLAdmin's own UI, Gilad-only, English)
 estimate: 1 coder run   # coder Opus/high (security; Speed rule 6)
@@ -135,7 +135,7 @@ So the app also has four guards, each a small Starlette or SQLAdmin switch:
 public image. Starlette 1.10.0 (already locked) satisfies its `starlette<2,>=0.50`.
 
 ## Data
-No migration. `0012a`'s `0023_admin_moderation` adds every column and table, and the relationships above
+No migration. `0012a`'s `0024_admin_moderation` (renumbered from 0023) adds every column and table, and the relationships above
 are model-only.
 
 **The `homie_admin` role** (`scripts/admin_role.py`):

@@ -31,9 +31,16 @@ dev = [
   "boto3-stubs[s3]==1.44.2",  # mypy types for the R2 store
   "types-openpyxl==3.1.5.20261017",  # mypy types for the CBS xlsx parser
 ]
+# The admin dashboard (spec 0012b): installed in the admin image, never in the public one.
+admin = [
+  "sqladmin[auth]==0.32.0",
+]
 
 [tool.uv]
 package = false
+# `make test` / `make lint` / CI's `uv sync --frozen` get both; Dockerfile.api passes
+# --no-default-groups, so the public image has neither.
+default-groups = ["dev", "admin"]
 
 [tool.ruff]
 target-version = "py312"

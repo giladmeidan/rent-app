@@ -11,9 +11,10 @@ from typing import get_args
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
+from app.models.user import User
 from app.schemas.report import NOTE_MAX_LENGTH, ReportReason, ReportTargetType
 
 
@@ -58,4 +59,13 @@ class Report(Base):
     resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    # For the admin dashboard (spec 0012b) only: model-only (no migration), loaded only when a
+    # query asks. Two FKs to `users`, so each names its own.
+    reporter: Mapped[User] = relationship(
+        User, foreign_keys=[reporter_id], viewonly=True, lazy="raise"
+    )
+    reported_user: Mapped[User] = relationship(
+        User, foreign_keys=[reported_user_id], viewonly=True, lazy="raise"
     )
