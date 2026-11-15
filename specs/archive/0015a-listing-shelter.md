@@ -1,7 +1,7 @@
 ---
 id: 0015a
 title: "A lister says what protected space the flat has (ממ״ד, ממ״ק, מקלט בבניין or none), seekers see it on the card and the listing page, and can filter for it"
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, qa, ux]   # qa: API + every place a listing is shown; ux: wizard field, card tag, filter
 estimate: 1 coder run       # coder Opus/high (migration; Speed rule 6)
@@ -239,3 +239,17 @@ page (CI only; never run e2e locally).
       AC11 tests backfill and downgrade; migration number may clash with 0012a's 0023 — second to merge re-points.
     Reviewers: code, qa, ux   Estimated: 1 coder run (Opus/high, migration), 1 review round
     Links: specs/0015a-listing-shelter.md · PRODUCT.md "Listings" + "Rent price estimate" · no artboard
+
+    Spec 0015a — A listing says what protected space the flat has   MERGED 6070048 (PR #98)
+    Shipped: a lister picks ממ״ד בדירה / ממ״ק בקומה / מקלט בבניין / אין מרחב מוגן / לא לציין in the wizard (the edit
+      page too), for apartments and rooms. The listing page shows one "מרחב מוגן" cell, the card a short ממ״ד / ממ״ק /
+      מקלט tag, and /search and /market get a "מרחב מוגן" filter (`shelter=true`: any of the three). 0014b's ממ״ד
+      yes/no (`safe_room`) is gone end to end; migration 0023 backfills it (true → mamad), its downgrade restores it.
+    Demo: make dev → create a listing → details step → pick "ממ״ק בקומה" → publish; the card shows "ממ״ק" and the page
+      one cell → /search, tick "מרחב מוגן" → only flats with a protected space.
+    Tests: +7 pytest, +12 vitest, e2e create-flow step amended (0014b's safe_room tests rewritten)   CI: green on
+      635d34b (run 43710380085; shard 4 flaky: market ac18, logged)
+    Findings: 0 blockers, 0 majors, 3 minors in FOLLOWUPS (filter copy check for Gilad; 4 e2e gaps; active-filter
+      tags can't be removed, AC9 reworded), 7 nits dropped.
+    Changed in PRODUCT.md: nothing beyond the 2026-11-15 lines.
+    Note: migration 0023 is now `0023_listing_shelter`; Slice 12's 0012a must take 0024 and re-point down_revision.

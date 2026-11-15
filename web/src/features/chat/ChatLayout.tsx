@@ -16,7 +16,7 @@ function PickOne() {
     <Card
       variant="muted"
       padding="lg"
-      className="flex min-h-96 flex-col items-center justify-center gap-3 text-center"
+      className="flex min-h-[calc(100dvh-7.5rem-1px)] flex-col items-center justify-center gap-3 text-center"
     >
       <svg
         aria-hidden="true"
