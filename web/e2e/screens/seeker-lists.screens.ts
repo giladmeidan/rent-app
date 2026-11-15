@@ -124,6 +124,11 @@ const STATES: State[] = [
     setup: { applicationList: FIVE_APPLICATIONS },
     path: APPLICATIONS,
     act: async (page) => {
+      // Declined and withdrawn sit behind the closed "past" disclosure (commit 1272dde): opened.
+      await expect(page.getByRole('article')).toHaveCount(3);
+      await page
+        .getByRole('button', { name: he.applications.mine.past.replace('{{count}}', '2') })
+        .click();
       await expect(page.getByRole('article')).toHaveCount(5);
     },
   },

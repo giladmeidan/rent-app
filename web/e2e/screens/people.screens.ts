@@ -181,6 +181,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     if (key === 'GET /me') return reply(route, OWNER);
     if (key === 'GET /me/conversations') return reply(route, []);
     if (key === 'GET /areas') return reply(route, AREAS);
+    if (key === 'GET /me/likes') return reply(route, { liked_me: [] }); // the nav's count (useMyLikes)
     if (key === 'GET /me/listings') {
       // A held request never answers: the page stays on its loading state.
       if (mine === 'pending') return new Promise<void>(() => {});
