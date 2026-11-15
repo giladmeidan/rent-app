@@ -686,6 +686,8 @@
     "title": "לייקים",
     "mutual": "זו התאמה הדדית! הצ'אט נפתח",
     "toChat": "לצ'אט",
+    "scrollPrev": "{{section}}: הקודמים",
+    "scrollNext": "{{section}}: הבאים",
     "people": {
       "likedMe": "אנשים שמתעניינים בך",
       "mine": "אנשים שאהבתי",
