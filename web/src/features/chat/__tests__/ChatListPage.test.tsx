@@ -416,4 +416,15 @@ describe('ChatListPage', () => {
     expect(within(third).queryByText(he.chat.list.direct)).toBeNull();
     view.unmount();
   });
+
+  it('ac4_deleted_member_row', async () => {
+    const gone = conversation({ other_name: null, can_send: false });
+    const { view } = renderPage([json([gone])]);
+    const link = await screen.findByRole('link', { name: new RegExp(he.account.deletedName) });
+    expect(link).toHaveAttribute('href', `/chat/${gone.id}`);
+    expect(within(link).getByText(he.account.deletedName)).toBeVisible();
+    expect(within(link).getByText(he.chat.list.closed)).toBeVisible();
+    expect(link).not.toHaveTextContent('null');
+    view.unmount();
+  });
 });

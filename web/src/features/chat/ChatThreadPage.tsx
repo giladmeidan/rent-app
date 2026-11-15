@@ -63,10 +63,12 @@ function WarningMark() {
 function Bubble({ message }: { message: MessageOut }) {
   const { t } = useTranslation();
   const mine = message.mine;
+  // null = a deleted account (spec 0013c)
+  const sender = message.sender_name ?? t('account.deletedName');
   return (
     <>
       <span className="sr-only">
-        {mine ? t('chat.thread.mine') : t('chat.thread.theirs', { name: message.sender_name })}{' '}
+        {mine ? t('chat.thread.mine') : t('chat.thread.theirs', { name: sender })}{' '}
       </span>
       <span className="flex flex-wrap items-end gap-x-2 gap-y-1">
         {/* Another person's free text: a text node only, never HTML and never linkified. */}
@@ -92,8 +94,9 @@ function MemberLine({ members }: { members: ThreadOut['members'] }) {
   const id = useId();
   const parts = members.map((m) => {
     if (m.is_me) return t('chat.you');
-    if (m.role === 'seeker') return m.name;
-    return t('chat.memberWithRole', { name: m.name, role: t(`chat.roles.${m.role}`) });
+    const name = m.name ?? t('account.deletedName');
+    if (m.role === 'seeker') return name;
+    return t('chat.memberWithRole', { name, role: t(`chat.roles.${m.role}`) });
   });
   const full = parts.join(' · ');
   return (
@@ -212,14 +215,16 @@ function Thread({
 
   const owner = thread.my_role === 'owner';
   const group = thread.members.length > 2;
-  const reportTitle = t('report.title.person', { name: thread.other_name });
+  // null = a deleted account (spec 0013c)
+  const otherName = thread.other_name ?? t('account.deletedName');
+  const reportTitle = t('report.title.person', { name: otherName });
   const reportButton = (
     <ReportButton
       target={{ type: 'chat', id }}
       title={reportTitle}
       ariaLabel={reportTitle}
       reasons={thread.listing ? LISTING_REASONS : PERSON_REASONS}
-      hint={group ? t('report.groupHint', { name: thread.other_name }) : undefined}
+      hint={group ? t('report.groupHint', { name: otherName }) : undefined}
     />
   );
   return (
@@ -229,7 +234,7 @@ function Thread({
         // Its own direction: a Latin name in an RTL page stays in order.
         title={
           <span dir="auto" className="[overflow-wrap:anywhere]">
-            {thread.other_name}
+            {otherName}
           </span>
         }
       />
@@ -327,7 +332,7 @@ function Thread({
                       dir="auto"
                       className="text-caption font-semibold text-ink-muted"
                     >
-                      {message.sender_name}
+                      {message.sender_name ?? t('account.deletedName')}
                     </span>
                   )}
                   {/* The small corner is the tail, at the bottom inline end (mine) or start. Not
@@ -371,7 +376,11 @@ function Thread({
               tabIndex={-1}
               className="text-body text-ink-muted focus:outline-none"
             >
-              {thread.listing ? t('chat.thread.closed') : t('chat.thread.closedDirect')}
+              {thread.other_name === null
+                ? t('chat.thread.closedDeleted')
+                : thread.listing
+                  ? t('chat.thread.closed')
+                  : t('chat.thread.closedDirect')}
             </p>
           </Card>
           {unsent !== '' && (
@@ -444,8 +453,8 @@ export function ChatThreadPage() {
       : notFound
         ? t('chat.thread.notFound')
         : thread.data !== undefined
-          ? // null = a deleted account (spec 0013c); 0013f names it with the placeholder
-            (thread.data.other_name ?? undefined)
+          ? // null = a deleted account (spec 0013c)
+            (thread.data.other_name ?? t('account.deletedName'))
           : thread.isError
             ? t('common.error')
             : undefined,
