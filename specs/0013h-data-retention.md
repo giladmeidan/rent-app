@@ -21,7 +21,7 @@ review of 2026-11-15 and PRODUCT.md "Retention" (Gilad, 2026-11-15).
 | House number | Removed at account deletion (none is collected: `listings.street` is the street name only, so nothing to do) |
 | Price history | 24 months per price change |
 | Final rent | 24 months from recording |
-| Conversations | While at least one participant has an active account (see open question 2) |
+| Conversations | While at least one participant has an active account, and deleted after 3 years with no message (inactivity rule) |
 | Declined / withdrawn applications without a chat | 12 months after the decision |
 | Reports and admin actions | 3 years after resolution |
 | Free-text report notes | 12 months after resolution |
@@ -45,7 +45,8 @@ review of 2026-11-15 and PRODUCT.md "Retention" (Gilad, 2026-11-15).
    - **R3 final rent:** `UPDATE listings SET final_rent_ils = NULL, close_reason = NULL` where
      `closed_at` is older than 24 months.
    - **R4 conversations:** `DELETE conversations` where every participant (owner, seeker and, on a room
-     chat, every `listing_flatmates` member) has `deleted_at` set. Messages cascade.
+     chat, every `listing_flatmates` member) has `deleted_at` set, **or** whose newest activity
+     (`coalesce(last_message_at, created_at)`) is older than 3 years. Messages cascade.
    - **R5 applications:** `DELETE applications` with status `declined` or `withdrawn`, no conversation,
      and `updated_at` older than 12 months.
    - **R6 report notes:** `UPDATE reports SET note = NULL` where `resolved_at` is older than 12 months.
@@ -64,8 +65,7 @@ review of 2026-11-15 and PRODUCT.md "Retention" (Gilad, 2026-11-15).
    (Fly's log retention, or the log shipper's setting if one is added).
 
 **Out:** aggregating old price history into per-area stats (nothing reads it yet: `rent_estimate.py`
-uses only the reference and CBS tables); the conversation inactivity review (open question 2); FOLLOWUPS
-0013c option D.
+uses only the reference and CBS tables); FOLLOWUPS 0013c option D.
 **New dependencies:** none.
 
 ## Data
@@ -92,8 +92,9 @@ Only the privacy page text (`/privacy`, `legal.privacy.*`). No new keys unless a
   `test_retention.py::test_r2_price_history`
 - [ ] AC4 R3: final rent and close reason are cleared 24 months after `closed_at` —
   `test_retention.py::test_r3_final_rent`
-- [ ] AC5 R4: a conversation goes only when every participant, room flatmates included, is deleted —
-  `test_retention.py::test_r4_conversations`
+- [ ] AC5 R4: a conversation goes when every participant, room flatmates included, is deleted, or when
+  its last message (or, with none, its creation) is 3 years + 1 day old; one with an active participant
+  and a message 3 years − 1 day old stays — `test_retention.py::test_r4_conversations`
 - [ ] AC6 R5: a declined/withdrawn application without a conversation goes after 12 months; one with a
   conversation, or submitted/shortlisted, stays — `test_retention.py::test_r5_applications`
 - [ ] AC7 R6/R7: a note is cleared 12 months after resolution, the report goes after 3 years, an
@@ -102,8 +103,9 @@ Only the privacy page text (`/privacy`, `legal.privacy.*`). No new keys unless a
   suspension or a hidden listing — `test_retention.py::test_r8_admin_actions`
 - [ ] AC9 R9: a blocked email older than 5 years goes, and that address can sign up again —
   `test_retention.py::test_r9_blocked_emails`
-- [ ] AC10 Nothing an active person can see disappears: a conversation where one side is active stays
-  (except under R1) — `test_retention.py::test_ac10_active_threads_kept`
+- [ ] AC10 Nothing else an active person can see disappears: a conversation where one side is active
+  and that had a message within 3 years stays, except under R1 —
+  `test_retention.py::test_ac10_active_threads_kept`
 - [ ] AC11 `purge_expired` is idempotent (a second run deletes 0) and the cron is registered —
   `test_retention.py::test_ac11_idempotent`, `api/tests/test_worker.py`
 - [ ] AC12 The privacy text has no "בלי הגבלת זמן" and states each period — `make i18n-check` +
@@ -115,13 +117,11 @@ period (freeze `now()` by inserting timestamps relative to it). Web: the privacy
 E2E: none (CI only anyway; no new screen).
 
 ## Risks / open questions
-1. **R1 vs. the conversations rule (blocks `verified`).** Deleting a listing cascades its conversations,
-   so 12 months after the last message the active seeker loses a read-only thread whose other side is
-   gone. Recommendation: accept it (the thread is closed and idle for a year). Alternative: keep the
-   listing while any participant is active, which in practice keeps most tombstones forever.
-2. **"Subject to inactivity review" for conversations (blocks `verified`).** Needs a concrete rule or
-   it is not enforceable. Recommendation: delete a conversation with no message for 3 years. Alternative:
-   no inactivity rule at launch; FOLLOWUPS entry to revisit.
+1. **R1 wins over the conversations rule (Gilad, 2026-11-15).** Deleting a deleted owner's listing
+   cascades its conversations, so 12 months after the last message the active seeker loses that
+   read-only thread. Accepted: the thread is closed and idle for a year. The privacy text says so.
+2. **Inactivity rule (Gilad, 2026-11-15):** a conversation with no message for 3 years is deleted (R4),
+   even with active participants. The privacy text says so.
 3. Photos of a deleted listing are already deleted at account deletion (0013c); R1 only removes rows.
 4. The deleted user's tombstone row (`users`, `deleted_at` set) is never deleted: it holds no PII and
    keeps FKs valid. The verifier should confirm no PII column survives on it.
