@@ -171,12 +171,15 @@ def list_own_listings(db: Session, owner: User) -> Sequence[tuple[Listing, int, 
 
 def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:
     """The listing as it would be after `patch`, re-validated as a whole (cross-field rules).
-    A status-only PATCH (pause / resume) does not need a room's `flatmates_count`. A failure is the
+    A status-only PATCH (pause / resume) does not need a room's `flatmates_count`; a stored NULL
+    `shelter` (a listing from before 0015b) is kept (`stored_row`). A failure is the
     request's fault: FastAPI's 422 with a list `detail`."""
     current: dict[str, Any] = {name: getattr(listing, name) for name in ListingIn.model_fields}
     sent = patch.model_dump(include=patch.model_fields_set - {"status"})
     try:
-        return ListingIn.model_validate({**current, **sent}, context={"status_only": not sent})
+        return ListingIn.model_validate(
+            {**current, **sent}, context={"status_only": not sent, "stored_row": True}
+        )
     except ValidationError as exc:
         raise RequestValidationError(
             [{**error, "loc": ("body", *error["loc"])} for error in exc.errors()]

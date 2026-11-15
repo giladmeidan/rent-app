@@ -114,6 +114,7 @@ const AC2_BODY = {
   smoker: false,
   contract_months: 24,
   parking_needed: 1,
+  shelter_needed: 'any',
   // The personal part off (0010c): its fields go empty, so the server clears them; the people
   // switch and the flatmates preference need both parts.
   people_visible: false,
@@ -239,6 +240,36 @@ describe('ProfilePage', () => {
     expect(currentPath()).toBe('/me/profile');
   });
 
+  it('ac9_shelter_needed_choice', async () => {
+    // Spec 0015b: "מרחב מוגן" in the looking part, right after parking; three options, "לא חשוב לי"
+    // by default; the chosen one is sent and a saved one pre-selected.
+    const sh = he.profile.shelter;
+    const api = renderPage({ [PUT]: [json(profile({ shelter_needed: 'mamad' }))] });
+    await fillValid();
+    const shelter = group(he.profile.fields.shelter);
+    expect(
+      within(shelter)
+        .getAllByRole('radio')
+        .map((r) => (r as HTMLInputElement).labels?.[0]?.textContent),
+    ).toEqual([sh.any, sh.protected, sh.mamad]);
+    expect(radio(he.profile.fields.shelter, sh.any)).toBeChecked();
+    expect(
+      group(he.profile.fields.parking).compareDocumentPosition(shelter) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(group(he.profile.fields.parking).parentElement).toBe(shelter.parentElement);
+    fireEvent.click(radio(he.profile.fields.shelter, sh.mamad));
+    save();
+    await expectSaved();
+    expect(api.calls(PUT)[0]?.body).toStrictEqual({ ...AC2_BODY, shelter_needed: 'mamad' });
+    unmount();
+    vi.unstubAllGlobals();
+
+    renderPage({ [PROFILE]: [json(profile({ shelter_needed: 'protected' }))] });
+    await form();
+    expect(radio(he.profile.fields.shelter, sh.protected)).toBeChecked();
+  });
+
   it('ac4_saved_takes_focus', async () => {
     // An in-page save (no `next`): the "saved" line takes focus (and so scrolls into view).
     renderPage({ [PROFILE]: [json(profile())] });
@@ -295,6 +326,7 @@ describe('ProfilePage', () => {
         smoker: true,
         contract_months: 24,
         parking_needed: 1,
+        shelter_needed: 'any',
         people_visible: false,
         about_me: null,
         gender: null,
@@ -1029,6 +1061,7 @@ describe('ProfilePage', () => {
         'household',
         'contract_months',
         'parking_needed',
+        'shelter_needed',
         'flatmate_gender',
       ]);
 
@@ -1184,6 +1217,7 @@ describe('ProfilePage', () => {
         smoker: null,
         contract_months: null,
         parking_needed: 0,
+        shelter_needed: 'any',
         gender: 'woman',
         birth_year: 1996,
         lifestyle: { night: 2 },

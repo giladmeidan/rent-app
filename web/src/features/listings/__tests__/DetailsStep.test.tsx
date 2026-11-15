@@ -364,8 +364,7 @@ describe('DetailsStep', () => {
   });
 });
 
-describe('shelter (0015a)', () => {
-  const r = he.listings.room;
+describe('shelter (0015a, required since 0015b)', () => {
   const sh = he.listings.shelter;
   const group = () => screen.getByRole('group', { name: f.shelter });
   const choice = (name: string) => within(group()).getByRole('radio', { name });
@@ -373,8 +372,12 @@ describe('shelter (0015a)', () => {
     within(group())
       .getAllByRole('radio')
       .map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent);
+  const nonePicked = () =>
+    within(group())
+      .getAllByRole('radio')
+      .every((radio) => !(radio as HTMLInputElement).checked);
 
-  it('ac6 an apartment picks its protected space after the elevator, sent as chosen', async () => {
+  it('ac10 an apartment picks its protected space after the elevator, sent as chosen', async () => {
     const api = mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [json(listing(), 201)],
@@ -383,10 +386,9 @@ describe('shelter (0015a)', () => {
     renderWizard();
     chooseApartmentAndContinue();
     await areasLoaded();
-    fillValidDetails();
 
-    // In the amenities card, right after the elevator; the four types and "לא לציין", which starts
-    // selected.
+    // In the amenities card, right after the elevator; the four types only (no "לא לציין"), none
+    // picked to start with.
     const elevator = screen.getByRole('switch', { name: f.elevator });
     const card = elevator.closest('.divide-y') as HTMLElement;
     expect(card).toContainElement(group());
@@ -396,10 +398,10 @@ describe('shelter (0015a)', () => {
     expect(
       group().compareDocumentPosition(field(f.parking)) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(optionLabels()).toEqual([sh.mamad, sh.mamak, sh.building, sh.none, r.unset]);
-    expect(choice(r.unset)).toBeChecked();
+    expect(optionLabels()).toEqual([sh.mamad, sh.mamak, sh.building, sh.none]);
+    expect(nonePicked()).toBe(true);
 
-    fireEvent.click(choice(sh.mamak));
+    fillValidDetails('apartment', sh.mamak);
     expect(choice(sh.mamak)).toBeChecked();
     fireEvent.click(nextButton());
     fireEvent.click(nextButton());
@@ -411,38 +413,37 @@ describe('shelter (0015a)', () => {
     expect(api.calls('POST /listings')[0]?.body).toMatchObject({ shelter: 'mamak' });
   });
 
-  it('ac6 unset is sent as null', async () => {
-    const api = mockApi({
-      'GET /areas': [json([gushDan])],
-      'POST /listings': [json(listing(), 201)],
-      'GET /me/listings': [json([])],
-    });
+  it('ac10 next with none picked shows the error on the group and focuses it', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
     renderWizard();
     chooseApartmentAndContinue();
     await areasLoaded();
-    fillValidDetails();
+    fillValidDetails('apartment', null);
+
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    expect(within(group()).getByRole('alert')).toHaveTextContent(
+      he.listings.errors.shelterRequired,
+    );
+    expect(errorFor(choice(sh.mamad))).toHaveTextContent(he.listings.errors.shelterRequired);
+    expect(document.activeElement).toBe(choice(sh.mamad));
+
+    // Picking one clears it and lets "next" through.
     fireEvent.click(choice(sh.building));
-    fireEvent.click(choice(r.unset));
+    expect(within(group()).queryByRole('alert')).toBeNull();
     fireEvent.click(nextButton());
-    fireEvent.click(nextButton());
-    fireEvent.click(nextButton());
-    fireEvent.click(screen.getByRole('button', { name: he.listings.publish }));
-    await vi.waitFor(() => {
-      expect(currentPath()).toBe('/me/listings');
-    });
-    expect(api.calls('POST /listings')[0]?.body).toMatchObject({ shelter: null });
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
   });
 
-  it('ac6 a room has the same field on its details step', async () => {
+  it('ac10 a room has the same field on its details step', async () => {
     mockApi({ 'GET /areas': [json([gushDan])] });
     renderWizard();
     chooseTypeAndContinue(he.listings.type.room);
     await areasLoaded();
-    fillValidDetails('room');
     expect(screen.getAllByRole('group', { name: f.shelter })).toHaveLength(1);
-    expect(optionLabels()).toEqual([sh.mamad, sh.mamak, sh.building, sh.none, r.unset]);
-    expect(choice(r.unset)).toBeChecked();
-    fireEvent.click(choice(sh.building));
+    expect(optionLabels()).toEqual([sh.mamad, sh.mamak, sh.building, sh.none]);
+    expect(nonePicked()).toBe(true);
+    fillValidDetails('room', sh.building);
     // The choice survives a step forward and back.
     fireEvent.click(nextButton());
     expect(progress()).toHaveAttribute('aria-valuenow', '3');

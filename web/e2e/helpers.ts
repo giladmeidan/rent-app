@@ -177,6 +177,7 @@ export async function postListing(
       parking_spots: 1,
       furnished: 'partial',
       pets_allowed: true,
+      shelter: 'none', // required since 0015b
       arnona_ils: null,
       vaad_ils: null,
       description: null,

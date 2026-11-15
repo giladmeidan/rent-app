@@ -11,6 +11,8 @@ export type ContractMonths = NonNullable<SeekerProfileOut['contract_months']>;
 export type Gender = NonNullable<SeekerProfileOut['gender']>;
 /** Who the seeker prefers to live with; also a room listing's "who it is for" (0007e). */
 export type FlatmateGender = SeekerProfileOut['flatmate_gender'];
+/** Whether the seeker needs a protected space (0015b): none / ממ״ד, ממ״ק or מקלט / a ממ״ד in the flat. */
+export type ShelterNeeded = SeekerProfileOut['shelter_needed'];
 
 /** A profile whose "what I am looking for" part is filled (0010c): its 7 looking fields are set. */
 export type LookingProfile = SeekerProfileOut & {

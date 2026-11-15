@@ -135,6 +135,11 @@ async function fillDetails(page: Page, type: 'apartment' | 'room') {
   await page.getByLabel(f.parking).selectOption('1');
   const furnished = type === 'room' ? he.listings.furnishedRoom : he.listings.furnished;
   await page.getByText(furnished.partial, { exact: true }).click();
+  // The protected space is required (spec 0015b).
+  await page
+    .getByRole('group', { name: f.shelter })
+    .getByText(he.listings.shelter.none, { exact: true })
+    .click();
   await page.getByLabel(f.price).fill('7200');
 }
 

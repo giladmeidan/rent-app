@@ -14,6 +14,7 @@ import { Select } from '../../components/Select';
 import { Switch } from '../../components/Switch';
 import { Textarea } from '../../components/Textarea';
 import { TextInput } from '../../components/TextInput';
+import type { Shelter } from './api';
 import { CONDITIONS, SHELTERS } from './constants';
 import { addDays, formatIls, formatRooms } from './format';
 import { furnishedLabel } from './furnished';
@@ -379,7 +380,12 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
             checked={form.elevator}
             onChange={(elevator) => onChange({ elevator })}
           />
-          <ShelterField form={form} onChange={onChange} />
+          <ShelterField
+            form={form}
+            onChange={onChange}
+            id={fieldId('shelter')}
+            error={message('shelter')}
+          />
           <div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <label htmlFor={fieldId('parking_spots')} className="text-body font-medium">
@@ -455,22 +461,30 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
 }
 
 /** The flat's protected space (0015a), right after the elevator, for an apartment and a room alike:
- * the four types and "לא לציין" (`''`, sent as `null`; how the edit page clears a saved one). */
-function ShelterField({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
+ * one of the four types, required since 0015b (`''` = none picked yet, also a pre-0015b listing's
+ * `null`); `id` is the focus target of its error. */
+function ShelterField({
+  form,
+  onChange,
+  id,
+  error,
+}: Pick<Props, 'form' | 'onChange'> & { id: string; error: string | undefined }) {
   const { t } = useTranslation();
-  const options: ChoiceOption<ListingForm['shelter']>[] = [
-    ...SHELTERS.map((value) => ({ value, label: shelterLabel(t, value) })),
-    { value: '' as const, label: t('listings.room.unset') },
-  ];
+  const options: ChoiceOption<Shelter>[] = SHELTERS.map((value) => ({
+    value,
+    label: shelterLabel(t, value),
+  }));
   return (
     <div className="px-4 py-3">
       <ChoiceGroup
+        id={id}
         legend={t('listings.fields.shelter')}
         name="shelter"
         options={options}
         wrap
-        value={form.shelter}
+        value={form.shelter === '' ? null : form.shelter}
         onChange={(shelter) => onChange({ shelter })}
+        error={error}
       />
     </div>
   );

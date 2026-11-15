@@ -220,6 +220,7 @@ def _applicant_out(row: Row[Any]) -> ApplicantOut:
                 smoker=row.smoker,
                 contract_months=row.contract_months,
                 parking_needed=row.parking_needed,
+                shelter_needed=row.shelter_needed,
             )
             if has_profile
             else None

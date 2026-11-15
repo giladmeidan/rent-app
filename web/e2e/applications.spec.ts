@@ -25,10 +25,14 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   // Minted on its own, never from `street`: `fitting` below finds cards by substring (0007f AC13).
   const roomStreet = `חדר ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-  // An owner posts a listing, and one above the seeker's budget (0006f AC10).
+  // An owner posts a listing, and one above the seeker's budget (0006f AC10). Both have a ממ״ד:
+  // the seeker below asks for one (spec 0015b).
   await signUp(page, 'owner');
-  const id = await postListing(page, street);
-  const overBudgetId = await postListing(page, overBudgetStreet, { price_ils: 7600 });
+  const id = await postListing(page, street, { shelter: 'mamad' });
+  const overBudgetId = await postListing(page, overBudgetStreet, {
+    price_ils: 7600,
+    shelter: 'mamad',
+  });
   // And a women-only room (0007f AC13).
   const roomId = await postListing(page, roomStreet, {
     listing_type: 'room',
@@ -72,6 +76,11 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();
+  // A ממ״ד in the flat (spec 0015b).
+  await page
+    .getByRole('group', { name: he.profile.fields.shelter, exact: true })
+    .getByText(he.profile.shelter.mamad, { exact: true })
+    .click();
   // The personal part "עליי" (0007d's room section, 0010c): a woman born 30 years ago, women as
   // flatmates (in "מה מחפשים", shown once "עליי" is on), one answer. Labels are found inside their
   // group: "גבר" is a substring of "גברים".
@@ -134,6 +143,11 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await expect(page.getByRole('switch', { name: he.profile.fields.smoker })).not.toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.contract['24'] })).toBeChecked();
   await expect(page.getByRole('radio', { name: he.profile.parking['1'] })).toBeChecked();
+  await expect(
+    page
+      .getByRole('group', { name: he.profile.fields.shelter, exact: true })
+      .getByRole('radio', { name: he.profile.shelter.mamad, exact: true }),
+  ).toBeChecked();
   await expect(page.getByRole('switch', { name: ABOUT.switch })).toBeChecked();
   await expect(roomRadio(ROOM.fields.gender, ROOM.gender.woman)).toBeChecked();
   await expect(page.getByLabel(ROOM.fields.birthYear)).toHaveValue(birthYear);
@@ -210,6 +224,7 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
     flatmate_gender: 'any',
     lifestyle: {},
     budget_max_ils: 7500,
+    shelter_needed: 'mamad',
   });
 
   await test.step('ac10 search and the listing pages show the match', async () => {

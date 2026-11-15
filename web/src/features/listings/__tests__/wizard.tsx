@@ -1,5 +1,5 @@
 // Helpers for driving the listing wizard in tests.
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { expect, vi } from 'vitest';
 
@@ -66,7 +66,12 @@ export async function areasLoaded() {
 export const IN_30_DAYS = addDays(todayInIsrael(), 30);
 
 /** The AC4 values. A room's furnished choice reads the room forms (spec 0009b). */
-export function fillValidDetails(type: ListingType = 'apartment') {
+/** Fills the details step with valid values; `shelter` is the protected space's option label
+ * (required since 0015b), or `null` to pick none. */
+export function fillValidDetails(
+  type: ListingType = 'apartment',
+  shelter: string | null = he.listings.shelter.none,
+) {
   const f = he.listings.fields;
   change(f.city, 'גבעתיים');
   change(f.street, 'כצנלסון');
@@ -77,6 +82,10 @@ export function fillValidDetails(type: ListingType = 'apartment') {
   change(f.price, '7200');
   change(f.availableFrom, IN_30_DAYS);
   fireEvent.click(screen.getByRole('switch', { name: f.elevator }));
+  if (shelter !== null) {
+    const group = screen.getByRole('group', { name: f.shelter });
+    fireEvent.click(within(group).getByRole('radio', { name: shelter }));
+  }
   change(f.parking, '1');
   fireEvent.click(
     screen.getByLabelText(

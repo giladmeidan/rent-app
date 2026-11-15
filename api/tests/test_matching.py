@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 
-from app.matching.score import CRITERIA, HARD, explain
+from app.matching.score import CRITERIA, HARD, WEIGHTS, explain
 from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import Outbox, make_listing, make_owner, make_profile, set_location, signup
 
@@ -167,7 +167,8 @@ AC1_ROWS: dict[str, tuple[dict[str, Any], dict[str, Any], tuple[str, ...], dict[
         {"price_ils": 7600, "area": "north"},
         {},
         (),
-        _match(55, ["move_in", "household", "contract"], "budget"),
+        # Budget 20 + area 15 lost (spec 0015b weights): 65, capped at 59.
+        _match(59, ["move_in", "household", "contract"], "budget"),
     ),
     "12_past_dates_mean_now": (
         {},
@@ -491,7 +492,7 @@ def _values(**overrides: Any) -> dict[str, Any]:
                 m_contract=Decimal(0),
                 m_score=48,
             ),
-            ["area", "parking", "smoking"],
+            ["area", "shelter", "parking"],
             "budget",
             id="agrees_needs_half",
         ),
@@ -503,3 +504,60 @@ def test_ac11_explain_rules(values: dict[str, Any], agrees: list[str], differs: 
     assert match.agrees == agrees
     assert match.differs == differs
     assert match.score == values["m_score"]
+
+
+# --- Spec 0015b: the protected-space criterion ---------------------------------------------------
+
+SHELTERS: tuple[str | None, ...] = ("mamad", "mamak", "building", "none", None)
+CAPPED = _match(59, TOP3, "shelter")
+
+
+@pytest.mark.usefixtures("redis_clean")
+def test_ac4_shelter_criterion(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID, owner: uuid.UUID
+) -> None:
+    # `L0` matches `P0` in full, so only the shelter can move a score; NULL = a pre-0015b listing.
+    start = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
+    ids = {
+        shelter: _l0(
+            db_engine, owner, gush_dan, shelter=shelter, created_at=start + dt.timedelta(seconds=i)
+        )
+        for i, shelter in enumerate(SHELTERS)
+    }
+    seeker = _seeker(client, outbox, db_engine, gush_dan)
+    full = _match(100, TOP3, None)
+    expected: dict[str, dict[str | None, dict[str, Any]]] = {
+        "any": dict.fromkeys(SHELTERS, full),
+        "protected": {"mamad": full, "mamak": full, "building": full, "none": CAPPED, None: CAPPED},
+        "mamad": {**dict.fromkeys(SHELTERS, CAPPED), "mamad": full},
+    }
+    for needed, matches in expected.items():
+        _execute(db_engine, "UPDATE seeker_profiles SET shelter_needed = :v", v=needed)
+        by_id = {item["id"]: item["match"] for item in _search(seeker)["items"]}
+        assert by_id == {ids[shelter]: match for shelter, match in matches.items()}, needed
+        # The listing page reads the same expression.
+        page = seeker.get(f"/listings/{ids[None]}")
+        assert page.json()["match"] == matches[None], needed
+
+
+@pytest.mark.usefixtures("redis_clean")
+def test_ac5_weights_with_shelter(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID, owner: uuid.UUID
+) -> None:
+    assert WEIGHTS == {
+        "budget": 20,
+        "move_in": 20,
+        "area": 15,
+        "household": 10,
+        "contract": 10,
+        "parking": 5,
+        "smoking": 5,
+        "pets": 5,
+        "shelter": 10,
+    }
+    assert sum(WEIGHTS.values()) == 100
+    assert "shelter" in HARD
+    listing_id = _l0(db_engine, owner, gush_dan, accepted_households=["family"])
+    seeker = _seeker(client, outbox, db_engine, gush_dan, shelter_needed="mamad")
+    _execute(db_engine, "UPDATE listings SET shelter = 'mamad'")
+    assert seeker.get(f"/listings/{listing_id}").json()["match"] == _match(90, TOP3, "household")

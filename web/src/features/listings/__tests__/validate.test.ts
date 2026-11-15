@@ -29,6 +29,7 @@ const valid: ListingForm = {
   size_sqm: '95',
   price_ils: '7200',
   available_from: addDays(today, 30),
+  shelter: 'none', // required since 0015b
 };
 
 const required = { key: 'listings.errors.required' };
@@ -122,6 +123,9 @@ const rows: Row[] = [
   ['date today-1 (immediate)', { available_from: addDays(today, -1) }, 'available_from', undefined],
   ['date today+729', { available_from: addDays(today, 729) }, 'available_from', undefined],
   ['date today+730', { available_from: addDays(today, 730) }, 'available_from', dateRange],
+  // Spec 0015b: one of the four protected-space types is required.
+  ['shelter not picked', { shelter: '' }, 'shelter', { key: 'listings.errors.shelterRequired' }],
+  ['shelter mamad', { shelter: 'mamad' }, 'shelter', undefined],
 ];
 
 describe('validate', () => {
@@ -171,8 +175,8 @@ describe('validate', () => {
       flatmates_count: null,
       flatmate_ages: [],
       lifestyle: {},
-      // Spec 0015a: the flat's protected space, not said.
-      shelter: null,
+      // Spec 0015a: the flat's protected space (`valid`'s, required since 0015b).
+      shelter: 'none',
       // Spec 0014b: an apartment's facts, not said.
       balcony: null,
       air_conditioning: null,
@@ -731,25 +735,34 @@ describe('validate', () => {
       air_conditioning: 'yes',
       condition: 'needs_work',
     });
-    expect(formFromListing(listing())).toMatchObject({
+    expect(formFromListing(listing({ shelter: null }))).toMatchObject({
       shelter: '',
       air_conditioning: '',
       condition: '',
     });
     expect(changedFields(stored, toListingIn(form))).toEqual({});
     expect(
-      changedFields(stored, toListingIn({ ...form, balcony: 'no', condition: '', shelter: '' })),
-    ).toEqual({ balcony: false, condition: null, shelter: null });
+      changedFields(
+        stored,
+        toListingIn({ ...form, balcony: 'no', condition: '', shelter: 'mamad' }),
+      ),
+    ).toEqual({ balcony: false, condition: null, shelter: 'mamad' });
   });
 
-  it('ac6 shelter: default, body mapping, edit form and changed fields', () => {
-    // Spec 0015a: `''` ("לא לציין") is the default and is sent as `null`; both types send it; the
-    // edit form loads the stored one, and clearing it sends `null`.
+  it('ac10 shelter: required, body mapping, edit form and changed fields', () => {
+    // Spec 0015a / 0015b: `''` (none picked) is the default and fails `validate` on both types;
+    // `toListingIn` still maps it to `null` without throwing (the edit page's dirty check and the
+    // preview run it before validation); the edit form loads the stored one, and a pre-0015b
+    // `null` starts with none picked.
     expect(emptyForm.shelter).toBe('');
     const room: ListingForm = { ...valid, listing_type: 'room', flatmates_count: 2 };
     for (const form of [valid, room]) {
-      expect(toListingIn(form)).toHaveProperty('shelter', null);
+      expect(validate({ ...form, shelter: '' }, today)).toEqual({
+        shelter: { key: 'listings.errors.shelterRequired' },
+      });
+      expect(toListingIn({ ...form, shelter: '' })).toHaveProperty('shelter', null);
       for (const shelter of ['mamad', 'mamak', 'building', 'none'] as const) {
+        expect(validate({ ...form, shelter }, today)).toEqual({});
         expect(toListingIn({ ...form, shelter })).toHaveProperty('shelter', shelter);
       }
     }
@@ -760,13 +773,12 @@ describe('validate', () => {
       const form = formFromListing(stored);
       expect(form.shelter).toBe('building');
       expect(changedFields(stored, toListingIn(form))).toEqual({});
-      expect(changedFields(stored, toListingIn({ ...form, shelter: '' }))).toEqual({
-        shelter: null,
-      });
       expect(changedFields(stored, toListingIn({ ...form, shelter: 'mamad' }))).toEqual({
         shelter: 'mamad',
       });
     }
-    expect(formFromListing(listing({ shelter: null })).shelter).toBe('');
+    const legacy = formFromListing(listing({ shelter: null }));
+    expect(legacy.shelter).toBe('');
+    expect(validate(legacy, today)).toHaveProperty('shelter');
   });
 });

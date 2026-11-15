@@ -41,6 +41,7 @@ const PROFILE = {
   smoker: false,
   contract_months: 12,
   parking_needed: 0,
+  shelter_needed: 'any',
   gender: 'woman',
   birth_year: 1997,
   flatmate_gender: 'any',

@@ -1,7 +1,7 @@
 ---
 id: 0015b
 title: "A seeker says whether they need a protected space (any, or a ממ״ד in the flat), and the match score treats it as a deal-breaker; listers must answer the protected-space question"
-status: verified
+status: in-review
 depends_on: []           # 0015a (listings.shelter) is merged
 reviewers: [code, qa, ux, perf]   # perf: the match score runs in search, the map box, the inbox and people browse
 estimate: 1 coder run    # a long one: full stack + ~15 test files touched; coder Opus/high (migration, matching)

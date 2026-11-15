@@ -54,11 +54,11 @@ LIFESTYLE_ROWS: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
         _woman(cleanliness=3, night=3, shabbat=1),
         _match(90, TOP3, "lifestyle"),
     ),
-    # m 1: lifestyle (20) ties budget (25 * 0.8) and sorts after it by index.
+    # m 1: lifestyle (20) beats budget (20 * 0.8 = 16, spec 0015b weights).
     "2_full_agreement": (
         _room(**FULL_AGREE),
         _woman(**FULL_AGREE),
-        _match(100, ["budget", "lifestyle", "move_in"], None),
+        _match(100, ["lifestyle", "budget", "move_in"], None),
     ),
     # No shared key: m NULL, the score and explanation are 0006b's.
     "3_no_shared_key": (_room(kosher=3), _woman(night=1), _match(100, TOP3, None)),
@@ -74,17 +74,18 @@ LIFESTYLE_ROWS: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
         _woman(**FULL_AGREE),
         _match(59, ["lifestyle", "move_in", "area"], "budget"),
     ),
-    # B 55: 44 + 0, below the cap. Budget and area both fail; budget comes first by index.
+    # B 65 (budget 20 and area 15 lost): 52 + 0, below the cap. Budget and area both fail; budget
+    # comes first by index.
     "6_below_the_cap": (
         {**_room(night=1), "price_ils": 7600, "area": "north"},
         _woman(night=3),
-        _match(44, ["move_in", "household", "contract"], "budget"),
+        _match(52, ["move_in", "household", "contract"], "budget"),
     ),
     # B 90: 72 + 20 = 92, higher than the base score (Risks Q1).
     "7_raises_the_score": (
         {**_room(**FULL_AGREE), "accepted_households": ["family"]},
         _woman(**FULL_AGREE),
-        _match(92, ["budget", "lifestyle", "move_in"], "household"),
+        _match(92, ["lifestyle", "budget", "move_in"], "household"),
     ),
     "8_apartment": ({}, _woman(night=1), _match(100, TOP3, None)),
     "9_no_room_section": (_room(night=1), {}, _match(100, TOP3, None)),
@@ -93,7 +94,8 @@ LIFESTYLE_ROWS: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
     "10_one_round_only": (
         {**_room(cleanliness=3, guests=1, night=1), "available_from": _day(37)},
         {**_woman(cleanliness=3, guests=2, night=2), "parking_needed": 2},
-        _match(87, ["budget", "area", "move_in"], "lifestyle"),
+        # Move-in 0.75 x 16 ties area 15 x 0.8 = 12 and comes first by index (spec 0015b).
+        _match(87, ["budget", "move_in", "area"], "lifestyle"),
     ),
     # t 0, 0, 0, 0.5 -> m 0.125: 80 + 2.5 = 82.5 rounds half up to 83 (a float bind gives 82).
     "11_half_way_rounds_up": (
@@ -107,7 +109,7 @@ LIFESTYLE_ROWS: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
     "13_shared_keys_only": (
         _room(**ALL_ONE),
         _woman(night=1),
-        _match(100, ["budget", "lifestyle", "move_in"], None),
+        _match(100, ["lifestyle", "budget", "move_in"], None),
     ),
     # All 7 shared, maximum disagreement: m 0 -> 80.
     "14_all_keys_max_disagreement": (
@@ -157,9 +159,10 @@ def test_ac1_lifestyle_score_and_explanation(
     [
         pytest.param(
             _values(m_lifestyle=Decimal(1)),
-            ["budget", "lifestyle", "move_in"],
+            # Spec 0015b: lifestyle 20 beats budget 0.8 x 20 = 16.
+            ["lifestyle", "budget", "move_in"],
             None,
-            id="full_agreement_ties_budget",
+            id="full_agreement_beats_budget",
         ),
         pytest.param(
             _values(m_lifestyle=Decimal("0.5"), m_score=90),

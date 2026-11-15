@@ -135,8 +135,6 @@ NULLABLE_FIELDS = frozenset(
         "balcony",
         "bills_included",
         "poster",
-        # The flat's protected space (spec 0015a), on any listing.
-        "shelter",
         # The apartment facts (spec 0014b), on any listing.
         "air_conditioning",
         "condition",
@@ -186,8 +184,10 @@ class ListingIn(BaseModel):
     balcony: bool | None = None
     bills_included: bool | None = None
     poster: Poster | None = None
-    # The flat's protected space (spec 0015a), on any listing; `None` = not said.
-    shelter: Shelter | None = None
+    # The flat's protected space (spec 0015a), on any listing. Required on create since 0015b: the
+    # key has no default and `None` is refused, except on a stored row re-validated by a PATCH
+    # (`_shelter_required`), where it is a listing from before 0015b that never said.
+    shelter: Shelter | None
     # Apartment facts (spec 0014b), on any listing; `None` = not said.
     air_conditioning: bool | None = None
     condition: Condition | None = None
@@ -196,6 +196,13 @@ class ListingIn(BaseModel):
     @classmethod
     def _empty_description_is_none(cls, value: str | None) -> str | None:
         return value or None
+
+    @field_validator("shelter")
+    @classmethod
+    def _shelter_required(cls, value: Shelter | None, info: ValidationInfo) -> Shelter | None:
+        if value is None and not (info.context or {}).get("stored_row"):
+            raise ValueError("shelter is required")
+        return value
 
     @model_validator(mode="after")
     def _total_floors_at_least_floor(self) -> Self:
@@ -261,7 +268,8 @@ class ListingPatch(BaseModel):
     balcony: bool | None = None
     bills_included: bool | None = None
     poster: Poster | None = None
-    # The flat's protected space (spec 0015a): in `NULLABLE_FIELDS`.
+    # The flat's protected space (spec 0015a): not in `NULLABLE_FIELDS` since 0015b, so an explicit
+    # `null` is a 422.
     shelter: Shelter | None = None
     # Apartment facts (spec 0014b): in `NULLABLE_FIELDS`. The closure answer is not patchable
     # (`PUT /listings/{id}/closure`): `extra="forbid"` refuses it.

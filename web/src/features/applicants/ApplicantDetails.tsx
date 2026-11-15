@@ -40,6 +40,19 @@ export function ProfileFacts({ profile }: { profile: ApplicantProfileOut }) {
       label: t('applicants.profile.parking'),
       value: parkingName(profile.parking_needed, t),
     },
+    // No row without a need (0015b).
+    ...(profile.shelter_needed === 'any'
+      ? []
+      : [
+          {
+            key: 'shelter',
+            label: t('applicants.profile.shelter'),
+            value:
+              profile.shelter_needed === 'mamad'
+                ? t('profile.shelter.mamad')
+                : t('profile.shelter.protected'),
+          },
+        ]),
   ];
   return (
     <dl className="grid grid-cols-2 gap-2">

@@ -36,6 +36,11 @@ test('ac7_wizard_photo', async ({ page }) => {
   await page.getByLabel(f.size, { exact: true }).fill('80');
   await page.getByLabel(f.price).fill('6500');
   await page.getByLabel(f.availableFrom).fill(israelDay(30));
+  // The protected space is required (spec 0015b).
+  await page
+    .getByRole('group', { name: f.shelter })
+    .getByText(he.listings.shelter.none, { exact: true })
+    .click();
   const next = page.getByRole('button', { name: he.listings.next });
   await next.click();
 

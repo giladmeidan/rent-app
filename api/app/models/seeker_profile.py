@@ -59,6 +59,10 @@ class SeekerProfile(Base):
             "contract_months IN (6, 12, 24, 36)", name="ck_seeker_profiles_contract_months"
         ),
         CheckConstraint("parking_needed BETWEEN 0 AND 2", name="ck_seeker_profiles_parking_needed"),
+        CheckConstraint(
+            "shelter_needed IN ('any', 'protected', 'mamad')",
+            name="ck_seeker_profiles_shelter_needed",
+        ),
         # The room section (spec 0007a).
         CheckConstraint(
             "gender IS NULL OR gender IN ('woman', 'man', 'other')",
@@ -93,7 +97,7 @@ class SeekerProfile(Base):
         ),
         CheckConstraint(
             "budget_max_ils IS NOT NULL OR (NOT move_in_flexible AND parking_needed = 0"
-            " AND flatmate_gender = 'any' AND NOT people_visible)",
+            " AND shelter_needed = 'any' AND flatmate_gender = 'any' AND NOT people_visible)",
             name="ck_seeker_profiles_looking_defaults",
         ),
         CheckConstraint(
@@ -122,6 +126,8 @@ class SeekerProfile(Base):
     parking_needed: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=text("0")
     )
+    # `any` / `protected` (ממ״ד, ממ״ק or מקלט) / `mamad` (a ממ״ד in the flat); spec 0015b.
+    shelter_needed: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'any'"))
     # The personal part (spec 0007a's room section, 0010c); `gender` NULL = no personal part.
     gender: Mapped[str | None] = mapped_column(Text)
     birth_year: Mapped[int | None] = mapped_column(SmallInteger)

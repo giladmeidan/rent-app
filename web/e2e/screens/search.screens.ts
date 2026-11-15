@@ -200,6 +200,7 @@ const seekerProfile = {
   smoker: false,
   contract_months: 24,
   parking_needed: 1,
+  shelter_needed: 'any',
   gender: 'woman',
   birth_year: new Date().getUTCFullYear() - 28,
   flatmate_gender: 'any',

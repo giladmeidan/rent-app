@@ -11,7 +11,7 @@ import { compareLifestyle } from '../lifestyle/keys';
 import { lifestyleTopic } from '../lifestyle/topic';
 import type { ListingPublic } from '../listings/api';
 import { formatDate, formatIls, todayInIsrael } from '../listings/format';
-import type { ContractMonths, Household, LookingProfile } from '../profile/api';
+import type { ContractMonths, Household, LookingProfile, ShelterNeeded } from '../profile/api';
 import type { Criterion, ReasonKind } from './types';
 
 type Line = (listing: ListingPublic, profile: LookingProfile, t: TFunction) => string;
@@ -44,6 +44,10 @@ export function householdName(household: Household, t: TFunction): string {
 const disjunction = new Intl.ListFormat('he', { type: 'disjunction' });
 // "ניקיון, אורחים ושעות לילה", likewise.
 const conjunction = new Intl.ListFormat('he', { type: 'conjunction' });
+
+/** Whether the listing has a protected space a `protected` seeker accepts (0015b). */
+const hasShelter = (listing: ListingPublic) =>
+  listing.shelter === 'mamad' || listing.shelter === 'mamak' || listing.shelter === 'building';
 
 /** At most this many differing topics are named in the lifestyle line. */
 const LIFESTYLE_TOPICS_SHOWN = 3;
@@ -119,6 +123,22 @@ const SEEKER: Record<Criterion, Record<ReasonKind, Line>> = {
       l.pets_allowed ? t('match.seeker.pets.agree') : t('match.seeker.pets.agreeNoPets'),
     differ: (_l, _p, t) => t('match.seeker.pets.differ'),
   },
+  shelter: {
+    agree: (_l, p, t) => {
+      if (p.shelter_needed === 'any') return t('match.seeker.shelter.agreeNotNeeded');
+      return p.shelter_needed === 'mamad'
+        ? t('match.seeker.shelter.agreeMamad')
+        : t('match.seeker.shelter.agree');
+    },
+    // Why it failed, from the listing: it did not say (from before 0015b), it has a ממ״ק or a מקלט
+    // (only a `mamad` seeker fails there), or it has none.
+    differ: (l, _p, t) => {
+      if (l.shelter === null) return t('match.seeker.shelter.differUnknown');
+      return hasShelter(l)
+        ? t('match.seeker.shelter.differMamad')
+        : t('match.seeker.shelter.differ');
+    },
+  },
   // Only a room answers the questionnaire (0007g), so apartments never show these. A key one step
   // apart still agrees, so "0 מתוך 1" is never shown; the profile may have changed since the score.
   lifestyle: {
@@ -182,6 +202,15 @@ const SEEKER_SHORT: Record<Criterion, Record<ReasonKind, Short>> = {
       l.pets_allowed ? t('match.short.pets.agree') : t('match.short.pets.agreeNoPets'),
     differ: (_l, _p, t) => t('match.short.pets.differ'),
   },
+  // From the listing only, as parking's: the profile may be missing.
+  shelter: {
+    agree: (l, _p, t) =>
+      hasShelter(l) ? t('match.short.shelter.agree') : t('match.short.shelter.agreeNotNeeded'),
+    differ: (l, _p, t) => {
+      if (l.shelter === null) return t('match.short.shelter.differUnknown');
+      return hasShelter(l) ? t('match.short.shelter.differMamad') : t('match.short.shelter.differ');
+    },
+  },
   lifestyle: {
     agree: (_l, _p, t) => t('match.short.lifestyle.agree'),
     differ: (_l, _p, t) => t('match.short.lifestyle.differ'),
@@ -231,6 +260,11 @@ export function contractName(months: ContractMonths, t: TFunction): string {
 export function parkingName(needed: number, t: TFunction): string {
   if (needed <= 0) return t('profile.parking.0');
   return needed === 1 ? t('profile.parking.1') : t('profile.parking.2');
+}
+
+/** "ממ״ד" / "מרחב מוגן": the protected space an applicant needs, as a short noun (0015b). */
+export function shelterNeedName(needed: ShelterNeeded, t: TFunction): string {
+  return needed === 'mamad' ? t('listings.card.shelter.mamad') : t('profile.fields.shelter');
 }
 
 /** The applicant's move-in day as shown: a stored date that has passed means today (as `0006b`
@@ -292,6 +326,15 @@ const OWNER: Record<Criterion, Record<ReasonKind, OwnerLine>> = {
       p.has_pets ? t('match.owner.pets.agreePet') : t('match.owner.pets.agree'),
     differ: (_p, _s, t) => t('match.owner.pets.differ'),
   },
+  // An agree on a need means the flat has it, a differ that it has not (or did not say).
+  shelter: {
+    agree: (p, _s, t) =>
+      p.shelter_needed === 'any'
+        ? t('match.owner.shelter.agreeNone')
+        : t('match.owner.shelter.agree', { shelter: shelterNeedName(p.shelter_needed, t) }),
+    differ: (p, _s, t) =>
+      t('match.owner.shelter.differ', { shelter: shelterNeedName(p.shelter_needed, t) }),
+  },
   // Scored only on an application made to a room (`0007g`).
   lifestyle: {
     agree: (_p, _s, t) => t('match.owner.lifestyle.agree'),
@@ -341,6 +384,16 @@ const OWNER_SHORT: Record<Criterion, Record<ReasonKind, OwnerShort>> = {
     agree: (p, _s, t) =>
       p.has_pets ? t('match.owner.short.pets.agreePet') : t('match.owner.short.pets.agree'),
     differ: (_p, _s, t) => t('match.owner.short.pets.differ'),
+  },
+  shelter: {
+    agree: (p, _s, t) =>
+      p.shelter_needed === 'any'
+        ? t('match.owner.short.shelter.agreeNone')
+        : t('match.owner.short.shelter.agree'),
+    differ: (p, _s, t) =>
+      p.shelter_needed === 'mamad'
+        ? t('match.owner.short.shelter.differMamad')
+        : t('match.owner.short.shelter.differ'),
   },
   lifestyle: {
     agree: (_p, _s, t) => t('match.owner.short.lifestyle.agree'),
@@ -406,6 +459,7 @@ const PERSON_BASE: Record<Criterion, Record<ReasonKind, string>> = {
     differ: 'people.short.smoking.differ',
   },
   pets: { agree: 'people.short.pets.agree', differ: 'people.short.pets.differ' },
+  shelter: { agree: 'people.short.shelter.agree', differ: 'people.short.shelter.differ' },
   lifestyle: {
     agree: 'match.owner.short.lifestyle.agree',
     differ: 'match.owner.short.lifestyle.differ',
@@ -422,6 +476,7 @@ const PERSON_REASON: Record<Criterion, Record<ReasonKind, string>> = {
   parking: { agree: 'people.reason.parking.agree', differ: 'people.reason.parking.differ' },
   smoking: { agree: 'people.reason.smoking.agree', differ: 'people.reason.smoking.differ' },
   pets: { agree: 'people.reason.pets.agree', differ: 'people.reason.pets.differ' },
+  shelter: { agree: 'people.reason.shelter.agree', differ: 'people.reason.shelter.differ' },
   lifestyle: { agree: 'match.owner.lifestyle.agree', differ: 'match.owner.lifestyle.differ' },
 };
 

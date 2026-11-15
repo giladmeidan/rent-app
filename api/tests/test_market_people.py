@@ -878,6 +878,21 @@ def test_ac13_statement_counts_and_plan(
     assert len(mutual) == 5, mutual  # plus `open_direct`
     assert mutual[4].startswith("INSERT INTO conversations")
 
+    # Plan on production-shaped statistics: most pairs are other people's (here every pair among
+    # the others, hundreds of rows beside the viewer's eleven), then ANALYZE, so the plan does not
+    # hang on when autovacuum last ran. On a table holding only the viewer's pairs, reading it
+    # whole is the planner's cheapest plan, which flipped this test in CI (PR #111).
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO person_pairs (user_low, user_high, low_liked_at)"
+                " SELECT l.user_id, h.user_id, now() FROM seeker_profiles l"
+                " JOIN seeker_profiles h ON l.user_id < h.user_id"
+                " WHERE NOT (l.user_id = ANY(:people) OR h.user_id = ANY(:people))"
+            ),
+            {"people": [a.id, b.id]},
+        )
+        conn.execute(text("ANALYZE person_pairs"))
     with Session(db_engine) as db:
         user = db.get(User, a.id)
         assert user is not None
