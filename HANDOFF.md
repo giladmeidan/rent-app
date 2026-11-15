@@ -13,32 +13,34 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
-Overall: MVP feature work done through Slice 10; Slice 14 (rent estimate) done through `0014d`; **Slice 11 (Trust
-basics) four of five specs merged, paused by Gilad on 2026-11-15** ("the next specs will be finished later").
+Overall: MVP feature work done through Slice 11 (Trust basics); Slice 14 (rent estimate) done through `0014d`.
+Next: Slice 12 (admin) and `0015a`, all still `draft`.
 
-- Slice 11 merged (all archived with digests): `0011a` listing renewal (PR #93), `0011b` report a listing or a person
-  (PR #94, `reports` table, migration `0022_reports`), `0011c` rate limits + request hardening (PR #95), `0011e`
-  listing views off the request path (PR #96, Redis + worker flush).
-- **Left in Slice 11: `0011d`** (report buttons in chat, the owner's inbox and a room's people page; web only,
-  `depends_on: [0011b]` which is merged, so it branches from `main`). Status `verified`, never started; no worktree.
-- Slice 14: `0014d` small-flat estimate merged (PR #92, migration `0021_cbs_rent_ratios`), built by a separate chat.
-- Alembic head `0022`. No open PRs, no spec worktrees, no spec stacks. Merging is delegated to the orchestrator for
-  Slices 11 and 14 (ask again for Slice 12+).
-- Main checkout `../rent-app` is on `main`, **88 commits behind `origin/main`**, with uncommitted `Makefile` and
+- **Slice 11 done** (all archived with digests): `0011a` listing renewal (PR #93), `0011b` report a listing or a
+  person (PR #94, `reports` table, migration `0022_reports`), `0011c` rate limits + request hardening (PR #95),
+  `0011e` listing views off the request path (PR #96, Redis + worker flush), `0011d` report button in chats, the
+  owner's inbox and a room's people page (PR #97, web only, merged 2026-11-15).
+- **Drafts on `main`, not verified, no worktree:** `0012a` moderation data (suspend account, listing removed by homie,
+  per-account listing cap), `0012b` admin dashboard (`depends_on: [0012a]`), `0015a` listing protected space
+  (ממ״ד / ממ״ק / מקלט / none, card + page + filter). Written by a separate chat of Gilad's working in
+  `../rent-app-orch`; check with Gilad whether it is still editing them before touching them.
+- Alembic head `0022`. No open PRs, no spec worktrees, no spec stacks. Merging was delegated for Slices 7–11 and 14;
+  **ask Gilad again for Slice 12+**.
+- Main checkout `../rent-app` is on `main`, **96 commits behind `origin/main`**, with uncommitted `Makefile` and
   `.gitignore` edits and untracked seed/promo work (`api/scripts/seed_demo.py`, `seed_promo.py`, `promo/`,
   `promo-video/`, `web/e2e/promo/`); its own compose stack (`rent-app`, 5 containers) is running. A `git pull` there
   also rebuilds the graph, which is stale (pre-Slice 14).
 - `../rent-app-orch` is the docs worktree (detached on `origin/main` between uses).
 
-Last updated: 2026-11-15 (Slice 11 paused after 0011a/b/c/e merged).
+Last updated: 2026-11-15 (Slice 11 done: 0011d merged, PR #97).
 
 ## Next Steps
-1. **Finish Slice 11 when Gilad says so: build `0011d`.** Make worktree `../rent-app-0011d` from `origin/main` with
-   its own `.env` (next free ports below), pre-start its build session in a turn Gilad wrote (it waits for "go").
-2. Then choose the next slice with Gilad: 12 Admin minimal (first admin surface: lists the `reports` rows, raises the
-   listing cap, shows rent-import failures — see FOLLOWUPS 0014a/0002b), 13 Launch readiness (deploy, one registrable
-   domain, SMS, real client IPs → OTP lockout per email + network, Gilad 2026-11-14 Q1 (a); read nadlan.gov.il's terms
-   before `RENT_REFERENCE=nadlan` in production).
+1. **Slice 12 + `0015a`:** once Gilad's spec chat is done with the drafts, run the spec-verifier (Opus/high) on
+   `0012a`, `0012b` and `0015a`, then build every `verified` one whose `depends_on` is met (`0012a` and `0015a` can
+   build in parallel; `0012b` after `0012a`'s PR is open). Ask Gilad whether merging is delegated for Slice 12.
+   Worktrees get the next free ports below; pre-start build sessions in a turn Gilad wrote.
+2. After Slice 12: 13 Launch readiness (deploy, one registrable domain, SMS, real client IPs → OTP lockout per email
+   + network, Gilad 2026-11-14 Q1 (a); read nadlan.gov.il's terms before `RENT_REFERENCE=nadlan` in production).
 3. Rest of the rent estimate waits for homie's own listings after launch (adjustments, comparables, learned model;
    each kept only if the backtest says it is better). The open estimate tab and the seekers' "fair price" badge wait
    for Gilad.
@@ -46,7 +48,8 @@ Last updated: 2026-11-15 (Slice 11 paused after 0011a/b/c/e merged).
 5. Digests still owed to Gilad: Slice 9, 9c, 10. Slice 11's digests are in each archived spec.
 6. FOLLOWUPS worth a sweep before launch: `make screens` failures (~20 states red), the Slice 11 review minors (view
    keys growing with real IPs, worker INFO logs hidden, Redis-down wait on the listing GET), flaky e2e (people /
-   people-market tests failed under Mac load on PR #94, green on the next run), Slice 13 deploy items.
+   people-market tests failed under Mac load on PR #94, green on the next run; `market ac18` sign-in focus on PR
+   #97), Slice 13 deploy items.
 7. Housekeeping: Gilad to mark GitGuardian incident 40007526 a false positive; Gilad's open decisions in FOLLOWUPS
    (person-card score inference, re-apply after decline, 0010l invite expiry).
 
@@ -77,6 +80,10 @@ Last updated: 2026-11-15 (Slice 11 paused after 0011a/b/c/e merged).
   listings created an hour and 10 a day.
 - Rent estimate (PRODUCT.md "Rent price estimate"): a range with confidence and source, never one number, nothing at
   low confidence; official data + homie's own listings only; the engine takes facts, not a listing id.
+- Admin (PRODUCT.md "Admin (Slice 12)", Gilad 2026-11-15): a separate dashboard for Gilad only, built with SQLAdmin
+  in `api/admin/` (own image and deploy; the public API holds no admin code or route), no public address.
+- Protected space (PRODUCT.md, Gilad 2026-11-15, spec `0015a`): a listing states its protected space as a type, not
+  yes/no.
 
 ## Constraints
 - Orchestrator never writes application code; agents never push to `main` (orchestrator docs commits excepted).
@@ -94,6 +101,10 @@ Last updated: 2026-11-15 (Slice 11 paused after 0011a/b/c/e merged).
   (seen on 0011b); never push for it from the orchestrator.
 - New worktree folders are not trusted workspaces: start build sessions in `/Users/giladmeidan/rent_app` and brief
   them to work in the worktree by absolute path.
+- `../rent-app-orch` can be shared with another chat writing specs (seen 2026-11-15: its uncommitted Slice 12 /
+  `0015a` drafts went to `main` inside an orchestrator `git add -A specs`). Stage only the paths you changed.
+- A build session can leave its digest commit local only (seen on 0011d); before deleting a spec branch, check
+  `git log origin/main..spec/NNNN-…` and bring any digest into the archived spec.
 - Adding the `ready-to-merge` label at PR creation starts two `ci` runs; one is cancelled at once. Watchers must skip
   cancelled runs and match the PR's head sha.
 - `/areas` blocks on a *hung* Postgres via pooled connections; why `GET /areas` is slow on CI runners is unconfirmed.
@@ -108,7 +119,7 @@ Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; the shell def
 Commands: see `CLAUDE.md` → Commands and the `##` comments in the `Makefile` (incl. `make rent-import`,
 `make rent-backtest`).
 
-A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5535,
-Redis 6430–6485, API 8050–8105, web 5191–5245: start above those). The main checkout's stack runs on 5434/6380/8000
+A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5540,
+Redis 6430–6490, API 8050–8110, web 5191–5250: start above those). The main checkout's stack runs on 5434/6380/8000
 with no `.env`, so pass `DB_PORT=5434 REDIS_PORT=6380` to `make migrate` there. Web at http://localhost:$WEB_PORT
 (must be `localhost` for CORS). Local login code: newest `.outbox/*.json`.
