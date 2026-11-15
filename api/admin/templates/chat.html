@@ -1,0 +1,37 @@
+{% extends "sqladmin/layout.html" %}
+{# User-written text: autoescaped only (never |safe), dir="auto" for Hebrew in an English page. #}
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Opened because of report {{ page.report_id }}. This open is logged.</h3>
+    </div>
+    <div class="card-body">
+      <h4>Members</h4>
+      <ul>
+        {% for name in page.members %}
+        <li dir="auto">{{ name }}</li>
+        {% endfor %}
+      </ul>
+      {% if page.messages %}
+      <table class="table table-vcenter">
+        <thead>
+          <tr><th>From</th><th>Time (Asia/Jerusalem)</th><th>Message</th></tr>
+        </thead>
+        <tbody>
+          {% for message in page.messages %}
+          <tr>
+            <td dir="auto">{{ message.sender }}</td>
+            <td class="text-nowrap">{{ message.sent_at }}</td>
+            <td dir="auto" style="white-space: pre-wrap">{{ message.body }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No messages in this conversation.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

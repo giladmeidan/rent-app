@@ -52,6 +52,7 @@ from app.redis_client import get_redis  # noqa: E402
 from app.services import listing_views  # noqa: E402
 from app.services.email import get_email_sender  # noqa: E402
 from app.services.photo_store import FilePhotoStore, get_photo_store  # noqa: E402
+from scripts.admin_role import ROLE, apply_admin_role  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
 
 get_settings.cache_clear()
@@ -124,6 +125,17 @@ def db_engine(migrated_db: Engine) -> Iterator[Engine]:
             )
         )
     yield migrated_db
+
+
+@pytest.fixture(scope="session")
+def admin_role(migrated_db: Engine) -> str:
+    """The `homie_admin` role (spec 0012b) applied to the test database; returns its URL there.
+    The role is cluster-wide, so its password is the dev one (the Makefile's ADMIN_DB_PASSWORD):
+    anything else would change it under a running dev admin."""
+    password = os.environ.get("ADMIN_DB_PASSWORD") or "dev-only-admin-db-password"
+    apply_admin_role(TEST_DATABASE_URL, password)
+    url = make_url(TEST_DATABASE_URL).set(username=ROLE, password=password)
+    return url.render_as_string(hide_password=False)
 
 
 @pytest.fixture
