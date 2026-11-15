@@ -1,7 +1,7 @@
 ---
 id: 0013g
 title: Before launch, an expired listing's photos are frozen like its fields, every rate-limited form says when to try again, the worker's own log lines show, and the suspension filters live in a neutral module
-status: verified
+status: in-review
 depends_on: []   # the test-only half of the sweep is 0013d (no shared file)
 reviewers: [code, qa]   # code: a move across four services and the photo routes' refusal order; qa: an API behaviour change (409 on three photo routes) and five UI error states. No security: no auth or data-exposure change, and the upload change is one more refusal before the body is read, the pattern 0012a's security review passed for `listing_removed`, no perf, no ux (error lines only, worded like the existing `rateLimitedIn` lines)
 estimate: 1 coder run   # coder Sonnet/medium: every item copies a pattern already in the code (update_listing's expired check, ApplySection's Retry-After line), and the module move changes no behaviour (Speed rule 6: mechanical)

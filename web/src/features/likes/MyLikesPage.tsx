@@ -10,6 +10,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { retryAfterText } from '../../components/retryAfter';
 import { Skeleton } from '../../components/Skeleton';
 import { fetchAreas } from '../areas/api';
 import type { LifestyleAnswers } from '../lifestyle/keys';
@@ -59,6 +60,18 @@ function PeopleSections({
             <Button variant="primary" to={profileHref('/me/likes', 'about', 'looking')}>
               {t('market.people.toProfile')}
             </Button>
+          }
+        />
+      );
+    }
+    if (people.error instanceof ApiError && people.error.status === 429) {
+      const { retryAfter } = people.error;
+      return (
+        <EmptyState
+          message={
+            retryAfter !== null
+              ? t('people.browseRateLimitedIn', { when: retryAfterText(t, retryAfter) })
+              : t('people.browseRateLimited')
           }
         />
       );

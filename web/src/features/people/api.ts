@@ -31,7 +31,13 @@ export async function likePerson(listingId: string, personId: string): Promise<L
     { params: { path: { listing_id: listingId, person_id: personId } } },
   );
   if (data === undefined) {
-    throw new ApiError('PUT', '/listings/{id}/people/{id}/like', response.status, error);
+    throw new ApiError(
+      'PUT',
+      '/listings/{id}/people/{id}/like',
+      response.status,
+      error,
+      response.headers,
+    );
   }
   return data;
 }
@@ -88,7 +94,8 @@ export async function unlikePersonCard(cardId: string): Promise<void> {
  * `card_required` throws. */
 export async function fetchMyPeopleLikes(): Promise<MyPeopleLikesOut> {
   const { data, error, response } = await api.GET('/me/people-likes');
-  if (data === undefined) throw new ApiError('GET', '/me/people-likes', response.status, error);
+  if (data === undefined)
+    throw new ApiError('GET', '/me/people-likes', response.status, error, response.headers);
   return data;
 }
 

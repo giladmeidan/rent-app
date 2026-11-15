@@ -18,10 +18,10 @@ export const noa: UserOut = {
   listing_cap: 3, // spec 0012a
 };
 
-export const json = (body: unknown, status = 200) =>
+export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
 
 export const empty = (status = 204) => new Response(null, { status });

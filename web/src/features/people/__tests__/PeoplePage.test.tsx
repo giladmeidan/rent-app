@@ -304,6 +304,11 @@ describe('PeoplePage', () => {
     // The card survives these: the alert is inline.
     const inline: { reply: Response; text: string }[] = [
       { reply: json({ detail: 'rate_limited' }, 429), text: he.people.errors.inviteRateLimited },
+      {
+        // ac7_invite_rate_limited_says_when
+        reply: json({ detail: 'rate_limited' }, 429, { 'Retry-After': '300' }),
+        text: 'יותר מדי הזמנות בזמן קצר. אפשר לנסות שוב בעוד 5 דקות.',
+      },
       { reply: json({ detail: 'listing_not_live' }, 409), text: he.people.notLive },
       { reply: json({ detail: 'boom' }, 500), text: he.common.error },
     ];

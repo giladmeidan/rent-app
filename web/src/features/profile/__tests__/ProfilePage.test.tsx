@@ -427,6 +427,23 @@ describe('ProfilePage', () => {
     expect(api.calls(PUT)).toHaveLength(0);
   });
 
+  it('ac5_rate_limited_save_says_when', async () => {
+    const cases: [Record<string, string>, string][] = [
+      [{ 'Retry-After': '7200' }, 'הפרופיל נשמר הרבה פעמים בזמן קצר. אפשר לנסות שוב בעוד שעתיים.'],
+      [{}, he.profile.errors.rateLimited],
+    ];
+    for (const [headers, text] of cases) {
+      renderPage({
+        [PROFILE]: [json(profile())],
+        [PUT]: [json({ detail: 'rate_limited' }, 429, headers)],
+      });
+      await form();
+      save();
+      expect((await screen.findByRole('alert')).textContent).toBe(text);
+      cleanup();
+    }
+  });
+
   it('ac5_server_errors', async () => {
     const msg = 'Input should be less than or equal to 100000';
 

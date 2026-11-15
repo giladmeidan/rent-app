@@ -75,7 +75,7 @@ from app.services.applications import AlreadyAppliedError
 from app.services.auth import _token_hash
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
-from app.services.search import owner_not_suspended
+from app.services.visibility import owner_not_suspended
 
 # The `FlatmatesCount` bound (spec 0007a): at most 7 people share a room's flat with its lister.
 FLATMATES_MAX = 7
