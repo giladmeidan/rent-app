@@ -1,15 +1,15 @@
 ---
 id: 0012a
 title: "A suspended account is signed out and hidden, a listing removed by homie stays off the site, and an account's own listing cap shows in the app"
-status: draft
+status: verified
 depends_on: []
-reviewers: [code, security, qa, ux]   # security: login and session rule; qa: every place a listing or card is shown; ux: the two new states (login, my listings)
-estimate: 1 coder run   # coder Opus/high (auth + migration; Speed rule 6)
+reviewers: [code, security, qa, perf, ux]   # security: login and session rule; qa: every place a listing or card is shown; perf: the search, browse and likes hot paths (Sonnet/medium); ux: the new states (login, my listings, edit page)
+estimate: 1 coder run   # coder Opus/high (auth + migration; Speed rule 6); on the large side
 ---
 
 ## Goal
-After this ships, the public app obeys the three switches Slice 12's admin dashboard (`0012b`) flips, and
-nothing else in the public app changes. PRODUCT.md "Admin (Slice 12)":
+After this ships, the public app obeys the three switches that Slice 12's admin dashboard (`0012b`)
+flips, and nothing else in the public app changes. PRODUCT.md "Admin (Slice 12)":
 - A **suspended** account is signed out at once, cannot sign in, and is told so. Its listings and its
   person card are hidden everywhere. Lifting the suspension brings everything back.
 - A listing **removed by homie** leaves the site. Its owner sees "הוסרה על ידי הומי" and cannot resume,
@@ -24,68 +24,110 @@ schema lands in one migration and `0012b` has none.
 - PRODUCT.md "Admin (Slice 12)" (Gilad, 2026-11-15):
   - the dashboard is a separate app (`0012b`) that writes these columns directly;
   - a suspended user is told "suspended", with no reason, and the suspension can be lifted;
+  - the suspended user's chats, applications and likes stay as they are;
   - a hidden listing reads "removed by homie" to its owner, has resume, renew and edit blocked, and frees
     its cap slot.
-- PRODUCT.md "Trust (MVP)": reports are stored only (0011b); this spec still never hides anything because
-  of a report. Only the admin's action does.
-- `services/search.py` `_public_listings()` is the one visibility rule for listings. People cards have
-  theirs in `market_people._candidate` and `people._shown`. This spec adds one condition to each rule
-  rather than a check per endpoint.
+- PRODUCT.md "Trust (MVP)": reports are stored only (0011b). This spec still never hides anything because
+  of a report; only the admin's action does.
+- Visibility already lives in a few rules, and this spec adds one condition to each rather than a check
+  per endpoint:
+  - `services/search.py` `_public_listings()` for listings;
+  - `market_people._candidate` and `people._shown` for people cards;
+  - `flatmates.shown_people`, `flatmates.preview` and `flatmates.join` for a room's flatmates and invite
+    tokens.
 
 ## Scope
 **In:**
-- Migration `0023_admin_moderation`: the four schema changes below.
-- `api/app/models/user.py` (`suspended_at`), `listing.py` (`removed_at` + CHECK), `report.py`
-  (`resolved_at`), a new `admin_action.py` (`AdminAction`), exported from `app/models/__init__.py`.
-- `api/app/services/auth.py`:
-  - `resolve_session` adds `User.suspended_at IS NULL`: every session of a suspended user stops
-    resolving, so every route answers 401 `unauthenticated`;
-  - `verify_otp` raises a new `AccountSuspendedError` after the code is claimed, for an existing user with
-    `suspended_at` set: no `last_login_at` write, no session;
-  - `routers/auth.py` maps it to **403 `account_suspended`**.
-- `api/app/services/search.py` `_public_listings()`: adds "the owner is not suspended". One `NOT EXISTS`
-  on `users` by primary key, or a join, whichever keeps NF1.
-- `api/app/services/market_people.py` `_candidate` and `api/app/services/people.py` `_shown`: add "the
-  card's user is not suspended". This applies wherever a card is shown or can be liked: market browse,
-  the likes lists, and a room's people page. If any card or like statement does not go through these
-  two, it gets the same condition. The verifier lists them in Blast radius.
-- `api/app/services/listings.py` and `api/app/services/photos.py`: a new `ListingRemovedError` for a
-  listing with `removed_at` set. It is raised by:
-  - `update_listing` (any field, `status` included);
-  - `renew_listing`;
-  - the listing-photo writes (add, delete, reorder).
+- **Migration and models:**
+  - migration `0023_admin_moderation` (Data). It takes the next free number if `0015a`'s migration lands
+    first, with `down_revision` set to `main`'s head at build time;
+  - `api/app/models/user.py` (`suspended_at`), `listing.py` (`removed_at` + CHECK; its docstring's
+    migration list gains this one), `report.py` (`resolved_at`), and a new `admin_action.py`
+    (`AdminAction`), exported from `app/models/__init__.py`.
+- **Sign-in and sessions:**
+  - `api/app/services/auth.py`:
+    - `resolve_session` adds `User.suspended_at IS NULL` and stays one statement. Every session of a
+      suspended user stops resolving, so every route answers 401 `unauthenticated`, and `optional_user`
+      routes treat the caller as a visitor;
+    - `verify_otp` raises a new `AccountSuspendedError` for an existing user with `suspended_at` set. It
+      runs **after** the code is claimed (`_SETTLE_CODE` `del`) and **outside** the `try` whose `except`
+      restores the code, so the code stays consumed. It writes no `last_login_at` and creates no session.
+  - `api/app/routers/auth.py`: maps it to **403 `account_suspended`**. `user_out` (which builds `UserOut`
+    field by field) sets `listing_cap`.
+- **Listing visibility:** `api/app/services/search.py` `_public_listings()` adds "the owner is not
+  suspended" as a `NOT EXISTS (SELECT 1 FROM users WHERE users.id = listings.owner_id AND suspended_at IS
+  NOT NULL)`. It is not a join, so the callers' `FOR KEY SHARE OF listings` locks and FROM lists stay as
+  they are.
+- **People cards:**
+  - `api/app/services/market_people.py` `_candidate` and `api/app/services/people.py` `_shown` add "the
+    card's user is not suspended".
+  - Every card and like statement goes through these two (Blast radius), with **one deliberate
+    exception**: a `match` row in `GET /me/people-likes` (`likes_statement`) stays, as it does for a
+    hidden card today, because the match is the chat's entry and chats stay.
+- **Rooms and invites** (`api/app/services/flatmates.py`):
+  - `shown_people`'s flatmate branch adds `User.suspended_at IS NULL` (`User` is already joined), so a
+    suspended flatmate disappears from a room's page;
+  - `preview` and `join` add "the owner is not suspended" as a `NOT EXISTS` on `users`, so `join`'s
+    `FOR UPDATE` still locks only the listing. They answer 404 `not_found`, as for a disabled token.
+- **Removed listings:** a new `ListingRemovedError` for a listing with `removed_at` set. Every check reads
+  the row its function already locks, so a hide cannot slip between the check and the write. It is raised
+  by:
+  - `api/app/services/listings.py` `update_listing` (any field, `status` included; locked `FOR UPDATE`),
+    checked before `ListingExpiredError`;
+  - `renew_listing` (`FOR UPDATE`), checked before `RenewalNotOpenError`;
+  - `api/app/services/photos.py` `_lock_own_listing` (`FOR NO KEY UPDATE`; add, delete, reorder) and
+    `check_listing_upload` (before the upload body is read).
 
-  It is checked after the owner check and before `ListingExpiredError` / `RenewalNotOpenError`, and
-  nothing is written. The routers map it to **409 `listing_removed`**. `set_closure` (the closure answer)
-  is unchanged.
-- `api/app/schemas/listing.py` `ListingOut` (the owner's view: `GET /me/listings`, the PATCH and renew
-  responses): `removed: bool` (`removed_at IS NOT NULL`).
-- `api/app/schemas/auth.py` `UserOut`: `listing_cap: int`.
-- Web:
-  - `web/src/features/listings/constants.ts`: `LISTING_CAP` is deleted. `MyListingsPage.tsx`,
-    `PreviewStep.tsx` and `useRenewListing.ts` read `listing_cap` from `useMe()`
-    (`features/auth/useMe.ts`).
-  - `MyListingsPage.tsx`: the removed state (UI below).
-  - `EditListingPage.tsx`: refuses a removed listing.
-  - `OtpForm.tsx`: the suspended error.
-  - `web/src/locales/he.json`: the keys below.
+  It always comes after the owner check, and nothing is written. The routers map it to **409
+  `listing_removed`**. The upload route's 409 description lists both `photo_limit` and
+  `listing_removed`. `set_closure` (the closure answer) is unchanged.
+- **Schemas:**
+  - `api/app/schemas/listing.py` `ListingOut` (the owner's view: `GET /me/listings`, the create, PATCH and
+    renew responses; `MyListingOut` inherits it): `removed: bool` (`removed_at IS NOT NULL`);
+  - `api/app/schemas/auth.py` `UserOut`: `listing_cap: int`. `test_auth.py:136`'s exact key set gains it.
+- **Web:**
+  - `web/src/features/listings/constants.ts`: `LISTING_CAP` is deleted. `MyListingsPage.tsx` (the count),
+    `ListingWizard.tsx` / `PreviewStep.tsx` (the cap error) and `useRenewListing.ts::actionErrorText` read
+    `listing_cap` from `useMe()` (`features/auth/useMe.ts`). `actionErrorText` is a plain function, so the
+    cap becomes a parameter that both callers pass.
+  - `ListingWizard.tsx::outcome` today maps every 409 except `listing_expired` to `capReached`. It now maps
+    `listing_removed` to a new `PublishError` `removed` (`PreviewStep.tsx`), shown as
+    `listings.errors.removed`.
+  - `useRenewListing.ts::actionErrorText` maps `listing_removed` to `listings.errors.removed`.
+  - `StatusBadge.tsx`: `ListingState` gains `removed`, returned first by `listingState` when
+    `listing.removed`, with tone `danger`.
+  - `MyListingsPage.tsx`, `EditListingPage.tsx` and `OtpForm.tsx`: the states under UI.
+  - `web/src/locales/he.json`: the keys under UI.
+  - Fixtures:
+    - `features/auth/__tests__/harness.tsx::noa` gains `listing_cap: 3`;
+    - every typed `ListingOut` / `MyListingOut` fixture gains `removed: false`
+      (`features/listings/__tests__/fixtures.ts`, `web/e2e/screens/fixtures-listings.ts` `listing()`, and
+      whatever else `tsc` reports);
+    - the e2e `/me` fixtures are typed as `UserOut`, starting with `OWNER` in
+      `web/e2e/screens/fixtures-listings.ts`. e2e runs only in CI.
 - `make client` regenerates `web/src/api` (two new response fields).
 - `specs/FOLLOWUPS.md`: the 0002b `LISTING_CAP` line is closed.
 
 **Out:**
-- The dashboard, its database role and every write to these columns: `0012b`.
+- The dashboard, its database role and every write to these columns: `0012b`. That includes ending
+  sessions on suspend.
 - Anything a report triggers on its own (PRODUCT.md "Trust (MVP)").
-- A suspended user's past messages, applications, likes and chats. They stay as they are and readable by
-  the other side, and the other side can still send into a chat with them. The suspended user cannot
-  read or answer, since they can't sign in. Revisit if reports show the need (Risks).
+- **A suspended user's past footprint:**
+  - their messages, applications, chats and match rows stay as they are and readable by the other side,
+    who can still send into a chat with them;
+  - the suspended user cannot read or answer, since they cannot sign in;
+  - `applications.list_my_applications`, `applications.list_applicants`, the chat summaries,
+    `flatmates.my_flats` and the geocoding worker are untouched (Blast radius).
 - A reason or contact line in the suspended message: there is no contact channel until Slice 13.
 - Deleting or anonymising an account: the pre-launch privacy pass.
+- `web/src/features/listings/syncPhotos.ts`: it runs only after a PATCH has succeeded, and the PATCH
+  refuses first. A photo 409 in that race counts as one failed photo, like any other failure.
 
 **New dependencies:** none.
 
 ## Data
-Migration `api/alembic/versions/0023_admin_moderation.py`, with a working `downgrade` (drops all four in
-reverse order):
+Migration `api/alembic/versions/0023_admin_moderation.py` (the number may change, see Scope), with a
+working `downgrade` that drops all four in reverse order:
 
 | Table | Change | Rule |
 | --- | --- | --- |
@@ -94,10 +136,22 @@ reverse order):
 | `reports` | `resolved_at timestamptz NULL` | NULL = open. Only the dashboard writes it |
 | `admin_actions` (new) | `id uuid PK default gen_random_uuid()`, `action text NOT NULL`, `target_type text NOT NULL`, `target_id uuid NOT NULL`, `detail text NULL`, `created_at timestamptz NOT NULL default now()` | `ck_admin_actions_action`: `'suspend'`, `'unsuspend'`, `'hide_listing'`, `'unhide_listing'`, `'set_listing_cap'`, `'resolve_reports'`, `'read_chat'`. `ck_admin_actions_target_type`: `'user'`, `'listing'`, `'report'`, `'chat'`. `ck_admin_actions_detail_length`: `char_length(detail) BETWEEN 1 AND 200`. No FK on `target_id` (it points into four tables; the log outlives its target) |
 
-- `admin_actions` has one admin (Gilad), so it has no "who" column. The running public app never reads or
-  writes it, nor `reports.resolved_at`.
-- Backwards-compatible: nullable columns and a new table. Every existing row is valid under the new CHECK
-  (`removed_at` is NULL everywhere).
+**Each action's target in `admin_actions`** (0012b writes them):
+
+| Action | `target_type` | `target_id` | `detail` |
+| --- | --- | --- | --- |
+| `suspend`, `unsuspend` | `user` | the user's id | none |
+| `set_listing_cap` | `user` | the user's id | e.g. "3→10" |
+| `hide_listing`, `unhide_listing` | `listing` | the listing's id | none |
+| `resolve_reports` | `report` | the id of the report it ran on | how many reports it closed |
+| `read_chat` | `chat` | the conversation's id | the report's id |
+
+- `admin_actions` has one admin (Gilad), so it has no "who" column.
+- The running public app never reads or writes `admin_actions` or `reports.resolved_at`.
+- `conftest.py`'s `db_engine` TRUNCATE gains `admin_actions`.
+- Backwards-compatible: nullable columns and a new table. Every existing row is valid under the new CHECK,
+  since `removed_at` is NULL everywhere.
+- `users.listing_cap` already has `ck_users_listing_cap` (0–100); unchanged.
 - As in 0011b, the model builds the CHECK IN-lists from `Literal` types (`AdminActionKind`,
   `AdminTargetType` in `app/models/admin_action.py`). The migration freezes the same texts, and
   autogenerate sees no diff.
@@ -107,122 +161,240 @@ No new endpoint. Changed answers:
 
 | Method | Path | Auth rule | Change |
 | --- | --- | --- | --- |
-| any | any route behind `current_user` / `optional_user` | session cookie | A suspended user's session no longer resolves: 401 `unauthenticated` (or anonymous on `optional_user` routes) |
-| GET | `/me/events` | session cookie | Checked at connect, as today. A stream already open ends within `STREAM_MAX_S` (900 s), and its reconnect gets 401 |
+| any | any route behind `current_user` / `optional_user` | session cookie | A suspended user's session no longer resolves: 401 `unauthenticated`, or a visitor on `optional_user` routes |
+| GET | `/me/events` | session cookie | Checked at connect, as today. A stream already open ends within `STREAM_MAX_S` + `STREAM_JITTER_S` (up to 960 s), and its reconnect gets 401 |
 | POST | `/auth/otp/verify` | none | The right code for a suspended account: **403 `account_suspended`**, no session and no cookie. The code is consumed. A wrong code is still 401 `invalid_code`. `POST /auth/otp/request` is unchanged for a suspended email, so nobody can test whether an email is suspended without its mailbox |
-| GET | `/me` | session cookie | `UserOut.listing_cap: int` |
-| GET | `/me/listings` | session cookie | `ListingOut.removed: bool` |
+| GET | `/me` (and `POST /auth/otp/verify`, `PUT /me/photo`, which return `UserOut`) | session cookie | `UserOut.listing_cap: int` |
+| GET | `/me/listings` (and create, PATCH, renew responses) | session cookie / owner | `ListingOut.removed: bool` |
 | PATCH | `/listings/{id}` | owner | 409 **`listing_removed`** on a removed listing, nothing written (checked before `listing_expired`) |
-| POST | `/listings/{id}/renew` | owner | 409 `listing_removed`, nothing written (before `renewal_not_open`) |
-| POST / DELETE / PUT | `/listings/{id}/photos…` | owner | 409 `listing_removed`, nothing written |
-| GET | `/search`, the map, `/listings/{id}`, market rooms, apply, reports, the people pages | as today | A suspended owner's listings and a suspended person's card are absent or 404, exactly like a paused listing or a hidden card today (`_public_listings()`, `_candidate`, `_shown`) |
+| POST | `/listings/{id}/renew` | owner | 409 `listing_removed`, nothing written (checked before `renewal_not_open`) |
+| POST / DELETE / PUT | `/listings/{id}/photos…` | owner | 409 `listing_removed`, nothing written (the upload checks before reading the body) |
+| GET / POST | `GET /listings` (search, the map's `bbox`, market rooms), `GET /listings/{id}`, `POST /listings/{id}/applications`, `POST /reports`, `GET /people`, `PUT /people/{card_id}/like`, `GET /me/people-likes`, `GET /me/likes`, `GET /listings/{id}/people`, the invite-token preview and join | as today | A suspended owner's listings, a suspended person's card and a suspended flatmate are absent or 404, exactly like a paused listing or a hidden card today. In `GET /me/people-likes`, `match` rows stay |
 
 ## UI
-There are no artboards. The kit and the existing patterns apply.
+There are no artboards, and no new layout. The badge, the hint line and the refusal reuse `StatusBadge`,
+the card's caption line and `PageHeader`, which already use logical properties (RTL).
 
 ### Login (`OtpForm.tsx`, step 2)
 - A 403 `account_suspended` becomes a step-2 error kind `suspended`. It shows in the same alert slot as
-  `failed` (not as a field error on the code, since the code was right), and the code field is cleared.
+  `failed`, not as a field error on the code (the code was right), and the code field is cleared.
 - Key `auth.errors.suspended`: "החשבון הזה הושעה, ולכן אי אפשר להתחבר אליו." (voice: no gendered forms).
 - The signup step behaves the same: an existing suspended email that signs up again reaches the same 403.
+- Other states (idle, sending, wrong code, too many) are unchanged.
 
 ### My listings (`MyListingsPage.tsx`, `ListingRow`)
 - A row with `removed: true`:
-  - shows a status badge `listings.mine.removed` "הוסרה על ידי הומי" where the live, paused and expired
-    badge sits;
-  - shows one line `listings.mine.removedHint` "המודעה הוסרה מהאתר בעקבות בדיקה שלנו, ואי אפשר לפרסם אותה
-    מחדש." under it;
+  - shows the `StatusBadge` state `removed` (`listings.status.removed` "הוסרה על ידי הומי", tone
+    `danger`) where the live, paused and expired badge sits;
+  - shows one caption line `listings.mine.removedHint` "המודעה הוסרה מהאתר בעקבות בדיקה שלנו, ואי אפשר
+    לפרסם אותה מחדש.";
   - has no pause/resume, renew or edit controls and no expiry line;
-  - keeps its applicants link, so the applicants stay readable as on an expired row.
-- The cap count (`listings.mine.count`) and the wizard's cap error (`listings.errors.capReached`) use
-  `me.listing_cap`. While `useMe()` is loading, the count is not rendered, and a 3 is never shown in its
-  place.
+  - keeps its applicants link, the closure question (apartments; `set_closure` is allowed) and the
+    flatmates link (rooms), as a paused row does.
+- `removed` wins over `expired`: a removed listing past its expiry shows the removed badge and hint, never
+  the renew button.
+- Any 409 `listing_removed` on a row action shows `listings.errors.removed` in the row's existing alert
+  (`actionErrorText`).
+- The cap count (`listings.mine.count`) uses `me.listing_cap`. While `useMe()` is loading, the count is not
+  rendered, and a 3 is never shown in its place.
+- Other states (loading, empty, error) are unchanged.
+
+### Wizard (`ListingWizard.tsx` / `PreviewStep.tsx`)
+- The cap error (`listings.errors.capReached`) uses `me.listing_cap`.
+- A 409 `listing_removed` (the edit flow's PATCH) shows `listings.errors.removed`, not the cap error.
 
 ### Edit page (`EditListingPage.tsx`)
-- Opening a removed listing shows `listings.errors.removed` "המודעה הוסרה על ידי הומי ואי אפשר לערוך
-  אותה." with the page's existing back link and no form, in the same layout as the expired-listing
-  refusal.
-- Any 409 `listing_removed` from a mutation (PATCH, renew, photos), for example when the listing was
-  removed while the page was open, shows the same key.
+- Opening a removed listing is checked before the expired refusal. The page is laid out as its not-found
+  state:
+  - `PageHeader` with `listings.errors.removed` "המודעה הוסרה על ידי הומי ואי אפשר לערוך אותה." as its
+    `<h1>`, focused on arrival and used as the tab title;
+  - the back link;
+  - no card, no form and no renew button.
+- A 409 `listing_removed` from the PATCH (the listing was removed while the page was open) shows the same
+  key through `outcome` / `PublishError` `removed`.
 
-i18n keys added: `auth.errors.suspended`, `listings.mine.removed`, `listings.mine.removedHint`,
+i18n keys added: `auth.errors.suspended`, `listings.status.removed`, `listings.mine.removedHint`,
 `listings.errors.removed`.
 
 ## Acceptance criteria
 - [ ] AC1 Given a signed-in user, When `suspended_at` is set on their row, Then their next `GET /me` and
-  `GET /me/listings` answer 401 `unauthenticated`, and an `optional_user` route (`GET /search`) treats
-  them as anonymous — `api/tests/test_moderation.py::test_ac1_suspended_session_stops_resolving`
-- [ ] AC2 Given a suspended account, When the right code is verified, Then 403 `account_suspended`, no
-  `sessions` row, no `Set-Cookie`, `last_login_at` unchanged, and the code cannot be used again. A wrong
-  code is still 401 `invalid_code`, and `POST /auth/otp/request` still answers as for any email —
-  `test_moderation.py::test_ac2_suspended_account_cannot_sign_in`
-- [ ] AC3 Given a suspended owner with a live apartment, a live room and a visible card, When anyone
-  searches, opens the map, opens either listing's page, lists market rooms, applies or reports either
-  listing, browses people, lists likes, or opens the room's people page as its lister, Then neither
-  listing nor the card appears, and the by-id routes answer 404 —
+  `GET /me/listings` answer 401 `unauthenticated`, and `GET /listings` answers as for a visitor (`match`
+  is null on every item) — `api/tests/test_moderation.py::test_ac1_suspended_session_stops_resolving`
+- [ ] AC2 Given a suspended account, When the right code is verified, Then:
+  - it answers 403 `account_suspended`, with no `sessions` row and no `Set-Cookie`;
+  - `last_login_at` is unchanged, and the code cannot be used again;
+  - a wrong code is still 401 `invalid_code`;
+  - `POST /auth/otp/request` still answers as for any email.
+
+  — `test_moderation.py::test_ac2_suspended_account_cannot_sign_in`
+- [ ] AC3 Given a suspended user U, with:
+  - a live apartment and a live room;
+  - a visible card;
+  - a place as a shown flatmate on another owner's live room;
+  - an invite token on their own room;
+  - a mutual match with a person P;
+
+  When anyone does any of the following:
+  - searches (`GET /listings`, with and without `bbox`) or lists market rooms;
+  - opens either listing (`GET /listings/{id}`), applies to it, or reports it;
+  - opens the other owner's room page;
+  - browses people (`GET /people`) or likes U's card;
+  - lists people likes (`GET /me/people-likes`) or invites (`GET /me/likes`);
+  - opens the people page of another lister's live room that U fits;
+  - previews or joins with U's invite token;
+
+  Then neither listing, U's card, nor U as a flatmate appears; the by-id routes, the like, and the token
+  preview and join answer 404. P's `GET /me/people-likes` still holds the `match` row with U —
   `test_moderation.py::test_ac3_suspended_user_hidden_everywhere`
-- [ ] AC4 Given AC3's user, When `suspended_at` is set back to NULL, Then they sign in again, and both
-  listings and the card are back where AC3 checked —
-  `test_moderation.py::test_ac4_lifting_suspension_restores_everything`
-- [ ] AC5 Given a removed listing (`status = 'paused'`, `removed_at` set), When its owner PATCHes a field,
-  PATCHes `status: active`, renews it, or adds, deletes or reorders a photo, Then each answers 409
-  `listing_removed` and the row and photos are unchanged. `PUT /listings/{id}/closure` still works, and
-  `GET /listings/{id}/applicants` still answers 200 —
-  `test_moderation.py::test_ac5_removed_listing_refuses_owner_writes`
+- [ ] AC4 Given AC3's user, When `suspended_at` is set back to NULL, Then they sign in again, and
+  everything AC3 checked is back — `test_moderation.py::test_ac4_lifting_suspension_restores_everything`
+- [ ] AC5 Given a removed listing (`status = 'paused'`, `removed_at` set), When its owner:
+  - PATCHes a field;
+  - PATCHes `status: active`;
+  - renews it;
+  - uploads, deletes or reorders a photo;
+
+  Then each answers 409 `listing_removed` (the upload before reading its body), and the row and photos
+  are unchanged. `PUT /listings/{id}/closure` still works, and `GET /listings/{id}/applicants` still
+  answers 200 — `test_moderation.py::test_ac5_removed_listing_refuses_owner_writes`
 - [ ] AC6 Given AC5's listing, When the owner lists `GET /me/listings` and creates new listings up to
-  their cap, Then the row has `removed: true`, and it takes no cap slot —
+  their cap, Then the row has `removed: true` and takes no cap slot —
   `test_moderation.py::test_ac6_removed_listing_frees_cap`
 - [ ] AC7 Given any listing, When an UPDATE sets `removed_at` with `status = 'active'`, Then the database
   refuses it (`ck_listings_removed_paused`) — `test_moderation.py::test_ac7_removed_listing_never_active`
-- [ ] AC8 Given a user with `listing_cap = 10`, When they call `GET /me` and then create 10 live listings
-  (within 0011c's hourly and daily limits, frozen or patched in the test as `test_listings.py` does), Then
-  `listing_cap` is 10, and the 11th answers 409 `listing_cap_reached` —
-  `test_moderation.py::test_ac8_me_returns_listing_cap`
+- [ ] AC8 Given a user with `listing_cap = 10` and 0011c's create limit raised in the test
+  (`monkeypatch.setattr(limits, "CREATE", limits.Bucket("create", 100, 100))`, as `test_listings.py:188`),
+  When they call `GET /me` and then create 10 live listings, Then `listing_cap` is 10, and the 11th
+  answers 409 `listing_cap_reached` — `test_moderation.py::test_ac8_me_returns_listing_cap`
 - [ ] AC9 Given an `admin_actions` row with an action, target type or detail outside its CHECK, When it is
   inserted, Then it is refused. The migration upgrades and downgrades cleanly, and autogenerate sees no
-  diff — `test_moderation.py::test_ac9_admin_actions_checks`, `api/tests/test_migrations.py` (existing
-  round trip)
+  diff:
+  - `test_moderation.py::test_ac9_admin_actions_checks`;
+  - `api/tests/test_migrations.py::test_ac9_admin_moderation_upgrade_downgrade` (new);
+  - `::test_ac4_autogenerate_sees_no_diff_with_postgis_extensions` (existing).
 - [ ] AC10 Given step 2 of sign-in, When verify answers 403 `account_suspended`, Then the alert shows
   `auth.errors.suspended`, the code field is cleared, and no navigation happens —
   `web/src/features/auth/__tests__/OtpForm.test.tsx::ac10_suspended_account`
-- [ ] AC11 Given my listings with one removed row, When it renders, Then that row shows
-  `listings.mine.removed` and `listings.mine.removedHint`, has no pause, resume, renew or edit control,
-  and keeps the applicants link — `web/src/features/listings/__tests__/MyListingsPage.test.tsx::ac11_removed_row`
+- [ ] AC11 Given my listings with one removed row (also past its expiry), When it renders, Then:
+  - the row shows `listings.status.removed` and `listings.mine.removedHint`;
+  - it has no pause, resume, renew or edit control;
+  - it keeps the applicants link and, for an apartment, the closure question.
+
+  A 409 `listing_removed` on a row action shows `listings.errors.removed` —
+  `web/src/features/listings/__tests__/MyListingsPage.test.tsx::ac11_removed_row`
 - [ ] AC12 Given `GET /me` with `listing_cap: 10`, When my listings and the wizard's cap error render,
-  Then both say 10, and nothing renders a 3 while `/me` is loading —
-  `MyListingsPage.test.tsx::ac12_cap_from_me`, `__tests__/PreviewStep.test.tsx::ac12_cap_from_me`
+  Then both say 10, and nothing renders a 3 while `/me` is loading:
+  - `MyListingsPage.test.tsx::ac12_cap_from_me`;
+  - `__tests__/ListingWizard.test.tsx::ac12_cap_from_me`.
 - [ ] AC13 Given a removed listing, When its edit page opens, or a PATCH there answers 409
-  `listing_removed`, Then `listings.errors.removed` shows and no form is offered —
-  `__tests__/EditListingPage.test.tsx::ac13_removed_listing`
-- [ ] NF1 Search stays within NF2 of 0003a: the `EXPLAIN` of the search statement does not seq-scan
-  `users`, and the existing search timing test still passes —
-  `test_moderation.py::test_nf1_owner_check_uses_pk`, `api/tests/test_search.py` (existing)
+  `listing_removed`, Then `listings.errors.removed` shows (as the focused `<h1>` on open), and no form,
+  card or renew button is offered — `__tests__/EditListingPage.test.tsx::ac13_removed_listing`
+- [ ] NF1 Given the search page statement, When it is EXPLAINed (FORMAT JSON) with `SET LOCAL
+  enable_seqscan = off`, as `test_market_people.py::_explain` does, Then every scan of `users` is an
+  Index or Index Only Scan on `users_pkey` with an Index Cond. `test_market_people.py::test_ac13_statement_counts_and_plan`
+  still passes. The perf reviewer re-measures 0003a's NF2 (each search statement under 50 ms at 10,000
+  live apartments) and writes it into the digest — `test_moderation.py::test_nf1_owner_check_uses_pk`
 - [ ] NF2 No log line carries a suspended user's email. The 403 is logged like other auth errors, with no
   user id — `test_moderation.py::test_nf2_no_email_in_logs` (caplog)
 
 ## Tests to write
-- Unit and integration: `api/tests/test_moderation.py` (AC1–AC9, NF1, NF2), using conftest's
-  `make_owner`, `make_seeker`, `make_card` and `make_pair`, with direct SQL to set `suspended_at` and
-  `removed_at`, since the dashboard is `0012b`.
-- Web vitest: AC10–AC13.
-- E2E: none new. CI's existing suite must stay green (the `LISTING_CAP` removal touches the wizard and my
-  listings).
+- **Unit and integration:** `api/tests/test_moderation.py` (AC1–AC9, NF1, NF2), using conftest's
+  `make_owner`, `make_seeker`, `make_card`, `make_pair` and `make_person_like`, with direct SQL to set
+  `suspended_at` and `removed_at`, since the dashboard is `0012b`. `test_migrations.py` gains the new
+  round trip.
+- **Web vitest:** AC10–AC13, plus the fixture changes in Scope (`noa`, `removed: false`).
+- **E2E:** none new. CI's existing suite must stay green; the `LISTING_CAP` removal touches the wizard and
+  my listings, and the e2e `/me` fixtures gain their type.
 
 ## Blast radius
-The verifier fills this from `graphify affected` for: `resolve_session`, `verify_otp`,
-`_public_listings`, `_candidate`, `_shown`, `update_listing`, `renew_listing`, the photo writes,
-`ListingOut`, `UserOut`, `LISTING_CAP`.
+From `graphify affected` on `main` (5713d57), checked against the code with grep (the graph missed
+`card_user`, `check_listing_upload` and `actionErrorText`'s cap use).
+- `services/auth.py::resolve_session` → `app/auth.py::optional_user` / `current_user` (every signed-in
+  and optional route) and `routers/events.py::_user_id_for` / `stream_user_id` (SSE, at connect). In
+  Scope (AC1). It stays one statement, so the "session" counts in `test_market_people.py::test_ac13_statement_counts_and_plan`
+  and other statement-count tests are unchanged; `test_chat_events.py` only imports it.
+- `services/auth.py::verify_otp` → `routers/auth.py::verify_otp` (the 403, in Scope). Tests `test_auth.py`
+  `verify()`, `test_otp_single_use_under_concurrency`, `test_code_survives_database_failure_at_login`:
+  untouched, as long as the suspended check sits after the claim and **outside** the `try`, whose
+  `except` restores the code (`_RESTORE_CODE`).
+- `search.py::_public_listings` → `_filtered` / `search_listings` (`GET /listings`: search, the map's
+  `bbox`, market rooms), `get_public_listing_with_match` (`GET /listings/{id}`; `applications.apply`
+  locks it `FOR KEY SHARE OF listings`), `public_listing_owner` (`POST /reports`, listing), `liked_rooms`
+  (`GET /me/likes`), `applications.apply` (its `listing_type` subquery), `people._own_room` (the room
+  people routes) and `people.room_person_user` (correlated EXISTS). All inherit the condition with no
+  change of their own; a `NOT EXISTS` keeps the `OF listings` locks and the callers' FROM lists as they
+  are. Not through it, untouched (own or member footprint, like chats): `applications.list_my_applications`,
+  the chat listing summaries, `flatmates.my_flats`, the geocoding worker (`geocoding.py:254`, harmless).
+  `flatmates.preview` / `join` (by invite token, any status): see Verifier finding 1.
+- `market_people._candidate` → `card_user` (`POST /reports`, person), `browse_statement` / `browse`
+  (`GET /people`), `like` (`PUT /people/{card_id}/like`), `likes_statement` / `my_people_likes`
+  (`GET /me/people-likes`, its `mine` and `liked_me` rows). Bypass: `likes_statement`'s `match` rows
+  (the chat-member rule), see finding 2. `test_market_people.py::test_ac13_statement_counts_and_plan`
+  EXPLAINs the browse and likes statements and must still pass.
+- `people._shown` → `list_people` (its snapshot INSERT … SELECT and its page; `GET /listings/{id}/people`),
+  `like_person` (its UPDATE), `room_person_user` (`POST /reports`, room_person). `test_applications.py`
+  `call()` and `test_flatmates.py::test_ac8_join_racing_like_is_never_both` untouched. Not through it:
+  `flatmates.shown_people` (a room page's shown flatmates), finding 1; `applications.list_applicants`
+  and chat members (Out: applications and chats stay).
+- `listings.update_listing` → `routers/listings.py::update_listing` (409 mapping, in Scope).
+  `test_listings.py`'s whole-body comparisons keep passing (`removed` is on both sides).
+- `listings.renew_listing` → `routers/listings.py::renew_listing`; `test_listing_renewal.py` `renew()` /
+  `test_ac7_concurrent_renewals_respect_cap` call it directly: untouched (the check reads the locked row).
+- Photo writes: `photos._lock_own_listing` → `add_listing_photo`, `delete_listing_photo`,
+  `reorder_listing_photos` (POST / DELETE / PUT under `/listings/{id}/photos`); `check_listing_upload` →
+  `routers/photos.py::upload_listing_photo` (the pre-body check). `api/scripts/seed_promo.py::main` calls
+  `add_listing_photo` on fresh listings: untouched. The person photo (`PUT` / `DELETE /me/photo`): untouched.
+- `schemas/listing.py::ListingOut` → `routers/listings.py` create / `my_listings` / update / renew and
+  `MyListingOut` (inherits); `test_geocoding.py`, `test_inbox.py` only import it. Web
+  `features/listings/api.ts::ListingOut` / `MyListingOut`: every typed fixture gains `removed` (tsc
+  covers `src` and `e2e`), finding 4.
+- `schemas/auth.py::UserOut` → `routers/auth.py::user_out` (builds it field by field: add `listing_cap`)
+  → `GET /me`, `POST /auth/otp/verify`, `PUT /me/photo`; `test_auth.py:136` asserts the exact key set
+  (add `listing_cap`); `test_photos.py`, `test_person_photo.py`, `test_market_people.py` `run()` untouched.
+  Web `UserOut`: `features/auth/__tests__/harness.tsx::noa` (typed) and the untyped e2e `/me` fixtures,
+  finding 4.
+- `web/src/features/listings/constants.ts::LISTING_CAP` → `MyListingsPage.tsx` (the count),
+  `PreviewStep.tsx` (the wizard's cap error), `useRenewListing.ts::actionErrorText` (the row's and the
+  edit page's cap error; a plain function, so the cap becomes a parameter). Tests asserting `cap: 3`:
+  `MyListingsPage.test.tsx`, `ListingWizard.test.tsx`, `EditListingPage.test.tsx`,
+  `market/__tests__/MarketMinePage.test.tsx` (pass through the shared `noa`). Other graph hits
+  (`routes.tsx`, `RequireOwner.test.tsx`, `wizard.tsx`, `MarketMinePage.tsx`, `ListingWizard.tsx`) import
+  those modules, not the constant: untouched.
+- Also reached (finding 4): `ListingWizard.tsx::outcome` (every 409 but `listing_expired` reads as
+  `capReached` today), `StatusBadge.tsx::listingState` / `StatusBadge` (callers `MyListingsPage`,
+  `people/RoomInviteHint.tsx` → `MarketPeoplePage`: live-only, unaffected).
+- Models `User`, `Listing`, `Report`, `AdminAction`: nullable columns and a new table; the new CHECK bites
+  only on writes that set `status = 'active'` (`update_listing`'s resume, `renew_listing`), which refuse
+  first. `Listing`'s docstring list of migrations gains 0023. `test_migrations.py` round trip and
+  autogenerate.
 
 ## Risks / open questions
-- **Hiding by rule, not by flag:** the hiding happens inside the three visibility rules, so lifting a
-  suspension restores everything with no undo code. The cost is one extra condition on the search hot
-  path (NF1).
-- **A suspended user's footprint stays:** their chats, applications and likes stay visible to the other
-  side, who can still send into those chats. If reports show that confuses people, a later spec can show
-  "this account was suspended" in those places. This is not a question for now.
-- **Open SSE streams** last up to 15 minutes after a suspension. They only carry "a chat changed"
-  pings, and every fetch they trigger gets 401. This is accepted.
-- **No open product questions:** Gilad decided all three behaviours on 2026-11-15.
+- **Hiding by rule, not by flag:** the hiding happens inside the visibility rules, so lifting a suspension
+  restores everything with no undo code. The cost is one `NOT EXISTS` by primary key on the search,
+  browse and likes paths (NF1, perf reviewer).
+- **A suspended user's footprint stays:** their chats, applications and match rows stay visible to the
+  other side, who can still send into those chats. If reports show that confuses people, a later spec can
+  show "this account was suspended" in those places. This is not a question for now.
+- **Open SSE streams** last up to 960 s after a suspension. They only carry "a chat changed" pings, and
+  every fetch they trigger gets 401. This is accepted.
+- **Old sessions on lifting:** this spec only stops sessions from resolving. Without more, lifting a
+  suspension would revive the account's unexpired sessions (up to 30 days). `0012b`'s Suspend therefore
+  also revokes the user's live sessions (`sessions.revoked_at`, orchestrator 2026-11-15, the safer
+  default), so a lifted account signs in afresh.
+- **Open product questions:** none. Gilad decided all three behaviours on 2026-11-15.
+
+## Verifier notes
+One round (2026-11-15, against `main` 5713d57). The verifier found 8 issues, and the orchestrator applied
+all of them to the text above:
+1. flatmates and invite tokens added to the hiding;
+2. the `match`-row exception made explicit;
+3. `perf` added, and NF1 made a plan check;
+4. the files Scope missed (`user_out`, the photo lock points, `outcome`, `actionErrorText`, `StatusBadge`,
+   fixtures);
+5. the removed row and edit-page states;
+6. real routes and test names;
+7. the admin log targets and the migration number;
+8. the stream timing and the old-sessions risk.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
