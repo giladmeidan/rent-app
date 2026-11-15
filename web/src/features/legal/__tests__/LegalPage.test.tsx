@@ -82,4 +82,19 @@ describe('LegalPage', () => {
     await visit('/privacy#%E0');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.legal.privacy.title);
   });
+
+  it('ac12_privacy_states_retention_periods', async () => {
+    await visit('/privacy');
+    const page = document.body.textContent ?? '';
+    // Spec 0013h: every kind of data has a period; none is kept without limit.
+    expect(page).not.toContain('בלי הגבלת זמן');
+    const { s1, s5, s6 } = he.legal.privacy;
+    for (const line of [s1.i13, ...Object.values(s5), ...Object.values(s6)]) {
+      expect(line).not.toContain('[');
+    }
+    for (const period of ['12 חודשים', '24 חודשים', '3 שנים', '5 שנים', '30 יום']) {
+      expect(page).toContain(period);
+    }
+    expect(page).toContain(s5.i9);
+  });
 });

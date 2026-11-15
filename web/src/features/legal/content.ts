@@ -188,6 +188,7 @@ export function privacyDoc(t: TFunction, email: string): LegalDoc {
               t('legal.privacy.s5.i9', { email }),
               t('legal.privacy.s5.i10', { email }),
               t('legal.privacy.s5.i11', { email }),
+              t('legal.privacy.s5.i12', { email }),
             ],
           },
         ],
