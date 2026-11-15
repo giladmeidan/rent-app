@@ -15,6 +15,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -969,3 +970,35 @@ def test_nf2_no_pii_in_logs(
         line = record.getMessage()
         assert U_EMAIL not in line.lower(), line
         assert U_NAME not in line, line
+
+
+# --- spec 0013h AC1 ----------------------------------------------------------------------------
+
+
+def test_ac1_listing_attributes_cleared(
+    client: TestClient, db_engine: Engine, photo_store: FilePhotoStore, gush_dan: uuid.UUID
+) -> None:
+    # Spec 0013h: the flatmates' answers and ages, their count and the floor go at the deletion;
+    # the facts the stats and the open threads need stay.
+    u = make_owner(db_engine, U_EMAIL)
+    room = make_listing(
+        db_engine,
+        u,
+        gush_dan,
+        listing_type="room",
+        flatmates_count=2,
+        flatmate_ages=[24, 31],
+        lifestyle={"cleanliness": 3, "night": 1},
+        floor=3,
+        total_floors=5,
+    )
+
+    _deleted(client, db_engine, u)
+
+    row = _rows(
+        db_engine,
+        "SELECT city, street, price_ils, rooms, lifestyle, flatmate_ages, flatmates_count, floor,"
+        " total_floors FROM listings WHERE id = :id",
+        id=room,
+    )[0]
+    assert tuple(row) == ("גבעתיים", "כצנלסון", 7200, Decimal("3.5"), {}, [], None, None, None)

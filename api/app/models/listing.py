@@ -1,7 +1,7 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
 Every CHECK, FK, unique constraint and index here matches migrations 0003, 0004, 0005, 0007, 0009,
-0010, 0012, 0016, 0020, 0023 and 0024 exactly (autogenerate must see no diff). A listing is
+0010, 0012, 0016, 0020, 0023, 0024 and 0027 exactly (autogenerate must see no diff). A listing is
 **live** while `status = 'active' AND expires_at > now()`.
 
 Room fields (spec 0007a): `gender_preference` (who the room is for), `flatmates_count` (people
@@ -190,7 +190,8 @@ class Listing(Base):
     # Street name only; no house number is collected.
     street: Mapped[str] = mapped_column(Text, nullable=False)
     rooms: Mapped[Decimal] = mapped_column(Numeric(3, 1), nullable=False)
-    floor: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    # NULL only on a deleted owner's listing (0013h).
+    floor: Mapped[int | None] = mapped_column(SmallInteger)
     total_floors: Mapped[int | None] = mapped_column(SmallInteger)
     size_sqm: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     price_ils: Mapped[int] = mapped_column(Integer, nullable=False)  # monthly
