@@ -178,11 +178,10 @@ runs `make e2e`. `tsc` (in `make lint`) type-checks `web/e2e/`.
 
 ## Risks / open questions
 No open product question.
-- **Open (coder, 2026-11-15): six shards do not meet AC9's "at most 8".** `--list --shard=N/6` puts 4, 7, 2, 8,
-  3 and **9** codes on shards 1–6 (6/6: `people-market` 2, `people` 2, `photos` 2, `reports` 2, `search` 1).
-  9 fits the limit of 10 (the 429s stop) but leaves 1 spare, not 2. Seven shards: 4/7 holds 10 (no spare).
-  Eight shards: at most 7 (2/8 and 7/8). The branch sets `E2E_SHARDS ?= 6` (the orchestrator's choice) with
-  the real count in the `shortcut:` comment; `?= 8` is the one-line change if AC9's bound wins.
+- **Decided (orchestrator, 2026-11-15): eight shards.** `--list --shard=N/6` put 4, 7, 2, 8, 3 and 9 codes on
+  shards 1–6 (1 spare, not AC9's 2); seven shards put 10 on 4/7. `E2E_SHARDS ?= 8`: at most 7 codes (2/8 and
+  7/8), 3 spare; 6/8 is empty (map.spec fills 5/8), which Playwright allows (it counts tests before sharding).
+  AC9's cap of 8 stays.
 - **Blind e2e changes.** The house rule (no local e2e) means the coder cannot run the changed tests before the
   push. Two things lower the risk: the helpers are small, and each test keeps its assertions. If CI fails on a
   changed test, the one allowed fix push (rule 7) fixes it; the traces are uploaded on failure
