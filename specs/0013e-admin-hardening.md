@@ -1,7 +1,7 @@
 ---
 id: 0013e
 title: "Gilad's admin login lives in Postgres: logging out ends the session even for a copied cookie, the wrong-password lock survives restarts, and every admin write needs a browser's same-origin proof"
-status: verified
+status: in-review
 depends_on: []   # builds beside 0013b (public API limits) and 0013c (account deletion); see Risks for the migration number
 reviewers: [code, security, qa]   # security: admin authentication, a new table with grants; qa: login, lock and write refusals change behaviour, AC6–AC8 are 0012b's qa edges; no ux: SQLAdmin's own login page, unchanged
 estimate: 1 coder run   # coder Opus/high (auth + migration, Speed rule 6)
