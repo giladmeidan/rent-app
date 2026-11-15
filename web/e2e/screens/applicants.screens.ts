@@ -117,6 +117,7 @@ const profile = (overrides: Partial<NonNullable<ApplicantOut['profile']>> = {}) 
   smoker: false,
   contract_months: 24 as const,
   parking_needed: 1,
+  shelter_needed: 'any' as const,
   ...overrides,
 });
 

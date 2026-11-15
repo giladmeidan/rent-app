@@ -12,6 +12,7 @@ import {
   type Household,
   type SeekerProfileIn,
   type SeekerProfileOut,
+  type ShelterNeeded,
 } from './api';
 
 /** The client's latest move-in date. The API allows `today + 365` in UTC; the client's today is
@@ -45,6 +46,7 @@ export type ProfileForm = {
   smoker: boolean;
   contract_months: ContractMonths | null;
   parking_needed: number;
+  shelter_needed: ShelterNeeded;
   /** The "what I am looking for" part's switch (0010c). Off, its 7 fields go as `null` (PUT
    * replaces, so the server clears them); what was typed stays in memory. */
   looking: boolean;
@@ -72,6 +74,7 @@ export const emptyProfileForm: ProfileForm = {
   smoker: false,
   contract_months: null,
   parking_needed: 0,
+  shelter_needed: 'any',
   looking: true,
   personal: false,
   gender: null,
@@ -96,6 +99,7 @@ export function formFromProfile(profile: SeekerProfileOut): ProfileForm {
         smoker: profile.smoker,
         contract_months: profile.contract_months,
         parking_needed: profile.parking_needed,
+        shelter_needed: profile.shelter_needed,
       }
     : {
         budget_max_ils: emptyProfileForm.budget_max_ils,
@@ -107,6 +111,7 @@ export function formFromProfile(profile: SeekerProfileOut): ProfileForm {
         smoker: emptyProfileForm.smoker,
         contract_months: emptyProfileForm.contract_months,
         parking_needed: emptyProfileForm.parking_needed,
+        shelter_needed: emptyProfileForm.shelter_needed,
       };
   return {
     ...looking,
@@ -262,6 +267,7 @@ export function toProfileIn(form: ProfileForm, areas: readonly { id: string }[])
       smoker: form.smoker,
       contract_months: form.contract_months,
       parking_needed: form.parking_needed,
+      shelter_needed: form.shelter_needed,
     };
   } else {
     looking = {
@@ -274,6 +280,7 @@ export function toProfileIn(form: ProfileForm, areas: readonly { id: string }[])
       smoker: null,
       contract_months: null,
       parking_needed: 0,
+      shelter_needed: 'any',
     };
   }
   let personal: Pick<SeekerProfileIn, 'gender' | 'birth_year' | 'lifestyle' | 'about_me'>;

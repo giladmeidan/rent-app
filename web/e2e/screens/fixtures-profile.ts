@@ -33,6 +33,7 @@ export const PROFILE: SeekerProfileOut = {
   smoker: false,
   contract_months: 24,
   parking_needed: 1,
+  shelter_needed: 'any',
   gender: null,
   birth_year: null,
   flatmate_gender: 'any',

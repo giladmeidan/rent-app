@@ -51,6 +51,7 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
       parking_spots: 1,
       furnished: 'partial',
       pets_allowed: true,
+      shelter: 'none', // required since 0015b
       arnona_ils: null,
       vaad_ils: null,
       description: null,

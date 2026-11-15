@@ -122,6 +122,7 @@ export const FIELD_ORDER = [
   'size_sqm',
   'price_ils',
   'available_from',
+  'shelter',
   'parking_spots',
   'arnona_ils',
   'vaad_ils',
@@ -141,6 +142,7 @@ export type FieldError =
   | { key: 'listings.errors.tooLong'; max: number }
   | { key: 'listings.errors.dateRange' }
   | { key: 'listings.errors.households' }
+  | { key: 'listings.errors.shelterRequired' }
   /** The API rejected the field (a 422 naming it); its English `msg` is never shown. */
   | { key: 'listings.errors.invalid' };
 
@@ -261,6 +263,7 @@ export function validate(form: ListingForm, today: string): FieldErrors {
     size_sqm: integer(form.size_sqm, LIMITS.size_sqm),
     price_ils: integer(form.price_ils, LIMITS.price_ils),
     available_from: day(form.available_from, today),
+    shelter: form.shelter === '' ? { key: 'listings.errors.shelterRequired' } : undefined,
     parking_spots: integer(form.parking_spots, LIMITS.parking_spots),
     arnona_ils: integer(form.arnona_ils, LIMITS.arnona_ils, true),
     vaad_ils: integer(form.vaad_ils, LIMITS.vaad_ils, true),

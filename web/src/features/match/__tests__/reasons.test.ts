@@ -334,6 +334,62 @@ const lifestyleRows: Row[] = [
     reason: 'אורח חיים שונה',
     short: 'אורח חיים שונה',
   },
+  // Spec 0015b: the protected space. A `mamad` seeker on a ממ״ק / מקלט flat gets "אין ממ״ד",
+  // never "אין מרחב מוגן".
+  {
+    name: 'shelter agree, no need (agreeNotNeeded)',
+    criterion: 'shelter',
+    kind: 'agree',
+    listing: { shelter: 'none' },
+    profile: { shelter_needed: 'any' },
+    reason: 'לא ביקשת מרחב מוגן',
+    short: 'מרחב מוגן לא נדרש',
+  },
+  {
+    name: 'shelter agree, protected on a מקלט (agree)',
+    criterion: 'shelter',
+    kind: 'agree',
+    listing: { shelter: 'building' },
+    profile: { shelter_needed: 'protected' },
+    reason: 'יש מרחב מוגן כפי שביקשת',
+    short: 'מרחב מוגן',
+  },
+  {
+    name: 'shelter agree, mamad (agreeMamad)',
+    criterion: 'shelter',
+    kind: 'agree',
+    listing: { shelter: 'mamad' },
+    profile: { shelter_needed: 'mamad' },
+    reason: 'יש ממ״ד בדירה כפי שביקשת',
+    short: 'מרחב מוגן',
+  },
+  {
+    name: 'shelter differ, protected on none (differ)',
+    criterion: 'shelter',
+    kind: 'differ',
+    listing: { shelter: 'none' },
+    profile: { shelter_needed: 'protected' },
+    reason: 'ביקשת מרחב מוגן — בדירה אין',
+    short: 'אין מרחב מוגן',
+  },
+  {
+    name: 'shelter differ, mamad on a ממ״ק (differMamad)',
+    criterion: 'shelter',
+    kind: 'differ',
+    listing: { shelter: 'mamak' },
+    profile: { shelter_needed: 'mamad' },
+    reason: 'ביקשת ממ״ד בדירה — אין',
+    short: 'אין ממ״ד',
+  },
+  {
+    name: 'shelter differ, not said (differUnknown)',
+    criterion: 'shelter',
+    kind: 'differ',
+    listing: { shelter: null },
+    profile: { shelter_needed: 'protected' },
+    reason: 'ביקשת מרחב מוגן — המפרסם לא ציין',
+    short: 'מרחב מוגן לא צוין',
+  },
 ];
 
 // Without the profile (pending or failed), only the `move_in` differ chip is left out.
@@ -354,6 +410,12 @@ const withoutProfile: [Criterion, ReasonKind, Partial<ListingPublic>, string | n
   ['pets', 'differ', {}, 'ללא חיות מחמד'],
   ['lifestyle', 'agree', { listing_type: 'room' }, 'אורח חיים דומה'],
   ['lifestyle', 'differ', { listing_type: 'room' }, 'אורח חיים שונה'],
+  // Spec 0015b: read from the listing alone.
+  ['shelter', 'agree', { shelter: 'mamak' }, 'מרחב מוגן'],
+  ['shelter', 'agree', { shelter: 'none' }, 'מרחב מוגן לא נדרש'],
+  ['shelter', 'differ', { shelter: 'none' }, 'אין מרחב מוגן'],
+  ['shelter', 'differ', { shelter: 'building' }, 'אין ממ״ד'],
+  ['shelter', 'differ', { shelter: null }, 'מרחב מוגן לא צוין'],
 ];
 
 type OwnerRow = {
@@ -590,6 +652,47 @@ const ownerRows: OwnerRow[] = [
     reason: 'עם חיית מחמד',
     short: 'עם חיית מחמד',
   },
+  // Spec 0015b: `{{shelter}}` is "מרחב מוגן" or "ממ״ד".
+  {
+    name: 'shelter agree, no need (agreeNone)',
+    criterion: 'shelter',
+    kind: 'agree',
+    profile: { shelter_needed: 'any' },
+    reason: 'לא צריכים מרחב מוגן',
+    short: 'מרחב מוגן לא נדרש',
+  },
+  {
+    name: 'shelter agree, protected',
+    criterion: 'shelter',
+    kind: 'agree',
+    profile: { shelter_needed: 'protected' },
+    reason: 'צריכים מרחב מוגן — יש',
+    short: 'מרחב מוגן',
+  },
+  {
+    name: 'shelter agree, mamad',
+    criterion: 'shelter',
+    kind: 'agree',
+    profile: { shelter_needed: 'mamad' },
+    reason: 'צריכים ממ״ד — יש',
+    short: 'מרחב מוגן',
+  },
+  {
+    name: 'shelter differ, protected',
+    criterion: 'shelter',
+    kind: 'differ',
+    profile: { shelter_needed: 'protected' },
+    reason: 'ביקשו מרחב מוגן, בדירה אין',
+    short: 'אין מרחב מוגן',
+  },
+  {
+    name: 'shelter differ, mamad (differMamad chip)',
+    criterion: 'shelter',
+    kind: 'differ',
+    profile: { shelter_needed: 'mamad' },
+    reason: 'ביקשו ממ״ד, בדירה אין',
+    short: 'אין ממ״ד',
+  },
 ];
 
 describe('reasons', () => {
@@ -657,6 +760,7 @@ describe('reasons', () => {
       'parking',
       'smoking',
       'pets',
+      'shelter',
     ];
     for (const criterion of criteria) {
       for (const kind of ['agree', 'differ'] as const) {
@@ -680,6 +784,7 @@ describe('people reasons', () => {
       'parking',
       'smoking',
       'pets',
+      'shelter',
       'lifestyle',
     ];
     const person = { move_in_date: inDays(30) };
@@ -710,6 +815,15 @@ describe('people reasons', () => {
       'הם לא מתאימים לכללי העישון בדירה',
     );
     expect(personReason('pets', 'agree', person, i18n.t)).toBe('הם מתאימים לכללי חיות המחמד בדירה');
+    // Spec 0015b: fit / no fit only, like parking.
+    expect(personReason('shelter', 'agree', person, i18n.t)).toBe(
+      'מבחינת מרחב מוגן, הדירה מתאימה להם',
+    );
+    expect(personReason('shelter', 'differ', person, i18n.t)).toBe(
+      'הם צריכים מרחב מוגן שאין בדירה',
+    );
+    expect(personShort('shelter', 'agree', person, i18n.t)).toBe('מרחב מוגן: מתאים');
+    expect(personShort('shelter', 'differ', person, i18n.t)).toBe('מרחב מוגן: לא מתאים');
     // A stored move-in that has passed means today, as everywhere.
     expect(personReason('move_in', 'agree', { move_in_date: inDays(-5) }, i18n.t)).toBe(
       i18n.t('match.owner.move_in.agree', { date: formatDate(todayInIsrael()) }),

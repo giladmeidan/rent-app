@@ -15,7 +15,7 @@ export const POSTERS: readonly Poster[] = ['lives_here', 'leaving', 'landlord'];
 /** An apartment's condition (0014b), in the order the wizard shows them (before "לא לציין"). */
 export const CONDITIONS: readonly Condition[] = ['new', 'renovated', 'good', 'needs_work'];
 
-/** The flat's protected space (0015a), in the order the wizard shows them (before "לא לציין"). */
+/** The flat's protected space (0015a), in the order the wizard shows them (one required, 0015b). */
 export const SHELTERS: readonly Shelter[] = ['mamad', 'mamak', 'building', 'none'];
 
 /** What happened to a listing that is not live (0014b), in the order the dialog shows them. */

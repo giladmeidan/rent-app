@@ -51,7 +51,7 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     balcony: null,
     bills_included: null,
     poster: null,
-    shelter: null, // spec 0015a: the flat's protected space
+    shelter: 'none', // spec 0015a: the flat's protected space; required since 0015b
     air_conditioning: null, // spec 0014b: the apartment facts
     condition: null,
     created_at: '2026-11-01T10:00:00Z',

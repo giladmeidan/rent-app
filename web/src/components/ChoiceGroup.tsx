@@ -17,6 +17,8 @@ type Props<T extends string | number> = {
   wrap?: boolean;
   /** One option per row, each the full width, its text at the inline start (long labels). */
   stacked?: boolean;
+  /** The first radio's `id`, for a caller that moves focus to the group (a field error's target). */
+  id?: string;
 };
 
 /** The shared shape and states of an option's label, with its alignment. */
@@ -51,21 +53,24 @@ export function ChoiceGroup<T extends string | number>({
   error,
   wrap = false,
   stacked = false,
+  id: firstId,
 }: Props<T>) {
   const id = useId();
   const errorId = `${id}-error`;
+  const optionId = (index: number, value: T) =>
+    index === 0 && firstId !== undefined ? firstId : `${id}-${String(value)}`;
 
   return (
     <fieldset className="flex flex-col">
       <legend className="mb-2 text-label text-ink">{legend}</legend>
       <div className={cx('flex gap-2', stacked ? 'flex-col' : wrap && 'flex-wrap')}>
-        {options.map((option) => (
+        {options.map((option, index) => (
           <div
             key={option.value}
             className={cx('flex', !stacked && (wrap ? 'flex-auto' : 'flex-1'))}
           >
             <input
-              id={`${id}-${String(option.value)}`}
+              id={optionId(index, option.value)}
               type="radio"
               name={name}
               value={option.value}
@@ -76,7 +81,7 @@ export function ChoiceGroup<T extends string | number>({
               className="peer sr-only"
             />
             <label
-              htmlFor={`${id}-${String(option.value)}`}
+              htmlFor={optionId(index, option.value)}
               className={stacked ? stackedSegment : choiceSegment}
             >
               {option.label}

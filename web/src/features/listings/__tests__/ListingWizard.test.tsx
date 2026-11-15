@@ -15,7 +15,7 @@ import {
   testQueryClient,
 } from '../../auth/__tests__/harness';
 import { ME_KEY } from '../../auth/useMe';
-import type { GenderPreference, Household, ListingOut, PhotoOut } from '../api';
+import type { GenderPreference, Household, ListingOut, PhotoOut, Shelter } from '../api';
 import { EditListingPage } from '../EditListingPage';
 import { ListingWizard } from '../ListingWizard';
 import { MarketMinePage } from '../../market/MarketMinePage';
@@ -91,8 +91,8 @@ const expectedBody = {
   flatmates_count: null,
   flatmate_ages: [] as number[],
   lifestyle: {},
-  // Spec 0015a: the flat's protected space, not said.
-  shelter: null,
+  // Spec 0015a: the flat's protected space; `fillValidDetails` picks "אין" (required since 0015b).
+  shelter: 'none' as Shelter,
   // Spec 0014b: an apartment's three facts, not said.
   balcony: null,
   air_conditioning: null,
