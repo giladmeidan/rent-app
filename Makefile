@@ -161,9 +161,10 @@ i18n-check: web/node_modules/.modules.yaml
 ## A shard's failed tests run once more, after the keys are cleared again (so the retry's sign-ups fit);
 ## a shard that passes only then prints a "Flaky e2e" warning (an annotation in CI) and does not fail.
 ## Each shard keeps its own web/test-results/shard-N (and shard-N-retry) with the failed tests' traces.
-# shortcut: 4 shards (E2E_SHARDS) fit ~33 sign-ups per 15 min (3 stopped fitting at 28 tests, PR #67:
-# Playwright moved inbox.spec.ts into shard 1, its 11th code); add a shard or an env override when the suite outgrows it
-E2E_SHARDS ?= 4
+# shortcut: 6 shards (E2E_SHARDS); the largest shard requests 9 codes (6/6: people-market, people, photos,
+# reports, search), 1 under the limit (4 shards put 12 on shard 4: 429s, spec 0013d). Recount with
+# `playwright test --list --shard=N/6` when a spec adds sign-ups; add a shard when one passes 10
+E2E_SHARDS ?= 6
 RL_FLUSH = $(COMPOSE) exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS',ARGV[1])) do redis.call('DEL',k) end return 0" 0 'rl:*'
 e2e: web/node_modules/.modules.yaml
 	$(PNPM) exec playwright install --with-deps chromium
