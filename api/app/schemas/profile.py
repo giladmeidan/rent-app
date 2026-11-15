@@ -11,7 +11,8 @@ bounds). Spec 0010c splits the profile in two independent parts, either alone or
   and `about_me` (plain text, 1-300 characters, 0008a); none of them without a `gender`;
 - **the looking part**: the 7 housing fields (`budget_max_ils`, `move_in_date`, `area_ids`,
   `household`, `has_pets`, `smoker`, `contract_months`), sent together or all None, plus
-  `move_in_flexible`, `parking_needed` and `flatmate_gender` (which also needs `gender`).
+  `move_in_flexible`, `parking_needed`, `shelter_needed` (0015b) and `flatmate_gender` (which also
+  needs `gender`).
 `people_visible` (0008a: opt in to people browse) needs both parts. Personal data: no message
 names a sent value."""
 
@@ -124,6 +125,8 @@ AreaIds = Annotated[
     AfterValidator(_distinct_area_ids),
 ]
 ParkingNeeded = Annotated[int, Field(ge=0, le=2)]
+# Spec 0015b: no preference / any protected space (ממ״ד, ממ״ק or מקלט) / a ממ״ד in the flat.
+ShelterNeeded = Literal["any", "protected", "mamad"]
 BirthYear = Annotated[int, AfterValidator(_adult_birth_year)]
 
 
@@ -166,6 +169,8 @@ class SeekerProfileIn(BaseModel):
     smoker: bool | None = None
     contract_months: ContractMonths | None = None  # the length the seeker wants
     parking_needed: ParkingNeeded = 0
+    # A factory for the same reason as `flatmate_gender` below.
+    shelter_needed: ShelterNeeded = Field(default_factory=lambda: "any")
     # The personal part (spec 0007a's room section), all optional: omitting it clears it (PUT
     # replaces). Factories, not plain defaults: a JSON-schema `default` makes the generated web
     # type require the key.
@@ -199,12 +204,13 @@ class SeekerProfileIn(BaseModel):
         if not has_looking and (
             self.move_in_flexible
             or self.parking_needed != 0
+            or self.shelter_needed != "any"
             or self.flatmate_gender != "any"
             or self.people_visible
         ):
             raise ValueError(
-                "move_in_flexible, parking_needed, flatmate_gender and people_visible need the"
-                " looking part"
+                "move_in_flexible, parking_needed, shelter_needed, flatmate_gender and"
+                " people_visible need the looking part"
             )
         if self.gender is None and (
             self.birth_year is not None
@@ -238,6 +244,7 @@ class SeekerProfileOut(BaseModel):
     smoker: bool | None
     contract_months: ContractMonths | None
     parking_needed: int
+    shelter_needed: ShelterNeeded
     gender: SeekerGender | None
     birth_year: int | None
     flatmate_gender: GenderPreference

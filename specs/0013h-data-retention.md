@@ -47,7 +47,7 @@ review of 2026-11-15 and PRODUCT.md "Retention" (Gilad, 2026-11-15).
    listing CHECK passes (`ck_listings_flatmate_ages`: an empty array fits a NULL count;
    `ck_listings_room_fields` holds on an apartment). Kept for the stats and the open threads: city, area,
    street, rooms, size, price, listing type, the flat facts. The module docstring and step 3's comment say so.
-2. **Migration and model:** `api/alembic/versions/0027_retention.py` and `api/app/models/listing.py`:
+2. **Migration and model:** `api/alembic/versions/0028_retention.py` and `api/app/models/listing.py`:
    `listings.floor` **DROP NOT NULL** (it is NOT NULL since 0003, so scope 1 needs it). See Data.
 3. `services/retention.py` (new): one function per rule below, each a single set-based `DELETE` or `UPDATE`
    with its period as a module constant, returning the row count. `purge_expired(db)` runs them **in this
@@ -124,8 +124,8 @@ commit; not this coder's).
 **New dependencies:** none.
 
 ## Data
-Migration `api/alembic/versions/0027_retention.py` (`down_revision` `0026_account_deletion`; 0015b may
-claim 0027 too: the second to merge re-points its `down_revision`):
+Migration `api/alembic/versions/0028_retention.py` (revision `0028`, `down_revision` `0027`: 0015b merged
+first as `0027_shelter_needed`, so this one was re-pointed):
 - **upgrade:** `ALTER TABLE listings ALTER COLUMN floor DROP NOT NULL`. `ck_listings_floor` (`BETWEEN`) and
   `ck_listings_total_floors` (`total_floors IS NULL OR …`) pass on NULL, unchanged.
 - **downgrade:** `UPDATE listings SET floor = 0 WHERE floor IS NULL` (only deleted owners' listings, never
@@ -187,8 +187,8 @@ is drafted by the coder from this spec; Gilad approves it in the digest (PRODUCT
   application (R5) that an unresolved report targets, directly or through the listing's chat or
   application, stay past their period; after the report is resolved the next run deletes them —
   `test_retention.py::test_ac13_unresolved_report_keeps_target`
-- [ ] AC14 Migration 0027 upgrades and downgrades (a NULL floor becomes 0 on downgrade) and autogenerate sees
-  no diff — `api/tests/test_migrations.py::test_0027_floor_nullable_roundtrip` (the existing
+- [ ] AC14 Migration 0028 upgrades and downgrades (a NULL floor becomes 0 on downgrade) and autogenerate sees
+  no diff — `api/tests/test_migrations.py::test_0028_floor_nullable_roundtrip` (the existing
   `test_ac4_autogenerate_sees_no_diff_with_postgis_extensions` stays green)
 
 ## Tests to write

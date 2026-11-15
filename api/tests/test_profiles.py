@@ -28,6 +28,7 @@ PROFILE_KEYS = {
     "smoker",
     "contract_months",
     "parking_needed",
+    "shelter_needed",  # 0015b
     "gender",
     "birth_year",
     "flatmate_gender",
@@ -65,6 +66,7 @@ def _p(area_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
         "smoker": False,
         "contract_months": 24,
         "parking_needed": 1,
+        "shelter_needed": "any",  # 0015b
     }
     body.update(overrides)
     return body
@@ -475,6 +477,7 @@ LOOKING_OFF: dict[str, Any] = {
     "smoker": None,
     "contract_months": None,
     "parking_needed": 0,
+    "shelter_needed": "any",
     "flatmate_gender": "any",
     "people_visible": False,
 }
@@ -504,7 +507,8 @@ def _row(engine: Engine) -> dict[str, Any]:
         row = conn.execute(
             text(
                 "SELECT budget_max_ils, move_in_date, move_in_flexible, area_ids, household,"
-                " has_pets, smoker, contract_months, parking_needed, gender, birth_year,"
+                " has_pets, smoker, contract_months, parking_needed, shelter_needed, gender,"
+                " birth_year,"
                 " flatmate_gender, lifestyle, people_visible, about_me FROM seeker_profiles"
             )
         ).one()
@@ -671,3 +675,44 @@ def test_ac8_any_account(
     assert both.status_code == 200, both.text
     assert both.json()["people_visible"] is True
     assert _profile_count(db_engine) == 1
+
+
+# --- 0015b: the protected-space preference -------------------------------------------------------
+
+
+def test_ac1_shelter_needed_round_trip(
+    seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    response = _put(seeker, _p(gush_dan, shelter_needed="mamad"))
+    assert response.status_code == 200, response.text
+    assert response.json()["shelter_needed"] == "mamad"
+    assert seeker.get("/me/profile").json()["shelter_needed"] == "mamad"
+
+    # Without the field (today's clients): `any`.
+    response = _put(seeker, _without(_p(gush_dan), "shelter_needed"))
+    assert response.status_code == 200, response.text
+    assert seeker.get("/me/profile").json()["shelter_needed"] == "any"
+
+    response = _put(seeker, _p(gush_dan, shelter_needed="bunker"))
+    assert response.status_code == 422, response.text
+    assert [entry["loc"] for entry in response.json()["detail"]] == [["body", "shelter_needed"]]
+    assert _row(db_engine)["shelter_needed"] == "any"
+
+
+def test_ac2_shelter_needed_needs_looking_part(
+    seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    response = _put(seeker, {**_personal(), "shelter_needed": "protected"})
+    assert response.status_code == 422, response.text
+    [entry] = response.json()["detail"]
+    assert "need the looking part" in entry["msg"]
+    assert _profile_count(db_engine) == 0
+
+    response = _put(seeker, {**_p(gush_dan, shelter_needed="protected"), **_personal()})
+    assert response.status_code == 200, response.text
+    assert _row(db_engine)["shelter_needed"] == "protected"
+    # Clearing the looking part writes `any`.
+    response = _put(seeker, _personal())
+    assert response.status_code == 200, response.text
+    assert response.json()["shelter_needed"] == "any"
+    assert _row(db_engine)["shelter_needed"] == "any"

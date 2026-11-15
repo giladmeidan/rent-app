@@ -3479,11 +3479,127 @@ def test_0026_downgrade_keeps_tombstones(migration_db_url: str) -> None:
         pytest.fail(f"autogenerate would emit operations against a migrated DB: {exc}")
 
 
-def test_0027_floor_nullable_roundtrip(migration_db_url: str) -> None:
-    # Spec 0013h AC14: 0027 makes `listings.floor` nullable (a deleted owner's listing loses it);
+def _profile_check_text(name: str) -> str:
+    """The model's `seeker_profiles` CHECK `name` text."""
+    for constraint in Base.metadata.tables["seeker_profiles"].constraints:
+        if constraint.name == name:
+            return str(constraint.sqltext)  # type: ignore[attr-defined]
+    raise AssertionError(f"the model has no {name}")
+
+
+def test_ac3_shelter_needed_migration(migration_db_url: str) -> None:
+    # Spec 0015b: 0027 adds `seeker_profiles.shelter_needed` (default `any`) with its CHECK and the
+    # looking-defaults term; both CHECKs' text equals the model's. Downgrade restores 0015's CHECK.
+    cfg = alembic_config(migration_db_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(migration_db_url)
+    insert_profile = (
+        "INSERT INTO seeker_profiles (user_id, budget_max_ils, move_in_date, area_ids, household,"
+        " has_pets, smoker, contract_months, gender) VALUES (:user, :budget, :move_in,"
+        " CAST(:areas AS uuid[]), :household, :flag, :flag, :contract, :gender)"
+    )
+    try:
+        with engine.begin() as conn:
+            area = conn.execute(
+                text(
+                    "INSERT INTO areas (slug, name_he, geom)"
+                    " VALUES ('gush-dan', 'gd', ST_GeomFromText(:wkt, 4326)) RETURNING id"
+                ),
+                {"wkt": GUSH_DAN_WKT},
+            ).scalar_one()
+            users = {
+                label: conn.execute(
+                    text(
+                        "INSERT INTO users (email, display_name, role)"
+                        " VALUES (:email, :label, 'seeker') RETURNING id"
+                    ),
+                    {"email": f"{label}@example.com", "label": label},
+                ).scalar_one()
+                for label in ("looking", "personal")
+            }
+            conn.execute(
+                text(insert_profile),
+                {
+                    "user": users["looking"],
+                    "budget": 7000,
+                    "move_in": "2030-01-01",
+                    "areas": [str(area)],
+                    "household": "couple",
+                    "contract": 12,
+                    "flag": False,
+                    "gender": None,
+                },
+            )
+            conn.execute(
+                text(insert_profile),
+                {
+                    "user": users["personal"],
+                    "budget": None,
+                    "move_in": None,
+                    "areas": None,
+                    "household": None,
+                    "contract": None,
+                    "flag": None,
+                    "gender": "woman",
+                },
+            )
+
+        command.upgrade(cfg, "0027")
+        with engine.begin() as conn:
+            assert _columns(conn, "seeker_profiles")["shelter_needed"] is False
+            values = conn.execute(text("SELECT shelter_needed FROM seeker_profiles")).scalars()
+            assert sorted(values) == ["any", "any"]
+            conn.execute(
+                text(
+                    "CREATE TEMP TABLE shelter_needed_probe (budget_max_ils integer,"
+                    " move_in_flexible boolean, parking_needed smallint, shelter_needed text,"
+                    " flatmate_gender text, people_visible boolean,"
+                    " CONSTRAINT probe_shelter CHECK"
+                    f" ({_profile_check_text('ck_seeker_profiles_shelter_needed')}),"
+                    " CONSTRAINT probe_defaults CHECK"
+                    f" ({_profile_check_text('ck_seeker_profiles_looking_defaults')}))"
+                    " ON COMMIT DROP"
+                )
+            )
+            for name, probe in (
+                ("ck_seeker_profiles_shelter_needed", "probe_shelter"),
+                ("ck_seeker_profiles_looking_defaults", "probe_defaults"),
+            ):
+                assert _check_definition(conn, name) == _check_definition(conn, probe), name
+        set_value = "UPDATE seeker_profiles SET shelter_needed = :value WHERE user_id = :user"
+        for user, value, check in (
+            (users["looking"], "bunker", "ck_seeker_profiles_shelter_needed"),
+            (users["personal"], "mamad", "ck_seeker_profiles_looking_defaults"),
+        ):
+            with pytest.raises(IntegrityError, match=check), engine.begin() as conn:
+                conn.execute(text(set_value), {"value": value, "user": user})
+        with engine.begin() as conn:
+            for value in ("protected", "mamad", "any"):
+                conn.execute(text(set_value), {"value": value, "user": users["looking"]})
+            conn.execute(text(set_value), {"value": "mamad", "user": users["looking"]})
+
+        command.downgrade(cfg, "0026")
+        with engine.connect() as conn:
+            assert "shelter_needed" not in _columns(conn, "seeker_profiles")
+            assert _check_definition(conn, "ck_seeker_profiles_shelter_needed") is None
+            defaults = _check_definition(conn, "ck_seeker_profiles_looking_defaults")
+            assert defaults is not None
+            assert "shelter_needed" not in defaults
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "head")
+    try:
+        command.check(cfg)
+    except AutogenerateDiffsDetected as exc:  # pragma: no cover - the failure message is the point
+        pytest.fail(f"autogenerate would emit operations against a migrated DB: {exc}")
+
+
+def test_0028_floor_nullable_roundtrip(migration_db_url: str) -> None:
+    # Spec 0013h AC14: 0028 makes `listings.floor` nullable (a deleted owner's listing loses it);
     # downgrade gives a NULL floor 0 and restores NOT NULL.
     cfg = alembic_config(migration_db_url)
-    command.upgrade(cfg, "0027")
+    command.upgrade(cfg, "0028")
     engine = create_engine(migration_db_url)
     try:
         with engine.begin() as conn:
@@ -3512,7 +3628,7 @@ def test_0027_floor_nullable_roundtrip(migration_db_url: str) -> None:
                 {"owner": owner, "area": area},
             ).scalar_one()
 
-        command.downgrade(cfg, "0026")
+        command.downgrade(cfg, "0027")
         with engine.connect() as conn:
             assert _columns(conn, "listings")["floor"] is False
             assert (

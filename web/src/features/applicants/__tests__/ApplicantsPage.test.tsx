@@ -946,6 +946,41 @@ describe('ApplicantsPage', () => {
     expect(within(cardOf('A')).queryByRole('term')).toBeNull();
   });
 
+  it('ac12_shelter_row', async () => {
+    // Spec 0015b: a "מרחב מוגן" row after parking for `protected` / `mamad`, none for `any`.
+    const needs = { M: 'mamad', P: 'protected', N: 'any' } as const;
+    const all = Object.entries(needs).map(([name, need]) =>
+      applicant({
+        applicant_name: name,
+        match: match(100),
+        profile: applicantProfile({ shelter_needed: need }),
+      }),
+    );
+    renderPage([json(all)]);
+    await screen.findAllByRole('article');
+    const rows = (name: string) => {
+      fireEvent.click(whyOf(name));
+      const panel = panelOf(name);
+      const terms = within(panel)
+        .getAllByRole('term')
+        .map((dt) => dt.textContent);
+      const values = within(panel)
+        .getAllByRole('definition')
+        .map((dd) => dd.textContent);
+      return { terms, last: values.at(-1) };
+    };
+    const m = rows('M');
+    expect(m.terms.slice(-2)).toEqual([
+      he.applicants.profile.parking,
+      he.applicants.profile.shelter,
+    ]);
+    expect(m.last).toBe(he.profile.shelter.mamad);
+    expect(rows('P').last).toBe(he.profile.shelter.protected);
+    const n = rows('N');
+    expect(n.terms).not.toContain(he.applicants.profile.shelter);
+    expect(n.terms.at(-1)).toBe(he.applicants.profile.parking);
+  });
+
   it('ac4_why_disclosure: the other profile values', async () => {
     const a = applicant({
       applicant_name: 'A',

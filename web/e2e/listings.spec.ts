@@ -187,6 +187,7 @@ test('ac12_owner_edits_listing', async ({ page }) => {
       parking_spots: 1,
       furnished: 'partial',
       pets_allowed: true,
+      shelter: 'none', // required since 0015b
       arnona_ils: 480,
       vaad_ils: null,
       description: null,
@@ -260,6 +261,11 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     await page.getByLabel(f.size, { exact: true }).fill('90');
     await page.getByLabel(f.price).fill('3200');
     await page.getByLabel(f.availableFrom).fill(israelDay(30));
+    // The protected space is required (spec 0015b).
+    await page
+      .getByRole('group', { name: f.shelter })
+      .getByText(he.listings.shelter.none, { exact: true })
+      .click();
     await page.getByRole('button', { name: he.listings.next }).click();
 
     // The photos step (0010e), skipped.

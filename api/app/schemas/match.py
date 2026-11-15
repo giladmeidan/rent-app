@@ -10,8 +10,18 @@ from pydantic import BaseModel
 # The match criteria, in tie-break order (`app/matching/score.py` `CRITERIA` is this tuple).
 # `lifestyle` (spec 0007g) is soft and scored on rooms only; it is NULL, and so never named, when
 # the flat and the seeker share no answered question.
+# `shelter` (spec 0015b) is hard: a seeker who needs a protected space fails a listing without one.
 Criterion = Literal[
-    "budget", "move_in", "area", "household", "contract", "parking", "smoking", "pets", "lifestyle"
+    "budget",
+    "move_in",
+    "area",
+    "household",
+    "contract",
+    "parking",
+    "smoking",
+    "pets",
+    "shelter",
+    "lifestyle",
 ]
 
 

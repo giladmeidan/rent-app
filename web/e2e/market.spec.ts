@@ -122,6 +122,11 @@ test('ac14_two_sides', async ({ page }) => {
   await page.getByLabel(f.size, { exact: true }).fill('90');
   await page.getByLabel(f.price).fill('3200');
   await page.getByLabel(f.availableFrom).fill(israelDay(30));
+  // The protected space is required (spec 0015b).
+  await page
+    .getByRole('group', { name: f.shelter })
+    .getByText(he.listings.shelter.none, { exact: true })
+    .click();
   await next.click();
   // The photos step (0010e), skipped.
   await expect(
@@ -184,6 +189,11 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   await page.getByLabel(f.size, { exact: true }).fill('90');
   await page.getByLabel(f.price).fill('3200');
   await page.getByLabel(f.availableFrom).fill(israelDay(30));
+  // The protected space is required (spec 0015b).
+  await page
+    .getByRole('group', { name: f.shelter })
+    .getByText(he.listings.shelter.none, { exact: true })
+    .click();
   await next.click();
   // The photos step (0010e), skipped.
   await expect(

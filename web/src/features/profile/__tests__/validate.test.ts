@@ -213,6 +213,7 @@ describe('ac10 the two parts', () => {
       contract_months: null,
       move_in_flexible: true,
       parking_needed: 2,
+      shelter_needed: 'mamad',
       flatmate_gender: 'women',
       people_visible: true,
     };
@@ -221,6 +222,7 @@ describe('ac10 the two parts', () => {
       ...looking,
       move_in_flexible: false,
       parking_needed: 0,
+      shelter_needed: 'any',
       gender: 'woman',
       lifestyle: {},
       about_me: null,
@@ -252,6 +254,17 @@ describe('ac10 the two parts', () => {
     });
   });
 
+  it('ac9 shelter_needed: default, sent with the looking part, read back', () => {
+    // Spec 0015b.
+    expect(emptyProfileForm.shelter_needed).toBe('any');
+    expect(toProfileIn({ ...valid, shelter_needed: 'protected' }, areas)).toMatchObject({
+      shelter_needed: 'protected',
+    });
+    expect(formFromProfile(profile({ shelter_needed: 'mamad' })).shelter_needed).toBe('mamad');
+    // Without the looking part the form starts at the default, whatever the row holds.
+    expect(formFromProfile(personalOnlyProfile()).shelter_needed).toBe('any');
+  });
+
   it('ac10 both off: only the "fill one part" error', () => {
     const errors = validate({ ...emptyProfileForm, looking: false, personal: false }, areas, TODAY);
     expect(errors).toEqual({ form: { key: 'profile.errors.onePart' } });
@@ -280,6 +293,7 @@ describe('ac10 the two parts', () => {
       smoker: false,
       contract_months: 24,
       parking_needed: 1,
+      shelter_needed: 'any',
       gender: 'woman',
       birth_year: 1996,
       flatmate_gender: 'women',

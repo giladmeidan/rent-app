@@ -38,6 +38,7 @@ export function applicantProfile(
     smoker: false,
     contract_months: 24,
     parking_needed: 1,
+    shelter_needed: 'any',
     ...overrides,
   };
 }

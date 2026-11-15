@@ -930,18 +930,20 @@ describe('EditListingPage', () => {
     expect(await saveFromPreferences(api, a)).toEqual([{ balcony: null, condition: null }]);
   });
 
-  it('ac6 the shelter field pre-selects the saved value and clears it to null', async () => {
-    // Spec 0015a AC6, an apartment and a room.
+  it('ac10 the shelter field pre-selects the saved value and cannot be cleared', async () => {
+    // Spec 0015a AC6 / 0015b AC10, an apartment and a room.
     const sh = he.listings.shelter;
-    const choice = (name: string) =>
-      within(screen.getByRole('group', { name: f.shelter })).getByRole('radio', { name });
+    const group = () => screen.getByRole('group', { name: f.shelter });
+    const choice = (name: string) => within(group()).getByRole('radio', { name });
     const apartment = stored({ shelter: 'none' });
-    let opened = await openEdit(apartment, [json({ ...apartment, shelter: null })]);
+    let opened = await openEdit(apartment, [json({ ...apartment, shelter: 'mamak' })]);
     expect(choice(sh.none)).toBeChecked();
+    expect(within(group()).getAllByRole('radio')).toHaveLength(4);
+    expect(within(group()).queryByRole('radio', { name: r.unset })).toBeNull();
     expect(beforeUnloadPrevented()).toBe(false);
-    fireEvent.click(choice(r.unset));
+    fireEvent.click(choice(sh.mamak));
     detailsToPreferences();
-    expect(await saveFromPreferences(opened.api, apartment)).toEqual([{ shelter: null }]);
+    expect(await saveFromPreferences(opened.api, apartment)).toEqual([{ shelter: 'mamak' }]);
     opened.view.unmount();
     vi.unstubAllGlobals();
 
@@ -954,9 +956,20 @@ describe('EditListingPage', () => {
     opened.view.unmount();
     vi.unstubAllGlobals();
 
-    // Not said: "לא לציין" starts selected.
-    opened = await openEdit(stored({ shelter: null }));
-    expect(choice(r.unset)).toBeChecked();
+    // A listing from before 0015b (not said): it renders with none picked, and "next" stays on
+    // details until one is.
+    const legacy = stored({ shelter: null });
+    opened = await openEdit(legacy, [json({ ...legacy, shelter: 'none' })]);
+    for (const radio of within(group()).getAllByRole('radio')) expect(radio).not.toBeChecked();
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '1');
+    expect(within(group()).getByRole('alert')).toHaveTextContent(
+      he.listings.errors.shelterRequired,
+    );
+    expect(opened.api.calls(`PATCH /listings/${legacy.id}`)).toHaveLength(0);
+    fireEvent.click(choice(sh.none));
+    detailsToPreferences();
+    expect(await saveFromPreferences(opened.api, legacy)).toEqual([{ shelter: 'none' }]);
   });
 
   it('ac13_expired_page_renews', async () => {

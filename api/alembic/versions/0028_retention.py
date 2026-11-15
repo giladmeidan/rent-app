@@ -7,8 +7,8 @@ pass on NULL, unchanged. No NULL exists before the new `delete_account` writes o
 Downgrade gives each NULL floor 0 (only deleted owners' listings, never shown to anyone), then
 restores NOT NULL.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0028
+Revises: 0027
 Create Date: 2026-11-15
 """
 
@@ -16,8 +16,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0027"
-down_revision: str | None = "0026"
+revision: str = "0028"
+down_revision: str | None = "0027"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

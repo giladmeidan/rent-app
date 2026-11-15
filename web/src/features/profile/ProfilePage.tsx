@@ -35,6 +35,7 @@ import type {
   Household,
   SeekerProfileIn,
   SeekerProfileOut,
+  ShelterNeeded,
 } from './api';
 import { DeleteAccountSection } from './DeleteAccountSection';
 import { PersonPhoto } from './PersonPhoto';
@@ -240,6 +241,11 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     { value: 0, label: t('profile.parking.0') },
     { value: 1, label: t('profile.parking.1') },
     { value: 2, label: t('profile.parking.2') },
+  ];
+  const shelters: ChoiceOption<ShelterNeeded>[] = [
+    { value: 'any', label: t('profile.shelter.any') },
+    { value: 'protected', label: t('profile.shelter.protected') },
+    { value: 'mamad', label: t('profile.shelter.mamad') },
   ];
 
   const areaError = errors.area_ids;
@@ -578,6 +584,15 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                   value={form.parking_needed}
                   onChange={(value) => change({ parking_needed: value }, 'parking_needed')}
                   error={groupError('parking_needed')}
+                />
+
+                <ChoiceGroup
+                  legend={t('profile.fields.shelter')}
+                  name="shelter_needed"
+                  stacked
+                  options={shelters}
+                  value={form.shelter_needed}
+                  onChange={(value) => change({ shelter_needed: value })}
                 />
 
                 {form.personal ? (

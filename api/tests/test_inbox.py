@@ -23,6 +23,7 @@ from sqlalchemy import Engine, event, text
 
 from app.schemas.listing import ListingOut
 from tests.conftest import (
+    NO_LOOKING,
     Outbox,
     make_application,
     make_listing,
@@ -612,6 +613,7 @@ PROFILE_KEYS = {
     "smoker",
     "contract_months",
     "parking_needed",
+    "shelter_needed",  # 0015b
 }
 MATCH_KEYS = {"score", "agrees", "differs"}
 TOP3 = ["budget", "move_in", "area"]
@@ -648,6 +650,7 @@ def _p0_out() -> dict[str, Any]:
         "smoker": False,
         "contract_months": 24,
         "parking_needed": 1,
+        "shelter_needed": "any",
     }
 
 
@@ -761,8 +764,8 @@ def test_ac3_match_ties_and_nulls(
     seekers = {
         "older_100": _profiled_seeker(db_engine, "a@example.com", gush_dan),
         "newer_100": _profiled_seeker(db_engine, "b@example.com", gush_dan),
-        # Budget, move-in (d = 70) and area fail: 10 + 10 + 5 + 5 + 5 = 35.
-        "s5_35": _profiled_seeker(
+        # Budget, move-in (d = 70) and area fail: 10 + 10 + 5 + 5 + 5 + 10 (shelter, 0015b) = 45.
+        "s5_45": _profiled_seeker(
             db_engine,
             "c@example.com",
             gush_dan,
@@ -781,29 +784,29 @@ def test_ac3_match_ties_and_nulls(
 
     body = _ok(_applicants(owner, listing))
 
-    expected = ["newer_100", "older_100", "s5_35", "newer_none", "older_none"]
+    expected = ["newer_100", "older_100", "s5_45", "newer_none", "older_none"]
     assert [item["id"] for item in body] == [str(applications[n]) for n in expected]
     assert [item["match"] and item["match"]["score"] for item in body] == [
         100,
         100,
-        35,
+        45,
         None,
         None,
     ]
-    assert body[2]["match"] == _match(35, ["household", "contract", "parking"], "budget")
+    assert body[2]["match"] == _match(45, ["household", "contract", "shelter"], "budget")
     assert [item["profile"] is None for item in body] == [False, False, False, True, True]
 
-    # On `L0` (available today + 30) an unscored row's meaningless `m_score` is 25, below S5's 35,
-    # so the order above holds even on score alone. Available today, it is 45 (move-in counts as
-    # met): only "applicants with a profile first" keeps S5 ahead.
+    # On `L0` (available today + 30) an unscored row's meaningless `m_score` is 25, below S5's 45,
+    # so the order above holds even on score alone. Available today, it is 45 too (move-in counts
+    # as met), a tie: only "applicants with a profile first" keeps S5 ahead.
     today_listing = _l0(db_engine, _user_id(owner), gush_dan, available_from=_utc_day(0))
-    late = make_application(db_engine, today_listing, seekers["s5_35"])
+    late = make_application(db_engine, today_listing, seekers["s5_45"])
     _created_ago(db_engine, late, 2)
     unscored = make_application(db_engine, today_listing, seekers["newer_none"])
     _created_ago(db_engine, unscored, 1)
     today_body = _ok(_applicants(owner, today_listing))
     assert [item["id"] for item in today_body] == [str(late), str(unscored)]
-    assert today_body[0]["match"]["score"] == 35
+    assert today_body[0]["match"]["score"] == 45
     assert today_body[1]["match"] is None
 
 
@@ -1513,3 +1516,36 @@ def test_ac7_personal_only_applicant(
     }
     assert all(other["match"] is not None for other in body if other["id"] != s)
     assert [x["id"] for x in _ok(_applicants(owner, room, sort="newest"))] == [s, b, a]
+
+
+# --- Spec 0015b: the applicant's protected-space need -------------------------------------------
+
+
+def test_ac6_inbox_shelter_needed(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    listing = _l0(db_engine, _user_id(owner), gush_dan, shelter="none")
+    seekers = {
+        "mamad": _profiled_seeker(db_engine, "m@example.com", gush_dan, shelter_needed="mamad"),
+        "any": _profiled_seeker(db_engine, "a@example.com", gush_dan),
+        "personal": make_seeker(db_engine, "p@example.com"),
+    }
+    make_profile(db_engine, seekers["personal"], gush_dan, gender="woman", **NO_LOOKING)
+    applications = {
+        name: make_application(db_engine, listing, sid) for name, sid in seekers.items()
+    }
+
+    body = _by_id(_ok(_applicants(owner, listing)))
+    mamad, anyone, personal = (body[str(applications[n])] for n in ("mamad", "any", "personal"))
+    assert mamad["match"] == _match(59, TOP3, "shelter")
+    assert mamad["profile"] == {**_p0_out(), "shelter_needed": "mamad"}
+    assert anyone["match"] == _match(100, TOP3, None)
+    assert anyone["profile"] == _p0_out()
+    assert (personal["match"], personal["profile"]) == (None, None)
+
+    # The status PATCH returns the same `ApplicantOut`.
+    response = owner.patch(
+        f"/listings/{listing}/applications/{applications['mamad']}", json={"status": "shortlisted"}
+    )
+    patched = _ok(response)
+    assert (patched["match"], patched["profile"]) == (mamad["match"], mamad["profile"])
