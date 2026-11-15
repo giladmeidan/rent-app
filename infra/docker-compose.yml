@@ -43,6 +43,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:${WEB_PORT:-5173}}
       SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
+      # Keys the re-signup block's email hash (spec 0013c); never rotated in production.
+      EMAIL_BLOCK_KEY: ${EMAIL_BLOCK_KEY:-dev-only-email-block-key-0123456789abcdef}
       EMAIL_BACKEND: file
       EMAIL_OUTBOX_DIR: /outbox
       # Photos (spec 0010d): the file store, served by the api itself at /media.
@@ -77,6 +79,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       # worker.py loads Settings at import, which requires SECRET_KEY.
       SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-0123456789abcdef}
+      # Keys the re-signup block's email hash (spec 0013c); never rotated in production.
+      EMAIL_BLOCK_KEY: ${EMAIL_BLOCK_KEY:-dev-only-email-block-key-0123456789abcdef}
       # Geocoding (spec 0003c): `fake` (no network) unless a deployment sets it; CI's e2e has no .env.
       GEOCODER: ${GEOCODER:-fake}
       NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}

@@ -10,6 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The public dev value from the Makefile, compose and .env.example; refused when serving https.
 DEV_SECRET_KEY = "dev-only-secret-change-me-0123456789abcdef"
+# The public dev value of EMAIL_BLOCK_KEY (Makefile, compose, .env.example); refused on https.
+DEV_EMAIL_BLOCK_KEY = "dev-only-email-block-key-0123456789abcdef"
 # The dev User-Agent for Nominatim; refused with `GEOCODER=nominatim` when serving https.
 DEV_NOMINATIM_USER_AGENT = "rent-app-dev/0.0.1"
 
@@ -60,6 +62,9 @@ class Settings(DatabaseSettings):
     web_origin: str = "http://localhost:5173"
     # HMAC key for OTP codes (spec 0001a). Required: there is no safe default in code.
     secret_key: SecretStr
+    # HMAC key of `blocked_emails` (spec 0013c). Required, and never rotated: the hashes cannot
+    # be re-keyed without the emails. Not SECRET_KEY, so rotating that one keeps the blocks.
+    email_block_key: SecretStr
     email_backend: Literal["file", "smtp"] = "file"
     email_outbox_dir: Path = Path("./.outbox")
     smtp_url: SecretStr | None = None
@@ -158,6 +163,14 @@ class Settings(DatabaseSettings):
             raise ValueError("SECRET_KEY must be at least 32 characters")
         return value
 
+    @field_validator("email_block_key")
+    @classmethod
+    def _email_block_key_is_long_enough(cls, value: SecretStr) -> SecretStr:
+        # The message names the rule only, never the value.
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("EMAIL_BLOCK_KEY must be at least 32 characters")
+        return value
+
     @model_validator(mode="after")
     def _email_and_production_rules(self) -> Self:
         if self.smtp_url is not None:
@@ -204,6 +217,11 @@ class Settings(DatabaseSettings):
             if base.scheme != "https" or base.hostname in {"localhost", "127.0.0.1"}:
                 raise ValueError(
                     "PHOTO_PUBLIC_BASE_URL must be https and not localhost when WEB_ORIGIN is https"
+                )
+            # The last https check: the key is never rotated, so a public one cannot be fixed later.
+            if self.email_block_key.get_secret_value() == DEV_EMAIL_BLOCK_KEY:
+                raise ValueError(
+                    "EMAIL_BLOCK_KEY must not be the dev value when WEB_ORIGIN is https"
                 )
         return self
 
