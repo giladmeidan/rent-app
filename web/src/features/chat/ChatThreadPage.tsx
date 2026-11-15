@@ -292,8 +292,9 @@ function Thread({
       )}
       {thread.truncated && <p className={systemLine}>{t('chat.thread.truncated')}</p>}
       {/* One flex item: the log is mounted even with no messages (so a first pushed message is
-          announced, spec 0009t), and an empty log adds no gap. */}
-      <div className="flex flex-col">
+          announced, spec 0009t), and an empty log adds no gap. It takes the spare height, so the
+          composer sits at the bottom of the screen. */}
+      <div className="flex flex-1 flex-col">
         {messages.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Mascot pose="sleep" width={96} />
@@ -482,5 +483,9 @@ export function ChatThreadPage() {
     body = <Thread key={id} id={id} thread={thread.data} userId={userId} />;
   }
 
-  return <section className="flex flex-col gap-4">{body}</section>;
+  // At `lg` the column fills the screen below the header (min-h-16 + its 1px border) and <main>'s
+  // pt-6/pb-8; below `lg` the header can wrap to two rows, so no fixed height.
+  return (
+    <section className="flex flex-col gap-4 lg:min-h-[calc(100dvh-7.5rem-1px)]">{body}</section>
+  );
 }
