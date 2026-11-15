@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +45,24 @@ const noRoomSections = () => {
 };
 
 describe('MyLikesPage', () => {
+  it('ac6_rate_limited_likes_page_says_when', async () => {
+    render({
+      [PEOPLE_LIKES]: [json({ detail: 'rate_limited' }, 429, { 'Retry-After': '60' })],
+    });
+    expect(
+      await screen.findByText('צפיתם בהרבה כרטיסים בזמן קצר. אפשר לחזור לזה בעוד דקה.'),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
+    cleanup();
+
+    render({ [PEOPLE_LIKES]: [json({ detail: 'rate_limited' }, 429)] });
+    expect(await screen.findByText(he.people.browseRateLimited)).toBeVisible();
+    cleanup();
+
+    render({ [PEOPLE_LIKES]: [json({ detail: 'boom' }, 500)] });
+    expect(await screen.findByRole('button', { name: he.common.retry })).toBeVisible();
+  });
+
   it('ac4_banner_and_one_mascot', async () => {
     // The banner (a person match, spec 0010i): a status on accent-soft, accent-strong text, an ink
     // button focused on mount.

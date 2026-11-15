@@ -40,7 +40,13 @@ export async function setApplicantStatus(
     },
   );
   if (data === undefined) {
-    throw new ApiError('PATCH', '/listings/{id}/applications/{id}', response.status, error);
+    throw new ApiError(
+      'PATCH',
+      '/listings/{id}/applications/{id}',
+      response.status,
+      error,
+      response.headers,
+    );
   }
   return data;
 }

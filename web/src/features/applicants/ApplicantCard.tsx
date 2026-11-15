@@ -9,8 +9,10 @@ import { Card } from '../../components/Card';
 import { ClampedText } from '../../components/ClampedText';
 import { cx } from '../../components/cx';
 import { focusRing } from '../../components/focusRing';
+import { retryAfterText } from '../../components/retryAfter';
 import { useOnline } from '../../components/useOnline';
 import { hasStatus } from '../applications/api';
+import { ApiError } from '../listings/api';
 import { ApplicationStatusChip } from '../applications/ApplicationStatusChip';
 import { appliedOn } from '../applications/format';
 import type { LifestyleAnswers } from '../lifestyle/keys';
@@ -175,6 +177,8 @@ export function ApplicantCard({
     !hasStatus(change.error, 401) &&
     !hasStatus(change.error, 403) &&
     !hasStatus(change.error, 404);
+
+  const retryAfter = change.error instanceof ApiError ? change.error.retryAfter : null;
 
   const reasons = reasonLines(applicant, spots, t);
 
@@ -358,7 +362,13 @@ export function ApplicantCard({
           )}
           {showError && (
             <p role="alert" className="text-body-sm font-semibold text-danger">
-              {online ? t('applicants.errors.actionFailed') : t('common.offline')}
+              {!online
+                ? t('common.offline')
+                : hasStatus(change.error, 429)
+                  ? retryAfter !== null
+                    ? t('applicants.errors.rateLimitedIn', { when: retryAfterText(t, retryAfter) })
+                    : t('applicants.errors.rateLimited')
+                  : t('applicants.errors.actionFailed')}
             </p>
           )}
         </div>
