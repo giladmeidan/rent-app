@@ -51,7 +51,7 @@ review of 2026-11-15 and PRODUCT.md "Retention" (Gilad, 2026-11-15).
    `listings.floor` **DROP NOT NULL** (it is NOT NULL since 0003, so scope 1 needs it). See Data.
 3. `services/retention.py` (new): one function per rule below, each a single set-based `DELETE` or `UPDATE`
    with its period as a module constant, returning the row count. `purge_expired(db)` runs them **in this
-   order** in one transaction, commits, and returns `{rule: count}`: R1, R4, R5, R2, R3, R6, R7, R8, R9
+   order** in one transaction, commits, and returns `{rule: count}`: R1, R4, R5, R2, R3, R6, R7, R8, R10, R9
    (R4 before R5: an application whose chat R4 deletes is R5's the same night, so a second run deletes 0).
    "Older than N" is `< now() - interval 'N'` in SQL, never a Python clock.
    An **unresolved report** below is a `reports` row with `resolved_at IS NULL`; its `target_id` is a
@@ -96,6 +96,8 @@ review of 2026-11-15 and PRODUCT.md "Retention" (Gilad, 2026-11-15).
      re-signup block's source and the current state; see "Readings"). `read_chat`, `resolve_reports`,
      `set_listing_cap`, `unsuspend`, `unhide_listing` rows simply age out. No FK points at `admin_actions`.
    - **R9 blocked emails:** `DELETE blocked_emails` where `created_at` is older than 5 years.
+   - **R10 login sessions (orchestrator, 2026-11-15, after review):** `DELETE sessions` where `expires_at`
+     or `revoked_at` is older than 30 days. Nothing references a session.
 4. `worker.py`: `purge_expired_job`, run off the event loop with `asyncio.to_thread` and its own session
    (the `_sweep` / `_flush_views` pattern), registered as `cron(purge_expired_job, hour=3, minute=25,
    unique=True)` in `WorkerSettings.cron_jobs`, logging the counts only (`log.info("retention purge: %s",
@@ -190,6 +192,8 @@ is drafted by the coder from this spec; Gilad approves it in the digest (PRODUCT
 - [ ] AC14 Migration 0028 upgrades and downgrades (a NULL floor becomes 0 on downgrade) and autogenerate sees
   no diff — `api/tests/test_migrations.py::test_0028_floor_nullable_roundtrip` (the existing
   `test_ac4_autogenerate_sees_no_diff_with_postgis_extensions` stays green)
+- [ ] AC15 R10: a session expired or revoked 30 days + 1 day ago goes; one expired 29 days ago and a live one
+  stay; `s5.i8` says so — `test_retention.py::test_r10_sessions` (and in `test_ac11_idempotent`)
 
 ## Tests to write
 Unit/integration (pytest, real Postgres): one test per rule with rows just inside and just outside the
@@ -235,6 +239,8 @@ Web: the privacy-page text test. E2E: none (CI only anyway; no new screen).
    (`s1.i13`, `s5.*`, `s6.*`), which the test checks. The operator placeholders elsewhere on the page
    (`intro`'s operator name, `s3.i2`'s providers and `s3.i5`'s countries) are launch details outside this
    spec and stay until the operator is known. Orchestrator: confirm, or name the spec that fills them.
+   **Confirmed (orchestrator, 2026-11-15):** AC12 covers the retention lines only; the operator, provider,
+   country and date placeholders are Gilad's legal items for launch (HANDOFF Next Steps 2).
 
 ## Verifier findings (2026-11-15)
 1. `listings.floor` is NOT NULL (migration 0003), so Scope 1's `floor = NULL` would fail: added migration
