@@ -64,7 +64,8 @@ function ConversationRow({
         className={() => cx('flex min-h-tap items-start gap-3 rounded-lg p-3.5', focusRing)}
       >
         <Avatar
-          name={conversation.other_name}
+          // null = a deleted account (spec 0013c); 0013f names it with the placeholder
+          name={conversation.other_name ?? ''}
           photoUrl={conversation.other_photo_url}
           size="md"
           tone="accent"

@@ -87,6 +87,8 @@ def _check_area(db: Session, area_id: uuid.UUID) -> None:
 
 def _lock_owner_cap(db: Session, owner_id: uuid.UUID) -> int:
     """Lock the owner's `users` row until the transaction ends and return its `listing_cap`."""
+    # shortcut: not checked in create; add deleted_at IS NULL to the 0002a cap lock if it is ever
+    # seen (spec 0013c: a create that waited here on DELETE /me runs against the tombstone).
     return db.execute(
         select(User.listing_cap).where(User.id == owner_id).with_for_update()
     ).scalar_one()
@@ -209,6 +211,8 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         }
         if patch.status == "active" and listing.status == "paused":
             # The paused listing is not live, so the count is of the others only.
+            # shortcut: resume locks listing then user, DELETE /me user then listing (spec 0013c);
+            # a race can deadlock and Postgres aborts one (a 500, nothing lost), re-order if seen.
             _enforce_cap(db, owner.id)
             # Live again, so it was not rented: the closure answer goes (spec 0014b).
             values.update(close_reason=None, final_rent_ils=None, closed_at=None)

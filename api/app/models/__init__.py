@@ -10,6 +10,7 @@ class Base(DeclarativeBase):
 from app.models.admin_action import AdminAction  # noqa: E402  (models must see Base first)
 from app.models.application import Application  # noqa: E402
 from app.models.area import Area  # noqa: E402
+from app.models.blocked_email import BlockedEmail  # noqa: E402
 from app.models.cbs_rent_price import CbsRentPrice  # noqa: E402
 from app.models.conversation import Conversation, Message  # noqa: E402
 from app.models.flatmate import ConversationRead, ListingFlatmate  # noqa: E402
@@ -30,6 +31,7 @@ __all__ = [
     "Application",
     "Area",
     "Base",
+    "BlockedEmail",
     "CbsRentPrice",
     "Conversation",
     "ConversationRead",

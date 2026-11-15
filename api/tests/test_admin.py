@@ -740,3 +740,34 @@ def test_nf5_action_and_log_are_one_transaction(
     assert "ck_users_listing_cap" in failed.text
     assert _scalar(db_engine, "SELECT listing_cap FROM users WHERE id = :id", id=user) == 3
     assert _log(db_engine) == []
+
+
+def test_deleted_account_in_reports_and_chat(signed_in: TestClient, db_engine: Engine) -> None:
+    # Spec 0013c AC10: a report about a deleted account and its reported chat.
+    a = make_seeker(db_engine, "a@example.com", display_name="אורי")
+    b = make_seeker(db_engine, "b@example.com", display_name="בתיה")
+    chat = make_direct_chat(db_engine, a, b)
+    _message(db_engine, chat, b, "from the deleted one", minutes_ago=5)
+    _message(db_engine, chat, a, "from the one left", minutes_ago=1)
+    report = _report(db_engine, a, b, "chat", chat)
+    # The tombstone `delete_account` leaves.
+    _execute(
+        db_engine,
+        "UPDATE users SET deleted_at = now(), email = NULL, display_name = NULL, photo_key = NULL"
+        " WHERE id = :id",
+        id=b,
+    )
+
+    reports = signed_in.get("/admin/report/list")
+    assert reports.status_code == 200
+    assert f"deleted account ({b})" in reports.text
+    details = signed_in.get(f"/admin/report/details/{report}")
+    assert details.status_code == 200
+    assert f"deleted account ({b})" in details.text
+    page = signed_in.get(f"/admin/report/chat/{report}")
+    assert page.status_code == 200
+    assert 'dir="auto">(deleted account)<' in page.text
+    assert page.text.count("(deleted account)") >= 2  # the member and the sender
+    assert "אורי" in page.text
+    assert signed_in.get("/admin/user/list").status_code == 200
+    assert signed_in.get(f"/admin/user/details/{b}").status_code == 200

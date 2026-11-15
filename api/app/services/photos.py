@@ -237,8 +237,8 @@ async def encode_upload(data: bytes) -> Encoded:
 
 def _lock_own_listing(db: Session, owner_id: uuid.UUID, listing_id: uuid.UUID) -> None:
     """Lock the caller's listing `FOR NO KEY UPDATE` until the transaction ends;
-    `ListingNotFoundError` when it is unknown or another owner's, `ListingRemovedError` when homie
-    removed it (spec 0012a)."""
+    `ListingNotFoundError` when it is unknown or another owner's, or its owner deleted the account
+    (spec 0013c), `ListingRemovedError` when homie removed it (spec 0012a)."""
     removed = db.scalar(
         select(Listing.removed_at.is_not(None))
         .where(Listing.id == listing_id, Listing.owner_id == owner_id)
@@ -246,6 +246,10 @@ def _lock_own_listing(db: Session, owner_id: uuid.UUID, listing_id: uuid.UUID) -
         .with_for_update(key_share=True)
     )
     if removed is None:
+        raise ListingNotFoundError
+    # A second statement, after the lock: a lock that waited on `DELETE /me`'s listing UPDATE keeps
+    # its old snapshot of `users`, while a new statement sees the committed deletion (spec 0013c).
+    if db.scalar(select(User.deleted_at.is_not(None)).where(User.id == owner_id)):
         raise ListingNotFoundError
     if removed:
         raise ListingRemovedError
@@ -401,6 +405,8 @@ def set_user_photo(db: Session, store: PhotoStore, user: User, encoded: Encoded)
         store.put(names[0], encoded.small)
         store.put(names[1], encoded.large)
         old = _lock_photo_key(db, user.id)
+        # shortcut: a PUT /me/photo racing DELETE /me trips ck_users_deleted_scrubbed here (a 500,
+        # nothing lost; spec 0013c Risks), add deleted_at IS NULL to the lock if it is ever seen.
         _set_photo_key(db, user.id, key)
         db.commit()
     except BaseException:

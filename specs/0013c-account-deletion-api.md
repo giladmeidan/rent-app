@@ -1,7 +1,7 @@
 ---
 id: 0013c
 title: "A person deletes their own account: their data goes, the people they talked to keep the thread, and an account homie acted against cannot sign up again"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa]   # security: PII deletion, the keyed email hash, the auth flow; qa: every place a deleted account could still appear
 estimate: 1 coder run   # a long one, at the limit: three race tests (AC13-AC15) and the key's wiring in 4 places; coder Opus/high (data, migration, PII; Speed rule 6); the web half is 0013f
@@ -486,6 +486,12 @@ From `graphify affected` on `main` (84b6fef), checked with grep:
   the api and the worker, from `openssl rand -hex 32`, kept in Gilad's password manager. Losing it voids
   every block. The settings refuse the dev value on https, so a deploy that copied it from `.env.example`
   fails to start instead of hashing with a public key.
+- **Coder, 2026-11-15: a type-only web change, so this PR's `make lint` is green.** After `make client` the
+  nullable names failed `tsc` in `ChatThreadPage.tsx` (the page title), `ConversationsPane.tsx` (the
+  avatar's initial) and 34 chat test lines. This PR adds `?? undefined` / `?? ''` at the two source sites
+  (a deleted account's chat shows no name until 0013f's placeholder replaces them) and narrows the chat
+  test fixtures' return types (`fixtures.ts`, plus two helper signatures). No text, no i18n key, no
+  behaviour for a live account. 0013f swaps both sites for `t('account.deletedName')`.
 - **The kept listing rows** hold the property's address and price, no longer linked to anyone
   identifiable. The privacy text (0013f) says they are kept for the threads and anonymous statistics.
 

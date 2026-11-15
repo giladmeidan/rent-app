@@ -74,7 +74,7 @@ class MyFlatOut(BaseModel):
     """One flat the caller is a flatmate of."""
 
     listing: ApplicationListingOut
-    owner_name: str
+    owner_name: str | None  # null = the owner deleted their account (0013c)
     joined_at: dt.datetime
     # Whether the caller chose to appear on the room's page (spec 0010f).
     shown: bool

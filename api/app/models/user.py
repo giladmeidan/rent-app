@@ -10,6 +10,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models import Base
 from app.models._checks import photo_key_check
 
+# A live account has an email and a name; a deleted one (spec 0013c) has no email, name or photo.
+DELETED_SCRUBBED_CHECK = (
+    "(deleted_at IS NULL AND email IS NOT NULL AND display_name IS NOT NULL)"
+    " OR (deleted_at IS NOT NULL AND email IS NULL AND display_name IS NULL"
+    " AND photo_key IS NULL)"
+)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -28,14 +35,19 @@ class User(Base):
         # The few suspended users (spec 0012a migration 0024, Gilad 2026-11-15): the visibility
         # rules' "not suspended" check reads only these, so it stays flat as `users` grows.
         Index("ix_users_suspended", "id", postgresql_where=text("suspended_at IS NOT NULL")),
+        # Deleted accounts (spec 0013c migration 0025): a scrubbed tombstone row, so every FK to
+        # it (threads, reports) stays valid. The chat's "no deleted party" check reads only these.
+        CheckConstraint(DELETED_SCRUBBED_CHECK, name="ck_users_deleted_scrubbed"),
+        Index("ix_users_deleted", "id", postgresql_where=text("deleted_at IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    # Stored lowercased and stripped by services/auth.py; UNIQUE is on the stored value.
-    email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Stored lowercased and stripped by services/auth.py; UNIQUE is on the stored value. Email and
+    # name are NULL only on a deleted account (spec 0013c).
+    email: Mapped[str | None] = mapped_column(Text, unique=True)
+    display_name: Mapped[str | None] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     # `broker` is reserved for a later paid tier; never set in slice 1.
     account_type: Mapped[str] = mapped_column(
@@ -59,3 +71,6 @@ class User(Base):
     card_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
     )
+    # Deleted by its owner (spec 0013c, `DELETE /me`), NULL = a live account. Set once, never
+    # cleared; the row stays as a tombstone with no PII and its sessions never resolve.
+    deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

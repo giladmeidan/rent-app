@@ -52,7 +52,7 @@ class MessageIn(BaseModel):
 class MemberOut(BaseModel):
     """One member of a conversation. `is_me` marks the caller (two members may share a name)."""
 
-    name: str
+    name: str | None  # null = a deleted account (0013c)
     photo_url: str | None  # their person photo's small address (spec 0010j)
     role: MemberRole
     is_me: bool
@@ -65,7 +65,7 @@ class MessageOut(BaseModel):
     id: uuid.UUID
     body: str
     mine: bool
-    sender_name: str
+    sender_name: str | None  # null = a deleted account (0013c)
     created_at: dt.datetime
 
 
@@ -82,7 +82,9 @@ class ConversationOut(BaseModel):
 
     id: uuid.UUID  # the application's id for an application chat
     listing: ApplicationListingOut | None  # null exactly for a direct chat
-    other_name: str  # the seeker's name for the owner and a flatmate, the owner's for the seeker
+    # the seeker's name for the owner and a flatmate, the owner's for the seeker; null = a deleted
+    # account (0013c)
+    other_name: str | None
     other_photo_url: str | None  # that person's photo's small address (spec 0010j)
     my_role: MemberRole
     member_count: int  # 2, plus the room's flatmates on a room application
@@ -102,7 +104,7 @@ class ThreadOut(BaseModel):
 
     id: uuid.UUID
     listing: ApplicationListingOut | None  # null exactly for a direct chat
-    other_name: str
+    other_name: str | None  # null = a deleted account (0013c)
     other_photo_url: str | None  # as `ConversationOut.other_photo_url`
     my_role: MemberRole
     members: list[MemberOut]
