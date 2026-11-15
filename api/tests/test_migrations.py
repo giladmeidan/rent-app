@@ -3271,10 +3271,10 @@ def test_ac9_admin_moderation_upgrade_downgrade(migration_db_url: str) -> None:
 
 
 def test_ac9_admin_logins_up_and_down(migration_db_url: str) -> None:
-    # Spec 0013e: 0026 adds `admin_logins` with three CHECKs whose texts equal the model's.
-    # Downgrade (one step, whatever 0026 revises) drops it.
+    # Spec 0013e: 0025 adds `admin_logins` with three CHECKs whose texts equal the model's.
+    # Downgrade (one step, whatever 0025 revises) drops it.
     cfg = alembic_config(migration_db_url)
-    command.upgrade(cfg, "0026")
+    command.upgrade(cfg, "0025")
     engine = create_engine(migration_db_url)
     checks = {
         "ck_admin_logins_token": admin_login_model.TOKEN_CHECK,

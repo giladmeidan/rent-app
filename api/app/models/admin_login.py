@@ -1,9 +1,9 @@
-"""`admin_logins` table (spec 0013e, migration 0026): the admin dashboard's login attempts (spec
+"""`admin_logins` table (spec 0013e, migration 0025): the admin dashboard's login attempts (spec
 0012b's login), one row per attempt. The running public app never reads or writes it.
 
 A right password is an `ok` row holding the sha256 of its session token (`ended_at` on logout); a
 wrong one is a failed row, with `locks_until` on the failure that starts a lock. Every CHECK
-matches migration 0026 exactly (autogenerate must see no diff)."""
+matches migration 0025 exactly (autogenerate must see no diff)."""
 
 import datetime as dt
 import uuid

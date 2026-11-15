@@ -7,7 +7,7 @@ failure that started a lock.
 
 Downgrade drops the table: every admin session ends and a running lock is lifted.
 
-Revision ID: 0026
+Revision ID: 0025
 Revises: 0024
 Create Date: 2026-11-15
 """
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision: str = "0026"
-down_revision: str | None = "0024"  # becomes "0025" once spec 0013c's migration lands on main
+revision: str = "0025"
+down_revision: str | None = "0024"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
