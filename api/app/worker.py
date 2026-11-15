@@ -40,7 +40,8 @@ async def geocode_listings(ctx: dict[str, Any]) -> dict[str, int]:
     """One geocoding sweep (spec 0003c), off the event loop. Logs the counts only, never an
     address or a point."""
     counts = await asyncio.to_thread(_sweep)
-    log.info("geocode sweep: %s", counts)
+    if any(counts.values()):  # every 10 s: a line only when something happened
+        log.info("geocode sweep: %s", counts)
     return counts
 
 
@@ -69,7 +70,22 @@ async def import_cbs_rent_job(ctx: dict[str, Any]) -> dict[str, int]:
     return await asyncio.to_thread(run_cbs_import)
 
 
+async def on_startup(ctx: dict[str, Any]) -> None:
+    """Show the `app` loggers' INFO lines (spec 0013g). arq's CLI configures only its own logger
+    and leaves the root at WARNING, so `view flush` and `geocode sweep` would never be written.
+    Runs after arq's `dictConfig`, whatever launches the worker."""
+    app_log = logging.getLogger("app")
+    app_log.setLevel(logging.INFO)
+    if not any(getattr(h, "_homie_worker", False) for h in app_log.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s: %(levelname)s %(name)s: %(message)s"))
+        handler._homie_worker = True  # type: ignore[attr-defined]
+        app_log.addHandler(handler)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 class WorkerSettings:
+    on_startup = on_startup
     functions = [ping]
     cron_jobs = [
         cron(geocode_listings, second={0, 10, 20, 30, 40, 50}, unique=True),

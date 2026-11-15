@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { retryAfterText } from '../../components/retryAfter';
 import { DisclosureButton } from '../applicants/DisclosureButton';
 import { RoomDetails } from '../applicants/RoomDetails';
 import { RoomLine } from '../applicants/RoomLine';
@@ -60,6 +61,7 @@ export function PersonCard({ person, listing, areaNames, onAlert }: Props) {
   const [whyOpen, setWhyOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [error, setError] = useState<InlineError | null>(null);
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const like = useLikePerson(listing.id);
   const unlike = useUnlikePerson(listing.id);
   const inFlight = useRef(false);
@@ -86,7 +88,10 @@ export function PersonCard({ person, listing, areaNames, onAlert }: Props) {
     } catch (caught) {
       const kind = errorKind(caught);
       if (kind === 'alreadyApplied' || kind === 'gone') onAlert({ kind, name });
-      else setError(kind);
+      else {
+        setRetryAfter(caught instanceof ApiError ? caught.retryAfter : null);
+        setError(kind);
+      }
     } finally {
       inFlight.current = false;
     }
@@ -208,7 +213,10 @@ export function PersonCard({ person, listing, areaNames, onAlert }: Props) {
           {error !== null && (
             <p role="alert" className="text-body-sm font-semibold text-danger">
               {error === 'notLive' && t('people.notLive')}
-              {error === 'rateLimited' && t('people.errors.inviteRateLimited')}
+              {error === 'rateLimited' &&
+                (retryAfter !== null
+                  ? t('people.errors.inviteRateLimitedIn', { when: retryAfterText(t, retryAfter) })
+                  : t('people.errors.inviteRateLimited'))}
               {error === 'failed' && t('common.error')}
             </p>
           )}

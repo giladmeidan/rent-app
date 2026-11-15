@@ -35,32 +35,20 @@ import datetime as dt
 import uuid
 from typing import Any
 
-from sqlalchemy import ColumnElement, Integer, Label, Select, and_, cast, exists, func, or_, select
-from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, undefer
+from sqlalchemy import Integer, Label, Select, and_, cast, func, or_, select
+from sqlalchemy.orm import Session, aliased, undefer
 
 from app.matching.fit import room_fit
 from app.matching.score import explain_row, match_columns
-from app.models import Area, Listing, ListingPhoto, RoomPair, SeekerProfile, User
+from app.models import Area, Listing, ListingPhoto, RoomPair, SeekerProfile
 from app.models.listing import PLAIN_GEOMETRY
 from app.schemas.match import MatchOut
 from app.schemas.search import SearchParams, SearchSort
 from app.services.listings import ListingNotFoundError
+from app.services.visibility import owner_not_suspended
 
 # A flexible-entry listing ("גמיש ±2 שבועות") counts as available this many days earlier.
 FLEXIBLE_ENTRY_DAYS = 14
-
-
-def not_suspended(user_id: InstrumentedAttribute[uuid.UUID]) -> ColumnElement[bool]:
-    """The user `user_id` is not suspended (spec 0012a). A `NOT EXISTS` by primary key, not a join,
-    so callers' FROM lists and `FOR … OF listings` locks stay as they are; over an anonymous alias,
-    so it never correlates with a `users` the caller already joins."""
-    user = aliased(User)
-    return ~exists().where(user.id == user_id, user.suspended_at.is_not(None))
-
-
-def owner_not_suspended() -> ColumnElement[bool]:
-    """The listing's owner is not suspended (spec 0012a)."""
-    return not_suspended(Listing.owner_id)
 
 
 def _public_listings() -> Select[tuple[Listing]]:

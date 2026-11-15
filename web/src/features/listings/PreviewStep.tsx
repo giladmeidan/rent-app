@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
+import { retryAfterText } from '../../components/retryAfter';
 import { useMe } from '../auth/useMe';
 import type { ListingInBody } from './api';
 import { ListingCard } from './ListingCard';
@@ -10,7 +11,7 @@ import { RoomPreview } from './RoomPreview';
 
 /** What a failed publish shows above the button (401 and 403 redirect instead). */
 export type PublishError =
-  'capReached' | 'expired' | 'removed' | 'areaInactive' | 'invalid' | 'failed';
+  'capReached' | 'expired' | 'removed' | 'areaInactive' | 'invalid' | 'rateLimited' | 'failed';
 
 type Props = {
   body: ListingInBody;
@@ -18,6 +19,8 @@ type Props = {
   /** The first photo's address (spec 0010e), shown on the card as "my listings" will. */
   coverUrl: string | null;
   error: PublishError | null;
+  /** A 429's `Retry-After` in seconds, when it sent one. */
+  retryAfter?: number | null;
   onRetry: () => void;
   onBackToDetails: () => void;
 };
@@ -27,7 +30,15 @@ const alertText = 'text-body-sm font-medium text-danger';
 /** The last step: the card exactly as "my listings" will render it, a room's flatmates and questionnaire,
  * the owner's preferences as the listing page shows them, and the publish errors. The step's
  * heading and hint are the wizard's. */
-export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDetails }: Props) {
+export function PreviewStep({
+  body,
+  today,
+  coverUrl,
+  error,
+  retryAfter = null,
+  onRetry,
+  onBackToDetails,
+}: Props) {
   const { t } = useTranslation();
   const me = useMe();
   return (
@@ -41,6 +52,13 @@ export function PreviewStep({ body, today, coverUrl, error, onRetry, onBackToDet
           {me.data == null
             ? t('common.error')
             : t('listings.errors.capReached', { cap: me.data.listing_cap })}
+        </p>
+      )}
+      {error === 'rateLimited' && (
+        <p role="alert" className={alertText}>
+          {retryAfter !== null
+            ? t('listings.errors.rateLimitedIn', { when: retryAfterText(t, retryAfter) })
+            : t('listings.errors.rateLimited')}
         </p>
       )}
       {error === 'removed' && (

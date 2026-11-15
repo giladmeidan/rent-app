@@ -63,7 +63,7 @@ from app.services import chat as chat_service
 from app.services import chat_events
 from app.services.people import CARD_COLUMNS, count_like
 from app.services.rate_limit import count_or_raise
-from app.services.search import not_suspended
+from app.services.visibility import not_suspended
 
 # Per user, `GET /people` and the room side's `GET /listings/{id}/people` together, counted in
 # pages: an infinite query refetches every loaded page, and the room side refetches after each like.

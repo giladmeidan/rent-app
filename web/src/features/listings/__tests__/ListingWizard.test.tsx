@@ -616,6 +616,38 @@ describe('ListingWizard', () => {
     }
   });
 
+  it('ac3_rate_limited_publish_says_when', async () => {
+    const limited = (after?: string) =>
+      json({ detail: 'rate_limited' }, 429, after === undefined ? {} : { 'Retry-After': after });
+    const cases: [string | undefined, string][] = [
+      ['840', 'הרבה פעולות על מודעות בזמן קצר. אפשר לנסות שוב בעוד 14 דקות.'],
+      [undefined, he.listings.errors.rateLimited],
+    ];
+    for (const [after, text] of cases) {
+      mockApi({ 'GET /areas': [json([gushDan])], 'POST /listings': [limited(after)] });
+      const view = await toPreview();
+      fireEvent.click(publishButton());
+      expect((await screen.findByRole('alert')).textContent).toBe(text);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // The edit wizard's PATCH says the same.
+    const stored = listing({});
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      [`PATCH /listings/${stored.id}`]: [limited('840')],
+    });
+    renderRoutes('/edit', <ListingWizard listing={stored} />);
+    await areasLoaded();
+    fireEvent.change(screen.getByLabelText(l.fields.price), { target: { value: '7500' } });
+    for (let i = 0; i < 3; i++) fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: l.save }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'הרבה פעולות על מודעות בזמן קצר. אפשר לנסות שוב בעוד 14 דקות.',
+    );
+  });
+
   it('ac4_publish_double_click_posts_once', async () => {
     const post = deferred();
     const api = mockApi({

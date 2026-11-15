@@ -1,7 +1,7 @@
 ---
 id: 0013g
 title: Before launch, an expired listing's photos are frozen like its fields, every rate-limited form says when to try again, the worker's own log lines show, and the suspension filters live in a neutral module
-status: verified
+status: done
 depends_on: []   # the test-only half of the sweep is 0013d (no shared file)
 reviewers: [code, qa]   # code: a move across four services and the photo routes' refusal order; qa: an API behaviour change (409 on three photo routes) and five UI error states. No security: no auth or data-exposure change, and the upload change is one more refusal before the body is read, the pattern 0012a's security review passed for `listing_removed`, no perf, no ux (error lines only, worded like the existing `rateLimitedIn` lines)
 estimate: 1 coder run   # coder Sonnet/medium: every item copies a pattern already in the code (update_listing's expired check, ApplySection's Retry-After line), and the module move changes no behaviour (Speed rule 6: mechanical)
@@ -283,3 +283,13 @@ Applied by the orchestrator (2026-11-15):
 2. Goal narrowed to the FOLLOWUPS forms plus the invite; renew, pause/resume, closure, market unlike / remove match and room person unlike added to Out.
 3. Blast radius: each listed hit named untouched with its reason; PreviewStep test reference now `ListingWizard.test.tsx`.
 4. Risks: 0013f (`ProfilePage.tsx`, `ProfilePage.test.tsx`, `he.json`) and 0013b (`market_people.py`, per-IP 429 on `/me/people-likes`) added, second to merge merges `origin/main`.
+
+## Digest (merged, PR #104)
+**Spec 0013g — Slice 11/12 review minors   MERGED 6f7a80f**
+Shipped: an expired listing's photos are frozen (409 `listing_expired` on upload, delete, reorder); 5 more forms say "try again in …" on a 429; worker INFO lines show; `not_suspended` moved to `services/visibility.py`.
+Demo: (1) `make dev`, expire a listing in SQL, POST a photo, get 409. (2) Make a profile save answer 429 with Retry-After 7200, see "בעוד שעתיים". (3) Worker log shows `view flush: 0` each minute.
+Tests: +3 API, +7 web, +0 e2e   CI: 11m46s
+Findings: 0 blockers, 0 majors, 5 minors/nits logged in specs/FOLLOWUPS.md, 0 waived
+Changed in PRODUCT.md: nothing
+Next spec I propose: 0013b or 0013c, whichever still waits.
+

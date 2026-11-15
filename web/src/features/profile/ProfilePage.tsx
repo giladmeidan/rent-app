@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import type { AreaOut } from '../../api/client';
 import { usePageTitle } from '../../app/usePageTitle';
 import { Button } from '../../components/Button';
+import { retryAfterText } from '../../components/retryAfter';
 import { Card } from '../../components/Card';
 import { ChoiceGroup, choiceSegment, type ChoiceOption } from '../../components/ChoiceGroup';
 import { cx } from '../../components/cx';
@@ -96,6 +97,8 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [failed, setFailed] = useState(false);
+  // A 429 on save: its `Retry-After` in seconds (null: none sent); undefined: not rate limited.
+  const [rateLimit, setRateLimit] = useState<number | null | undefined>(undefined);
   const [saved, setSaved] = useState(false);
   // Same-tick guard: a double click sends one request.
   const inFlight = useRef(false);
@@ -139,6 +142,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     inFlight.current = true;
     lastBody.current = body;
     setFailed(false);
+    setRateLimit(undefined);
     setSaved(false);
     save.mutate(body, {
       onSettled: () => {
@@ -166,6 +170,10 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
             focus(first);
             return;
           }
+        }
+        if (error instanceof ApiError && error.status === 429) {
+          setRateLimit(error.retryAfter);
+          return;
         }
         setFailed(true);
       },
@@ -622,6 +630,13 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
             {errors.form !== undefined && (
               <p role="alert" className="text-body-sm text-danger">
                 {message(errors.form)}
+              </p>
+            )}
+            {rateLimit !== undefined && (
+              <p role="alert" className="text-body-sm text-danger">
+                {rateLimit !== null
+                  ? t('profile.errors.rateLimitedIn', { when: retryAfterText(t, rateLimit) })
+                  : t('profile.errors.rateLimited')}
               </p>
             )}
             {failed && (
