@@ -49,6 +49,10 @@ class User(Base):
     photo_key: Mapped[str | None] = mapped_column(Text)
     # The only person id in market cards and likes (spec 0010h): random, never changes, and never
     # appears beside a user id in any response.
+    # Suspended by the admin (spec 0012a; written only by the dashboard, 0012b), NULL = not. A
+    # suspended account's sessions stop resolving and its listings and person card are hidden (the
+    # visibility rules in services/search.py, market_people.py, people.py and flatmates.py).
+    suspended_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     card_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
     )
