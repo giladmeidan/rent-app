@@ -82,10 +82,11 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
     height: 0,
   };
   expect(brand.y < logout.y + logout.height && logout.y < brand.y + brand.height).toBe(true);
-  const mainPadding = await page
-    .locator('main')
+  // The page's last element clears the bar: the footer since spec 0013f (`index.css`).
+  const lastPadding = await page
+    .locator('[data-site-footer]')
     .evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom));
-  expect(mainPadding).toBeGreaterThanOrEqual(bar.height);
+  expect(lastPadding).toBeGreaterThanOrEqual(bar.height);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
