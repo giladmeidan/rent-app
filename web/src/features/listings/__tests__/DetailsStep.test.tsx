@@ -281,10 +281,10 @@ describe('DetailsStep', () => {
     expect(price.selectionStart).toBe(price.selectionEnd);
   });
 
-  it('ac12 four optional apartment facts, after pets, sent as chosen', async () => {
-    // Spec 0014b AC12.
+  it('ac12 three optional apartment facts, after pets, sent as chosen', async () => {
+    // Spec 0014b AC12; its ממ״ד yes / no went to the shelter field (spec 0015a).
     const r = he.listings.room;
-    const facts = [r.balcony, f.safeRoom, f.airConditioning, f.condition];
+    const facts = [r.balcony, f.airConditioning, f.condition];
     const group = (legend: string) => screen.getByRole('group', { name: legend });
     const choice = (legend: string, name: string) =>
       within(group(legend)).getByRole('radio', { name });
@@ -312,7 +312,7 @@ describe('DetailsStep', () => {
       }
     });
     for (const legend of facts) expect(choice(legend, r.unset)).toBeChecked();
-    for (const legend of [r.balcony, f.safeRoom, f.airConditioning]) {
+    for (const legend of [r.balcony, f.airConditioning]) {
       expect(
         within(group(legend))
           .getAllByRole('radio')
@@ -327,11 +327,11 @@ describe('DetailsStep', () => {
     ).toEqual([cond.new, cond.renovated, cond.good, cond.needsWork, r.unset]);
 
     // Optional: the step moves on with none answered; a balcony and a condition are sent, the
-    // other two as `null`.
+    // air conditioning as `null`.
     fireEvent.click(choice(r.balcony, he.common.yes));
     fireEvent.click(choice(f.condition, cond.renovated));
-    fireEvent.click(choice(f.safeRoom, he.common.no));
-    fireEvent.click(choice(f.safeRoom, r.unset));
+    fireEvent.click(choice(f.airConditioning, he.common.no));
+    fireEvent.click(choice(f.airConditioning, r.unset));
     fireEvent.click(nextButton());
     expect(progress()).toHaveAttribute('aria-valuenow', '3');
     fireEvent.click(nextButton());
@@ -342,17 +342,16 @@ describe('DetailsStep', () => {
     });
     expect(api.calls('POST /listings')[0]?.body).toMatchObject({
       balcony: true,
-      safe_room: null,
       air_conditioning: null,
       condition: 'renovated',
     });
     view.unmount();
     vi.unstubAllGlobals();
 
-    // A room: none of the three on the details step, and its balcony only in `RoomFields`.
+    // A room: neither of the two on the details step, and its balcony only in `RoomFields`.
     mockApi({ 'GET /areas': [json([gushDan])] });
     await toPreferences(testQueryClient(), 'room');
-    for (const legend of [f.safeRoom, f.airConditioning, f.condition]) {
+    for (const legend of [f.airConditioning, f.condition]) {
       expect(screen.queryByRole('group', { name: legend })).toBeNull();
     }
     expect(screen.getAllByRole('group', { name: r.balcony })).toHaveLength(1);
@@ -362,6 +361,113 @@ describe('DetailsStep', () => {
     fireEvent.click(screen.getByRole('button', { name: he.common.back }));
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
     expect(screen.queryByRole('group', { name: r.balcony })).toBeNull();
+  });
+});
+
+describe('shelter (0015a)', () => {
+  const r = he.listings.room;
+  const sh = he.listings.shelter;
+  const group = () => screen.getByRole('group', { name: f.shelter });
+  const choice = (name: string) => within(group()).getByRole('radio', { name });
+  const optionLabels = () =>
+    within(group())
+      .getAllByRole('radio')
+      .map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent);
+
+  it('ac6 an apartment picks its protected space after the elevator, sent as chosen', async () => {
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    fillValidDetails();
+
+    // In the amenities card, right after the elevator; the four types and "לא לציין", which starts
+    // selected.
+    const elevator = screen.getByRole('switch', { name: f.elevator });
+    const card = elevator.closest('.divide-y') as HTMLElement;
+    expect(card).toContainElement(group());
+    expect(
+      elevator.compareDocumentPosition(group()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      group().compareDocumentPosition(field(f.parking)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(optionLabels()).toEqual([sh.mamad, sh.mamak, sh.building, sh.none, r.unset]);
+    expect(choice(r.unset)).toBeChecked();
+
+    fireEvent.click(choice(sh.mamak));
+    expect(choice(sh.mamak)).toBeChecked();
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: he.listings.publish }));
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({ shelter: 'mamak' });
+  });
+
+  it('ac6 unset is sent as null', async () => {
+    const api = mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    fillValidDetails();
+    fireEvent.click(choice(sh.building));
+    fireEvent.click(choice(r.unset));
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(nextButton());
+    fireEvent.click(screen.getByRole('button', { name: he.listings.publish }));
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/me/listings');
+    });
+    expect(api.calls('POST /listings')[0]?.body).toMatchObject({ shelter: null });
+  });
+
+  it('ac6 a room has the same field on its details step', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+    chooseTypeAndContinue(he.listings.type.room);
+    await areasLoaded();
+    fillValidDetails('room');
+    expect(screen.getAllByRole('group', { name: f.shelter })).toHaveLength(1);
+    expect(optionLabels()).toEqual([sh.mamad, sh.mamak, sh.building, sh.none, r.unset]);
+    expect(choice(r.unset)).toBeChecked();
+    fireEvent.click(choice(sh.building));
+    // The choice survives a step forward and back.
+    fireEvent.click(nextButton());
+    expect(progress()).toHaveAttribute('aria-valuenow', '3');
+    fireEvent.click(screen.getByRole('button', { name: he.common.back }));
+    expect(choice(sh.building)).toBeChecked();
+  });
+
+  it('ac12 no protected-room yes / no control on either type', async () => {
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    const view = renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    // The one ממ״ד on the step is the shelter field's option; no group is named after it.
+    expect(screen.queryByRole('group', { name: he.listings.card.shelter.mamad })).toBeNull();
+    expect(screen.getAllByText(sh.mamad)).toHaveLength(1);
+    expect(group()).toContainElement(screen.getByText(sh.mamad));
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+    chooseTypeAndContinue(he.listings.type.room);
+    await areasLoaded();
+    expect(screen.queryByRole('group', { name: he.listings.card.shelter.mamad })).toBeNull();
+    expect(group()).toContainElement(screen.getByText(sh.mamad));
   });
 });
 

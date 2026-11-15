@@ -106,6 +106,34 @@ describe('filters', () => {
     ).toBe('');
   });
 
+  it('ac9 shelter filter parse and serialise', () => {
+    // Spec 0015a: only `true` is kept; it counts as one filter and is written after the other
+    // features, before the sort.
+    expect(parse('shelter=true')).toEqual({ shelter: true });
+    expect(countActive(parse('shelter=true'))).toBe(1);
+    expect(toSearchParams(parse('shelter=true')).toString()).toBe('shelter=true');
+    for (const query of ['shelter=false', 'shelter=1', 'shelter=mamad', 'shelter=']) {
+      expect(parse(query), query).toEqual({});
+    }
+    expect(toSearchParams(parse('sort=price_asc&shelter=true&parking=true')).toString()).toBe(
+      'parking=true&shelter=true&sort=price_asc',
+    );
+    expect(countActive(parse('pets=true&shelter=true'))).toBe(2);
+  });
+
+  it('ac9 shelter filter is sent to the API, the list and the map box alike', async () => {
+    const api = mockApi({ 'GET /listings': [json(page([])), json(page([]))] });
+    await searchListings({ shelter: true, listing_type: 'room' }, 0);
+    await searchListings({ shelter: true }, 0, {
+      bbox: [34.7712, 32.0412, 34.8299, 32.1099],
+      limit: 50,
+    });
+    expect(query(at(api.calls('GET /listings'), 0).request)).toEqual(
+      expected({ listing_type: 'room', shelter: 'true', limit: '20', offset: '0' }),
+    );
+    expect(query(at(api.calls('GET /listings'), 1).request)).toContainEqual(['shelter', 'true']);
+  });
+
   it('ac5_match_sort_in_url', () => {
     expect(parse('sort=match')).toEqual({ sort: 'match' });
     expect(toSearchParams(parse('sort=match')).toString()).toBe('sort=match');

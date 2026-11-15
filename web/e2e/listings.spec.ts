@@ -56,6 +56,11 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByLabel(f.price).fill('7200');
   await page.getByLabel(f.availableFrom).fill(israelDay(30));
   await page.getByRole('switch', { name: f.elevator }).check();
+  // The flat's protected space (spec 0015a).
+  await page
+    .getByRole('group', { name: f.shelter })
+    .getByText(he.listings.shelter.mamad, { exact: true })
+    .click();
   await page.getByLabel(f.parking, { exact: true }).selectOption('1');
   await page.getByText(he.listings.furnished.partial, { exact: true }).click();
   await page.getByRole('switch', { name: f.pets }).check();
@@ -99,6 +104,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(card).toContainText('כצנלסון');
   await expect(card.getByText(/7,200\s*₪/)).toBeVisible();
   await expect(card.getByTestId('status-badge')).toHaveText(he.listings.status.live);
+  await expect(card.getByTestId('listing-facts')).toContainText(he.listings.card.shelter.mamad);
   await expectNoAxeViolations(page, '/me/listings');
   // No photo was chosen: no upload, delete or reorder, and the card keeps its placeholder.
   expect(photoRequests).toEqual([]);
@@ -109,6 +115,12 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await expect(page.getByRole('region', { name: he.listing.ownerLooksFor.title })).toContainText(
     he.listing.ownerLooksFor.noSmokers,
   );
+  // And the protected space (spec 0015a), as one facts cell.
+  const shelterCell = page.getByRole('term').filter({ hasText: f.shelter });
+  await expect(shelterCell).toHaveCount(1);
+  await expect(
+    page.getByRole('definition').filter({ hasText: he.listings.shelter.mamad }),
+  ).toBeVisible();
   await page.goto('/me/listings');
   await expect(card).toHaveCount(1);
 

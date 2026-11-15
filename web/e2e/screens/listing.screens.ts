@@ -62,8 +62,8 @@ function detail(overrides: Record<string, unknown>) {
     balcony: null,
     bills_included: null,
     poster: null,
-    safe_room: null, // spec 0014b: the apartment facts
-    air_conditioning: null,
+    shelter: null, // spec 0015a: the flat's protected space
+    air_conditioning: null, // spec 0014b: the apartment facts
     condition: null,
     created_at: '2026-11-01T10:00:00Z',
     lat: 32.0707,

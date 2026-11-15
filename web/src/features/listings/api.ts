@@ -25,9 +25,11 @@ export type Poster = NonNullable<ListingOut['poster']>;
 export type RoomFactKey =
   'room_size_sqm' | 'private_bathroom' | 'balcony' | 'bills_included' | 'poster';
 /** An apartment's optional facts (0014b), with `balcony`: `null` means not said. */
-export type ApartmentFactKey = 'safe_room' | 'air_conditioning' | 'condition';
+export type ApartmentFactKey = 'air_conditioning' | 'condition';
 /** The apartment's condition (0014b). */
 export type Condition = NonNullable<ListingOut['condition']>;
+/** The flat's protected space (0015a), on any listing; `null` means not said. */
+export type Shelter = NonNullable<ListingOut['shelter']>;
 /** What happened to a listing that is not live (0014b), private to its owner. */
 export type CloseReason = NonNullable<MyListingOut['close_reason']>;
 export type ClosureIn = components['schemas']['ClosureIn'];

@@ -993,6 +993,57 @@ describe('SearchPage', () => {
     expect(screen.queryByRole('list', { name: he.search.tags.label })).toBeNull();
   });
 
+  it('ac9 shelter filter: checkbox, URL, query, reload and tag', async () => {
+    // Spec 0015a AC9: "מרחב מוגן" sets `shelter=true` in the URL and the query, survives a
+    // reload, shows an active-filter tag, and clearing the filters drops both.
+    const label = he.search.feature.shelter;
+    const tagList = () => screen.queryByRole('list', { name: he.search.tags.label });
+    let api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    let view = render('/search');
+    await screen.findByText(i18n.t('search.count', { count: 1 }));
+    openPanel();
+    expect(feature(label)).not.toBeChecked();
+    fireEvent.click(feature(label));
+    apply();
+    expect(currentPath()).toBe('/search?shelter=true');
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+    expect(query(sent(api, 1))).toEqual(
+      expected({ listing_type: 'apartment', shelter: 'true', limit: '20', offset: '0' }),
+    );
+    expect(
+      within(tagList() as HTMLElement)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([label]);
+    // Clearing drops the param, the tag and the check.
+    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    expect(currentPath()).toBe('/search');
+    expect(feature(label)).not.toBeChecked();
+    expect(tagList()).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A reload of the URL: the box is checked, the query carries it, the tag shows.
+    for (const [path, type] of [
+      ['/search', 'apartment'],
+      ['/market', 'room'],
+    ] as const) {
+      api = mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+      view = render(`${path}?shelter=true`);
+      await screen.findByText(i18n.t('search.count', { count: 1 }));
+      expect(query(sent(api, 0))).toEqual(
+        expected({ listing_type: type, shelter: 'true', limit: '20', offset: '0' }),
+      );
+      expect(within(tagList() as HTMLElement).getByText(label)).toBeVisible();
+      openPanel();
+      expect(feature(label)).toBeChecked();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('ac3_desktop_side_panel', async () => {
     stubDesktop();
     const api = mockApi({ [SEARCH]: [json(page([publicListing(), publicListing()]))] });

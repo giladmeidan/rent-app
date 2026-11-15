@@ -174,6 +174,36 @@ describe('ListingCard', () => {
     expect(screen.queryByText(he.rooms.card.similarAge)).toBeNull();
   });
 
+  it('ac8 shelter fact after the elevator for the three shelter types only', () => {
+    // Spec 0015a AC8: "ממ״ד" / "ממ״ק" / "מקלט", nothing for `none` or not said; on a room too.
+    const c = he.listings.card;
+    const items = () =>
+      [
+        ...screen.getByTestId('listing-facts').querySelectorAll('span > span:not([aria-hidden])'),
+      ].map((el) => el.textContent);
+    const shown = { mamad: c.shelter.mamad, mamak: c.shelter.mamak, building: c.shelter.building };
+    for (const listing_type of ['apartment', 'room'] as const) {
+      const base = {
+        listing_type,
+        elevator: true,
+        ...(listing_type === 'room' ? { flatmates_count: 2, flatmate_ages: [] } : {}),
+      };
+      for (const [shelter, text] of Object.entries(shown) as [keyof typeof shown, string][]) {
+        const { view } = renderCard({ ...base, shelter });
+        const facts = items();
+        expect(facts.filter((fact) => fact === text)).toHaveLength(1);
+        expect(facts.indexOf(text)).toBe(facts.indexOf(c.elevator) + 1);
+        view.unmount();
+      }
+      for (const shelter of ['none', null] as const) {
+        const { view } = renderCard({ ...base, shelter });
+        const facts = items();
+        for (const text of Object.values(shown)) expect(facts).not.toContain(text);
+        view.unmount();
+      }
+    }
+  });
+
   it('ac4_card_anatomy', () => {
     const entry = new Date(`${TODAY}T00:00:00Z`);
     entry.setUTCDate(entry.getUTCDate() + 30);

@@ -68,6 +68,7 @@ function initialValues(filters: Filters): Values {
     furnished: filters.furnished === true,
     elevator: filters.elevator === true,
     parking: filters.parking === true,
+    shelter: filters.shelter === true,
   };
 }
 
@@ -123,6 +124,7 @@ function toFilters(values: Values): FormFilters {
     furnished: parsed.furnished,
     elevator: parsed.elevator,
     parking: parsed.parking,
+    shelter: parsed.shelter,
   };
 }
 
@@ -209,6 +211,7 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
     furnished: t('search.feature.furnished'),
     elevator: t('search.feature.elevator'),
     parking: t('search.feature.parking'),
+    shelter: t('search.feature.shelter'),
   };
 
   const dateId = fieldId('available_by');

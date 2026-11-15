@@ -975,7 +975,7 @@ def test_nf2_lifestyle_unknown_keys_one_error_no_echo(
 
 FACTS: dict[str, Any] = {
     "balcony": True,
-    "safe_room": True,
+    "shelter": "mamad",
     "air_conditioning": False,
     "condition": "renovated",
 }
@@ -992,7 +992,7 @@ def test_ac4_apartment_facts(owner: TestClient, gush_dan: uuid.UUID, db_engine: 
     plain = _create(owner, gush_dan)
     assert _facts(plain) == dict.fromkeys(FACTS)
 
-    changed = {"balcony": False, "safe_room": False, "air_conditioning": True, "condition": "new"}
+    changed = {"balcony": False, "shelter": "none", "air_conditioning": True, "condition": "new"}
     assert _facts(_patched(owner, plain["id"], changed)) == changed
     assert _facts(_row(db_engine, plain["id"])) == changed
     # An explicit `null` clears each one.
@@ -1003,7 +1003,7 @@ def test_ac4_apartment_facts(owner: TestClient, gush_dan: uuid.UUID, db_engine: 
     response = owner.post("/listings", json=_body(gush_dan, condition="old"))
     assert response.status_code == 422, response.text
     assert [entry["loc"] for entry in response.json()["detail"]] == [["body", "condition"]]
-    _assert_refused(owner, db_engine, plain["id"], [{"condition": "old"}, {"safe_room": "maybe"}])
+    _assert_refused(owner, db_engine, plain["id"], [{"condition": "old"}, {"shelter": "maybe"}])
     assert _count(db_engine) == 2
 
 
@@ -1030,3 +1030,81 @@ def test_ac5_facts_on_a_room_and_room_fields_still_room_only(
         assert response.status_code == 422, (name, response.text)
         assert "are for a room only" in response.text
     assert _count(db_engine) == 1
+
+
+# --- Spec 0015a: the flat's protected space ----------------------------------------------------
+
+
+def test_ac1_create_listing_shelter(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    created = _create(owner, gush_dan, shelter="mamad")
+    assert created["shelter"] == "mamad"
+    assert _row(db_engine, created["id"])["shelter"] == "mamad"
+    plain = _create(owner, gush_dan)
+    assert plain["shelter"] is None
+    assert _row(db_engine, plain["id"])["shelter"] is None
+    # A room has it too (a fact of the flat).
+    room = _create_room(owner, gush_dan, shelter="building")
+    assert room["shelter"] == "building"
+    mine = {item["id"]: item["shelter"] for item in owner.get("/me/listings").json()}
+    assert mine == {created["id"]: "mamad", plain["id"]: None, room["id"]: "building"}
+
+
+def test_ac2_patch_listing_shelter(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    listing_id = _create(owner, gush_dan, shelter="mamak")["id"]
+
+    assert _patched(owner, listing_id, {"shelter": "none"})["shelter"] == "none"
+    assert _row(db_engine, listing_id)["shelter"] == "none"
+    # A PATCH without the key leaves it as it was.
+    untouched = _patched(owner, listing_id, {"price_ils": 7300})
+    assert (untouched["price_ils"], untouched["shelter"]) == (7300, "none")
+    assert _row(db_engine, listing_id)["shelter"] == "none"
+    # `none` and NULL stay distinct: an explicit `null` clears it to "not said".
+    assert _patched(owner, listing_id, {"shelter": None})["shelter"] is None
+    assert _row(db_engine, listing_id)["shelter"] is None
+    assert _patched(owner, listing_id, {"price_ils": 7200})["shelter"] is None
+
+
+def test_ac3_shelter_rejects_unknown_value(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    response = owner.post("/listings", json=_body(gush_dan, shelter="bunker"))
+    assert response.status_code == 422, response.text
+    assert [entry["loc"] for entry in response.json()["detail"]] == [["body", "shelter"]]
+    assert _count(db_engine) == 0
+
+    listing_id = _create(owner, gush_dan, shelter="mamad")["id"]
+    _assert_refused(owner, db_engine, listing_id, [{"shelter": "bunker"}, {"shelter": True}])
+    assert _row(db_engine, listing_id)["shelter"] == "mamad"
+
+
+def test_ac12_safe_room_removed(owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine) -> None:
+    # Spec 0015a replaced 0014b's ממ״ד yes/no: a POST ignores the key (extra keys are ignored),
+    # a PATCH refuses it (`extra="forbid"`), no response and no column has it.
+    response = owner.post("/listings", json=_body(gush_dan, safe_room=True))
+    assert response.status_code == 201, response.text
+    created = response.json()
+    listing_id = created["id"]
+    assert "safe_room" not in created
+    assert created["shelter"] is None
+    row = _row(db_engine, listing_id)
+    assert "safe_room" not in row
+    assert row["shelter"] is None
+
+    _assert_refused(owner, db_engine, listing_id, [{"safe_room": True}])
+    patched = _patched(owner, listing_id, {"shelter": "mamad"})
+    with db_engine.begin() as conn:  # Into the renewal window (spec 0011a).
+        conn.execute(
+            text("UPDATE listings SET expires_at = now() + interval '3 days' WHERE id = :id"),
+            {"id": listing_id},
+        )
+    renewed = owner.post(f"/listings/{listing_id}/renew")
+    assert renewed.status_code == 200, renewed.text
+    detail = owner.get(f"/listings/{listing_id}")
+    assert detail.status_code == 200, detail.text
+    for item in (patched, renewed.json(), detail.json(), *owner.get("/me/listings").json()):
+        assert "safe_room" not in item
+        assert item["shelter"] == "mamad"

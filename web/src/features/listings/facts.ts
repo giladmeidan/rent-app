@@ -1,7 +1,7 @@
 // The three strings the card's facts line and the listing page's facts line both build.
 import type { TFunction } from 'i18next';
 
-import type { Condition, ListingOut } from './api';
+import type { Condition, ListingOut, Shelter } from './api';
 import { formatDate } from './format';
 
 /** "קומה 3 מתוך 5", or "קומה 3" when the building's height is not known. */
@@ -38,4 +38,30 @@ export function conditionLabel(t: TFunction, condition: Condition): string {
     good: t('listings.condition.good'),
     needs_work: t('listings.condition.needsWork'),
   }[condition];
+}
+
+/** "ממ״ד בדירה" (0015a), the wizard's option and the listing page's fact. A literal map, so
+ * `i18n-check` sees every key. */
+export function shelterLabel(t: TFunction, shelter: Shelter): string {
+  return {
+    mamad: t('listings.shelter.mamad'),
+    mamak: t('listings.shelter.mamak'),
+    building: t('listings.shelter.building'),
+    none: t('listings.shelter.none'),
+  }[shelter];
+}
+
+/** The card's short "ממ״ד" / "ממ״ק" / "מקלט" (0015a); `null` for `none` or not said, which the card
+ * does not show. */
+export function shelterCardFact(t: TFunction, shelter: Shelter | null): string | null {
+  switch (shelter) {
+    case 'mamad':
+      return t('listings.card.shelter.mamad');
+    case 'mamak':
+      return t('listings.card.shelter.mamak');
+    case 'building':
+      return t('listings.card.shelter.building');
+    default:
+      return null;
+  }
 }
