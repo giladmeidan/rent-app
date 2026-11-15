@@ -4,12 +4,14 @@ The admin app runs through Starlette's `TestClient` on `create_admin_app`, conne
 `homie_admin` role to the test database, on `http://localhost` (the default `testserver` host
 fails the allowlist). Reports, conversations and messages are direct inserts."""
 
+import asyncio
 import os
 import subprocess
 import sys
 import uuid
 from collections.abc import Iterator
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 import pytest
@@ -17,15 +19,18 @@ from fastapi.testclient import TestClient
 from psycopg.errors import InsufficientPrivilege
 from pydantic import ValidationError
 from sqlalchemy import Engine, create_engine, text
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.types import Message
 
 import admin.auth
 from admin import actions
+from admin.auth import PasswordAuth
 from admin.config import AdminSettings
 from admin.main import create_admin_app, main
-from app.models import User
+from admin.views import UserView
 from scripts.admin_role import apply_admin_role
 from tests.conftest import (
     API_DIR,
@@ -116,6 +121,18 @@ def _message(
     )
 
 
+def _live_session(engine: Engine, user_id: uuid.UUID) -> uuid.UUID:
+    with engine.begin() as conn:
+        session_id: uuid.UUID = conn.execute(
+            text(
+                "INSERT INTO sessions (user_id, token_hash, expires_at)"
+                " VALUES (:u, :h, now() + interval '1 day') RETURNING id"
+            ),
+            {"u": user_id, "h": uuid.uuid4().hex},
+        ).scalar_one()
+    return session_id
+
+
 def _settings(database_url: str) -> AdminSettings:
     return AdminSettings(database_url=database_url, password=PASSWORD, secret_key=SECRET)
 
@@ -144,8 +161,11 @@ def _to_login(response: httpx.Response) -> bool:
     return response.status_code == 302 and response.headers["location"].endswith("/admin/login")
 
 
-def test_ac1_everything_needs_login(admin_client: TestClient, db_engine: Engine) -> None:
+def test_ac1_everything_needs_login(
+    admin_client: TestClient, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
     owner = make_owner(db_engine, "owner@example.com")
+    listing = make_listing(db_engine, owner, gush_dan)
     reporter = make_seeker(db_engine, "reporter@example.com")
     chat = make_direct_chat(db_engine, owner, reporter)
     report = _report(db_engine, reporter, owner, "chat", chat)
@@ -162,7 +182,8 @@ def test_ac1_everything_needs_login(admin_client: TestClient, db_engine: Engine)
         f"/admin/user/action/suspend?pks={owner}",
         f"/admin/user/action/unsuspend?pks={owner}",
         "/admin/listing/list",
-        f"/admin/listing/action/hide?pks={uuid.uuid4()}",
+        f"/admin/listing/details/{listing}",
+        f"/admin/listing/action/hide?pks={listing}",
         "/admin/admin-action/list",
     ]
     for path in pages:
@@ -171,6 +192,7 @@ def test_ac1_everything_needs_login(admin_client: TestClient, db_engine: Engine)
     assert _scalar(db_engine, "SELECT count(*) FROM users WHERE suspended_at IS NOT NULL") == 0
     assert _scalar(db_engine, "SELECT listing_cap FROM users WHERE id = :id", id=owner) == 3
     assert _scalar(db_engine, "SELECT resolved_at FROM reports") is None
+    assert _scalar(db_engine, "SELECT removed_at FROM listings") is None
     assert _log(db_engine) == []
 
     assert admin_client.get("/admin/login").status_code == 200
@@ -224,6 +246,68 @@ def test_ac2_password_login_session_age_and_lockout(
     assert _login_admin(admin_client, "סיסמה שגויה לגמרי בעברית").status_code == 400
 
 
+def test_ac2_lock_counts_five_wrong_within_15_minutes(
+    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(admin.auth, "_now", lambda: clock[0])
+    for _ in range(4):
+        assert _login_admin(admin_client, "four wrong are not a lock").status_code == 400
+    assert _login_admin(admin_client).status_code == 302
+
+    # Five wrong, but the first is more than 15 minutes older than the fifth: no lock.
+    for minutes in (0, 4, 8, 12):
+        clock[0] = 1_800_100_000.0 + minutes * 60
+        assert _login_admin(admin_client, "spread over the window!!").status_code == 400
+    clock[0] = 1_800_100_000.0 + 15 * 60 + 1
+    assert _login_admin(admin_client, "spread over the window!!").status_code == 400
+    assert _login_admin(admin_client).status_code == 302
+
+    # Five within the window: the right password is refused.
+    for _ in range(5):
+        clock[0] += 1
+        assert _login_admin(admin_client, "five wrong make a lock").status_code == 400
+    assert _login_admin(admin_client).status_code == 400
+
+
+def test_ac2_lock_holds_for_logins_whose_bodies_arrive_late() -> None:
+    """Six logins start at once and their bodies arrive later, the right password last: the five
+    wrong ones lock it (the lock is checked after the body is read)."""
+    backend = PasswordAuth(_settings("postgresql+psycopg://unused@localhost/unused"))
+
+    def request(password: str, gate: asyncio.Event) -> Request:
+        body = urlencode({"password": password}).encode()
+
+        async def receive() -> Message:
+            await gate.wait()
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/admin/login",
+            "query_string": b"",
+            "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
+            "session": {},
+        }
+        return Request(scope, receive)
+
+    async def scenario() -> list[bool]:
+        wrong, right = asyncio.Event(), asyncio.Event()
+        logins = [
+            asyncio.create_task(backend.login(request("wrong password, held", wrong)))
+            for _ in range(5)
+        ]
+        last = asyncio.create_task(backend.login(request(PASSWORD, right)))
+        await asyncio.sleep(0)  # every login is now waiting for its body
+        wrong.set()
+        results = list(await asyncio.gather(*logins))
+        right.set()
+        return [*results, await last]
+
+    assert asyncio.run(scenario()) == [False] * 6
+
+
 def test_ac3_resolve_closes_the_whole_target(signed_in: TestClient, db_engine: Engine) -> None:
     owner = make_owner(db_engine, "owner@example.com")
     r1 = make_seeker(db_engine, "r1@example.com")
@@ -264,7 +348,9 @@ def test_ac4_suspend_and_lift(
     email = "noa@example.com"
     user = make_seeker(db_engine, email)
     reporter = make_seeker(db_engine, "reporter@example.com")
+    bystander = make_seeker(db_engine, "bystander@example.com")
     api_1, api_2 = _login(client, db_engine, user), _login(client, db_engine, user)
+    api_bystander = _login(client, db_engine, bystander)
     assert api_1.get("/me").status_code == 200
 
     def live_sessions() -> int:
@@ -302,6 +388,15 @@ def test_ac4_suspend_and_lift(
     assert signed_in.get(path).status_code == 302
     assert suspended() and live_sessions() == 0
     assert fresh.get("/me").status_code == 401
+    assert api_bystander.get("/me").status_code == 200
+    assert (
+        _scalar(
+            db_engine,
+            "SELECT count(*) FROM sessions WHERE user_id = :u AND revoked_at IS NULL",
+            u=bystander,
+        )
+        == 1
+    )
     assert _log(db_engine) == [
         ("suspend", "user", user, None),
         ("unsuspend", "user", user, None),
@@ -324,6 +419,9 @@ def test_ac5_hide_and_unhide_listing(
         )[0]
 
     assert str(listing) in public_ids()
+    details = signed_in.get(f"/admin/listing/details/{listing}")
+    assert details.status_code == 200
+    assert "בעלים &lt;owner@example.com&gt;" in details.text
     assert signed_in.get(f"/admin/listing/action/hide?pks={listing}").status_code == 302
     assert row().status == "paused" and row().removed_at is not None
     assert str(listing) not in public_ids()
@@ -472,8 +570,7 @@ def test_ac9_read_only_views(signed_in: TestClient, db_engine: Engine) -> None:
     assert _scalar(db_engine, "SELECT count(*) FROM users") == 2
 
 
-def test_nf2_role_has_only_its_grants(admin_role: str, db_engine: Engine) -> None:
-    owner = make_owner(db_engine, "owner@example.com")
+def _check_role(admin_role: str, owner: uuid.UUID) -> None:
     engine = create_engine(admin_role)
     try:
         for statement in (
@@ -482,6 +579,8 @@ def test_nf2_role_has_only_its_grants(admin_role: str, db_engine: Engine) -> Non
             "UPDATE listings SET price_ils = 1000",
             "UPDATE sessions SET expires_at = now()",
             "DELETE FROM sessions",
+            "DELETE FROM admin_actions",
+            "UPDATE admin_actions SET detail = 'x'",
             "CREATE TABLE x()",
             "INSERT INTO users (email, display_name, role) VALUES ('y@example.com', 'yy', 'owner')",
         ):
@@ -501,12 +600,18 @@ def test_nf2_role_has_only_its_grants(admin_role: str, db_engine: Engine) -> Non
     finally:
         engine.dispose()
     assert flags == [(False, False, False, False)]
+
+
+def test_nf2_role_has_only_its_grants(admin_role: str, db_engine: Engine) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    _check_role(admin_role, owner)
     password = os.environ.get("ADMIN_DB_PASSWORD") or "dev-only-admin-db-password"
     apply_admin_role(TEST_DATABASE_URL, password)
     apply_admin_role(TEST_DATABASE_URL, password)
+    _check_role(admin_role, owner)  # a re-run converges on the same rights
 
 
-def test_nf3_host_and_fetch_site_guards(admin_client: TestClient) -> None:
+def test_nf3_host_and_fetch_site_guards(admin_client: TestClient, db_engine: Engine) -> None:
     assert admin_client.get("/admin/login", headers={"host": "evil.example"}).status_code == 400
     for site in ("cross-site", "same-site"):
         refused = admin_client.post(
@@ -520,10 +625,24 @@ def test_nf3_host_and_fetch_site_guards(admin_client: TestClient) -> None:
         assert admin_client.get("/admin/login", headers={"sec-fetch-site": site}).status_code == 200
     assert admin_client.get("/admin/login").status_code == 200
     assert _login_admin(admin_client).status_code == 302
-    action = admin_client.get(
-        f"/admin/user/action/suspend?pks={uuid.uuid4()}", headers={"sec-fetch-site": "same-site"}
+    user = make_owner(db_engine, "owner@example.com")
+    suspend = f"/admin/user/action/suspend?pks={user}"
+    # An action or a write needs `same-origin`: `none` is a link opened from mail or chat.
+    for site in ("same-site", "cross-site", "none"):
+        assert admin_client.get(suspend, headers={"sec-fetch-site": site}).status_code == 400
+    refused = admin_client.post(
+        f"/admin/user/edit/{user}", data={"listing_cap": "9"}, headers={"sec-fetch-site": "none"}
     )
-    assert action.status_code == 400
+    assert refused.status_code == 400
+    assert _scalar(db_engine, "SELECT suspended_at FROM users WHERE id = :id", id=user) is None
+    assert _scalar(db_engine, "SELECT listing_cap FROM users WHERE id = :id", id=user) == 3
+    assert _log(db_engine) == []
+    assert (
+        admin_client.get("/admin/user/list", headers={"sec-fetch-site": "none"}).status_code == 200
+    )
+    done = admin_client.get(suspend, headers={"sec-fetch-site": "same-origin"})
+    assert done.status_code == 302
+    assert _log(db_engine) == [("suspend", "user", user, None)]
 
 
 def test_nf4_settings_refuse_weak_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -564,39 +683,60 @@ def test_nf4_settings_refuse_weak_secrets(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_nf5_action_and_log_are_one_transaction(
-    db_engine: Engine, admin_role: str, gush_dan: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+    signed_in: TestClient,
+    db_engine: Engine,
+    admin_role: str,
+    gush_dan: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = make_owner(db_engine, "owner@example.com")
-    listing = make_listing(db_engine, owner_id=user, area_id=gush_dan)
-    engine = create_engine(admin_role)
+    suspended = make_owner(db_engine, "suspended@example.com")
+    reporter = make_seeker(db_engine, "reporter@example.com")
+    session_id = _live_session(db_engine, user)
+    _execute(db_engine, "UPDATE users SET suspended_at = now() WHERE id = :id", id=suspended)
+    live = make_listing(db_engine, user, gush_dan)
+    hidden = make_listing(db_engine, user, gush_dan, status="paused")
+    _execute(db_engine, "UPDATE listings SET removed_at = now() WHERE id = :id", id=hidden)
+    report = _report(db_engine, reporter, user, "person", uuid.uuid4())
 
     def broken_log(*args: Any) -> None:
         raise RuntimeError("log insert failed")
 
+    # Every action: its UPDATE runs, its log insert fails, and neither is committed.
+    # (read_chat writes only its log row, so it has no UPDATE to roll back.)
+    engine = create_engine(admin_role)
     try:
-        # The UPDATE succeeds, the log insert fails: neither is committed.
         with monkeypatch.context() as patch:
             patch.setattr(actions, "_log", broken_log)
             for action, target in (
                 (actions.suspend, user),
-                (actions.hide_listings, listing),
+                (actions.unsuspend, suspended),
+                (actions.hide_listings, live),
+                (actions.unhide_listings, hidden),
+                (actions.resolve_reports, report),
             ):
                 with Session(engine) as session, pytest.raises(RuntimeError):
                     action(session, [target])
-        assert _scalar(db_engine, "SELECT suspended_at FROM users WHERE id = :id", id=user) is None
-        assert (
-            _scalar(db_engine, "SELECT removed_at FROM listings WHERE id = :id", id=listing) is None
-        )
-
-        # The reverse, as UserView's edit runs it: the log row is added, then the UPDATE fails.
-        with Session(engine) as session:
-            row = session.get(User, user)
-            assert row is not None
-            actions.log_listing_cap(session, row, 101)
-            row.listing_cap = 101
-            with pytest.raises(IntegrityError):
-                session.commit()
     finally:
         engine.dispose()
+
+    def one(sql: str, row_id: uuid.UUID) -> Any:
+        return _rows(db_engine, sql, id=row_id)[0]
+
+    assert one("SELECT suspended_at FROM users WHERE id = :id", user).suspended_at is None
+    assert one("SELECT revoked_at FROM sessions WHERE id = :id", session_id).revoked_at is None
+    assert one("SELECT suspended_at FROM users WHERE id = :id", suspended).suspended_at is not None
+    live_row = one("SELECT status, removed_at FROM listings WHERE id = :id", live)
+    assert (live_row.status, live_row.removed_at) == ("active", None)
+    hidden_row = one("SELECT status, removed_at FROM listings WHERE id = :id", hidden)
+    assert hidden_row.status == "paused" and hidden_row.removed_at is not None
+    assert one("SELECT resolved_at FROM reports WHERE id = :id", report).resolved_at is None
+
+    # The reverse, through UserView's real edit: the log row is added, then the UPDATE fails at
+    # the DB CHECK (the form's range check is lifted so 101 reaches it).
+    monkeypatch.setattr(UserView, "form_args", {"listing_cap": {"validators": []}})
+    failed = signed_in.post(f"/admin/user/edit/{user}", data={"listing_cap": "101"})
+    assert failed.status_code == 400
+    assert "ck_users_listing_cap" in failed.text
     assert _scalar(db_engine, "SELECT listing_cap FROM users WHERE id = :id", id=user) == 3
     assert _log(db_engine) == []
