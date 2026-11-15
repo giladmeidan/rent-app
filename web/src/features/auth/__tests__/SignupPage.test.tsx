@@ -57,7 +57,7 @@ describe('SignupPage', () => {
       const images = [...brand.querySelectorAll('img')];
       expect(images.map((img) => img.getAttribute('src'))).toEqual([
         expect.stringMatching(/homie-turtle-hello/),
-        expect.stringMatching(/homie-wordmark-he\./),
+        expect.stringMatching(/homie-wordmark-en\./),
       ]);
       expect(images.map((img) => img.getAttribute('alt'))).toEqual(['', '']);
       expect(within(brand).queryAllByRole('img')).toEqual([]);

@@ -78,7 +78,7 @@ export function AuthMenu() {
 
   if (user === undefined && me.isPending) {
     return (
-      <div className="ms-auto flex min-h-tap items-center" aria-busy="true">
+      <div className="me-auto flex min-h-tap items-center" aria-busy="true">
         <Skeleton className="h-5 w-24" />
       </div>
     );
@@ -87,7 +87,7 @@ export function AuthMenu() {
   // 401, or a network or server error on /me with nothing cached, renders the logged-out state.
   if (user === undefined || user === null) {
     return (
-      <nav aria-label={t('nav.label')} className="ms-auto flex items-center gap-1">
+      <nav aria-label={t('nav.label')} className="me-auto flex items-center gap-1">
         <Link
           to={side === 'market' ? `/login?next=${encodeURIComponent('/market')}` : '/login'}
           className={headerLink}
@@ -134,13 +134,13 @@ export function AuthMenu() {
           // Its block size and safe-area padding are index.css's, from --bottom-nav-h.
           'flex max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:border-t max-lg:border-border max-lg:bg-surface',
           // From lg: the top bar's text tabs, after the brand.
-          'lg:gap-1',
+          'lg:order-1 lg:me-auto lg:gap-1',
           focused && 'max-lg:hidden',
         )}
       >
         {tabs}
       </nav>
-      <div className="ms-auto flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-row-reverse items-center gap-3 max-lg:me-auto lg:order-last">
         <span className="truncate text-label max-sm:hidden">
           {t('header.greeting', { name: user.display_name })}
         </span>

@@ -36,7 +36,7 @@ export function SignupPage() {
     <PageContainer as="section" width="narrow" className="flex flex-col gap-4 lg:pt-10">
       <div data-testid="auth-brand" className="flex flex-col items-center gap-3">
         <Mascot pose="hello" width={112} className="w-24 lg:w-28" />
-        <Logo variant="wordmark" tone="dark" decorative className="h-7" />
+        <Logo variant="wordmark" tone="dark" lang="en" decorative className="h-7" />
       </div>
       <Card data-testid="auth-card" padding="lg" className="flex flex-col gap-6">
         <PageHeader title={t('auth.signup.title')} subtitle={t('auth.signup.subtitle')} />

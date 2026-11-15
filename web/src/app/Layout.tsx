@@ -33,15 +33,15 @@ export function Layout() {
       <RouteFocus />
       <header className="border-b border-border bg-surface">
         <PageContainer width="wide">
-          <div className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 py-2 md:flex-nowrap">
-            {/* The lockup's alt (app.title, "הומי") names the link. */}
+          <div className="flex min-h-16 flex-row-reverse flex-wrap items-center gap-x-3 gap-y-2 py-2 md:flex-nowrap">
+            {/* The lockup's alt (app.title, "Homie") names the link. */}
             <Link
               to="/"
               className={`flex min-h-tap shrink-0 items-center rounded-md px-1 ${focusRing}`}
             >
-              <Logo variant="lockup" className="h-8" />
+              <Logo variant="lockup" lang="en" className="h-8" />
             </Link>
-            <div data-side-switch-row="" className="order-last w-full md:order-none md:w-auto">
+            <div data-side-switch-row="" className="order-last w-full md:w-auto">
               <SideSwitch />
             </div>
             <AuthMenu />
