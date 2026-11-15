@@ -1,7 +1,7 @@
 ---
 id: 0013h
 title: "homie keeps each kind of personal data only for a stated period, and a daily job deletes it after that"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa]   # security: PII deletion, cascades that could erase another person's thread or the admin's evidence; qa: every rule's edges (UI text change too, checklist 8)
 estimate: 1 coder run   # a long one: 9 rules + their tests, one small migration; coder Opus/high (data deletion, migration; Speed rule 6)
@@ -231,6 +231,10 @@ Web: the privacy-page text test. E2E: none (CI only anyway; no new screen).
 6. `purge_expired` takes row locks for one transaction at 03:25. A message sent into a conversation R4 is
    deleting either commits first (the DELETE re-checks `last_message_at` and skips it) or finds the row
    gone and fails as a send to an unknown chat. Accepted at this volume.
+7. **AC12's "no '[' placeholder" (coder, 2026-11-15):** read as the retention lines this spec owns
+   (`s1.i13`, `s5.*`, `s6.*`), which the test checks. The operator placeholders elsewhere on the page
+   (`intro`'s operator name, `s3.i2`'s providers and `s3.i5`'s countries) are launch details outside this
+   spec and stay until the operator is known. Orchestrator: confirm, or name the spec that fills them.
 
 ## Verifier findings (2026-11-15)
 1. `listings.floor` is NOT NULL (migration 0003), so Scope 1's `floor = NULL` would fail: added migration
