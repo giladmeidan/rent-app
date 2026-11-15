@@ -42,6 +42,8 @@ type Props = {
   target: ReportTarget;
   title: string;
   reasons: readonly ReportReason[];
+  /** A line between the intro and the reasons. */
+  hint?: string;
   open: boolean;
   /** Esc, the backdrop, ביטול or סגירה: the parent closes it. A running request is not cancelled. */
   onClose: () => void;
@@ -52,7 +54,7 @@ type Props = {
  * reported", or "no longer here"). Mount it anew (a new `key`) for each opening, so it starts
  * empty. The report reaches only homie's team: nothing else happens.
  */
-export function ReportDialog({ target, title, reasons, open, onClose }: Props) {
+export function ReportDialog({ target, title, reasons, hint, open, onClose }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const report = useReport();
@@ -169,6 +171,7 @@ export function ReportDialog({ target, title, reasons, open, onClose }: Props) {
       )}
       {!done && (
         <>
+          {hint !== undefined && <p className="text-start text-body-sm text-ink-muted">{hint}</p>}
           <ChoiceGroup
             legend={t('report.reasonLegend')}
             name={`report-${target.id}`}

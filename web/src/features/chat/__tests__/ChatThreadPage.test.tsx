@@ -981,6 +981,60 @@ describe('ChatThreadPage', () => {
     reset(view);
   });
 
+  it('ac1_report_from_chat', async () => {
+    const name = (n: string) => i18n.t('report.title.person', { name: n });
+    const reports = { 'POST /reports': [() => json({ already_reported: false }, 201)] };
+
+    // An application chat (seeker view): the caption row's button, six reasons, a chat report.
+    const T = thread({ other_name: NAME });
+    const { api, view: first } = renderThread(T, [json(T)], { extra: reports });
+    let view = first;
+    expect(await h1(NAME)).toBeVisible();
+    const button = screen.getByRole('button', { name: name(NAME) });
+    expect(button).toHaveTextContent(he.report.button);
+    expect(button.closest('div')).toContainElement(
+      screen.getByRole('link', { name: he.chat.thread.toListing }),
+    );
+    fireEvent.click(button);
+    const dialog = screen.getByRole('dialog', { name: name(NAME) });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(6);
+    expect(within(dialog).queryByText(he.report.groupHint)).toBeNull();
+    fireEvent.click(within(dialog).getByRole('radio', { name: he.report.reasons.broker }));
+    fireEvent.click(within(dialog).getByRole('button', { name: he.report.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(he.report.sent);
+    expect(api.calls('POST /reports')[0]?.body).toEqual({
+      target_type: 'chat',
+      target_id: T.id,
+      reason: 'broker',
+      note: null,
+    });
+    reset(view);
+
+    // A direct chat, open and closed: the button is there with five reasons.
+    const D = directThread({ other_name: NAME });
+    for (const t of [D, { ...D, can_send: false }]) {
+      ({ view } = renderThread(t, [json(t)]));
+      expect(await h1(NAME)).toBeVisible();
+      fireEvent.click(screen.getByRole('button', { name: name(NAME) }));
+      const direct = screen.getByRole('dialog', { name: name(NAME) });
+      expect(within(direct).getAllByRole('radio')).toHaveLength(5);
+      expect(within(direct).queryByText(he.report.reasons.unavailable)).toBeNull();
+      reset(view);
+    }
+
+    // A group chat (three members): the hint names the other side.
+    const G = group();
+    ({ view } = renderThread(G, [json(G)]));
+    expect(await h1(G.other_name)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: name(G.other_name) }));
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        i18n.t('report.groupHint', { name: G.other_name }),
+      ),
+    ).toBeVisible();
+    reset(view);
+  });
+
   it('ac11_direct_chat_header_and_closed_note', async () => {
     // A direct chat (spec 0010g): the person's name, one caption line, no listing link, the
     // deposit warning, and no member line (two people).

@@ -34,10 +34,22 @@ type Props = {
   label?: string;
   /** The id of what the button reports on (a card's heading). */
   describedBy?: string;
+  /** The button's accessible name, when it must say more than the visible text (a chat). */
+  ariaLabel?: string;
+  /** A line in the dialog between the intro and the reasons (a group chat). */
+  hint?: string;
 };
 
 /** The report button and its dialog, mounted anew on each opening so every opening starts empty. */
-export function ReportButton({ target, title, reasons, label, describedBy }: Props) {
+export function ReportButton({
+  target,
+  title,
+  reasons,
+  label,
+  describedBy,
+  ariaLabel,
+  hint,
+}: Props) {
   const { t } = useTranslation();
   const [state, setState] = useState({ open: false, key: 0 });
   return (
@@ -47,6 +59,7 @@ export function ReportButton({ target, title, reasons, label, describedBy }: Pro
         size="sm"
         icon={<FlagIcon />}
         aria-describedby={describedBy}
+        aria-label={ariaLabel}
         onClick={() => setState((s) => ({ open: true, key: s.key + 1 }))}
       >
         {label ?? t('report.button')}
@@ -57,6 +70,7 @@ export function ReportButton({ target, title, reasons, label, describedBy }: Pro
           target={target}
           title={title}
           reasons={reasons}
+          hint={hint}
           open={state.open}
           onClose={() => setState((s) => ({ ...s, open: false }))}
         />

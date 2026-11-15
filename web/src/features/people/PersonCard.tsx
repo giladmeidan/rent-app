@@ -14,6 +14,8 @@ import { MatchChips } from '../match/MatchChips';
 import { MatchRing } from '../match/MatchRing';
 import { personReason } from '../match/reasons';
 import { ReasonList } from '../match/ReasonList';
+import { PERSON_REASONS } from '../reports/reasons';
+import { ReportButton } from '../reports/ReportButton';
 import type { Criterion, ReasonKind } from '../match/types';
 import type { PersonOut } from './api';
 import { useLikePerson, useUnlikePerson } from './useLikePerson';
@@ -182,19 +184,27 @@ export function PersonCard({ person, listing, areaNames, onAlert }: Props) {
             />
           </div>
         </div>
-        <div className="flex flex-col items-start gap-2">
-          {/* `busy` keeps the focused button focusable while it runs (aria-disabled, not disabled). */}
-          <Button
-            size="md"
-            variant={person.liked_by_me ? 'soft' : 'primary'}
-            aria-pressed={person.liked_by_me}
-            aria-describedby={headingId}
-            busy={pending}
-            onClick={() => void toggle()}
-          >
-            {t('people.invite')}
-            {person.liked_by_me && <span aria-hidden="true">✓</span>}
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* `busy` keeps the focused button focusable while it runs (aria-disabled, not disabled). */}
+            <Button
+              size="md"
+              variant={person.liked_by_me ? 'soft' : 'primary'}
+              aria-pressed={person.liked_by_me}
+              aria-describedby={headingId}
+              busy={pending}
+              onClick={() => void toggle()}
+            >
+              {t('people.invite')}
+              {person.liked_by_me && <span aria-hidden="true">✓</span>}
+            </Button>
+            <ReportButton
+              target={{ type: 'room_person', id: person.id }}
+              title={t('report.title.person', { name })}
+              reasons={PERSON_REASONS}
+              describedBy={headingId}
+            />
+          </div>
           {error !== null && (
             <p role="alert" className="text-body-sm font-semibold text-danger">
               {error === 'notLive' && t('people.notLive')}

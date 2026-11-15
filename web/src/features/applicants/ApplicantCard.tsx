@@ -18,6 +18,8 @@ import { MatchChips } from '../match/MatchChips';
 import { MatchRing } from '../match/MatchRing';
 import { applicantMoveIn, householdName, ownerReason } from '../match/reasons';
 import { ReasonList } from '../match/ReasonList';
+import { PERSON_REASONS } from '../reports/reasons';
+import { ReportButton } from '../reports/ReportButton';
 import type { ReasonKind } from '../match/types';
 import type { ApplicantOut, ApplicantStatus } from './api';
 import { ProfileFacts } from './ApplicantDetails';
@@ -359,6 +361,16 @@ export function ApplicantCard({
               {online ? t('applicants.errors.actionFailed') : t('common.offline')}
             </p>
           )}
+        </div>
+      )}
+      {!compact && (
+        <div className="flex justify-end">
+          <ReportButton
+            target={{ type: 'applicant', id: applicant.id }}
+            title={t('report.title.person', { name })}
+            reasons={PERSON_REASONS}
+            describedBy={headingId}
+          />
         </div>
       )}
     </Card>
