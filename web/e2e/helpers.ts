@@ -38,13 +38,15 @@ export const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
  * the code field has focus and returns it. A refused request (429: the OTP budget per IP) fails
  * here with its status, not as a missing code field. */
 export async function requestCode(page: Page): Promise<Locator> {
-  const answer = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      new URL(response.url()).pathname === '/auth/otp/request',
-  );
-  await page.getByRole('button', { name: he.auth.sendCode }).click();
-  expect((await answer).status(), 'POST /auth/otp/request').toBe(204);
+  const [answer] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/auth/otp/request',
+    ),
+    page.getByRole('button', { name: he.auth.sendCode }).click(),
+  ]);
+  expect(answer.status(), 'POST /auth/otp/request').toBe(204);
   const codeInput = page.getByLabel(he.auth.code.label);
   await expect(codeInput).toBeFocused();
   return codeInput;
