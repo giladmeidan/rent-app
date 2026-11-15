@@ -4,7 +4,8 @@
 Since spec 0013e both live in Postgres (`admin_logins`, one row per attempt): the cookie holds only
 a random session id whose sha256 is the row's `token_hash`, so a logout ends the session for every
 copy of the cookie, and the lock holds across restarts and admin machines. Each method's database
-work is one transaction in a worker thread."""
+work is one transaction in a worker thread. Nothing lifts a lock early (`homie_admin` cannot
+DELETE); the owner role can: `DELETE FROM admin_logins WHERE locks_until > now()`."""
 
 import datetime as dt
 import hashlib

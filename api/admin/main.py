@@ -6,7 +6,8 @@ localhost port, which is the same site), then SQLAdmin at `/admin` behind its pa
 
 Every write needs `Sec-Fetch-Site: same-origin` (spec 0013e): a request without the header (curl,
 a browser without Fetch Metadata) can read but never write. This stands in for a per-session CSRF
-token, which SQLAdmin's templates would need overridden for."""
+token, which SQLAdmin's templates would need overridden for. Browsers send the header only to
+localhost or https, so the admin is reached on localhost (`fly proxy`) or over https."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
