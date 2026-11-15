@@ -1,4 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { useEffect } from 'react';
 import { useNavigate, type NavigateFunction } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +25,7 @@ import { gushDan, owner, seeker } from '../../features/listings/__tests__/fixtur
 import { profile } from '../../features/profile/__tests__/fixtures';
 import { PROFILE_KEY } from '../../features/profile/useProfile';
 import { page } from '../../features/search/__tests__/fixtures';
+import { CONTACT_EMAIL } from '../contact';
 import { AppRoutes } from '../routes';
 
 // jsdom has no WebGL: the map view renders the stand-in.
@@ -314,6 +318,7 @@ describe('Layout', () => {
     expect(screen.getAllByRole('navigation').map((n) => n.getAttribute('aria-label'))).toEqual([
       he.side.label,
       he.nav.label,
+      he.footer.label, // the footer's links (spec 0013f)
     ]);
     expect(nav).toHaveAttribute('data-bottom-nav');
     const logout = screen.getByRole('button', { name: he.header.logout });
@@ -542,5 +547,81 @@ describe('Layout', () => {
       vi.unstubAllGlobals();
     }
     window.localStorage.removeItem('homie.side');
+  });
+
+  describe('site footer (spec 0013f)', () => {
+    const footerEl = () => document.querySelector<HTMLElement>('footer[data-site-footer]');
+    const listing = '00000000-0000-0000-0000-0000000000f1';
+
+    it('ac8_site_footer', async () => {
+      const signedOut = { 'GET /me': [unauthenticated], 'GET /listings': [() => json(page([]))] };
+      const signedIn = {
+        'GET /me': [() => json(seeker)],
+        'GET /me/conversations': [() => json([])],
+        'GET /me/profile': [() => json({ detail: 'seeker_profile_not_found' }, 404)],
+        'GET /areas': [() => json([gushDan])],
+      };
+      // On these routes: a footer with one nav and the three links, in order.
+      for (const [path, replies] of [
+        ['/search', signedOut],
+        [`/listings/${listing}`, signedOut],
+        ['/me/profile', signedIn],
+        ['/terms', signedOut],
+      ] as const) {
+        mockApi(replies);
+        const view = renderRoutes(path, <AppRoutes />);
+        await waitFor(() => expect(footerEl()).not.toBeNull());
+        const footer = within(footerEl() as HTMLElement);
+        const nav = footer.getByRole('navigation', { name: he.footer.label });
+        expect(
+          within(nav)
+            .getAllByRole('link')
+            .map((a) => [a.textContent, a.getAttribute('href')]),
+        ).toEqual([
+          [he.footer.terms, '/terms'],
+          [he.footer.privacy, '/privacy'],
+          [he.footer.contact, `mailto:${CONTACT_EMAIL}`],
+        ]);
+        // It follows <main>, as the clearance rule's selector expects.
+        expect(main()?.nextElementSibling).toBe(footerEl());
+        view.unmount();
+        vi.unstubAllGlobals();
+      }
+
+      // The landing and chat have none.
+      mockApi(signedOut);
+      let view = renderRoutes('/', <AppRoutes />);
+      await screen.findByRole('heading', { level: 1 });
+      expect(footerEl()).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      mockApi(signedIn);
+      view = renderRoutes('/chat', <AppRoutes />);
+      await screen.findByText(he.chat.list.empty);
+      expect(footerEl()).toBeNull();
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      mockApi(signedIn);
+      view = renderRoutes(`/chat/${listing}`, <AppRoutes />);
+      await screen.findByRole('button', { name: he.common.retry });
+      expect(footerEl()).toBeNull();
+    });
+
+    it('nf1_footer_clears_tab_bar', () => {
+      // jsdom has no layout: assert the clearance rule's selectors in the stylesheet. Below `lg` the
+      // bar's height goes on the page's last element: the footer where one follows <main>, <main>
+      // where none does (`/`, `/chat`).
+      const css = readFileSync(
+        join(dirname(fileURLToPath(import.meta.url)), '..', 'index.css'),
+        'utf8',
+      );
+      const clearance = String.raw`\{[^}]*padding-block-end:\s*calc\(var\(--bottom-nav-h\)`;
+      expect(css).toMatch(
+        new RegExp(String.raw`main:not\(:has\(\+ \[data-site-footer\]\)\)\s*` + clearance),
+      );
+      expect(css).toMatch(new RegExp(String.raw`\[data-site-footer\]\s*` + clearance));
+    });
   });
 });

@@ -35,9 +35,14 @@ html:has([data-sticky-footer]) {
     scroll-padding-block-end: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
   }
 
-  /* Today's pb-8, kept above the bar. */
-  :root:has([data-bottom-nav]:not([data-hidden-mobile])) main {
+  /* Today's pb-8, kept above the bar. The page's last element carries the clearance: the footer
+     (spec 0013f) where there is one, `main` on `/` and under `/chat`, which have none. */
+  :root:has([data-bottom-nav]:not([data-hidden-mobile])) main:not(:has(+ [data-site-footer])) {
     padding-block-end: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 2rem);
+  }
+
+  :root:has([data-bottom-nav]:not([data-hidden-mobile])) [data-site-footer] {
+    padding-block-end: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
   }
 
   /* An installed app has no browser bar: the bar grows by the inset and pads its tabs above it. */
