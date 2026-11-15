@@ -53,7 +53,11 @@ class NullFilter:
 
 
 def _person(user: User | None) -> str:
-    return f"{user.display_name} <{user.email}>" if user else ""
+    if user is None:
+        return ""
+    if user.deleted_at is not None:  # a scrubbed tombstone (spec 0013c)
+        return f"deleted account ({user.id})"
+    return f"{user.display_name} <{user.email}>"
 
 
 def _values(literal: Any) -> list[tuple[str, str]]:
@@ -211,6 +215,7 @@ class UserView(_ReadOnly, model=User):
         User.last_login_at,
         User.listing_cap,
         User.suspended_at,
+        User.deleted_at,
     ]
     column_default_sort = ("created_at", True)
     column_sortable_list = [User.created_at, User.last_login_at]

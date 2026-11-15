@@ -444,7 +444,8 @@ export function ChatThreadPage() {
       : notFound
         ? t('chat.thread.notFound')
         : thread.data !== undefined
-          ? thread.data.other_name
+          ? // null = a deleted account (spec 0013c); 0013f names it with the placeholder
+            (thread.data.other_name ?? undefined)
           : thread.isError
             ? t('common.error')
             : undefined,

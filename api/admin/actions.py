@@ -170,6 +170,8 @@ def read_chat(session: Session, report_id: uuid.UUID) -> ReportedChat | None:
     """A reported conversation: its members and all its messages, oldest first, and one
     `read_chat` row per open. None (nothing logged) unless `report_id` is a `chat` report whose
     conversation still exists."""
+    # A deleted account's name is NULL (spec 0013c).
+    name = func.coalesce(User.display_name, "(deleted account)")
     report = session.get(Report, report_id)
     if report is None or report.target_type != "chat":
         return None
@@ -178,7 +180,7 @@ def read_chat(session: Session, report_id: uuid.UUID) -> ReportedChat | None:
         return None
     names = dict(
         session.execute(
-            select(User.id, User.display_name).where(
+            select(User.id, name).where(
                 User.id.in_([conversation.owner_id, conversation.seeker_id])
             )
         )
@@ -194,7 +196,7 @@ def read_chat(session: Session, report_id: uuid.UUID) -> ReportedChat | None:
     if application is not None and application.listing_type_at_apply == "room":
         # As services/chat.py: the room's flatmates, the seeker excluded.
         members += session.scalars(
-            select(User.display_name)
+            select(name)
             .join(ListingFlatmate, ListingFlatmate.user_id == User.id)
             .where(
                 ListingFlatmate.listing_id == application.listing_id,
@@ -204,7 +206,7 @@ def read_chat(session: Session, report_id: uuid.UUID) -> ReportedChat | None:
         ).all()
     rows = session.execute(
         select(
-            User.display_name,
+            name,
             func.to_char(func.timezone("Asia/Jerusalem", Message.created_at), "YYYY-MM-DD HH24:MI"),
             Message.body,
         )

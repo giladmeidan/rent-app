@@ -76,6 +76,7 @@ from app.models import (
 )
 from app.redis_client import RedisClient
 from app.schemas.people import PEOPLE_LIMIT, LikeStateOut
+from app.services import accounts
 from app.services import search as search_service
 from app.services.applications import AlreadyAppliedError
 from app.services.listings import ListingNotFoundError
@@ -360,6 +361,7 @@ def like_person(
     the post-lock check both re-test flatmate membership after it (`ListingNotFoundError`).
     Commits."""
     try:
+        accounts.lock_live_account(db, owner.id)  # spec 0013c: never a like by a tombstone
         listing = _own_room(db, owner, listing_id, lock=True)
         count_like(r, owner)
         # The pair's seeker, for the (listing, seeker) key; the UPDATE below re-checks the pair.

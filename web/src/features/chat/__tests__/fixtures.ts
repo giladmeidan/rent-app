@@ -8,6 +8,13 @@ const uuid = (fill: string) => `00000000-0000-0000-0000-${String(n).padStart(12,
 /** The listing line of an application chat (a direct chat has none, spec 0010g). */
 type ListingSummary = NonNullable<ConversationOut['listing']>;
 
+// The API types allow a null name for a deleted account (spec 0013c); these fixtures always name
+// people, so tests can find them by name.
+export type Conversation = ConversationOut & { other_name: string };
+type Message = MessageOut & { sender_name: string };
+type Member = ThreadOut['members'][number] & { name: string };
+type Thread = ThreadOut & { other_name: string; members: Member[]; messages: Message[] };
+
 const listingSummary = (): ListingSummary => ({
   id: '00000000-0000-0000-0000-0000000000a1',
   listing_type: 'apartment',
@@ -21,9 +28,9 @@ const listingSummary = (): ListingSummary => ({
  * `listing` is set unless an override (a plain `Partial<ConversationOut>`) says otherwise. */
 export function conversation(
   overrides?: Partial<ConversationOut & { listing: ListingSummary }>,
-): ConversationOut & { listing: ListingSummary };
-export function conversation(overrides: Partial<ConversationOut>): ConversationOut;
-export function conversation(overrides: Partial<ConversationOut> = {}): ConversationOut {
+): Conversation & { listing: ListingSummary };
+export function conversation(overrides: Partial<ConversationOut>): Conversation;
+export function conversation(overrides: Partial<ConversationOut> = {}): Conversation {
   n += 1;
   return {
     id: uuid('c'),
@@ -38,11 +45,11 @@ export function conversation(overrides: Partial<ConversationOut> = {}): Conversa
     last_message: null,
     created_at: '2026-11-10T10:00:00Z',
     ...overrides,
-  };
+  } as Conversation;
 }
 
 /** A message from the other person. */
-export function message(overrides: Partial<MessageOut> = {}): MessageOut {
+export function message(overrides: Partial<MessageOut> = {}): Message {
   n += 1;
   return {
     id: uuid('d'),
@@ -51,16 +58,16 @@ export function message(overrides: Partial<MessageOut> = {}): MessageOut {
     sender_name: 'מיכל',
     created_at: '2026-11-10T10:00:00Z',
     ...overrides,
-  };
+  } as Message;
 }
 
 /** An open application thread with no messages, as `GET /conversations/{id}` returns it. Its
  * `listing` is set unless an override (a plain `Partial<ThreadOut>`) says otherwise. */
 export function thread(
   overrides?: Partial<ThreadOut & { listing: ListingSummary }>,
-): ThreadOut & { listing: ListingSummary };
-export function thread(overrides: Partial<ThreadOut>): ThreadOut;
-export function thread(overrides: Partial<ThreadOut> = {}): ThreadOut {
+): Thread & { listing: ListingSummary };
+export function thread(overrides: Partial<ThreadOut>): Thread;
+export function thread(overrides: Partial<ThreadOut> = {}): Thread {
   n += 1;
   return {
     id: uuid('e'),
@@ -77,11 +84,11 @@ export function thread(overrides: Partial<ThreadOut> = {}): ThreadOut {
     messages: [],
     truncated: false,
     ...overrides,
-  };
+  } as Thread;
 }
 
 /** An open, read direct chat (two people, no listing, spec 0010g) with no messages. */
-export function directConversation(overrides: Partial<ConversationOut> = {}): ConversationOut {
+export function directConversation(overrides: Partial<ConversationOut> = {}): Conversation {
   n += 1;
   return {
     id: uuid('f'),
@@ -96,11 +103,11 @@ export function directConversation(overrides: Partial<ConversationOut> = {}): Co
     last_message: null,
     created_at: '2026-11-10T10:00:00Z',
     ...overrides,
-  };
+  } as Conversation;
 }
 
 /** An open direct thread with no messages: the two people, both `person`. */
-export function directThread(overrides: Partial<ThreadOut> = {}): ThreadOut {
+export function directThread(overrides: Partial<ThreadOut> = {}): Thread {
   n += 1;
   return {
     id: uuid('b'),
@@ -117,5 +124,5 @@ export function directThread(overrides: Partial<ThreadOut> = {}): ThreadOut {
     messages: [],
     truncated: false,
     ...overrides,
-  };
+  } as Thread;
 }

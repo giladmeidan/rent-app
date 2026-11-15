@@ -1,7 +1,7 @@
 """Rate limits and request hardening (spec 0011c): AC1-AC6 and AC12-AC14.
 
 `LIMITED` is the hand-kept registry of the routes this spec limits (proved by AC2); `OWN` the write
-routes with a limit of their own, proved by their own specs; `EXEMPT` the two that have none. AC1
+routes with a limit of their own, proved by their own specs; `EXEMPT` the three that have none. AC1
 fails for a new write route that is in none of them."""
 
 import asyncio
@@ -90,7 +90,8 @@ OWN = {
     ("POST", "/reports"),  # 0011b
 }
 # Signing in (5 guesses per code) and signing out (always works).
-EXEMPT = {("POST", "/auth/otp/verify"), ("POST", "/auth/logout")}
+# DELETE /me (spec 0013c): succeeds at most once per account, behind a sign-in of the last 15 min.
+EXEMPT = {("POST", "/auth/otp/verify"), ("POST", "/auth/logout"), ("DELETE", "/me")}
 WRITES = {"POST", "PUT", "PATCH", "DELETE"}
 
 
