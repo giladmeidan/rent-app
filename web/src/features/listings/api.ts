@@ -60,7 +60,8 @@ export class ApiError extends Error {
 
 export async function createListing(body: ListingInBody): Promise<ListingOut> {
   const { data, error, response } = await api.POST('/listings', { body });
-  if (data === undefined) throw new ApiError('POST', '/listings', response.status, error);
+  if (data === undefined)
+    throw new ApiError('POST', '/listings', response.status, error, response.headers);
   return data;
 }
 
@@ -75,7 +76,8 @@ export async function patchListing(id: string, body: ListingPatch): Promise<List
     params: { path: { listing_id: id } },
     body,
   });
-  if (data === undefined) throw new ApiError('PATCH', '/listings/{id}', response.status, error);
+  if (data === undefined)
+    throw new ApiError('PATCH', '/listings/{id}', response.status, error, response.headers);
   return data;
 }
 

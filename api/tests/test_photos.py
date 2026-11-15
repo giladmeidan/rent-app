@@ -970,3 +970,65 @@ def test_ac5_refused_uploads_never_read_decode_or_store(
         assert (len(reads), len(encodes), store.puts) == (1, 1, 2)
     finally:
         _app(client).dependency_overrides.pop(get_photo_store, None)
+
+
+# --- 0013g: an expired listing's photos are frozen like its fields -------------------------------
+
+
+def _set(engine: Engine, listing_id: Any, assignment: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(text(f"UPDATE listings SET {assignment} WHERE id = :id"), {"id": listing_id})
+
+
+def test_ac13_expired_listing_photos_frozen(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    listing: uuid.UUID,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    photo_store: FilePhotoStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    p0 = _created(owner, listing)
+    p1 = _created(owner, listing)
+    _set(db_engine, listing, "expires_at = now() - interval '1 day'")
+    before = (_rows(db_engine, listing), _files(photo_store))
+    reads = _read_spy(monkeypatch)
+
+    def no_decode(data: bytes) -> Any:
+        raise AssertionError("the decoder ran")
+
+    monkeypatch.setattr(photos_service, "encode", no_decode)
+    order = {"photo_ids": [p1["id"], p0["id"]]}
+
+    def attempts() -> list[Any]:
+        return [
+            _upload(owner, listing, jpeg()),
+            owner.delete(f"/listings/{listing}/photos/{p0['id']}"),
+            owner.put(f"/listings/{listing}/photos/order", json=order),
+        ]
+
+    for response in attempts():
+        assert (response.status_code, response.json()) == (409, {"detail": "listing_expired"})
+    assert (_rows(db_engine, listing), _files(photo_store)) == before
+    assert reads == []
+
+    _set(db_engine, listing, "status = 'paused', removed_at = now()")  # removed wins
+    for response in attempts():
+        assert (response.status_code, response.json()) == (409, {"detail": "listing_removed"})
+
+    signup(client, outbox, "o2@example.com", "owner")  # another owner's expired listing: 404
+    other = make_listing(db_engine, _user_id(db_engine, "o2@example.com"), gush_dan)
+    _set(db_engine, other, "expires_at = now() - interval '1 day'")
+    assert _upload(owner, other, jpeg()).status_code == 404
+    assert owner.put(f"/listings/{other}/photos/order", json=order).status_code == 404
+
+
+def test_ac13_renewed_listing_photos_open(
+    owner: TestClient, listing: uuid.UUID, db_engine: Engine
+) -> None:
+    _set(db_engine, listing, "expires_at = now() - interval '1 day'")
+    assert _upload(owner, listing, jpeg()).status_code == 409
+    assert owner.post(f"/listings/{listing}/renew").status_code == 200
+    assert _upload(owner, listing, jpeg()).status_code == 201

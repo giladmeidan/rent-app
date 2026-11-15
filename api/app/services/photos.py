@@ -29,6 +29,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import SmallInteger, delete, func, select, update, values
@@ -41,7 +42,7 @@ from app.config import get_settings
 from app.models import Listing, ListingPhoto, User
 from app.redis_client import RedisClient
 from app.schemas.photo import PhotoOut
-from app.services.listings import ListingNotFoundError, ListingRemovedError
+from app.services.listings import ListingExpiredError, ListingNotFoundError, ListingRemovedError
 from app.services.photo_store import PhotoStore, PhotoStoreUnavailable
 from app.services.rate_limit import RateLimitedError, count_or_raise
 
@@ -238,21 +239,32 @@ async def encode_upload(data: bytes) -> Encoded:
 def _lock_own_listing(db: Session, owner_id: uuid.UUID, listing_id: uuid.UUID) -> None:
     """Lock the caller's listing `FOR NO KEY UPDATE` until the transaction ends;
     `ListingNotFoundError` when it is unknown or another owner's, or its owner deleted the account
-    (spec 0013c), `ListingRemovedError` when homie removed it (spec 0012a)."""
-    removed = db.scalar(
-        select(Listing.removed_at.is_not(None))
+    (spec 0013c), `ListingRemovedError` when homie removed it (spec 0012a), `ListingExpiredError`
+    when past `expires_at` (spec 0013g)."""
+    row = db.execute(
+        select(Listing.removed_at.is_not(None), Listing.expires_at <= func.now())
         .where(Listing.id == listing_id, Listing.owner_id == owner_id)
         # `key_share` without `read` renders `FOR NO KEY UPDATE` on PostgreSQL.
         .with_for_update(key_share=True)
-    )
-    if removed is None:
-        raise ListingNotFoundError
+    ).one_or_none()
     # A second statement, after the lock: a lock that waited on `DELETE /me`'s listing UPDATE keeps
     # its old snapshot of `users`, while a new statement sees the committed deletion (spec 0013c).
-    if db.scalar(select(User.deleted_at.is_not(None)).where(User.id == owner_id)):
+    if row is not None and db.scalar(
+        select(User.deleted_at.is_not(None)).where(User.id == owner_id)
+    ):
         raise ListingNotFoundError
+    _raise_unless_open(row)
+
+
+def _raise_unless_open(row: Any) -> None:
+    """The refusals, in order, for a `(removed, expired)` row (None: not the caller's)."""
+    if row is None:
+        raise ListingNotFoundError
+    removed, expired = row
     if removed:
         raise ListingRemovedError
+    if expired:
+        raise ListingExpiredError
 
 
 def _photo_count(db: Session, listing_id: uuid.UUID) -> int:
@@ -263,17 +275,16 @@ def _photo_count(db: Session, listing_id: uuid.UUID) -> int:
 
 def check_listing_upload(db: Session, owner: User, listing_id: uuid.UUID) -> None:
     """Before an upload's body is read (no lock): `ListingNotFoundError` unless the listing is the
-    caller's, `ListingRemovedError` when homie removed it, `PhotoLimitError` when it is full.
-    `add_listing_photo` checks all three again under the lock."""
-    removed = db.scalar(
-        select(Listing.removed_at.is_not(None)).where(
-            Listing.id == listing_id, Listing.owner_id == owner.id
-        )
+    caller's, `ListingRemovedError` when homie removed it, `ListingExpiredError` when past
+    `expires_at`, `PhotoLimitError` when it is full. `add_listing_photo` checks all again under
+    the lock."""
+    _raise_unless_open(
+        db.execute(
+            select(Listing.removed_at.is_not(None), Listing.expires_at <= func.now()).where(
+                Listing.id == listing_id, Listing.owner_id == owner.id
+            )
+        ).one_or_none()
     )
-    if removed is None:
-        raise ListingNotFoundError
-    if removed:
-        raise ListingRemovedError
     if _photo_count(db, listing_id) >= MAX_LISTING_PHOTOS:
         raise PhotoLimitError
 
@@ -291,8 +302,8 @@ def add_listing_photo(
 ) -> ListingPhoto:
     """Store both copies of an encoded upload under a new key and add the photo last on the
     caller's listing. Raises `PhotoStoreUnavailable`, `ListingNotFoundError`,
-    `ListingRemovedError` and `PhotoLimitError` (re-checked under the listing lock); on any failure
-    both objects are deleted again."""
+    `ListingRemovedError`, `ListingExpiredError` and `PhotoLimitError` (re-checked under the
+    listing lock); on any failure both objects are deleted again."""
     key = new_key()
     names = object_names(key)
     try:

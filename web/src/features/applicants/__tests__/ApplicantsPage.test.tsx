@@ -570,6 +570,30 @@ describe('ApplicantsPage', () => {
     reset(view);
   });
 
+  it('ac4_rate_limited_status_says_when', async () => {
+    const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
+    const cases: [Response, string][] = [
+      [
+        json({ detail: 'rate_limited' }, 429, { 'Retry-After': '120' }),
+        'הרבה שינויים בזמן קצר. אפשר לנסות שוב בעוד 2 דקות.',
+      ],
+      [json({ detail: 'rate_limited' }, 429), he.applicants.errors.rateLimited],
+      [json({ detail: 'boom' }, 500), he.applicants.errors.actionFailed],
+    ];
+    for (const [reply, text] of cases) {
+      const { view } = renderPage([json([P]), json([P])], {
+        extra: { [patchRoute(P)]: [reply] },
+      });
+      await screen.findByRole('article');
+      fireEvent.click(
+        within(cardOf(MICHAL)).getByRole('button', { name: he.applicants.actions.shortlist }),
+      );
+      expect((await within(cardOf(MICHAL)).findByRole('alert')).textContent).toBe(text);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('ac6_action_errors', async () => {
     const P = applicant({ applicant_name: MICHAL, status: 'submitted' });
     const Q = applicant({ status: 'shortlisted' });

@@ -42,6 +42,7 @@ export async function fetchProfile(): Promise<SeekerProfileOut | null> {
 /** Creates or replaces the caller's profile. 422 (a list, or `unknown_area`), 401, … throw. */
 export async function putProfile(body: SeekerProfileIn): Promise<SeekerProfileOut> {
   const { data, error, response } = await api.PUT('/me/profile', { body });
-  if (data === undefined) throw new ApiError('PUT', '/me/profile', response.status, error);
+  if (data === undefined)
+    throw new ApiError('PUT', '/me/profile', response.status, error, response.headers);
   return data;
 }

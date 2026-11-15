@@ -77,6 +77,42 @@ def test_ac12_rent_import_cron_registered() -> None:
     assert job.timeout_s == 1800
 
 
+@pytest.fixture
+def app_logger_restored() -> Iterator[None]:
+    app_logger = logging.getLogger("app")
+    level, handlers = app_logger.level, list(app_logger.handlers)
+    yield
+    app_logger.setLevel(level)
+    app_logger.handlers[:] = handlers
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("httpx_log_level", "app_logger_restored")
+async def test_ac8_worker_logs_its_info_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Spec 0013g: arq's CLI leaves the root at WARNING; the startup hook makes `app` log INFO.
+    from app import worker
+
+    importlib.reload(worker)
+    logging.getLogger("app").setLevel(logging.NOTSET)
+    await worker.WorkerSettings.on_startup({})
+    await worker.WorkerSettings.on_startup({})  # idempotent: one handler
+    app_logger = logging.getLogger("app")
+    assert app_logger.getEffectiveLevel() == logging.INFO
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+    (handler,) = (h for h in app_logger.handlers if getattr(h, "_homie_worker", False))
+    records: list[logging.LogRecord] = []
+    monkeypatch.setattr(handler, "emit", records.append)
+    logging.getLogger("app.worker").info("view flush: %d", 0)
+    assert [r.getMessage() for r in records] == ["view flush: 0"]
+
+    # A sweep with nothing to do logs no line; one with work logs its counts.
+    for counts, lines in (({"located": 0, "failed": 0}, 0), ({"located": 1, "failed": 0}, 1)):
+        monkeypatch.setattr(worker, "_sweep", lambda counts=counts: counts)
+        records.clear()
+        await worker.geocode_listings({})
+        assert len(records) == lines
+
+
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("geo_clean", "httpx_log_level")
 async def test_nf3_worker_logs_no_address(

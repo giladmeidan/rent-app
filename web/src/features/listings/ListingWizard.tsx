@@ -48,6 +48,7 @@ function outcome(error: Error): Outcome {
   if (error.status === 401) return 'unauthenticated';
   if (error.status === 403) return 'forbidden';
   if (error.status === 404) return 'notFound';
+  if (error.status === 429) return 'rateLimited';
   if (error.status === 409) {
     if (error.detail === 'listing_expired') return 'expired';
     if (error.detail === 'listing_removed') return 'removed';
@@ -652,6 +653,7 @@ export function ListingWizard({ listing, initialType }: Props) {
                 today={today}
                 // A 404 while editing unmounts the wizard (the page shows "not found").
                 error={failure === 'notFound' ? 'failed' : failure}
+                retryAfter={active.error instanceof ApiError ? active.error.retryAfter : null}
                 onRetry={publish}
                 onBackToDetails={() => {
                   // The chosen area was deactivated: offer the current list.

@@ -7,8 +7,9 @@ another's are one 404 `not_found`.
 Upload: the request body **is** the image (`Content-Type: image/jpeg`, `image/png` or `image/webp`;
 not multipart, and the header is not trusted: Pillow decides the format). Before the body is read
 (`prepare_upload`): the attempt is counted against the user's photo rate limit, the listing must be
-the caller's (404), not removed by homie (409 `listing_removed`, spec 0012a) and not full (409
-`photo_limit`), the user's one upload slot is taken (a second upload in flight is a 429,
+the caller's (404), not removed by homie (409 `listing_removed`, spec 0012a), not past `expires_at`
+(409 `listing_expired`, spec 0013g) and not full (409 `photo_limit`), the user's one upload slot
+is taken (a second upload in flight is a 429,
 `Retry-After: 5`), and the request's transaction is committed, so a slow body,
 the re-encode and the store never hold a pooled connection idle in a transaction. None of these
 refusals reads the body or decodes anything. `read_capped` stops reading past 8 MB. The re-encode
@@ -17,7 +18,8 @@ threadpool: the event loop is never blocked.
 Nothing here logs or echoes the body; a 413 / 415 logs the route and the error code only.
 
 Delete and reorder count the shared `write` budget (spec 0011c, `app/limits.py`), every attempt, and
-answer 409 `listing_removed` on a listing removed by homie (spec 0012a), nothing written.
+answer 409 `listing_removed` on a listing removed by homie (spec 0012a) and 409 `listing_expired`
+on one past `expires_at` (spec 0013g), nothing written.
 
 Person photo (spec 0010j): `PUT /me/photo` and `DELETE /me/photo`, any role. The upload runs exactly
 as a listing upload (no listing check), counting against the same limit and the same one upload
@@ -45,7 +47,7 @@ from app.schemas.auth import UserOut
 from app.schemas.error import ErrorOut
 from app.schemas.photo import PhotoOrderIn, PhotoOut
 from app.services import photos as photos_service
-from app.services.listings import ListingNotFoundError, ListingRemovedError
+from app.services.listings import ListingExpiredError, ListingNotFoundError, ListingRemovedError
 from app.services.photo_store import PhotoStore, PhotoStoreUnavailable, get_photo_store
 from app.services.rate_limit import RateLimitedError
 
@@ -78,7 +80,11 @@ _NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorOut, "description": "not_found: unknown listing or another's"},
 }
 _REMOVED: dict[int | str, dict[str, Any]] = {
-    409: {"model": ErrorOut, "description": "listing_removed: removed by homie"},
+    409: {
+        "model": ErrorOut,
+        "description": "listing_removed: removed by homie; listing_expired: past expires_at:"
+        " renew it",
+    },
 }
 UPLOAD_ERRORS: dict[int | str, dict[str, Any]] = {
     413: {"model": ErrorOut, "description": "photo_too_large: over 8 MB or over 40 megapixels"},
@@ -104,6 +110,10 @@ def _unsupported() -> HTTPException:
 
 def _removed() -> HTTPException:
     return HTTPException(status_code=409, detail="listing_removed")
+
+
+def _expired() -> HTTPException:
+    return HTTPException(status_code=409, detail="listing_expired")
 
 
 def _storage_unavailable() -> HTTPException:
@@ -200,7 +210,7 @@ def _log_refused(request: Request, code: object) -> None:
         409: {
             "model": ErrorOut,
             "description": "photo_limit: the listing has 10 photos; listing_removed: removed by"
-            " homie (before the body is read)",
+            " homie; listing_expired: past expires_at: renew it (all before the body is read)",
         },
         **UPLOAD_ERRORS,
     },
@@ -235,6 +245,8 @@ async def upload_listing_photo(
         raise HTTPException(status_code=409, detail="photo_limit") from None
     except ListingRemovedError:
         raise _removed() from None
+    except ListingExpiredError:
+        raise _expired() from None
     except PhotoStoreUnavailable:
         raise _storage_unavailable() from None
     return photos_service.photo_out(photo.id, photo.key)
@@ -269,6 +281,8 @@ def delete_listing_photo(
         raise HTTPException(status_code=404, detail="not_found") from None
     except ListingRemovedError:
         raise _removed() from None
+    except ListingExpiredError:
+        raise _expired() from None
     return Response(status_code=204)
 
 
@@ -297,6 +311,8 @@ def reorder_listing_photos(
         raise HTTPException(status_code=404, detail="not_found") from None
     except ListingRemovedError:
         raise _removed() from None
+    except ListingExpiredError:
+        raise _expired() from None
     except photos_service.PhotoOrderMismatchError:
         raise HTTPException(status_code=422, detail="photo_order_mismatch") from None
     return photos_service.photos_out(photos)
