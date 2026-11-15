@@ -589,6 +589,7 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                 <ChoiceGroup
                   legend={t('profile.fields.shelter')}
                   name="shelter_needed"
+                  stacked
                   options={shelters}
                   value={form.shelter_needed}
                   onChange={(value) => change({ shelter_needed: value })}
