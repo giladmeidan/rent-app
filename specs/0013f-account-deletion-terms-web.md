@@ -1,7 +1,7 @@
 ---
 id: 0013f
 title: "A person deletes their account from the profile, chats show who left, and every page links to the terms of use and the privacy policy"
-status: verified
+status: in-review
 depends_on: [0013c]
 reviewers: [code, security, ux, qa]   # security: the reauth flow, signup_blocked, and the legal text's claims read against the code; ux: the delete section and dialog, the footer, the legal pages; qa: the flows and every placeholder
 estimate: 1 coder run   # coder Sonnet/high (UI and copy; the data and auth rules are 0013c's)
@@ -318,6 +318,29 @@ From `graphify affected` on `main` (84b6fef), checked with grep:
   promises a way to ask, not a time frame.
 - **Production values:** `VITE_CONTACT_EMAIL` (and 0013c's `EMAIL_BLOCK_KEY`) belong in 0013a's deploy
   checklist. A build without it shows `contact@example.com`.
+- **Build notes (coder, 2026-11-15), deviations from the text above:**
+  - `useDeleteAccount` navigates in `onSuccess` but forgets the session (`clearAllDrafts`, `clearSeen`,
+    `clearSession`) in the cleanup of its host component's unmount, not in `onSuccess`. React Router
+    commits a navigation inside `startTransition`, while the query cache's store updates are
+    synchronous: clearing in `onSuccess` rendered `RequireUser` on `/me/profile` with `['me']` null first
+    and bounced to the login page (reproduced in `ac1_delete_account`). The profile unmounting is the
+    signal that `/account-deleted` is up.
+  - The delete section is its own file, `DeleteAccountSection.tsx` (`ProfilePage.tsx` is 740 lines); the
+    landing's two links are `landing/LegalLinks.tsx` (one line in `LandingPage.tsx`, so 0016a's merge
+    stays small); the legal text is rendered from `legal/content.ts`, one literal `t('legal.…')` per
+    paragraph, so `make i18n-check` checks every key.
+  - `ProfilePage.test.tsx::0009r layout::ac1_sections_index_and_field_order` lists the page's `h2`s; the
+    delete section adds one (the Blast radius missed it). Updated.
+  - `{{email}}` renders as a first-strong isolate (`U+2068 … U+2069`, as `OtpForm` does for the code step's
+    email), not a `<bdi>`: the footer shows "יצירת קשר", never the address, so only sentences need it.
+  - `VITE_CONTACT_EMAIL` also passes through `infra/docker-compose.yml`'s web service (without it the
+    `.env.example` line would not reach the container).
+  - `/privacy#deletion` scrolls to its section: the router does not scroll to a hash, so `LegalPage` does.
+  - `legal.date` ("[תאריך]") is its own key, so Gilad fills one place for both pages' "עודכן לאחרונה".
+  - Legal text per the orchestrator's exceptions: Privacy §3's providers bullet and its last bullet name no
+    paid provider. Placeholders left in `he.json`: see the coder's report.
+  - Not verified: a 390 px / `lg` visual pass of the footer, the delete section and the legal pages (no
+    stack was started; the Mac was loaded by other stacks). NF1 is checked by a stylesheet test only.
 - The reauth trip loses nothing: the profile form's unsaved edits are lost on logout, as on any logout,
   and the dialog says a sign-in follows.
 
