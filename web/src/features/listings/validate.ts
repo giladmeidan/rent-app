@@ -18,6 +18,7 @@ import type {
   Condition,
   Poster,
   RoomFactKey as RoomFact,
+  Shelter,
 } from './api';
 
 /** A yes / no fact the lister may leave unsaid (0010f): `''` is "לא לציין" (sent as `null`). */
@@ -65,8 +66,9 @@ export type ListingForm = {
   balcony: YesNo;
   bills_included: YesNo;
   poster: Poster | '';
+  /** The flat's protected space (0015a), optional, on any listing; `''` = not said. */
+  shelter: Shelter | '';
   /** The apartment facts (0014b), all optional, with `balcony`; `''` = not said. */
-  safe_room: YesNo;
   air_conditioning: YesNo;
   condition: Condition | '';
 };
@@ -102,7 +104,7 @@ export const emptyForm: ListingForm = {
   balcony: '',
   bills_included: '',
   poster: '',
-  safe_room: '',
+  shelter: '',
   air_conditioning: '',
   condition: '',
 };
@@ -371,7 +373,8 @@ const yesNoOf = (value: boolean | null): YesNo => (value === null ? '' : value ?
 /** The `POST /listings` body for a form that `validate` and `validatePreferences` accept. Every
  * key: an apartment sends the room fields' defaults (the only values the API takes for one), and
  * never the room-only flat facts (0010f), which a room sends with `null` for "not said". An
- * apartment sends `balcony` and its own facts (0014b) instead, `null` for "not said". */
+ * apartment sends `balcony` and its own facts (0014b) instead, `null` for "not said". Both send
+ * the flat's protected space (0015a), `null` for "not said". */
 export function toListingIn(form: ListingForm): ListingInBody {
   if (form.listing_type === null) throw new Error('toListingIn: no listing type');
   const description = cleanText(form.description, { multiline: true });
@@ -386,7 +389,6 @@ export function toListingIn(form: ListingForm): ListingInBody {
       }
     : {
         balcony: yesNoValue(form.balcony),
-        safe_room: yesNoValue(form.safe_room),
         air_conditioning: yesNoValue(form.air_conditioning),
         condition: form.condition === '' ? null : form.condition,
       };
@@ -417,6 +419,7 @@ export function toListingIn(form: ListingForm): ListingInBody {
     flatmates_count: room ? form.flatmates_count : null,
     flatmate_ages: room ? agesOf(form) : [],
     lifestyle: room ? answeredLifestyle(form.lifestyle) : {},
+    shelter: form.shelter === '' ? null : form.shelter,
     ...facts,
   };
 }
@@ -457,7 +460,7 @@ export function formFromListing(listing: ListingOut): ListingForm {
     balcony: yesNoOf(listing.balcony),
     bills_included: yesNoOf(listing.bills_included),
     poster: listing.poster ?? '',
-    safe_room: yesNoOf(listing.safe_room),
+    shelter: listing.shelter ?? '',
     air_conditioning: yesNoOf(listing.air_conditioning),
     condition: listing.condition ?? '',
   };

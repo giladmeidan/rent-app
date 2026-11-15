@@ -91,9 +91,10 @@ const expectedBody = {
   flatmates_count: null,
   flatmate_ages: [] as number[],
   lifestyle: {},
-  // Spec 0014b: an apartment's four facts, not said.
+  // Spec 0015a: the flat's protected space, not said.
+  shelter: null,
+  // Spec 0014b: an apartment's three facts, not said.
   balcony: null,
-  safe_room: null,
   air_conditioning: null,
   condition: null,
 };

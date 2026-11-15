@@ -1,7 +1,7 @@
-"""`admin_actions` table (spec 0012a, migration 0023): the admin dashboard's log (spec 0012b), one
+"""`admin_actions` table (spec 0012a, migration 0024): the admin dashboard's log (spec 0012b), one
 row per action. The running public app never reads or writes it.
 
-Every CHECK matches migration 0023 exactly (autogenerate must see no diff). `target_id` has no FK:
+Every CHECK matches migration 0024 exactly (autogenerate must see no diff). `target_id` has no FK:
 it points into four tables (`target_type` says which) and the log outlives its target. There is one
 admin, so there is no "who" column."""
 

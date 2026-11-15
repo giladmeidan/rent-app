@@ -10,8 +10,8 @@ writes any of them.
 Downgrade drops all four in reverse order: **the admin log, every resolution, removal and
 suspension is lost**.
 
-Revision ID: 0023
-Revises: 0022
+Revision ID: 0024
+Revises: 0023
 Create Date: 2026-11-15
 """
 
@@ -21,8 +21,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision: str = "0023"
-down_revision: str | None = "0022"
+revision: str = "0024"
+down_revision: str | None = "0023"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

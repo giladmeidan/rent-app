@@ -25,7 +25,7 @@ class User(Base):
         CheckConstraint(photo_key_check("photo_key"), name="ck_users_photo_key"),
         # The person's market card id (spec 0010h migration 0017).
         UniqueConstraint("card_id", name="uq_users_card_id"),
-        # The few suspended users (spec 0012a migration 0023, Gilad 2026-11-15): the visibility
+        # The few suspended users (spec 0012a migration 0024, Gilad 2026-11-15): the visibility
         # rules' "not suspended" check reads only these, so it stays flat as `users` grows.
         Index("ix_users_suspended", "id", postgresql_where=text("suspended_at IS NOT NULL")),
     )

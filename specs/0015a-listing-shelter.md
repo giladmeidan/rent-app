@@ -1,7 +1,7 @@
 ---
 id: 0015a
 title: "A lister says what protected space the flat has (ממ״ד, ממ״ק, מקלט בבניין or none), seekers see it on the card and the listing page, and can filter for it"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, qa, ux]   # qa: API + every place a listing is shown; ux: wizard field, card tag, filter
 estimate: 1 coder run       # coder Opus/high (migration; Speed rule 6)
@@ -134,7 +134,7 @@ Design: no artboard; follow the existing fact rows, chips and filter checkboxes 
 - [ ] AC8 The card shows `ממ״ד` / `ממ״ק` / `מקלט` for the three shelter types and nothing for `none` or NULL —
   `ListingCard.test.tsx`
 - [ ] AC9 The search filter "מרחב מוגן" sets `shelter=true` in the URL and query, survives a reload, and shows an
-  active-filter tag that clears it — `web/src/features/search/__tests__/filters.test.ts` (parse / serialise) and
+  active-filter tag; clearing the filters removes it (tags are not removable today) — `web/src/features/search/__tests__/filters.test.ts` (parse / serialise) and
   `web/src/features/search/__tests__/SearchPage.test.tsx` (checkbox, query, tag; there is no `FiltersForm` test file)
 - [ ] AC10 `make i18n-check` passes; no hardcoded Hebrew.
 - [ ] AC11 Given rows with `safe_room` true, false and NULL at the previous head, When the migration upgrades,
@@ -196,7 +196,8 @@ page (CI only; never run e2e locally).
 - `none` vs NULL must stay distinct everywhere ("no shelter" is information; "not said" is not).
 - Dropping `safe_room` in one migration is safe only because nothing is deployed (Slice 13). A listing that said
   ממ״ד "no" loses that answer (becomes "not said"); accepted, since it told nothing about ממ״ק / מקלט.
-- `safe_room` in full, after this PR, must have zero hits outside `api/alembic/versions/` (`git grep safe_room`).
+- `safe_room` in full, after this PR, must have zero hits outside `api/alembic/versions/` and the migration tests
+  that must name it (AC11, AC12, 0014b's 0020 test) (`git grep safe_room`).
 
 ## Verifier findings (2026-11-15, one round; status stays `draft` on finding 1 only)
 1. **Blocker, product/schema (checklist 9, 3) — Gilad.** `main` already has `listings.safe_room boolean NULL`

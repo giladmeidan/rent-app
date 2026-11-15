@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Tag } from '../../components/Tag';
 import { formatDate, formatIls, formatRooms } from '../listings/format';
-import { countActive, type Feature, type Filters } from './filters';
+import { countActive, FEATURES, type Feature, type Filters } from './filters';
 
 type Props = {
   filters: Filters;
@@ -55,8 +55,9 @@ export function ActiveFilterTags({ filters, className }: Props) {
     furnished: t('search.feature.furnished'),
     elevator: t('search.feature.elevator'),
     parking: t('search.feature.parking'),
+    shelter: t('search.feature.shelter'),
   };
-  for (const feature of ['pets', 'furnished', 'elevator', 'parking'] as const) {
+  for (const feature of FEATURES) {
     if (filters[feature] === true) tags.push(featureLabels[feature]);
   }
 

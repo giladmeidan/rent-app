@@ -8,7 +8,7 @@ import { flatmatesNearAge } from '../rooms/age';
 import { flatmatesText, genderPreferenceLabel } from '../rooms/flatmates';
 import type { ListingOut } from './api';
 import { cardTitle } from './cardTitle';
-import { entryFact, floorFact, sizeFact } from './facts';
+import { entryFact, floorFact, shelterCardFact, sizeFact } from './facts';
 import { formatIls } from './format';
 import { furnishedLabel } from './furnished';
 
@@ -30,6 +30,7 @@ export type CardFacts = Pick<
   | 'parking_spots'
   | 'furnished'
   | 'pets_allowed'
+  | 'shelter'
 > &
   Partial<Pick<ListingOut, 'gender_preference' | 'flatmates_count' | 'flatmate_ages'>> & {
     is_mine?: boolean;
@@ -153,11 +154,13 @@ export function ListingCard({
   }
 
   const flatmates = isRoom ? flatmatesText(t, listing) : null;
+  const shelter = shelterCardFact(t, listing.shelter);
   const facts = [
     ...(flatmates === null ? [] : [flatmates]),
     floorFact(listing, t),
     sizeFact(listing, t),
     listing.elevator ? t('listings.card.elevator') : t('listings.card.noElevator'),
+    ...(shelter === null ? [] : [shelter]),
     ...(listing.parking_spots > 0
       ? [t('listings.card.parking', { count: listing.parking_spots })]
       : []),

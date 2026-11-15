@@ -908,10 +908,10 @@ describe('EditListingPage', () => {
   });
 
   it('ac13 apartment facts load and a cleared one is sent as null', async () => {
-    // Spec 0014b AC13.
+    // Spec 0014b AC13; its ממ״ד yes / no is the shelter field's (spec 0015a).
     const a = stored({
       balcony: true,
-      safe_room: false,
+      shelter: 'mamak',
       air_conditioning: true,
       condition: 'good',
     });
@@ -920,7 +920,7 @@ describe('EditListingPage', () => {
       within(screen.getByRole('group', { name: legend })).getByRole('radio', { name });
     const cond = he.listings.condition;
     expect(fact(r.balcony, he.common.yes)).toBeChecked();
-    expect(fact(f.safeRoom, he.common.no)).toBeChecked();
+    expect(fact(f.shelter, he.listings.shelter.mamak)).toBeChecked();
     expect(fact(f.airConditioning, he.common.yes)).toBeChecked();
     expect(fact(f.condition, cond.good)).toBeChecked();
 
@@ -928,6 +928,35 @@ describe('EditListingPage', () => {
     fireEvent.click(fact(f.condition, r.unset));
     detailsToPreferences();
     expect(await saveFromPreferences(api, a)).toEqual([{ balcony: null, condition: null }]);
+  });
+
+  it('ac6 the shelter field pre-selects the saved value and clears it to null', async () => {
+    // Spec 0015a AC6, an apartment and a room.
+    const sh = he.listings.shelter;
+    const choice = (name: string) =>
+      within(screen.getByRole('group', { name: f.shelter })).getByRole('radio', { name });
+    const apartment = stored({ shelter: 'none' });
+    let opened = await openEdit(apartment, [json({ ...apartment, shelter: null })]);
+    expect(choice(sh.none)).toBeChecked();
+    expect(beforeUnloadPrevented()).toBe(false);
+    fireEvent.click(choice(r.unset));
+    detailsToPreferences();
+    expect(await saveFromPreferences(opened.api, apartment)).toEqual([{ shelter: null }]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    const room = stored({ listing_type: 'room', flatmates_count: 2, shelter: 'building' });
+    opened = await openEdit(room, [json({ ...room, shelter: 'mamad' })]);
+    expect(choice(sh.building)).toBeChecked();
+    fireEvent.click(choice(sh.mamad));
+    detailsToPreferences();
+    expect(await saveFromPreferences(opened.api, room)).toEqual([{ shelter: 'mamad' }]);
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Not said: "לא לציין" starts selected.
+    opened = await openEdit(stored({ shelter: null }));
+    expect(choice(r.unset)).toBeChecked();
   });
 
   it('ac13_expired_page_renews', async () => {

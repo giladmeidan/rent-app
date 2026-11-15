@@ -114,6 +114,9 @@ def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
         query = query.where(Listing.furnished.in_(("partial", "full")))
     if params.elevator:
         query = query.where(Listing.elevator.is_(True))
+    if params.shelter:
+        # Spec 0015a: the flat has a protected space; `none` and NULL (not said) never match.
+        query = query.where(Listing.shelter.in_(("mamad", "mamak", "building")))
     if params.parking:
         query = query.where(Listing.parking_spots >= 1)
     if params.bbox is not None:

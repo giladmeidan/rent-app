@@ -41,8 +41,8 @@ schema lands in one migration and `0012b` has none.
 ## Scope
 **In:**
 - **Migration and models:**
-  - migration `0023_admin_moderation` (Data). It takes the next free number if `0015a`'s migration lands
-    first, with `down_revision` set to `main`'s head at build time;
+  - migration `0024_admin_moderation` (Data): `0015a`'s `0023_listing_shelter` landed first, so
+    `down_revision` is 0023;
   - `api/app/models/user.py` (`suspended_at`), `listing.py` (`removed_at` + CHECK; its docstring's
     migration list gains this one), `report.py` (`resolved_at`), and a new `admin_action.py`
     (`AdminAction`), exported from `app/models/__init__.py`.
@@ -128,7 +128,7 @@ schema lands in one migration and `0012b` has none.
 **New dependencies:** none.
 
 ## Data
-Migration `api/alembic/versions/0023_admin_moderation.py` (the number may change, see Scope), with a
+Migration `api/alembic/versions/0024_admin_moderation.py` (`down_revision` 0023, `0015a`'s), with a
 working `downgrade` that drops all four in reverse order:
 
 | Table | Change | Rule |
@@ -369,7 +369,7 @@ From `graphify affected` on `main` (5713d57), checked against the code with grep
   `people/RoomInviteHint.tsx` → `MarketPeoplePage`: live-only, unaffected).
 - Models `User`, `Listing`, `Report`, `AdminAction`: nullable columns and a new table; the new CHECK bites
   only on writes that set `status = 'active'` (`update_listing`'s resume, `renew_listing`), which refuse
-  first. `Listing`'s docstring list of migrations gains 0023. `test_migrations.py` round trip and
+  first. `Listing`'s docstring list of migrations gains 0024. `test_migrations.py` round trip and
   autogenerate.
 
 ## Risks / open questions

@@ -214,7 +214,8 @@ describe('ListingPage', () => {
   });
 
   it('ac14 apartment facts show only when said', async () => {
-    // Spec 0014b AC14: two of the four filled, two cells; a room shows none of the three new ones.
+    // Spec 0014b AC14: two of the three filled, two cells; a room shows neither apartment-only one
+    // (its ממ״ד yes / no is the shelter's, spec 0015a, shown on both types).
     const f = he.listings.fields;
     const l = listingDetail({ ...katznelson, balcony: true, condition: 'needs_work' });
     mockApi({
@@ -238,14 +239,14 @@ describe('ListingPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    const all = listingDetail({ safe_room: false, air_conditioning: true });
+    const all = listingDetail({ shelter: 'none', air_conditioning: true });
     mockApi({
       'GET /me': [json({ detail: 'unauthenticated' }, 401)],
       [`GET /listings/${all.id}`]: [json(all)],
     });
     view = render(all.id);
     await screen.findByRole('heading', { level: 1 });
-    expect(facts()[f.safeRoom]).toBe(he.listing.no);
+    expect(facts()[f.shelter]).toBe(he.listings.shelter.none);
     expect(facts()[f.airConditioning]).toBe(he.listing.yes);
     expect(facts()).not.toHaveProperty(he.listings.room.balcony);
     expect(facts()).not.toHaveProperty(f.condition);
@@ -255,7 +256,6 @@ describe('ListingPage', () => {
     const room = listingDetail({
       listing_type: 'room',
       flatmates_count: 2,
-      safe_room: true,
       air_conditioning: true,
       condition: 'new',
     });
@@ -265,8 +265,48 @@ describe('ListingPage', () => {
     });
     render(room.id);
     await screen.findByRole('heading', { level: 1 });
-    for (const label of [f.safeRoom, f.airConditioning, f.condition]) {
+    for (const label of [f.airConditioning, f.condition]) {
       expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
+  describe('shelter (0015a)', () => {
+    const f = he.listings.fields;
+    const sh = he.listings.shelter;
+    /** Every facts cell on the page (both grids of a room) whose label is `label`. */
+    const cells = (label: string) =>
+      screen.getAllByRole('term').filter((term) => term.textContent === label);
+
+    async function open(l: ReturnType<typeof listingDetail>) {
+      mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        [`GET /listings/${l.id}`]: [json(l)],
+      });
+      const view = render(l.id);
+      await screen.findByRole('heading', { level: 1 });
+      return view;
+    }
+
+    for (const type of ['apartment', 'room'] as const) {
+      const base = type === 'room' ? { listing_type: type, flatmates_count: 2 } : {};
+
+      it(`ac7 ${type} page shows one shelter cell after the elevator, none when not said`, async () => {
+        for (const value of ['mamad', 'mamak', 'building', 'none'] as const) {
+          const view = await open(listingDetail({ ...base, shelter: value }));
+          expect(cells(f.shelter)).toHaveLength(1);
+          expect(facts()[f.shelter]).toBe(sh[value]);
+          const labels = Object.keys(facts());
+          expect(labels.indexOf(f.shelter)).toBe(labels.indexOf(f.elevator) + 1);
+          // AC12: no second ממ״ד cell (0014b's yes / no).
+          expect(cells(he.listings.card.shelter.mamad)).toHaveLength(0);
+          view.unmount();
+          vi.unstubAllGlobals();
+        }
+
+        await open(listingDetail({ ...base, shelter: null }));
+        expect(cells(f.shelter)).toHaveLength(0);
+        expect(cells(he.listings.card.shelter.mamad)).toHaveLength(0);
+      });
     }
   });
 
