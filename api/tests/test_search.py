@@ -55,8 +55,8 @@ PUBLIC_KEYS = {
     "balcony",
     "bills_included",
     "poster",
-    "safe_room",  # spec 0014b: the apartment facts, public
-    "air_conditioning",
+    "shelter",  # spec 0015a: the flat's protected space, public
+    "air_conditioning",  # spec 0014b: the apartment facts, public
     "condition",
     "created_at",
     "lat",
@@ -230,8 +230,9 @@ def test_ac2_public_shape_hides_owner_and_lifecycle(client: TestClient, world: W
         "balcony": None,
         "bills_included": None,
         "poster": None,
+        # The flat's protected space (spec 0015a): not said.
+        "shelter": None,
         # The apartment facts (spec 0014b): not said.
-        "safe_room": None,
         "air_conditioning": None,
         "condition": None,
         "lat": None,  # not located yet (spec 0003c)
@@ -296,6 +297,35 @@ def test_ac4_feature_filters_true_only(
     assert _id_set(client, "pets=true&furnished=true&elevator=true&parking=true") == {every}
     assert _id_set(client, "pets=false") == all_rows
     assert _id_set(client, "pets=false&furnished=false&elevator=false&parking=false") == all_rows
+
+
+def test_ac4_search_shelter_filter(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    # Spec 0015a: `shelter=true` is a flat with a protected space; `none` and NULL never match.
+    owner = make_owner(db_engine, "owner@example.com")
+    values = ("mamad", "mamak", "building", "none", None)
+    ids = {value: str(make_listing(db_engine, owner, gush_dan, shelter=value)) for value in values}
+    room = str(make_listing(db_engine, owner, gush_dan, listing_type="room", shelter="mamak"))
+    bare_room = str(make_listing(db_engine, owner, gush_dan, listing_type="room", shelter="none"))
+
+    sheltered = _search(client, "shelter=true&limit=50")
+    assert sheltered["total"] == 3
+    assert {item["id"]: item["shelter"] for item in sheltered["items"]} == {
+        ids["mamad"]: "mamad",
+        ids["mamak"]: "mamak",
+        ids["building"]: "building",
+    }
+    every = _search(client, "limit=50")["items"]
+    assert {item["id"]: item["shelter"] for item in every} == {v: k for k, v in ids.items()}
+    assert _id_set(client, "shelter=false") == set(ids.values())
+    # The market's rooms use the same filter.
+    assert _id_set(client, "listing_type=room") == {room, bare_room}
+    assert _id_set(client, "listing_type=room&shelter=true") == {room}
+    # The listing page carries it too.
+    expected = {**{v: k for k, v in ids.items()}, room: "mamak", bare_room: "none"}
+    for listing_id, value in expected.items():
+        assert client.get(f"/listings/{listing_id}").json()["shelter"] == value
 
 
 def test_ac5_available_by_honours_flexible_entry(

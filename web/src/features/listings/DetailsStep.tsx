@@ -14,11 +14,11 @@ import { Select } from '../../components/Select';
 import { Switch } from '../../components/Switch';
 import { Textarea } from '../../components/Textarea';
 import { TextInput } from '../../components/TextInput';
-import { CONDITIONS } from './constants';
+import { CONDITIONS, SHELTERS } from './constants';
 import { addDays, formatIls, formatRooms } from './format';
 import { furnishedLabel } from './furnished';
 import { useRentEstimate } from './useRentEstimate';
-import { conditionLabel } from './facts';
+import { conditionLabel, shelterLabel } from './facts';
 import { yesNoOptions } from './RoomFields';
 import {
   AVAILABLE_FROM_MAX_DAYS,
@@ -379,6 +379,7 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
             checked={form.elevator}
             onChange={(elevator) => onChange({ elevator })}
           />
+          <ShelterField form={form} onChange={onChange} />
           <div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <label htmlFor={fieldId('parking_spots')} className="text-body font-medium">
@@ -453,15 +454,36 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
   );
 }
 
-/** An apartment's four optional facts (0014b), after "pets": balcony, ממ״ד and air conditioning as
+/** The flat's protected space (0015a), right after the elevator, for an apartment and a room alike:
+ * the four types and "לא לציין" (`''`, sent as `null`; how the edit page clears a saved one). */
+function ShelterField({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
+  const { t } = useTranslation();
+  const options: ChoiceOption<ListingForm['shelter']>[] = [
+    ...SHELTERS.map((value) => ({ value, label: shelterLabel(t, value) })),
+    { value: '' as const, label: t('listings.room.unset') },
+  ];
+  return (
+    <div className="px-4 py-3">
+      <ChoiceGroup
+        legend={t('listings.fields.shelter')}
+        name="shelter"
+        options={options}
+        wrap
+        value={form.shelter}
+        onChange={(shelter) => onChange({ shelter })}
+      />
+    </div>
+  );
+}
+
+/** An apartment's three optional facts (0014b), after "pets": balcony and air conditioning as
  * yes / no / "לא לציין" (as `RoomFields` asks a room's), then the condition. A room asks its balcony
- * in `RoomFields`. */
+ * in `RoomFields`; the ממ״ד is the shelter field's (0015a). */
 function ApartmentFacts({ form, onChange }: Pick<Props, 'form' | 'onChange'>) {
   const { t } = useTranslation();
   const yesNo = yesNoOptions(t);
   const yesNoFacts = [
     { name: 'balcony', legend: t('listings.room.balcony') },
-    { name: 'safe_room', legend: t('listings.fields.safeRoom') },
     { name: 'air_conditioning', legend: t('listings.fields.airConditioning') },
   ] as const;
   const conditionOptions: ChoiceOption<ListingForm['condition']>[] = [

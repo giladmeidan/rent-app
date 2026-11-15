@@ -171,9 +171,10 @@ describe('validate', () => {
       flatmates_count: null,
       flatmate_ages: [],
       lifestyle: {},
+      // Spec 0015a: the flat's protected space, not said.
+      shelter: null,
       // Spec 0014b: an apartment's facts, not said.
       balcony: null,
-      safe_room: null,
       air_conditioning: null,
       condition: null,
     });
@@ -630,11 +631,18 @@ describe('validate', () => {
       expect(apartment).not.toHaveProperty(key);
     }
     expect(apartment).toHaveProperty('balcony', false);
-    // A room never sends the apartment facts (spec 0014b).
-    const roomBody = toListingIn({ ...said, safe_room: 'yes', condition: 'good' });
-    for (const key of ['safe_room', 'air_conditioning', 'condition']) {
+    // A room never sends the apartment facts (spec 0014b), but does send its protected space,
+    // a fact of the flat (spec 0015a).
+    const roomBody = toListingIn({
+      ...said,
+      shelter: 'mamad',
+      air_conditioning: 'yes',
+      condition: 'good',
+    });
+    for (const key of ['air_conditioning', 'condition']) {
       expect(roomBody).not.toHaveProperty(key);
     }
+    expect(roomBody).toHaveProperty('shelter', 'mamad');
 
     // The edit form starts from the stored facts, and only a changed one is sent.
     const stored = listing({
@@ -693,24 +701,23 @@ describe('validate', () => {
   });
 
   it('ac12 apartment facts: body mapping, edit form and changed fields', () => {
-    // Spec 0014b: `''` is `null`; an apartment sends the four, the edit form loads them, and a
-    // cleared one is sent as `null`.
+    // Spec 0014b: `''` is `null`; an apartment sends the three, the edit form loads them, and a
+    // cleared one is sent as `null` (its ממ״ד yes / no is the shelter's, spec 0015a).
     expect(toListingIn(valid)).toMatchObject({
       balcony: null,
-      safe_room: null,
       air_conditioning: null,
       condition: null,
     });
     const said: ListingForm = {
       ...valid,
       balcony: 'yes',
-      safe_room: 'no',
+      shelter: 'none',
       air_conditioning: 'yes',
       condition: 'needs_work',
     };
     const saidBody = {
       balcony: true,
-      safe_room: false,
+      shelter: 'none',
       air_conditioning: true,
       condition: 'needs_work',
     } as const;
@@ -720,18 +727,46 @@ describe('validate', () => {
     const form = formFromListing(stored);
     expect(form).toMatchObject({
       balcony: 'yes',
-      safe_room: 'no',
+      shelter: 'none',
       air_conditioning: 'yes',
       condition: 'needs_work',
     });
     expect(formFromListing(listing())).toMatchObject({
-      safe_room: '',
+      shelter: '',
       air_conditioning: '',
       condition: '',
     });
     expect(changedFields(stored, toListingIn(form))).toEqual({});
     expect(
-      changedFields(stored, toListingIn({ ...form, balcony: 'no', condition: '', safe_room: '' })),
-    ).toEqual({ balcony: false, condition: null, safe_room: null });
+      changedFields(stored, toListingIn({ ...form, balcony: 'no', condition: '', shelter: '' })),
+    ).toEqual({ balcony: false, condition: null, shelter: null });
+  });
+
+  it('ac6 shelter: default, body mapping, edit form and changed fields', () => {
+    // Spec 0015a: `''` ("לא לציין") is the default and is sent as `null`; both types send it; the
+    // edit form loads the stored one, and clearing it sends `null`.
+    expect(emptyForm.shelter).toBe('');
+    const room: ListingForm = { ...valid, listing_type: 'room', flatmates_count: 2 };
+    for (const form of [valid, room]) {
+      expect(toListingIn(form)).toHaveProperty('shelter', null);
+      for (const shelter of ['mamad', 'mamak', 'building', 'none'] as const) {
+        expect(toListingIn({ ...form, shelter })).toHaveProperty('shelter', shelter);
+      }
+    }
+    for (const stored of [
+      listing({ shelter: 'building' }),
+      listing({ listing_type: 'room', flatmates_count: 2, shelter: 'building' }),
+    ]) {
+      const form = formFromListing(stored);
+      expect(form.shelter).toBe('building');
+      expect(changedFields(stored, toListingIn(form))).toEqual({});
+      expect(changedFields(stored, toListingIn({ ...form, shelter: '' }))).toEqual({
+        shelter: null,
+      });
+      expect(changedFields(stored, toListingIn({ ...form, shelter: 'mamad' }))).toEqual({
+        shelter: 'mamad',
+      });
+    }
+    expect(formFromListing(listing({ shelter: null })).shelter).toBe('');
   });
 });

@@ -14,7 +14,7 @@ import {
   SafeRoomIcon,
   VaadIcon,
 } from './factIcons';
-import { conditionLabel } from './facts';
+import { conditionLabel, shelterLabel } from './facts';
 import { formatIls } from './format';
 import { furnishedLabel } from './furnished';
 
@@ -40,8 +40,9 @@ export function FactCell({
   );
 }
 
-/** Listing.dc.html's facts grid as label/value pairs; arnona and vaad only when given. An
- * apartment adds its balcony, ממ״ד, air conditioning and condition (0014b), each only when said
+/** Listing.dc.html's facts grid as label/value pairs; arnona and vaad only when given. The flat's
+ * protected space (0015a) follows the elevator when said, on an apartment and a room alike. An
+ * apartment adds its balcony, air conditioning and condition (0014b), each only when said
  * (`ListingPage` renders this grid for a room too, whose facts are `RoomFacts`'). */
 export function ListingFacts({ listing }: { listing: ListingPublic }) {
   const { t } = useTranslation();
@@ -53,6 +54,15 @@ export function ListingFacts({ listing }: { listing: ListingPublic }) {
       value: listing.elevator ? t('listing.yes') : t('listing.no'),
       icon: <ElevatorIcon />,
     },
+    ...(listing.shelter === null
+      ? []
+      : [
+          {
+            label: t('listings.fields.shelter'),
+            value: shelterLabel(t, listing.shelter),
+            icon: <SafeRoomIcon />,
+          },
+        ]),
     {
       label: t('listings.fields.parking'),
       value:
@@ -79,13 +89,6 @@ export function ListingFacts({ listing }: { listing: ListingPublic }) {
         label: t('listings.room.balcony'),
         value: yesNo(listing.balcony),
         icon: <ArnonaIcon />,
-      });
-    }
-    if (listing.safe_room !== null) {
-      rows.push({
-        label: t('listings.fields.safeRoom'),
-        value: yesNo(listing.safe_room),
-        icon: <SafeRoomIcon />,
       });
     }
     if (listing.air_conditioning !== null) {
