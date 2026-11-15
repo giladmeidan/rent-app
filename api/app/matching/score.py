@@ -10,6 +10,12 @@ criterion also has `f_<c>`, "fails". `raw = round(sum(WEIGHTS[c] * m_c))` on the
 (`round(numeric)` rounds half away from zero), and a listing failing any hard filter is capped at
 `HARD_FAIL_CAP`: it stays in the results with its failure as the "differs" line, never hidden.
 
+Weights (spec 0015b): budget 20, move-in 20, area 15, household 10, contract 10, shelter 10,
+parking 5, smoking 5, pets 5. The hard filters are budget, move-in, area, smoking, pets and
+shelter: a seeker who needs a protected space (`shelter_needed` `protected`: a listing's `mamad`,
+`mamak` or `building`; `mamad`: a ממ״ד in the flat) fails a listing without one, and a listing that
+did not say (NULL `shelter`, rows from before 0015b) fails it too.
+
 A past `available_from` means "immediately" (spec 0002a) and a past stored `move_in_date` means
 "now", hence both `greatest(..., current_date)`; `current_date` is the database's (UTC). The
 expressions assume a profile row: with NULL profile columns they are not NULL but meaningless.
@@ -18,7 +24,7 @@ Lifestyle (spec 0007g; PRODUCT.md "Rooms"): on a **room**, the soft `lifestyle` 
 agreement between the flat's questionnaire answers and the seeker's, over the questions both
 answered: per shared key `1 - |a - b| / 2` (1, 0.5 or 0), averaged. It is NULL when no answer is
 shared or the listing is not a room, and a NULL criterion is skipped: it neither scores nor
-explains. When it is set, the 8 base criteria share `BASE_SHARE` of the score and lifestyle the
+explains. When it is set, the 9 base criteria share `BASE_SHARE` of the score and lifestyle the
 rest: `raw = round(BASE_SHARE * B + LIFESTYLE_WEIGHT * m_lifestyle)`, with `B` the unrounded base
 sum, so without it the score is exactly the base one. The terms are unrolled per key in Python, so
 the SQL is a plain per-row expression (no subquery, no SubPlan).
@@ -59,18 +65,21 @@ from app.schemas.profile import LIFESTYLE_KEYS
 
 # Also the tie-break order of the explanation; `lifestyle` is last.
 CRITERIA: Final[tuple[Criterion, ...]] = get_args(Criterion)
-# The 8 base criteria (sum 100); `lifestyle` is weighted apart (`LIFESTYLE_WEIGHT`).
+# The 9 base criteria (sum 100); `lifestyle` is weighted apart (`LIFESTYLE_WEIGHT`).
 WEIGHTS: Final[dict[Criterion, int]] = {
-    "budget": 25,
+    "budget": 20,
     "move_in": 20,
-    "area": 20,
+    "area": 15,
     "household": 10,
     "contract": 10,
     "parking": 5,
     "smoking": 5,
     "pets": 5,
+    "shelter": 10,
 }
-HARD: Final[tuple[Criterion, ...]] = ("budget", "move_in", "area", "smoking", "pets")
+HARD: Final[tuple[Criterion, ...]] = ("budget", "move_in", "area", "smoking", "pets", "shelter")
+# A `protected` seeker's protected spaces (`listings.shelter`); `none` and NULL are not.
+_PROTECTED: Final = ("mamad", "mamak", "building")
 # When `lifestyle` is scored it takes this many of the 100 points; the base criteria keep the rest,
 # each `W_c` scaled by `BASE_SHARE` (0.8). `lifestyle` is soft: never in `HARD`.
 LIFESTYLE_WEIGHT: Final = 20
@@ -185,6 +194,12 @@ def match_columns(
         "pets": case(
             (and_(profile.has_pets.is_(True), not_(listing.pets_allowed)), _ZERO), else_=_ONE
         ),
+        # Never NULL: a NULL `listing.shelter` falls to `_ones_when`'s `ELSE 0`.
+        "shelter": case(
+            (profile.shelter_needed == "any", _ONE),
+            (profile.shelter_needed == "mamad", _ones_when(listing.shelter == "mamad")),
+            else_=_ones_when(listing.shelter.in_(_PROTECTED)),
+        ),
         "lifestyle": _lifestyle(listing, profile, room_type),
     }
     fails: dict[Criterion, ColumnElement[bool]] = {
@@ -193,6 +208,7 @@ def match_columns(
         "area": m["area"] == 0,
         "smoking": m["smoking"] == 0,
         "pets": m["pets"] == 0,
+        "shelter": m["shelter"] == 0,
     }
     # `B`, unrounded. `BASE_SHARE` is bound as numeric: a float bind would make the sum double
     # precision, which `round` rounds half to even. One `round`, over the whole sum.

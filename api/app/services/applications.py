@@ -386,6 +386,7 @@ _PROFILE_COLUMNS = (
     SeekerProfile.smoker,
     SeekerProfile.contract_months,
     SeekerProfile.parking_needed,
+    SeekerProfile.shelter_needed,
 )
 
 # The owner-facing room section (0007c, NF2): by name and only on an application made to a room

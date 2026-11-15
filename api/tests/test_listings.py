@@ -26,7 +26,8 @@ pytestmark = pytest.mark.usefixtures("redis_clean")
 
 
 def _body(area_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
-    """The AC1 body: a full valid apartment listing."""
+    """The AC1 body: a full valid apartment listing (`shelter` is required since 0015b; `none`
+    moves no match score)."""
     body: dict[str, Any] = {
         "listing_type": "apartment",
         "area_id": str(area_id),
@@ -46,6 +47,7 @@ def _body(area_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
         "arnona_ils": 480,
         "vaad_ils": 150,
         "description": "דירה מוארת",
+        "shelter": "none",
     }
     body.update(overrides)
     return body
@@ -989,16 +991,21 @@ def test_ac4_apartment_facts(owner: TestClient, gush_dan: uuid.UUID, db_engine: 
     created = _create(owner, gush_dan, **FACTS)
     assert _facts(created) == FACTS
     assert _facts(_row(db_engine, created["id"])) == FACTS
-    plain = _create(owner, gush_dan)
-    assert _facts(plain) == dict.fromkeys(FACTS)
+    plain = _create(owner, gush_dan)  # `_body`'s `shelter: none` (required since 0015b)
+    assert _facts(plain) == {**dict.fromkeys(FACTS), "shelter": "none"}
 
-    changed = {"balcony": False, "shelter": "none", "air_conditioning": True, "condition": "new"}
+    changed = {
+        "balcony": False,
+        "shelter": "building",
+        "air_conditioning": True,
+        "condition": "new",
+    }
     assert _facts(_patched(owner, plain["id"], changed)) == changed
     assert _facts(_row(db_engine, plain["id"])) == changed
-    # An explicit `null` clears each one.
-    for name in FACTS:
+    # An explicit `null` clears each one, except `shelter` (0015b, AC8).
+    for name in FACTS.keys() - {"shelter"}:
         assert _patched(owner, created["id"], {name: None})[name] is None
-    assert _facts(_row(db_engine, created["id"])) == dict.fromkeys(FACTS)
+    assert _facts(_row(db_engine, created["id"])) == {**dict.fromkeys(FACTS), "shelter": "mamad"}
 
     response = owner.post("/listings", json=_body(gush_dan, condition="old"))
     assert response.status_code == 422, response.text
@@ -1035,37 +1042,51 @@ def test_ac5_facts_on_a_room_and_room_fields_still_room_only(
 # --- Spec 0015a: the flat's protected space ----------------------------------------------------
 
 
-def test_ac1_create_listing_shelter(
+def test_ac7_shelter_required_on_create(
     owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
+    # Spec 0015b (replaces 0015a's `test_ac1_create_listing_shelter`): no `shelter` or `null` is a
+    # 422 at the field and writes nothing.
+    missing = _body(gush_dan)
+    del missing["shelter"]
+    for body in (missing, _body(gush_dan, shelter=None), _room(gush_dan, shelter=None)):
+        response = owner.post("/listings", json=body)
+        assert response.status_code == 422, response.text
+        assert [entry["loc"] for entry in response.json()["detail"]] == [["body", "shelter"]]
+    assert _count(db_engine) == 0
+
     created = _create(owner, gush_dan, shelter="mamad")
     assert created["shelter"] == "mamad"
     assert _row(db_engine, created["id"])["shelter"] == "mamad"
-    plain = _create(owner, gush_dan)
-    assert plain["shelter"] is None
-    assert _row(db_engine, plain["id"])["shelter"] is None
     # A room has it too (a fact of the flat).
     room = _create_room(owner, gush_dan, shelter="building")
     assert room["shelter"] == "building"
     mine = {item["id"]: item["shelter"] for item in owner.get("/me/listings").json()}
-    assert mine == {created["id"]: "mamad", plain["id"]: None, room["id"]: "building"}
+    assert mine == {created["id"]: "mamad", room["id"]: "building"}
 
 
-def test_ac2_patch_listing_shelter(
+def test_ac8_shelter_not_clearable(
     owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
-    listing_id = _create(owner, gush_dan, shelter="mamak")["id"]
-
-    assert _patched(owner, listing_id, {"shelter": "none"})["shelter"] == "none"
-    assert _row(db_engine, listing_id)["shelter"] == "none"
-    # A PATCH without the key leaves it as it was.
+    # Spec 0015b (replaces 0015a's `test_ac2_patch_listing_shelter`): `null` is a 422; a value
+    # replaces; a key not sent leaves it.
+    listing_id = _create(owner, gush_dan, shelter="none")["id"]
+    _assert_refused(owner, db_engine, listing_id, [{"shelter": None}])
+    assert _patched(owner, listing_id, {"shelter": "mamak"})["shelter"] == "mamak"
+    assert _row(db_engine, listing_id)["shelter"] == "mamak"
     untouched = _patched(owner, listing_id, {"price_ils": 7300})
-    assert (untouched["price_ils"], untouched["shelter"]) == (7300, "none")
-    assert _row(db_engine, listing_id)["shelter"] == "none"
-    # `none` and NULL stay distinct: an explicit `null` clears it to "not said".
-    assert _patched(owner, listing_id, {"shelter": None})["shelter"] is None
-    assert _row(db_engine, listing_id)["shelter"] is None
-    assert _patched(owner, listing_id, {"price_ils": 7200})["shelter"] is None
+    assert (untouched["price_ils"], untouched["shelter"]) == (7300, "mamak")
+
+    # A listing from before 0015b (NULL `shelter`): another field and pause / resume still save,
+    # and it stays NULL.
+    owner_id = uuid.UUID(owner.get("/me").json()["id"])
+    legacy = str(make_listing(db_engine, owner_id, gush_dan))
+    assert _row(db_engine, legacy)["shelter"] is None
+    patched = _patched(owner, legacy, {"price_ils": 7100})
+    assert (patched["price_ils"], patched["shelter"]) == (7100, None)
+    assert _patched(owner, legacy, {"status": "paused"})["status"] == "paused"
+    assert _patched(owner, legacy, {"status": "active"})["status"] == "active"
+    assert _row(db_engine, legacy)["shelter"] is None
 
 
 def test_ac3_shelter_rejects_unknown_value(
@@ -1089,10 +1110,10 @@ def test_ac12_safe_room_removed(owner: TestClient, gush_dan: uuid.UUID, db_engin
     created = response.json()
     listing_id = created["id"]
     assert "safe_room" not in created
-    assert created["shelter"] is None
+    assert created["shelter"] == "none"  # `_body`'s (required since 0015b)
     row = _row(db_engine, listing_id)
     assert "safe_room" not in row
-    assert row["shelter"] is None
+    assert row["shelter"] == "none"
 
     _assert_refused(owner, db_engine, listing_id, [{"safe_room": True}])
     patched = _patched(owner, listing_id, {"shelter": "mamad"})

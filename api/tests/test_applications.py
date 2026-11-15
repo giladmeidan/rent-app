@@ -192,6 +192,7 @@ def _listing_body(area_id: uuid.UUID) -> dict[str, Any]:
         "elevator": True,
         "furnished": "partial",
         "pets_allowed": True,
+        "shelter": "none",
     }
 
 

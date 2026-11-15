@@ -38,7 +38,13 @@ from pydantic import (
 from app.schemas._text import blank_to_none, visible_characters_only
 from app.schemas.listing import ListingType, _lf_newlines
 from app.schemas.match import MatchOut
-from app.schemas.profile import ContractMonths, Household, Lifestyle, SeekerGender
+from app.schemas.profile import (
+    ContractMonths,
+    Household,
+    Lifestyle,
+    SeekerGender,
+    ShelterNeeded,
+)
 
 ApplicationStatus = Literal["submitted", "shortlisted", "declined", "withdrawn"]
 # What an owner sees and may set: a withdrawn application is invisible to the owner (0004c).
@@ -111,6 +117,7 @@ class ApplicantProfileOut(BaseModel):
     smoker: bool
     contract_months: ContractMonths
     parking_needed: int
+    shelter_needed: ShelterNeeded
 
 
 class ApplicantRoomOut(BaseModel):
