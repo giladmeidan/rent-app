@@ -397,4 +397,17 @@ all of them to the text above:
 8. the stream timing and the old-sessions risk.
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0012a — Suspension, removed listings and the per-account cap in the public app   (verified 2026-11-15; part 1 of 2, 0012b is the dashboard)
+What a user can do after this: nothing new to click. The app obeys the admin's three switches: a suspended account
+is signed out, cannot sign in ("החשבון הזה הושעה…"), and its listings, card, flatmate spots and invite links vanish;
+lifting brings all of it back. A listing removed by homie leaves the site, and its owner sees "הוסרה על ידי הומי"
+with resume, renew, edit and photos blocked. "My listings" and the wizard show the account's real cap, not a fixed 3.
+Decisions I need from you: none. FYI: (1) suspended users' chats, applications and existing matches stay as they
+are (your "footprint stays" call); (2) all of Slice 12's schema lands here in one migration, so 0012b has none.
+KPIs this slice moves: trust (time from report to action, once 0012b ships).
+Acceptance targets: NF1 the "owner not suspended" check uses the users primary key, and search stays under 50 ms per
+statement at 10,000 live apartments (perf reviewer re-measures); NF2 no suspended user's email in any log line.
+Risks: one more condition on the search, browse and likes hot paths, mitigated by a primary-key NOT EXISTS plus a
+plan test; migration number race with 0015a (both want 0023), so whichever merges second renames.
+Reviewers: code, security, qa, perf, ux   Estimated: 1 coder run (Opus/high), 1 review round
+Links: `specs/0012a-moderation-data.md` · PRODUCT.md "Admin (Slice 12)" · `specs/0012b-admin-dashboard.md`

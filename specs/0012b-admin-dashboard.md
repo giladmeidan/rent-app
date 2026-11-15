@@ -418,4 +418,17 @@ image. The verifier found 10 issues, and the orchestrator applied all of them to
 - the test fixtures.
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0012b — The admin dashboard   (verified 2026-11-15; part 2 of 2, depends on 0012a)
+What a user can do after this: Gilad runs `make admin`, opens localhost:8001 and logs in with his password. He works
+the report queue newest first, resolves every report on a target at once, reads a reported chat (logged), suspends
+or lifts an account, hides or un-hides a listing, and edits an account's listing cap. Every action is in a log.
+Decisions I need from you: none. FYI (orchestrator, the safer default): Suspend also ends the account's open
+sessions, so lifting a suspension makes them sign in again rather than reviving old sessions.
+KPIs this slice moves: trust (reports resolved, time from report to action).
+Acceptance targets: NF1 the public API can't import the admin (checked in a fresh process); NF2 the admin's database
+user cannot delete anything or touch other columns; NF3 a foreign Host, or a request from another site or another
+localhost port, gets 400; NF4 no start with a weak password or secret.
+Risks: your browser is the way in to a localhost app, mitigated by four guards (password, a cookie no other site
+gets, a Host allowlist, a Sec-Fetch-Site check). Production deploy (a Fly app with no public address) is Slice 13.
+Reviewers: code, security, qa   Estimated: 1 coder run (Opus/high), 1 review round
+Links: `specs/0012b-admin-dashboard.md` · PRODUCT.md "Admin (Slice 12)" · `specs/0012a-moderation-data.md`
