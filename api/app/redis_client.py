@@ -47,5 +47,5 @@ def soft[T](call: Callable[[], T]) -> T | None:
         return call()
     except RedisError as exc:
         log.warning("redis call skipped: %s", type(exc).__name__)
-        _soft_skip_until = now + SOFT_SKIP_S
+        _soft_skip_until = time.monotonic() + SOFT_SKIP_S  # timed from the failure, not the call
         return None
