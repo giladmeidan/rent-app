@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 
@@ -33,6 +33,22 @@ export function uniqueEmail(): string {
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
 export const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
+
+/** Clicks "שליחת קוד", waits for that `POST /auth/otp/request` and asserts its 204, then asserts
+ * the code field has focus and returns it. A refused request (429: the OTP budget per IP) fails
+ * here with its status, not as a missing code field. */
+export async function requestCode(page: Page): Promise<Locator> {
+  const answer = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/auth/otp/request',
+  );
+  await page.getByRole('button', { name: he.auth.sendCode }).click();
+  expect((await answer).status(), 'POST /auth/otp/request').toBe(204);
+  const codeInput = page.getByLabel(he.auth.code.label);
+  await expect(codeInput).toBeFocused();
+  return codeInput;
+}
 
 type SignUpOptions = {
   /** Where the signup form is opened, e.g. the listing page's `/signup?role=seeker&next=…`. */
@@ -71,9 +87,7 @@ export async function signUp(
   }
   await page.getByLabel(he.auth.name.label).fill(name);
   await page.getByLabel(he.auth.email.label).fill(email);
-  await page.getByRole('button', { name: he.auth.sendCode }).click();
-  const codeInput = page.getByLabel(he.auth.code.label);
-  await expect(codeInput).toBeFocused();
+  const codeInput = await requestCode(page);
   let code: string | null = null;
   await expect
     .poll(async () => (code = await latestCode(email)), { timeout: 10_000 })
@@ -88,6 +102,31 @@ export async function signUp(
  * session cookie set. */
 export async function signUpOwner(page: Page): Promise<string> {
   return signUp(page, 'owner');
+}
+
+/** Signs up a fresh `role` through the API with the page's context (`page.request` shares its
+ * cookie jar), so the page is signed in; returns the address. For a person whose signup is not
+ * what the test is about: no page load, no form. It does not navigate. `{ market: true }` stores a
+ * seeker, as the market's UI signup does. */
+export async function signUpApi(
+  page: Page,
+  role: 'owner' | 'seeker',
+  { name = '\u05d3\u05e0\u05d4', market = false }: Pick<SignUpOptions, 'name' | 'market'> = {},
+): Promise<string> {
+  expect(market && role !== 'seeker', 'a market signup stores a seeker').toBe(false);
+  const email = uniqueEmail();
+  const requested = await page.request.post(API + '/auth/otp/request', { data: { email } });
+  expect(requested.status(), 'POST /auth/otp/request').toBe(204);
+  let code: string | null = null;
+  await expect
+    .poll(async () => (code = await latestCode(email)), { timeout: 10_000 })
+    .toMatch(/^\d{6}$/);
+  const verified = await page.request.post(API + '/auth/otp/verify', {
+    data: { email, code, profile: { display_name: name, role } },
+  });
+  expect(verified.status(), 'POST /auth/otp/verify').toBe(201);
+  expect(await verified.json()).toMatchObject({ display_name: name, role });
+  return email;
 }
 
 /** Creates (or rotates) the invite link of the room `listingId` through the API with the page's

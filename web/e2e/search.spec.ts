@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { latestCode, postListing, uniqueEmail } from './helpers';
+import { postListing, signUpApi } from './helpers';
 import { test } from './fixtures';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -21,27 +21,13 @@ function israelDay(days: number): string {
 test.use({ viewport: { width: 390, height: 844 } });
 
 test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
-  const email = uniqueEmail();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   // Minted on its own: it neither contains nor is contained in `street` (cards are found by
   // substring), spec 0007f AC12.
   const roomStreet = `חדר ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-  // A fresh owner, signed up through the outbox (as auth.spec.ts).
-  await page.goto('/signup');
-  await page.getByText(he.auth.role.owner, { exact: true }).click();
-  await page.getByLabel(he.auth.name.label).fill('דנה');
-  await page.getByLabel(he.auth.email.label).fill(email);
-  await page.getByRole('button', { name: he.auth.sendCode }).click();
-  const codeInput = page.getByLabel(he.auth.code.label);
-  await expect(codeInput).toBeFocused();
-  let code: string | null = null;
-  await expect
-    .poll(async () => (code = await latestCode(email)), { timeout: 10_000 })
-    .toMatch(/^\d{6}$/);
-  await codeInput.fill(code ?? '');
-  await page.getByRole('button', { name: he.auth.verify }).click();
-  await expect(page).toHaveURL('/me/listings');
+  // A fresh owner, signed up through the API (the UI signup is auth.spec.ts's).
+  await signUpApi(page, 'owner');
 
   // One listing, posted through the API with the owner's session.
   const areas = await page.request.get(API + '/areas');

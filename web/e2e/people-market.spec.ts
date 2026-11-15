@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { newTileContext, test } from './fixtures';
-import { putProfile, signUp } from './helpers';
+import { putProfile, signUpApi } from './helpers';
 
 /** Both parts of the profile and the card shown (0010c), through the API with the page's session. */
 async function showCard(page: Page, gender: 'woman' | 'man', about: string): Promise<void> {
@@ -42,11 +42,11 @@ test('ac19_people_like_match_chat_remove', async ({ page, browser }) => {
   const MESSAGE = `hello ${tag}`;
 
   // A (the fixture page) and B (a second context) sign up from the market and show their cards.
-  await signUp(page, 'seeker', { name: A_NAME, market: true });
+  await signUpApi(page, 'seeker', { name: A_NAME, market: true });
   await showCard(page, 'woman', 'quiet and tidy');
   const bContext = await newTileContext(browser);
   const b = await bContext.newPage();
-  await signUp(b, 'seeker', { name: B_NAME, market: true });
+  await signUpApi(b, 'seeker', { name: B_NAME, market: true });
   await showCard(b, 'man', 'likes cooking');
 
   // A opens the people tab from the market's inner switch and finds B.

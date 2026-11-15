@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, postListing, putProfile, signUp } from './helpers';
+import { API, postListing, putProfile, signUpApi } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 // A room lister likes (invites) someone in people browse; that seeker applies, the application is
@@ -14,7 +14,7 @@ test('ac10_owner_likes_seeker_applies_and_chats', async ({ page, browser }) => {
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // An owner posts a room.
-  await signUp(page, 'owner');
+  await signUpApi(page, 'owner');
   const roomId = await postListing(page, street, {
     listing_type: 'room',
     gender_preference: 'any',
@@ -26,7 +26,7 @@ test('ac10_owner_likes_seeker_applies_and_chats', async ({ page, browser }) => {
   // A seeker opts in to people browse with a room section.
   const seekerContext = await newTileContext(browser);
   const seekerPage = await seekerContext.newPage();
-  await signUp(seekerPage, 'seeker', { name: SEEKER_NAME });
+  await signUpApi(seekerPage, 'seeker', { name: SEEKER_NAME });
   await putProfile(seekerPage, {
     gender: 'woman',
     birth_year: new Date().getUTCFullYear() - 27,

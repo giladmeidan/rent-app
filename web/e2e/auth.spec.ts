@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, latestCode, uniqueEmail } from './helpers';
+import { API, latestCode, requestCode, uniqueEmail } from './helpers';
 import { test } from './fixtures';
 
 test('ac7_signup_via_outbox_and_logout', async ({ page }) => {
@@ -16,10 +16,7 @@ test('ac7_signup_via_outbox_and_logout', async ({ page }) => {
   await expect(page.getByRole('radio', { name: he.auth.role.owner })).toBeChecked();
   await page.getByLabel(he.auth.name.label).fill(name);
   await page.getByLabel(he.auth.email.label).fill(email);
-  await page.getByRole('button', { name: he.auth.sendCode }).click();
-
-  const codeInput = page.getByLabel(he.auth.code.label);
-  await expect(codeInput).toBeFocused();
+  const codeInput = await requestCode(page);
   let code: string | null = null;
   await expect
     .poll(async () => (code = await latestCode(email)), { timeout: 10_000 })
@@ -90,8 +87,7 @@ test('ac5_auth_layout_desktop_and_mobile', async ({ page, baseURL }) => {
 
   // Sending the code reaches step 2.
   await page.getByLabel(he.auth.email.label).fill(uniqueEmail());
-  await page.getByRole('button', { name: he.auth.sendCode }).click();
-  await expect(page.getByLabel(he.auth.code.label)).toBeFocused();
+  await requestCode(page);
   await expect(page.getByRole('button', { name: he.auth.verify })).toBeVisible();
   await expectNoAxeViolations(page, '/login step 2');
 

@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, likePerson, postListing, signUp } from './helpers';
+import { API, likePerson, postListing, signUpApi } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 const ROOM = he.profile.room;
@@ -52,7 +52,7 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   const street = `חדר ${suffix}`;
 
   // A seeker fills the profile with the room section, shows themselves, and saves.
-  await signUp(page, 'seeker', { name });
+  await signUpApi(page, 'seeker', { name });
 
   // Spec 0009a AC9: at 390x844 the seeker's nav is the bottom tab bar; at 1280x800 it is in the
   // top bar. The viewport is restored for the rest of the test.
@@ -120,7 +120,7 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   // API. The context stays open: the owner receives the seeker's message at the end.
   const ownerContext = await newTileContext(browser);
   const ownerPage = await ownerContext.newPage();
-  await signUp(ownerPage, 'owner');
+  await signUpApi(ownerPage, 'owner');
   const roomId = await postListing(ownerPage, street, {
     listing_type: 'room',
     gender_preference: 'any',

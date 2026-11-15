@@ -2,7 +2,7 @@ import { expect, type Locator } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { latestCode, postListing, signUpOwner, uniqueEmail } from './helpers';
+import { latestCode, postListing, requestCode, signUpOwner, uniqueEmail } from './helpers';
 import { test } from './fixtures';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -27,9 +27,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByText(he.auth.role.owner, { exact: true }).click();
   await page.getByLabel(he.auth.name.label).fill('דנה');
   await page.getByLabel(he.auth.email.label).fill(email);
-  await page.getByRole('button', { name: he.auth.sendCode }).click();
-  const codeInput = page.getByLabel(he.auth.code.label);
-  await expect(codeInput).toBeFocused();
+  const codeInput = await requestCode(page);
   let code: string | null = null;
   await expect
     .poll(async () => (code = await latestCode(email)), { timeout: 10_000 })
