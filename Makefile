@@ -26,8 +26,12 @@ export WEB_PORT          ?= 5173
 export WEB_ORIGIN        ?= http://localhost:$(WEB_PORT)
 export API_PORT          ?= 8000
 export SECRET_KEY        ?= dev-only-secret-change-me-0123456789abcdef
+# The admin dashboard (spec 0012b): its host port and its Postgres role's password. The test
+# fixture uses the same password: the role is cluster-wide, shared by `rent` and `rent_test`.
+export ADMIN_PORT        ?= 8001
+export ADMIN_DB_PASSWORD ?= dev-only-admin-db-password
 
-.PHONY: dev dev-api down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -67,9 +71,20 @@ dev-api:
 	$(COMPOSE) up -d --build api worker
 	$(call wait_for,$(API_HEALTH),60,api)
 
-## down: stop the stack, remove its volumes, empty the email outbox and the dev photo store
+## admin: the admin dashboard (spec 0012b) on http://127.0.0.1:$(ADMIN_PORT)/admin: db, migrate, the
+## `homie_admin` role (scripts/admin_role.py), then the `admin` service. Needs ADMIN_PASSWORD (16+
+## characters) and ADMIN_SECRET_KEY (32+) in `.env` or the shell; without them it never comes up.
+admin:
+	$(COMPOSE) up -d --wait db
+	$(MAKE) migrate
+	$(UV) run python scripts/admin_role.py
+	$(COMPOSE) --profile admin up -d --build admin
+	$(call wait_for,http://127.0.0.1:$(ADMIN_PORT)/admin/login,60,admin)
+
+## down: stop the stack (the `admin` profile included: a service in an inactive profile is not an
+## orphan), remove its volumes, empty the email outbox and the dev photo store
 down:
-	$(COMPOSE) down -v --remove-orphans
+	$(COMPOSE) --profile admin down -v --remove-orphans
 	rm -f .outbox/*.json
 	rm -f .media/*.webp .media/.*.tmp
 
@@ -118,7 +133,7 @@ lint: lint-api lint-web
 lint-api:
 	$(UV) run ruff check .
 	$(UV) run ruff format --check .
-	$(UV) run mypy --strict app scripts tests alembic
+	$(UV) run mypy --strict app admin scripts tests alembic
 
 lint-web: web/node_modules/.modules.yaml web/src/api/schema.d.ts
 	$(PNPM) exec eslint .

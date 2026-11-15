@@ -92,6 +92,27 @@ services:
       redis:
         condition: service_healthy
 
+  # The admin dashboard (spec 0012b): `make admin` only (a profile, so `make dev` never starts it).
+  # Connects as the `homie_admin` role (scripts/admin_role.py); NF4 refuses the empty defaults.
+  admin:
+    profiles: ["admin"]
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.admin
+    command: uvicorn admin.main:main --factory --host 0.0.0.0 --port 8001 --reload
+    restart: unless-stopped
+    environment:
+      ADMIN_DATABASE_URL: postgresql+psycopg://homie_admin:${ADMIN_DB_PASSWORD:-dev-only-admin-db-password}@db:5432/rent
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:-}
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-8001}:8001"
+    volumes:
+      - ../api:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
   web:
     build:
       context: ..
