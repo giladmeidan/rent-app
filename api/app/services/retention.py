@@ -22,13 +22,13 @@ REPORT_NOTE = "12 months"  # R6, after resolution
 REPORT = "3 years"  # R7, after resolution
 ADMIN_ACTION = "3 years"  # R8
 BLOCKED_EMAIL = "5 years"  # R9, from blocking
+SESSION = "30 days"  # R10, after expiry or revocation
 
 _CUTOFF = "now() - CAST(:period AS interval)"
 
 # The conversations of a listing `l` (a conversation has no listing id: through its application).
 _LISTING_CHATS = (
-    "SELECT c.id FROM conversations c JOIN applications a ON a.id = c.application_id"
-    " WHERE a.listing_id = l.id"
+    "FROM conversations c JOIN applications a ON a.id = c.application_id WHERE a.listing_id = l.id"
 )
 
 
@@ -47,14 +47,13 @@ def purge_deleted_owner_listings(db: Session) -> int:
         db,
         "DELETE FROM listings l USING users u"
         " WHERE u.id = l.owner_id AND u.deleted_at IS NOT NULL"
-        " AND greatest(u.deleted_at, (SELECT max(c.last_message_at) FROM conversations c"
-        " JOIN applications a ON a.id = c.application_id WHERE a.listing_id = l.id))"
+        f" AND greatest(u.deleted_at, (SELECT max(c.last_message_at) {_LISTING_CHATS}))"
         f" < {_CUTOFF}"
         " AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.resolved_at IS NULL AND ("
         " (r.target_type = 'listing' AND r.target_id = l.id)"
         " OR (r.target_type = 'applicant'"
         " AND r.target_id IN (SELECT a.id FROM applications a WHERE a.listing_id = l.id))"
-        f" OR (r.target_type = 'chat' AND r.target_id IN ({_LISTING_CHATS}))))",
+        f" OR (r.target_type = 'chat' AND r.target_id IN (SELECT c.id {_LISTING_CHATS}))))",
         DELETED_OWNER_LISTING,
     )
 
@@ -154,6 +153,15 @@ def purge_blocked_emails(db: Session) -> int:
     return _run(db, f"DELETE FROM blocked_emails WHERE created_at < {_CUTOFF}", BLOCKED_EMAIL)
 
 
+def purge_sessions(db: Session) -> int:
+    """R10: a login session 30 days after it expired or was revoked."""
+    return _run(
+        db,
+        f"DELETE FROM sessions WHERE expires_at < {_CUTOFF} OR revoked_at < {_CUTOFF}",
+        SESSION,
+    )
+
+
 # The order matters: R4 before R5 (an application whose chat R4 deletes is R5's the same night).
 _RULES: tuple[tuple[str, Callable[[Session], int]], ...] = (
     ("r1_deleted_owner_listings", purge_deleted_owner_listings),
@@ -164,6 +172,7 @@ _RULES: tuple[tuple[str, Callable[[Session], int]], ...] = (
     ("r6_report_notes", purge_report_notes),
     ("r7_reports", purge_reports),
     ("r8_admin_actions", purge_admin_actions),
+    ("r10_sessions", purge_sessions),
     ("r9_blocked_emails", purge_blocked_emails),
 )
 

@@ -170,6 +170,23 @@ def _block(engine: Engine, email: str, age: str) -> None:
     )
 
 
+def _session(
+    engine: Engine, user_id: uuid.UUID, *, expires: str, revoked: str | None = None
+) -> uuid.UUID:
+    """A login session that expired `expires` ago (a negative interval: still valid), revoked
+    `revoked` ago if set."""
+    row: uuid.UUID = _execute(
+        engine,
+        "INSERT INTO sessions (user_id, token_hash, created_at, expires_at, revoked_at)"
+        " VALUES (:u, md5(random()::text), now() - interval '60 days',"
+        " now() - CAST(:expires AS interval), now() - CAST(:revoked AS interval)) RETURNING id",
+        u=user_id,
+        expires=expires,
+        revoked=revoked,
+    )
+    return row
+
+
 def _purge(engine: Engine) -> dict[str, int]:
     with Session(engine) as db:
         return retention.purge_expired(db)
@@ -200,6 +217,11 @@ def test_r1_deleted_owner_listing(db_engine: Engine, gush_dan: uuid.UUID) -> Non
     live_owner = make_owner(db_engine, "live@example.com")
     live = make_listing(db_engine, live_owner, gush_dan)
     _chat(db_engine, make_application(db_engine, live, seeker, status="shortlisted"), "5 years")
+    # Deleted yesterday, last message 2 years ago: the later of the two counts.
+    late_owner = make_owner(db_engine, "late@example.com")
+    late = make_listing(db_engine, late_owner, gush_dan)
+    _chat(db_engine, make_application(db_engine, late, seeker, status="shortlisted"), "2 years")
+    _tombstone(db_engine, late_owner, "1 day")
 
     counts = _purge(db_engine)
 
@@ -210,7 +232,7 @@ def test_r1_deleted_owner_listing(db_engine: Engine, gush_dan: uuid.UUID) -> Non
     assert not _exists(db_engine, "messages", old_chat, key="conversation_id")
     assert not _exists(db_engine, "listing_price_changes", old_price)
     assert not _exists(db_engine, "listings", no_chat_old)
-    for kept in (recent, no_chat_recent, live):
+    for kept in (recent, no_chat_recent, live, late):
         assert _exists(db_engine, "listings", kept)
     assert _exists(db_engine, "messages", recent_chat, key="conversation_id")
 
@@ -221,8 +243,8 @@ def test_r1_deleted_owner_listing(db_engine: Engine, gush_dan: uuid.UUID) -> Non
 def test_r2_price_history(db_engine: Engine, gush_dan: uuid.UUID) -> None:
     owner = make_owner(db_engine, "owner@example.com")
     changed = make_listing(db_engine, owner, gush_dan)
-    oldest, older, current = (
-        _price_change(db_engine, changed, a) for a in ("30 months", OUT_24M, IN_24M)
+    oldest, older, inside, current = (
+        _price_change(db_engine, changed, a) for a in ("30 months", OUT_24M, IN_24M, "1 month")
     )
     stale = make_listing(db_engine, owner, gush_dan)
     stale_first, stale_newest = (
@@ -233,11 +255,11 @@ def test_r2_price_history(db_engine: Engine, gush_dan: uuid.UUID) -> None:
 
     remaining = {
         row_id
-        for row_id in (oldest, older, current, stale_first, stale_newest)
+        for row_id in (oldest, older, inside, current, stale_first, stale_newest)
         if _exists(db_engine, "listing_price_changes", row_id)
     }
-    # The newest row of each listing stays, even when it is older than the period.
-    assert remaining == {current, stale_newest}
+    # A row inside the period stays; so does each listing's newest, even when it is older.
+    assert remaining == {inside, current, stale_newest}
 
 
 def test_r3_final_rent(db_engine: Engine, gush_dan: uuid.UUID) -> None:
@@ -290,6 +312,20 @@ def test_r4_conversations(db_engine: Engine, gush_dan: uuid.UUID) -> None:
     shared = _chat(
         db_engine, make_application(db_engine, shared_room, seeker, status="shortlisted"), "1 day"
     )
+    # A deleted flatmate whose row is still there is not a live one.
+    ghost_room = make_listing(db_engine, owner, gush_dan, listing_type="room", flatmates_count=1)
+    ghost = make_seeker(db_engine, "ghost@example.com")
+    make_flatmate(db_engine, ghost_room, ghost)
+    _tombstone(db_engine, ghost)
+    ghost_chat = _chat(
+        db_engine, make_application(db_engine, ghost_room, seeker, status="shortlisted"), "1 day"
+    )
+    # An apartment chat has no flatmates, even with a stray live row on its listing.
+    apartment = make_listing(db_engine, owner, gush_dan)
+    make_flatmate(db_engine, apartment, flatmate)
+    apartment_chat = _chat(
+        db_engine, make_application(db_engine, apartment, seeker, status="shortlisted"), "1 day"
+    )
     a, b, c, d, e = (make_seeker(db_engine, f"{n}@example.com") for n in "abcde")
     both_deleted = _direct(db_engine, d, e, last_message="1 day")
     _tombstone(db_engine, owner)
@@ -300,9 +336,9 @@ def test_r4_conversations(db_engine: Engine, gush_dan: uuid.UUID) -> None:
     never_written = _direct(db_engine, a, c, last_message=None, created=OUT_3Y)
     recent = _direct(db_engine, b, c, last_message=IN_3Y, created="4 years")
 
-    assert _purge(db_engine)["r4_conversations"] == 4
+    assert _purge(db_engine)["r4_conversations"] == 6
 
-    for gone in (lonely, both_deleted, idle, never_written):
+    for gone in (lonely, ghost_chat, apartment_chat, both_deleted, idle, never_written):
         assert not _exists(db_engine, "conversations", gone)
         assert not _exists(db_engine, "messages", gone, key="conversation_id")
     # The application stays (R5 may take it: not a shortlisted one).
@@ -439,6 +475,25 @@ def test_r9_blocked_emails(client: TestClient, outbox: Outbox, db_engine: Engine
     assert response.json() == {"detail": "signup_blocked"}
 
 
+# --- R10 ---------------------------------------------------------------------------------------
+
+
+def test_r10_sessions(db_engine: Engine) -> None:
+    user = make_seeker(db_engine, "user@example.com")
+    gone = {
+        _session(db_engine, user, expires="31 days"),
+        _session(db_engine, user, expires="-10 days", revoked="31 days"),
+    }
+    kept = {
+        _session(db_engine, user, expires="29 days"),
+        _session(db_engine, user, expires="-10 days"),
+    }
+
+    assert _purge(db_engine)["r10_sessions"] == 2
+
+    assert {s for s in gone | kept if _exists(db_engine, "sessions", s)} == kept
+
+
 # --- AC10, AC11, AC13 --------------------------------------------------------------------------
 
 
@@ -493,6 +548,7 @@ def test_ac11_idempotent(db_engine: Engine, gush_dan: uuid.UUID) -> None:
     _report(db_engine, reporter, seeker, "person", uuid.uuid4(), resolved="4 years")
     _action(db_engine, "read_chat", "chat", uuid.uuid4(), "4 years")  # R8
     _block(db_engine, "old@example.com", "6 years")  # R9
+    _session(db_engine, seeker, expires="31 days")  # R10
 
     first = _purge(db_engine)
 
@@ -505,6 +561,7 @@ def test_ac11_idempotent(db_engine: Engine, gush_dan: uuid.UUID) -> None:
         "r6_report_notes",
         "r7_reports",
         "r8_admin_actions",
+        "r10_sessions",
         "r9_blocked_emails",
     ]
     assert all(first.values()), first
