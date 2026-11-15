@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '../../app/usePageTitle';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
+import { cx } from '../../components/cx';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
@@ -13,6 +14,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { retryAfterText } from '../../components/retryAfter';
 import { Skeleton } from '../../components/Skeleton';
 import { fetchAreas } from '../areas/api';
+import { Chevron } from '../landing/Icon';
 import type { LifestyleAnswers } from '../lifestyle/keys';
 import { ApiError } from '../listings/api';
 import { MarketPersonCard } from '../people/MarketPersonCard';
@@ -21,8 +23,55 @@ import { profileHref } from '../profile/links';
 import { useProfile } from '../profile/useProfile';
 import { MutualBanner } from './MutualBanner';
 
-const cardGrid = 'grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3';
+// One scrolling row per list (swipe on touch, arrows from md): 1, 2 or 3 cards in view. p-0.5 keeps
+// the cards' focus ring inside the scroll box.
+const cardRow =
+  'grid snap-x snap-mandatory auto-cols-[85%] grid-flow-col items-start gap-4 overflow-x-auto p-0.5 pb-2 md:auto-cols-[calc((100%-1rem)/2)] xl:auto-cols-[calc((100%-2rem)/3)] [&>li]:snap-start';
 const h2Class = 'text-start font-display text-h2';
+
+/** A list's heading with prev/next arrows that scroll its row by a view. The arrows show only from
+ * md, and only when the row holds more cards than fit (2 at md, 3 at xl). */
+function RowHeader({ id, title, count }: { id: string; title: string; count: number }) {
+  const { t } = useTranslation();
+  const scroll = (toEnd: boolean) => {
+    const row = document.getElementById(`${id}-row`);
+    if (row === null) return;
+    // RTL rows scroll toward the end with a negative scrollLeft.
+    const rtl = getComputedStyle(row).direction === 'rtl';
+    row.scrollBy({ left: row.clientWidth * (toEnd === rtl ? -1 : 1), behavior: 'smooth' });
+  };
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h2 id={id} className={h2Class}>
+        {title}
+      </h2>
+      <div className={cx('hidden gap-2', count > 2 && 'md:flex', count <= 3 && 'xl:hidden')}>
+        <Button
+          variant="secondary"
+          size="sm"
+          shape="pill"
+          aria-label={t('likes.scrollPrev', { section: title })}
+          aria-controls={`${id}-row`}
+          icon={
+            <span className="-scale-x-100">
+              <Chevron size={18} />
+            </span>
+          }
+          onClick={() => scroll(false)}
+        />
+        <Button
+          variant="secondary"
+          size="sm"
+          shape="pill"
+          aria-label={t('likes.scrollNext', { section: title })}
+          aria-controls={`${id}-row`}
+          icon={<Chevron size={18} />}
+          onClick={() => scroll(true)}
+        />
+      </div>
+    </div>
+  );
+}
 
 /**
  * The people part of the likes page (spec 0010i), from `GET /me/people-likes`: the people who liked
@@ -80,8 +129,8 @@ function PeopleSections({
   }
 
   const { liked_me: likedMe, mine, matches } = people.data;
-  const cards = (list: typeof likedMe) => (
-    <ul className={cardGrid}>
+  const cards = (id: string, list: typeof likedMe) => (
+    <ul id={`${id}-row`} className={cardRow}>
       {list.map((card) => (
         <MarketPersonCard
           key={card.card_id}
@@ -99,20 +148,24 @@ function PeopleSections({
   return (
     <>
       <section className="flex flex-col gap-4" aria-labelledby="likes-people-liked-me">
-        <h2 id="likes-people-liked-me" className={h2Class}>
-          {t('likes.people.likedMe')}
-        </h2>
+        <RowHeader
+          id="likes-people-liked-me"
+          title={t('likes.people.likedMe')}
+          count={likedMe.length}
+        />
         {likedMe.length === 0 ? (
           <EmptyState message={t('likes.people.likedMeEmpty')} />
         ) : (
-          cards(likedMe)
+          cards('likes-people-liked-me', likedMe)
         )}
       </section>
       <section className="flex flex-col gap-4" aria-labelledby="likes-people-mine">
-        <h2 id="likes-people-mine" className={h2Class}>
-          {t('likes.people.mine')}
-        </h2>
-        {mine.length === 0 ? <EmptyState message={t('likes.people.mineEmpty')} /> : cards(mine)}
+        <RowHeader id="likes-people-mine" title={t('likes.people.mine')} count={mine.length} />
+        {mine.length === 0 ? (
+          <EmptyState message={t('likes.people.mineEmpty')} />
+        ) : (
+          cards('likes-people-mine', mine)
+        )}
       </section>
       <section className="flex flex-col gap-4" aria-labelledby="likes-people-matches">
         <h2 id="likes-people-matches" className={h2Class}>
