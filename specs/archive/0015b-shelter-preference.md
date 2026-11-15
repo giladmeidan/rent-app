@@ -1,7 +1,7 @@
 ---
 id: 0015b
 title: "A seeker says whether they need a protected space (any, or a ממ״ד in the flat), and the match score treats it as a deal-breaker; listers must answer the protected-space question"
-status: in-review
+status: done
 depends_on: []           # 0015a (listings.shelter) is merged
 reviewers: [code, qa, ux, perf]   # perf: the match score runs in search, the map box, the inbox and people browse
 estimate: 1 coder run    # a long one: full stack + ~15 test files touched; coder Opus/high (migration, matching)
@@ -380,3 +380,11 @@ Status set to `verified`: the one blocker had a mechanical fix inside Gilad's de
     existing housing summary. Estimate kept at 1 coder run, noted as a long one.
 
 ## Digest (filled by orchestrator after verification)
+
+Spec 0015b — seeker shelter preference; listing shelter required   MERGED 3fcb67c (PR #111)
+Shipped: a seeker says whether they need a protected space (any / ממ״ד, ממ״ק or מקלט / a ממ״ד in the flat), a hard match criterion (weight 10; a listing without one or that does not say is capped at 59 with shelter as its "differs" line); listers must state the flat's protected space. Migration `0027_shelter_needed`.
+Demo: profile → looking part → "מרחב מוגן" → "ממ״ד בדירה"; search: a flat with a ממ״ק shows ≤ 59 and "ביקשת ממ״ד בדירה — אין"; new listing wizard: the protected-space step has no "לא לציין" and needs a choice.
+Tests: every AC (AC1–AC13) has a test; API 851 passed, vitest 776; e2e specs updated for the required shelter. CI: green on 08e93f0 with e2e (10 min).
+Findings: 0 blockers, 0 majors, 5 minors (1 fixed, 2 logged in FOLLOWUPS, 2 no action), 6 nits dropped. CI's first run failed on `test_ac13_statement_counts_and_plan`, a planner flake already on `main` (autovacuum stats); the test now plans on analyzed, production-shaped pairs, assert unchanged.
+Changed in PRODUCT.md: "Matching" and "Listings" lines (written with the spec, 2026-11-15).
+Next spec I propose: none queued; `0013a` stays parked until paid hosting is approved.

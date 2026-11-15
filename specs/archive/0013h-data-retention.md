@@ -1,7 +1,7 @@
 ---
 id: 0013h
 title: "homie keeps each kind of personal data only for a stated period, and a daily job deletes it after that"
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, security, qa]   # security: PII deletion, cascades that could erase another person's thread or the admin's evidence; qa: every rule's edges (UI text change too, checklist 8)
 estimate: 1 coder run   # a long one: 9 rules + their tests, one small migration; coder Opus/high (data deletion, migration; Speed rule 6)

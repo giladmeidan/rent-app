@@ -44,7 +44,8 @@ Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../r
 ## Completed
 - [x] Slices 1–12 (MVP features, trust, admin), Slice 14 through `0014d` (rent estimate), `0015a` (protected space).
 - [x] Slice 13 launch readiness except `0013a`: real client networks for limits, account deletion (API + web),
-  admin sessions in Postgres, terms/privacy pages (draft text), review minors, `make screens` green, stable e2e.
+  admin sessions in Postgres, terms/privacy pages (draft text), review minors, `make screens` green, stable e2e,
+  `0013h` data retention (PR #112: nightly purge R1–R10, periods in PRODUCT.md "Retention" and the privacy text).
 
 ## Decisions (Gilad, 2026-11-15, during the build)
 - Re-signup after self-deletion: rule **A**, only an admin action blocks (as PRODUCT.md). The gap (a reported account
@@ -59,7 +60,8 @@ Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../r
    **homie must not go public before `0013b` is deployed with `TRUST_PROXY=fly`** (runbook §9).
 2. Legal text (`web/src/locales/he.json`, Gilad fills, lawyer's read advised): `legal.date`;
    `legal.terms.intro` + `legal.privacy.intro` (operator name and ID); `legal.terms.s2.i1` (18+) and
-   `legal.terms.s11.p1` (Tel Aviv-Yafo courts) to confirm; `legal.privacy.s1.i13` + `s5.i9` (log retention);
+   `legal.terms.s11.p1` (Tel Aviv-Yafo courts) to confirm; approve 0013h's retention text (privacy s5, s6, s1/s7/s8
+   fixes, terms s9.p1);
    `legal.privacy.s3.i2` (hosting/DB, server location, photo/site storage, email providers); `legal.privacy.s3.i5`
    (countries). Production web build needs `VITE_CONTACT_EMAIL`.
 3. Main checkout (Gilad's uncommitted edits stay; never `git stash` there): `git pull`, `make migrate` (`0025`
