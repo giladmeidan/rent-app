@@ -4,8 +4,11 @@
 stays (every FK to it, 14 in 11 tables, cascades, so deleting it would erase the other side's
 threads and the reports), with `deleted_at` set and no email, name or photo
 (`ck_users_deleted_scrubbed`). Their personal data goes; the threads, messages, reports and the
-listing rows (paused, without photos, description or invite link) stay. The photo objects are
-deleted after the commit, so a failure before it deletes nothing.
+listing rows stay. A listing row is paused and loses its photos, description, invite link, the
+flatmates' lifestyle answers and ages, their count, the floor and the total floors (spec 0013h); it
+keeps city, area, street, rooms, size, price, listing type and the flat facts, for the stats and the
+open threads, until `services/retention.py` deletes it. The photo objects are deleted after the
+commit, so a failure before it deletes nothing.
 
 An account homie acted against (an `admin_actions` `suspend` on it, or `hide_listing` on one of its
 listings, even if later lifted) leaves the keyed hash of its email in `blocked_emails`, and that
@@ -100,12 +103,22 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             return
         my_listings = select(Listing.id).where(Listing.owner_id == me).scalar_subquery()
         # 3. Listings off the site, before the photos: its row locks wait for a photo write that
-        # holds `_lock_own_listing`, so step 4 sees that write's committed row.
+        # holds `_lock_own_listing`, so step 4 sees that write's committed row. The personal
+        # attributes go too (0013h); the stats' facts stay. An empty `flatmate_ages` fits a NULL
+        # count (`ck_listings_flatmate_ages`), and an apartment already holds these defaults.
         db.execute(
             update(Listing)
             .where(Listing.owner_id == me)
             .values(
-                status="paused", description=None, flatmate_invite_hash=None, updated_at=func.now()
+                status="paused",
+                description=None,
+                flatmate_invite_hash=None,
+                lifestyle={},
+                flatmate_ages=[],
+                flatmates_count=None,
+                floor=None,
+                total_floors=None,
+                updated_at=func.now(),
             )
             .execution_options(synchronize_session=False)
         )
