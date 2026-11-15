@@ -29,14 +29,24 @@ LANDING = "/admin/report/list"
 REFUSED_FETCH_SITES = frozenset({"cross-site", "same-site"})
 
 
+def _refused(scope: Scope) -> bool:
+    site = Headers(scope=scope).get("sec-fetch-site")
+    if site is None:
+        return False
+    if site in REFUSED_FETCH_SITES:
+        return True
+    # A write (any non-GET, or an action, which SQLAdmin runs as a GET after a client-side modal)
+    # must come from an admin page: `none` (a link opened from mail or chat) only loads pages.
+    writes = scope["method"] != "GET" or "/action/" in scope["path"]
+    return writes and site != "same-origin"
+
+
 class FetchSiteGuard:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and Headers(scope=scope).get("sec-fetch-site") in (
-            REFUSED_FETCH_SITES
-        ):
+        if scope["type"] == "http" and _refused(scope):
             response = PlainTextResponse("Cross-site request refused", status_code=400)
             await response(scope, receive, send)
             return

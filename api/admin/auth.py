@@ -26,7 +26,8 @@ class PasswordAuth(AuthenticationBackend):
             path="/admin",
             same_site="strict",
             https_only=settings.https_only,
-            # Starlette's max_age slides on every response; `login_at` is the absolute limit.
+            # Starlette re-issues the cookie (and its max_age) whenever the session is modified, so
+            # it is not an absolute limit; `login_at` is.
             max_age=SESSION_MAX_AGE_S,
         )
         self._password = settings.password.get_secret_value().encode()
@@ -36,10 +37,12 @@ class PasswordAuth(AuthenticationBackend):
         self._locked_until = 0.0
 
     async def login(self, request: Request) -> bool:
+        password = (await request.form()).get("password")
+        # From here to the return there is no await: concurrent logins whose bodies arrive late
+        # are each checked against the lock as it is once their body is in.
         now = _now()
         if now < self._locked_until:
             return False  # even the right password: a lock is never lifted early
-        password = (await request.form()).get("password")
         # Bytes, not str: compare_digest raises on non-ASCII str.
         if isinstance(password, str) and hmac.compare_digest(password.encode(), self._password):
             self._failures.clear()

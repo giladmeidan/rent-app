@@ -100,7 +100,8 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.admin
     command: uvicorn admin.main:main --factory --host 0.0.0.0 --port 8001 --reload
-    restart: unless-stopped
+    # No restart: without real secrets it exits at once (NF4) instead of crash-looping.
+    restart: "no"
     environment:
       ADMIN_DATABASE_URL: postgresql+psycopg://homie_admin:${ADMIN_DB_PASSWORD:-dev-only-admin-db-password}@db:5432/rent
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
