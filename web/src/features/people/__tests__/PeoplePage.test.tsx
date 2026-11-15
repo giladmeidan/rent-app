@@ -442,4 +442,37 @@ describe('PeoplePage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(title()).toBeVisible();
   });
+
+  it('ac3_report_room_person', async () => {
+    const p1 = person({ display_name: 'P1' });
+    const p2 = person({ display_name: 'P2' });
+    const { api } = renderPage([page([p1, p2])], {
+      extra: { 'POST /reports': [json({ already_reported: false }, 201)] },
+    });
+    await screen.findAllByRole('article');
+    for (const name of ['P1', 'P2']) {
+      const invite = within(cardOf(name)).getByRole('button', { name: he.people.invite });
+      const report = within(cardOf(name)).getByRole('button', { name: he.report.button });
+      expect(report).toHaveAccessibleDescription(name);
+      // Same row as the invite button, which comes first.
+      expect(report.parentElement).toBe(invite.parentElement);
+      expect(
+        invite.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    fireEvent.click(within(cardOf('P2')).getByRole('button', { name: he.report.button }));
+    const dialog = screen.getByRole('dialog', {
+      name: i18n.t('report.title.person', { name: 'P2' }),
+    });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(5);
+    fireEvent.click(within(dialog).getByRole('radio', { name: he.report.reasons.offensive }));
+    fireEvent.click(within(dialog).getByRole('button', { name: he.report.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(he.report.sent);
+    expect(api.calls('POST /reports')[0]?.body).toEqual({
+      target_type: 'room_person',
+      target_id: p2.id,
+      reason: 'offensive',
+      note: null,
+    });
+  });
 });

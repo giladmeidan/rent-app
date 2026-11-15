@@ -20,6 +20,8 @@ import { formatDay } from '../flatmates/format';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { useRemoveMatch } from '../people/useMarketPeople';
+import { LISTING_REASONS, PERSON_REASONS } from '../reports/reasons';
+import { ReportButton } from '../reports/ReportButton';
 import type { MessageOut, ThreadOut } from './api';
 import { Composer } from './Composer';
 import { formatMessageTime } from './format';
@@ -210,6 +212,16 @@ function Thread({
 
   const owner = thread.my_role === 'owner';
   const group = thread.members.length > 2;
+  const reportTitle = t('report.title.person', { name: thread.other_name });
+  const reportButton = (
+    <ReportButton
+      target={{ type: 'chat', id }}
+      title={reportTitle}
+      ariaLabel={reportTitle}
+      reasons={thread.listing ? LISTING_REASONS : PERSON_REASONS}
+      hint={group ? t('report.groupHint', { name: thread.other_name }) : undefined}
+    />
+  );
   return (
     <>
       <PageHeader
@@ -223,7 +235,7 @@ function Thread({
       />
       {group && <MemberLine members={thread.members} />}
       {thread.listing ? (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-muted">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-muted">
           <span>
             {cardTitle(t, thread.listing)} · {formatIls(thread.listing.price_ils)}{' '}
             {t('listings.units.ils')}
@@ -239,7 +251,8 @@ function Thread({
           >
             {owner ? t('chat.thread.toApplicants') : t('chat.thread.toListing')}
           </Button>
-        </p>
+          {reportButton}
+        </div>
       ) : (
         // A direct chat (spec 0010g): no listing, one caption line. While it can send, the line
         // also carries "remove the match" (spec 0010i).
@@ -256,6 +269,7 @@ function Thread({
                 {t('chat.thread.removeMatch')}
               </Button>
             )}
+            {reportButton}
           </div>
           {removeFailed && (
             <p role="alert" className="text-body-sm font-semibold text-danger">

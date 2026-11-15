@@ -363,6 +363,7 @@ describe('ApplicantsPage', () => {
     expect(buttonsOf(MICHAL)).toEqual([
       he.applicants.actions.shortlist,
       he.applicants.actions.decline,
+      he.report.button,
     ]);
     for (const button of inCard.getAllByRole('button')) {
       expect(button).toHaveAttribute('aria-describedby', heading.id);
@@ -373,10 +374,11 @@ describe('ApplicantsPage', () => {
     expect(buttonsOf(shortlisted.applicant_name)).toEqual([
       he.applicants.actions.unshortlist,
       he.applicants.actions.decline,
+      he.report.button,
     ]);
 
     expect(chipOf(declined.applicant_name)).toHaveTextContent(he.applicants.status.declined);
-    expect(buttonsOf(declined.applicant_name)).toEqual([]);
+    expect(buttonsOf(declined.applicant_name)).toEqual([he.report.button]);
   });
 
   it('ac5_shortlist_unshortlist_decline', async () => {
@@ -422,6 +424,7 @@ describe('ApplicantsPage', () => {
     expect(buttonsOf(MICHAL)).toEqual([
       he.applicants.actions.unshortlist,
       he.applicants.actions.decline,
+      he.report.button,
     ]);
     expect(totals()).toEqual([
       `2 ${he.applicants.stats.total}`,
@@ -516,7 +519,7 @@ describe('ApplicantsPage', () => {
       expect(chipOf(MICHAL)).toHaveTextContent(he.applicants.status.declined);
     });
     expect(api.calls(patchRoute(P)).map((c) => c.body)).toEqual([{ status: 'declined' }]);
-    expect(buttonsOf(MICHAL)).toEqual([]);
+    expect(buttonsOf(MICHAL)).toEqual([he.report.button]);
     await vi.waitFor(() => {
       expect(within(cardOf(MICHAL)).getByRole('heading', { level: 2 })).toHaveFocus();
     });
@@ -1101,6 +1104,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
         he.applicants.why,
         he.applicants.actions.shortlist,
         he.applicants.actions.decline,
+        he.report.button,
       ]);
       expect(within(cardOf('P')).queryByRole('button', { name: he.applicants.more })).toBeNull();
       // The summary line follows "applied at", as in 0006g; no gender word anywhere.
@@ -1280,7 +1284,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
     expect(line?.textContent).toBe(
       i18n.t('applicants.room.line', { gender: he.profile.room.gender.man, age: 40 }),
     );
-    expect(buttonsOf('D')).toEqual([he.applicants.why, he.applicants.more]);
+    expect(buttonsOf('D')).toEqual([he.applicants.why, he.applicants.more, he.report.button]);
     fireEvent.click(moreOf('D'));
     const panel = morePanelOf('D');
     expect(panel).toBeVisible();
@@ -1379,6 +1383,7 @@ describe('ApplicantsPage, room applicants (0007c)', () => {
       expect(buttonsOf(name)).toEqual([
         he.applicants.actions.shortlist,
         he.applicants.actions.decline,
+        he.report.button,
       ]);
     }
     reset(view);
@@ -1835,5 +1840,65 @@ describe('ApplicantsPage, desktop (0009u)', () => {
     expect(phoneTiles.previousElementSibling).toContainElement(
       screen.getByRole('heading', { level: 1 }),
     );
+  });
+
+  it('ac2_report_applicant', async () => {
+    // Desktop: the pane has the button (after the chat link), the compact cards have none.
+    stubDesktop();
+    const [a, b] = abc({ a: { status: 'shortlisted' } });
+    const { api } = renderPage([json([a, b])], {
+      extra: { 'POST /reports': [json({ already_reported: false }, 201)] },
+    });
+    await screen.findAllByRole('article');
+    for (const card of cards()) {
+      expect(within(card).queryByRole('button', { name: he.report.button })).toBeNull();
+    }
+    const button = within(pane()).getByRole('button', { name: he.report.button });
+    expect(button).toHaveAccessibleDescription('A');
+    const chat = within(pane()).getByRole('link', { name: he.applicants.pane.chat });
+    expect(chat.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(button);
+    const dialog = screen.getByRole('dialog', {
+      name: i18n.t('report.title.person', { name: 'A' }),
+    });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(5);
+    fireEvent.click(within(dialog).getByRole('radio', { name: he.report.reasons.broker }));
+    fireEvent.click(within(dialog).getByRole('button', { name: he.report.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(he.report.sent);
+    expect(api.calls('POST /reports')[0]?.body).toEqual({
+      target_type: 'applicant',
+      target_id: a.id,
+      reason: 'broker',
+      note: null,
+    });
+  });
+
+  it('ac2_report_applicant: the phone card, every status', async () => {
+    const submitted = applicant({ applicant_name: 'S', status: 'submitted' });
+    const shortlisted = applicant({ applicant_name: 'L', status: 'shortlisted' });
+    const declined = applicant({ applicant_name: 'D', status: 'declined' });
+    const { api } = renderPage([json([submitted, shortlisted, declined])], {
+      extra: { 'POST /reports': [json({ already_reported: false }, 201)] },
+    });
+    await screen.findAllByRole('article');
+    for (const name of ['S', 'L', 'D']) {
+      const card = cardOf(name);
+      const last = within(card).getAllByRole('button').at(-1);
+      expect(last).toHaveTextContent(he.report.button);
+      expect(last).toHaveAccessibleDescription(name);
+    }
+    fireEvent.click(within(cardOf('D')).getByRole('button', { name: he.report.button }));
+    const dialog = screen.getByRole('dialog', {
+      name: i18n.t('report.title.person', { name: 'D' }),
+    });
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(5);
+    expect(within(dialog).queryByText(he.report.reasons.unavailable)).toBeNull();
+    fireEvent.click(within(dialog).getByRole('radio', { name: he.report.reasons.other }));
+    fireEvent.click(within(dialog).getByRole('button', { name: he.report.submit }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(he.report.sent);
+    expect(api.calls('POST /reports')[0]?.body).toMatchObject({
+      target_type: 'applicant',
+      target_id: declined.id,
+    });
   });
 });

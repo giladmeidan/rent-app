@@ -108,6 +108,20 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const seekerLog = seekerPage.getByRole('log', { name: he.chat.thread.log });
   await expect(seekerLog.getByText('Hello', { exact: true })).toBeVisible();
 
+  // The seeker reports the other side of the chat (0011d).
+  await seekerPage
+    .getByRole('button', { name: withName(he.report.title.person, OWNER_NAME) })
+    .click();
+  const reportDialog = seekerPage.getByRole('dialog', {
+    name: withName(he.report.title.person, OWNER_NAME),
+  });
+  await expectNoAxeViolations(seekerPage, 'chat report dialog');
+  await reportDialog.getByText(he.report.reasons.moneyBeforeViewing, { exact: true }).click();
+  await reportDialog.getByRole('button', { name: he.report.submit }).click();
+  await expect(reportDialog.getByRole('status')).toHaveText(he.report.sent);
+  await reportDialog.getByRole('button', { name: he.report.close }).click();
+  await expect(reportDialog).toBeHidden();
+
   // The seeker replies; the owner's open thread shows it without a reload (the event stream).
   await seekerPage.getByLabel(he.chat.composer.label).fill('Hi');
   await seekerPage.getByRole('button', { name: he.chat.composer.send }).click();
