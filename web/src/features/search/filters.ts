@@ -13,7 +13,7 @@ export const PRICE_MAX = 100_000;
 export const ROOMS_MIN = 1;
 export const ROOMS_MAX = 10;
 
-export const FEATURES = ['pets', 'furnished', 'elevator', 'parking'] as const;
+export const FEATURES = ['pets', 'furnished', 'elevator', 'parking', 'shelter'] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export type Filters = {
@@ -31,6 +31,8 @@ export type Filters = {
   furnished?: true | undefined;
   elevator?: true | undefined;
   parking?: true | undefined;
+  /** The flat has a protected space (spec 0015a): a ממ״ד, a ממ״ק or a מקלט in the building. */
+  shelter?: true | undefined;
   sort?: Sort | undefined;
   /** `map`: the results as a map (spec 0003d). Not a filter: never sent to the API, never counted. */
   view?: 'map' | undefined;

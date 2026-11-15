@@ -1,4 +1,4 @@
-import type { CloseReason, Condition, GenderPreference, Household, Poster } from './api';
+import type { CloseReason, Condition, GenderPreference, Household, Poster, Shelter } from './api';
 
 /** Live listings per owner account (PRODUCT.md "Brokers"). Replaced by `GET /me`'s `listing_cap` in a
  * later slice; until then an admin-raised cap is not reflected in the client's copy. */
@@ -18,6 +18,9 @@ export const POSTERS: readonly Poster[] = ['lives_here', 'leaving', 'landlord'];
 
 /** An apartment's condition (0014b), in the order the wizard shows them (before "לא לציין"). */
 export const CONDITIONS: readonly Condition[] = ['new', 'renovated', 'good', 'needs_work'];
+
+/** The flat's protected space (0015a), in the order the wizard shows them (before "לא לציין"). */
+export const SHELTERS: readonly Shelter[] = ['mamad', 'mamak', 'building', 'none'];
 
 /** What happened to a listing that is not live (0014b), in the order the dialog shows them. */
 export const CLOSE_REASONS: readonly CloseReason[] = [

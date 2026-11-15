@@ -134,6 +134,7 @@
       "availableFrom": "תאריך כניסה",
       "entryFlexible": "גמיש ±2 שבועות",
       "elevator": "מעלית",
+      "shelter": "מרחב מוגן",
       "parking": "חניה",
       "furnished": "ריהוט",
       "pets": "חיות מחמד מותרות",
@@ -146,7 +147,6 @@
       "charsLeft_one": "נותר תו אחד",
       "charsLeft_two": "נותרו 2 תווים",
       "charsLeft_other": "נותרו {{count}} תווים",
-      "safeRoom": "ממ״ד",
       "airConditioning": "מיזוג אוויר",
       "condition": "מצב הדירה"
     },
@@ -169,6 +169,12 @@
         "medium": "ודאות בינונית"
       },
       "period": "רבעון {{quarter}} {{year}}"
+    },
+    "shelter": {
+      "mamad": "ממ״ד בדירה",
+      "mamak": "ממ״ק בקומה",
+      "building": "מקלט בבניין",
+      "none": "אין מרחב מוגן"
     },
     "furnished": {
       "none": "לא מרוהטת",
@@ -272,6 +278,11 @@
       "immediate": "כניסה מיידית",
       "elevator": "מעלית",
       "noElevator": "ללא מעלית",
+      "shelter": {
+        "mamad": "ממ״ד",
+        "mamak": "ממ״ק",
+        "building": "מקלט"
+      },
       "parking_one": "חניה",
       "parking_two": "2 חניות",
       "parking_other": "{{count}} חניות",
@@ -381,7 +392,8 @@
       "pets": "חיות מחמד",
       "furnished": "ריהוט",
       "elevator": "מעלית",
-      "parking": "חניה"
+      "parking": "חניה",
+      "shelter": "מרחב מוגן"
     },
     "apply": "הצגת תוצאות",
     "clear": "ניקוי",

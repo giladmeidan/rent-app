@@ -34,12 +34,13 @@ own listing `match` is `null`.
 The flat facts (spec 0010f: `room_size_sqm`, `private_bathroom`, `balcony`, `bills_included`,
 `poster`) describe the flat, not a person, and are public to every caller (null on an apartment,
 except `balcony`, a fact of any listing since spec 0014b; `poster` says who posts, never their
-name). So are the apartment facts of spec 0014b (`safe_room`, `air_conditioning`, `condition`, on
-any listing); the closure answer and the price history never are. `ListingDetail.people` (spec
-0010f) lists the people who live in a room's flat as `FlatPersonOut`: the lister when `poster =
-'lives_here'`, then each flatmate who chose to be shown (decision 17), each filtered by decision
-7's gender rule; only for a seeker (decision 13) on a room that fits them (`room_fit` not false),
-else `[]`. A person carries no id of any kind and no looking field."""
+name). So are the apartment facts of spec 0014b (`air_conditioning`, `condition`) and the flat's
+protected space of spec 0015a (`shelter`), on any listing; the closure answer and the price history
+never are. `ListingDetail.people` (spec 0010f) lists the people who live in a room's flat as
+`FlatPersonOut`: the lister when `poster = 'lives_here'`, then each flatmate who chose to be shown
+(decision 17), each filtered by decision 7's gender rule; only for a seeker (decision 13) on a room
+that fits them (`room_fit` not false), else `[]`. A person carries no id of any kind and no looking
+field."""
 
 import datetime as dt
 import uuid
@@ -49,7 +50,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
-from app.schemas.listing import Condition, Furnished, ListingType, Poster, Rooms
+from app.schemas.listing import Condition, Furnished, ListingType, Poster, Rooms, Shelter
 from app.schemas.match import MatchOut
 from app.schemas.photo import PhotoOut
 from app.schemas.profile import (
@@ -86,6 +87,8 @@ class SearchParams(BaseModel):
     furnished: bool | None = None
     elevator: bool | None = None
     parking: bool | None = None
+    # Spec 0015a: the flat has a protected space (`mamad`, `mamak` or `building`).
+    shelter: bool | None = None
     # Omitted: `apartment` (spec 0010a); rooms are asked for explicitly by the market.
     listing_type: ListingType = "apartment"
     # Omitted: `match` for an account with a profile, else `newest` (`services/search.py`).
@@ -182,8 +185,9 @@ class ListingPublic(BaseModel):
     balcony: bool | None
     bills_included: bool | None
     poster: Poster | None
+    # The flat's protected space (spec 0015a), public on any listing.
+    shelter: Shelter | None
     # The apartment facts (spec 0014b), public on any listing.
-    safe_room: bool | None
     air_conditioning: bool | None
     condition: Condition | None
     created_at: dt.datetime

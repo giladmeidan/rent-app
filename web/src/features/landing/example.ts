@@ -33,5 +33,6 @@ export function exampleListing({
     parking_spots: 1,
     furnished: 'partial',
     pets_allowed: true,
+    shelter: null, // spec 0015a: the example card stays as it was
   };
 }

@@ -105,6 +105,9 @@ RoomSizeSqm = Annotated[int, Field(ge=4, le=100)]
 # answer.
 Condition = Literal["new", "renovated", "good", "needs_work"]
 CloseReason = Literal["rented_here", "rented_elsewhere", "not_renting"]
+# The flat's protected space (spec 0015a), an optional fact of any listing: ממ״ד in the flat, ממ״ק
+# on the floor, מקלט in the building, or none. `None` = not said.
+Shelter = Literal["mamad", "mamak", "building", "none"]
 
 # The room fields as an apartment must hold them (`ck_listings_room_fields`). Never mutated.
 ROOM_FIELD_DEFAULTS: dict[str, Any] = {
@@ -132,8 +135,9 @@ NULLABLE_FIELDS = frozenset(
         "balcony",
         "bills_included",
         "poster",
+        # The flat's protected space (spec 0015a), on any listing.
+        "shelter",
         # The apartment facts (spec 0014b), on any listing.
-        "safe_room",
         "air_conditioning",
         "condition",
     }
@@ -182,8 +186,9 @@ class ListingIn(BaseModel):
     balcony: bool | None = None
     bills_included: bool | None = None
     poster: Poster | None = None
+    # The flat's protected space (spec 0015a), on any listing; `None` = not said.
+    shelter: Shelter | None = None
     # Apartment facts (spec 0014b), on any listing; `None` = not said.
-    safe_room: bool | None = None
     air_conditioning: bool | None = None
     condition: Condition | None = None
 
@@ -256,9 +261,10 @@ class ListingPatch(BaseModel):
     balcony: bool | None = None
     bills_included: bool | None = None
     poster: Poster | None = None
+    # The flat's protected space (spec 0015a): in `NULLABLE_FIELDS`.
+    shelter: Shelter | None = None
     # Apartment facts (spec 0014b): in `NULLABLE_FIELDS`. The closure answer is not patchable
     # (`PUT /listings/{id}/closure`): `extra="forbid"` refuses it.
-    safe_room: bool | None = None
     air_conditioning: bool | None = None
     condition: Condition | None = None
     status: ListingStatus | None = None
@@ -320,7 +326,7 @@ class ListingOut(BaseModel):
     balcony: bool | None
     bills_included: bool | None
     poster: Poster | None
-    safe_room: bool | None
+    shelter: Shelter | None
     air_conditioning: bool | None
     condition: Condition | None
     created_at: dt.datetime
