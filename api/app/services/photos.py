@@ -286,9 +286,9 @@ def add_listing_photo(
     db: Session, store: PhotoStore, owner: User, listing_id: uuid.UUID, encoded: Encoded
 ) -> ListingPhoto:
     """Store both copies of an encoded upload under a new key and add the photo last on the
-    caller's listing. Raises `PhotoStoreUnavailable`, `ListingNotFoundError` and
-    `PhotoLimitError` (re-checked under the listing lock); on any failure both objects are deleted
-    again."""
+    caller's listing. Raises `PhotoStoreUnavailable`, `ListingNotFoundError`,
+    `ListingRemovedError` and `PhotoLimitError` (re-checked under the listing lock); on any failure
+    both objects are deleted again."""
     key = new_key()
     names = object_names(key)
     try:

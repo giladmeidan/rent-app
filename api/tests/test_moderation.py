@@ -4,8 +4,8 @@
 The admin dashboard (0012b) writes `users.suspended_at` and `listings.removed_at`; here they are
 set with direct SQL. `World` is AC3's setup: a suspended-to-be user `U` ("Uri") with a live
 apartment `A`, a live room `RU` with an invite token, a visible card, a shown flatmate place on
-`O`'s live room `R2`, a mutual match with `P` ("Pia"), and a like for and an invite to the viewer
-`S` ("Sam"). `O` also owns the room `R3`, whose people page `U` fits."""
+`O`'s live room `R2`, a mutual match with `P` ("Pia"), a like for and an invite to the viewer `S`
+("Sam"), and a like from `V` ("Vered"). `O` also owns the room `R3`, whose people page `U` fits."""
 
 import datetime as dt
 import json
@@ -130,11 +130,17 @@ class World:
         self.p_id = make_seeker(engine, "pia@example.com", "Pia")
         self.p_card = make_card(engine, self.p_id, area, gender="woman")
         self.p = _login(client, engine, self.p_id)
+        self.v_id = make_seeker(engine, "vered@example.com", "Vered")
+        make_card(engine, self.v_id, area, gender="woman")
+        self.v = _login(client, engine, self.v_id)
 
-        # U and P match (a chat opens); U likes S (S's `liked_me`); U's room invites S.
+        # U and P match (a chat opens); U likes S (S's `liked_me`); V likes U (V's `mine`); U's
+        # room invites S. (A seeker's own room like is gone since 0018: `GET /me/likes` lists
+        # invites only.)
         _ok(self.u.put(f"/people/{self.p_card}/like"))
         _ok(self.p.put(f"/people/{self.u_card}/like"))
         _ok(self.u.put(f"/people/{self.s_card}/like"))
+        _ok(self.v.put(f"/people/{self.u_card}/like"))
         make_pair(engine, uuid.UUID(self.u_room), self.s_id, price_ils_seen=7000, lister_liked=True)
 
     def observe(self) -> dict[str, Any]:
@@ -148,6 +154,7 @@ class World:
 
         p_likes = _ok(self.p.get("/me/people-likes"))
         s_likes = _ok(self.s.get("/me/people-likes"))
+        v_likes = _ok(self.v.get("/me/people-likes"))
         return {
             "search": ids(self.client.get("/listings?limit=50")),
             "bbox": ids(self.client.get(f"/listings?{BOX}&limit=50")),
@@ -158,6 +165,7 @@ class World:
             "people": names(_ok(self.s.get("/people"))["items"]),
             "S people-likes": {key: names(value) for key, value in s_likes.items()},
             "P matches": names(p_likes["matches"]),
+            "V mine": names(v_likes["mine"]),
             "S invites": [
                 item["listing"]["id"] for item in _ok(self.s.get("/me/likes"))["liked_me"]
             ],
@@ -200,6 +208,7 @@ def _hidden(world: World, before: dict[str, Any]) -> dict[str, Any]:
             for key, value in before["S people-likes"].items()
         },
         "S invites": [],
+        "V mine": [name for name in before["V mine"] if name != "Uri"],
         "R3 people": [name for name in before["R3 people"] if name != "Uri"],
         "preview": 404,
     }
@@ -276,9 +285,34 @@ def test_nf2_no_email_in_logs(
 # --- AC3, AC4 ----------------------------------------------------------------------------------
 
 
+def _r3_pair(world: World, user_id: uuid.UUID) -> str:
+    """`user_id`'s person card on R3's people page (its `room_pairs` row, made by `observe`)."""
+    return str(
+        _scalar(
+            world.engine,
+            "SELECT id FROM room_pairs WHERE listing_id = :l AND seeker_id = :u",
+            l=world.r3,
+            u=user_id,
+        )
+    )
+
+
+def _report(caller: TestClient, target_type: str, target_id: Any) -> httpx.Response:
+    response: httpx.Response = caller.post(
+        "/reports",
+        json={"target_type": target_type, "target_id": str(target_id), "reason": "broker"},
+    )
+    return response
+
+
 def _writes_refused(world: World) -> None:
-    """Every write on U's listings, card and token answers 404, and nothing is written."""
+    """Every write on U's listings, card, room card and token answers 404, and nothing is
+    written."""
+    u_pair = _r3_pair(world, world.u_id)
     for response in (
+        _report(world.s, "person", world.u_card),
+        _report(world.o, "room_person", u_pair),
+        world.o.put(f"/listings/{world.r3}/people/{u_pair}/like"),
         world.s.post(f"/listings/{world.apartment}/applications", json={"message": "Hello"}),
         world.s.post(
             "/reports",
@@ -298,6 +332,10 @@ def _writes_refused(world: World) -> None:
         )
         == 0
     )
+    assert (
+        _scalar(world.engine, "SELECT lister_liked_at FROM room_pairs WHERE id = :id", id=u_pair)
+        is None
+    )
 
 
 def test_ac3_suspended_user_hidden_everywhere(world: World) -> None:
@@ -311,12 +349,17 @@ def test_ac3_suspended_user_hidden_everywhere(world: World) -> None:
     assert before["S people-likes"]["liked_me"] == ["Uri"]
     assert before["P matches"] == ["Uri"]
     assert before["S invites"] == [world.u_room]
+    assert before["V mine"] == ["Uri"]
 
     _suspend(world.engine, world.u_id)
     after = world.observe()
     assert after == _hidden(world, before)
     assert after["P matches"] == ["Uri"]  # the match row stays: the chat's entry
     _writes_refused(world)
+    # The lister's like still works on a person who is not suspended.
+    assert _ok(world.o.put(f"/listings/{world.r3}/people/{_r3_pair(world, world.s_id)}/like")) == {
+        "liked": True
+    }
 
 
 def test_ac4_lifting_suspension_restores_everything(
@@ -338,6 +381,10 @@ def test_ac4_lifting_suspension_restores_everything(
         ),
         201,
     )
+    u_pair = _r3_pair(world, world.u_id)
+    _ok(_report(world.s, "person", world.u_card), 201)
+    _ok(_report(world.o, "room_person", u_pair), 201)
+    assert _ok(world.o.put(f"/listings/{world.r3}/people/{u_pair}/like")) == {"liked": True}
     _ok(world.s.put(f"/people/{world.u_card}/like"))
     _ok(world.s.post("/flatmate-invites/join", json={"token": world.token}))
 
@@ -397,8 +444,42 @@ def test_ac5_removed_listing_refuses_owner_writes(
     assert reads == []  # the upload refused before reading its body
     assert _snapshot(db_engine, listing) == before
 
+    # Still 30 days from expiry (too early to renew): removed is answered, not renewal_not_open.
+    early = make_listing(
+        db_engine,
+        owner_id,
+        gush_dan,
+        status="paused",
+        removed_at=dt.datetime.now(dt.UTC),
+        expires_at=dt.datetime.now(dt.UTC) + dt.timedelta(days=30),
+    )
+    response = owner.post(f"/listings/{early}/renew")
+    assert (response.status_code, response.json()) == (409, REMOVED)
+
     _ok(owner.put(f"/listings/{listing}/closure", json={"reason": "not_renting"}), 204)
     _ok(owner.get(f"/listings/{listing}/applications"))
+
+
+def test_ac5_removed_room_invite_is_404(
+    client: TestClient, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    """A removed room's invite token answers 404 on preview and join, as a disabled one does."""
+    owner_id = make_owner(db_engine, "o@example.com")
+    owner = _login(client, db_engine, owner_id)
+    room = _room(db_engine, owner_id, gush_dan)
+    token = _ok(owner.post(f"/listings/{room}/flatmate-invite"), 201)["token"]
+    _execute(
+        db_engine,
+        "UPDATE listings SET status = 'paused', removed_at = now() WHERE id = :id",
+        id=room,
+    )
+    seeker_id = make_seeker(db_engine, "s@example.com")
+    make_card(db_engine, seeker_id, gush_dan, gender="woman")
+    seeker = _login(client, db_engine, seeker_id)
+    for path in ("/flatmate-invites/preview", "/flatmate-invites/join"):
+        response = seeker.post(path, json={"token": token})
+        assert (response.status_code, response.json()) == (404, NOT_FOUND), path
+    assert _scalar(db_engine, "SELECT count(*) FROM listing_flatmates") == 0
 
 
 def test_ac6_removed_listing_frees_cap(
@@ -482,13 +563,13 @@ def _users_scans(node: dict[str, Any], parent: str = "") -> Iterator[tuple[str, 
         yield from _users_scans(child, node["Node Type"])
 
 
-def test_nf1_owner_check_uses_pk(
+def test_nf1_owner_check_is_one_pass(
     client: TestClient, db_engine: Engine, gush_dan: uuid.UUID
 ) -> None:
-    """The search's "owner not suspended" check never reads `users` once per listing without an
-    index: each read is a `users_pkey` probe (an Index Cond), or one pass over the few suspended
-    rows built once (under a Materialize or a Hash). Planned at scale, with fresh statistics:
-    2,000 owners with a live apartment each."""
+    """The search's "owner not suspended" check is one filtered pass over the suspended users
+    (served by the partial index `ix_users_suspended`), or a `users_pkey` probe; never a scan of
+    `users` once per listing. EXPLAIN ANALYZEd at 2,000 owners with a live apartment each, with
+    fresh statistics, sequential scans priced out."""
     _execute(
         db_engine,
         "INSERT INTO users (email, display_name, role)"
@@ -524,22 +605,29 @@ def test_nf1_owner_check_uses_pk(
             assert _ok(caller.get("/listings"))["total"] == 2000
     finally:
         event.remove(db_engine, "before_cursor_execute", record)
-    assert len(seen) == 4  # the count and the page, twice
+    counts = [statement for statement, _ in seen if statement.startswith("SELECT count(*)")]
+    assert len(counts) == 2, seen  # each search's count ...
+    assert len(seen) - len(counts) == 2, seen  # ... and its page
 
     for statement, parameters in seen:
         with db_engine.connect() as conn:
             conn.exec_driver_sql("SET LOCAL enable_seqscan = off")
             (plan,) = conn.exec_driver_sql(
-                "EXPLAIN (FORMAT JSON) " + statement, parameters
+                "EXPLAIN (ANALYZE, FORMAT JSON) " + statement, parameters
             ).scalar_one()
             conn.rollback()
         scans = list(_users_scans(plan["Plan"]))
         assert scans, plan
         for parent, scan in scans:
-            assert scan["Node Type"] in ("Index Scan", "Index Only Scan"), json.dumps(plan)
-            assert scan["Index Name"] == "users_pkey", json.dumps(plan)
-            probe = "Index Cond" in scan
-            once = parent in ("Materialize", "Hash") and "suspended_at IS NOT NULL" in scan.get(
-                "Filter", ""
-            )
-            assert probe or once, json.dumps(plan)
+            dump = json.dumps(plan)
+            probe = scan["Index Name"] == "users_pkey" and "Index Cond" in scan
+            partial = scan["Index Name"] == "ix_users_suspended"
+            filtered = "suspended_at IS NOT NULL" in scan.get("Filter", "")
+            assert probe or partial or filtered, dump
+            if not probe:
+                # One pass, built once for the whole statement: not re-run per listing.
+                assert parent in ("Hash", "Materialize"), dump
+                assert scan["Actual Loops"] == 1, dump
+            # On fresh statistics, the partial index serves it (an Index Scan: the implied
+            # `suspended_at` qual keeps Postgres from an index-only scan).
+            assert scan["Node Type"] in ("Index Scan", "Index Only Scan") and partial, dump

@@ -3109,6 +3109,12 @@ def test_ac9_admin_moderation_upgrade_downgrade(migration_db_url: str) -> None:
                 "created_at": False,
             }
             assert inspect(conn).get_foreign_keys("admin_actions") == []
+            assert _index_columns(conn, "users")["ix_users_suspended"] == ["id"]
+            assert (
+                conn.execute(text("SELECT pg_get_indexdef('ix_users_suspended'::regclass)"))
+                .scalar_one()
+                .endswith("(id) WHERE (suspended_at IS NOT NULL)")
+            )
             assert _check_definition(conn, "ck_listings_removed_paused") == (
                 "CHECK (((removed_at IS NULL) OR (status = 'paused'::text)))"
             )
@@ -3126,6 +3132,7 @@ def test_ac9_admin_moderation_upgrade_downgrade(migration_db_url: str) -> None:
         with engine.connect() as conn:
             assert "admin_actions" not in inspect(conn).get_table_names()
             assert "suspended_at" not in _columns(conn, "users")
+            assert "ix_users_suspended" not in _index_columns(conn, "users")
             assert "removed_at" not in _columns(conn, "listings")
             assert "resolved_at" not in _columns(conn, "reports")
             assert _check_definition(conn, "ck_listings_removed_paused") is None

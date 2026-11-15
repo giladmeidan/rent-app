@@ -3,7 +3,7 @@
 import datetime as dt
 import uuid
 
-from sqlalchemy import CheckConstraint, DateTime, SmallInteger, Text, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, DateTime, Index, SmallInteger, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,9 @@ class User(Base):
         CheckConstraint(photo_key_check("photo_key"), name="ck_users_photo_key"),
         # The person's market card id (spec 0010h migration 0017).
         UniqueConstraint("card_id", name="uq_users_card_id"),
+        # The few suspended users (spec 0012a migration 0023, Gilad 2026-11-15): the visibility
+        # rules' "not suspended" check reads only these, so it stays flat as `users` grows.
+        Index("ix_users_suspended", "id", postgresql_where=text("suspended_at IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -47,12 +50,12 @@ class User(Base):
     # The person photo's random object key (`{photo_key}-s.webp` / `-l.webp`), NULL = no photo.
     # Column only in spec 0010d; nothing reads or writes it until 0010j.
     photo_key: Mapped[str | None] = mapped_column(Text)
-    # The only person id in market cards and likes (spec 0010h): random, never changes, and never
-    # appears beside a user id in any response.
     # Suspended by the admin (spec 0012a; written only by the dashboard, 0012b), NULL = not. A
     # suspended account's sessions stop resolving and its listings and person card are hidden (the
     # visibility rules in services/search.py, market_people.py, people.py and flatmates.py).
     suspended_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # The only person id in market cards and likes (spec 0010h): random, never changes, and never
+    # appears beside a user id in any response.
     card_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
     )
