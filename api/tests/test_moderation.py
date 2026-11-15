@@ -619,20 +619,26 @@ def test_nf1_owner_check_is_one_pass(
             conn.rollback()
         scans = list(_users_scans(plan["Plan"]))
         assert scans, plan
-        for parent, scan in scans:
+        for _parent, scan in scans:
             dump = json.dumps(plan)
-            probe = scan["Index Name"] == "users_pkey" and "Index Cond" in scan
+            # A Bitmap Heap Scan names its index on its Bitmap Index Scan child.
+            index = scan.get("Index Name") or next(
+                (c.get("Index Name") for c in scan.get("Plans", [])), None
+            )
+            probe = index == "users_pkey" and "Index Cond" in scan
             # Spec 0013c: a second NOT EXISTS for deleted owners, on its own partial index.
-            partial = scan["Index Name"] in ("ix_users_suspended", "ix_users_deleted")
+            partial = index in ("ix_users_suspended", "ix_users_deleted")
             filtered = any(
                 f"{column} IS NOT NULL" in scan.get("Filter", "")
                 for column in ("suspended_at", "deleted_at")
             )
             assert probe or partial or filtered, dump
             if not probe:
-                # One pass, built once for the whole statement: not re-run per listing.
-                assert parent in ("Hash", "Materialize"), dump
+                # One pass for the whole statement, never re-run per listing. The parent node
+                # (Hash, Materialize, or a Hash Join's outer side) is the planner's choice.
                 assert scan["Actual Loops"] == 1, dump
-            # On fresh statistics, the partial index serves it (an Index Scan: the implied
-            # `suspended_at` qual keeps Postgres from an index-only scan).
-            assert scan["Node Type"] in ("Index Scan", "Index Only Scan") and partial, dump
+            # On fresh statistics, a partial index serves it.
+            assert (
+                scan["Node Type"] in ("Index Scan", "Index Only Scan", "Bitmap Heap Scan")
+                and partial
+            ), dump
