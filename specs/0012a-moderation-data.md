@@ -1,7 +1,7 @@
 ---
 id: 0012a
 title: "A suspended account is signed out and hidden, a listing removed by homie stays off the site, and an account's own listing cap shows in the app"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa, perf, ux]   # security: login and session rule; qa: every place a listing or card is shown; perf: the search, browse and likes hot paths (Sonnet/medium); ux: the new states (login, my listings, edit page)
 estimate: 1 coder run   # coder Opus/high (auth + migration; Speed rule 6); on the large side
@@ -382,6 +382,16 @@ From `graphify affected` on `main` (5713d57), checked against the code with grep
   also revokes the user's live sessions (`sessions.revoked_at`, orchestrator 2026-11-15, the safer
   default), so a lifted account signs in afresh.
 - **Open product questions:** none. Gilad decided all three behaviours on 2026-11-15.
+- **NF1 as written does not hold at realistic scale (coder, 2026-11-15).** With 2,000+ live
+  apartments and fresh statistics, Postgres plans the `NOT EXISTS` as one pass over `users` (a
+  Materialize of `users_pkey` filtered on `suspended_at IS NOT NULL`, about 1 row), not a
+  per-listing probe with an Index Cond; with `enable_seqscan` on it would be a Seq Scan of `users`.
+  That plan is cheap (one pass, a tiny materialized set), but it is not what NF1 asks for.
+  `test_nf1_owner_check_uses_pk` therefore accepts either a `users_pkey` probe with an Index Cond
+  or that one pass built once under a Materialize/Hash, planned at 2,000 owners. Options: (a) keep
+  this test and the perf reviewer's 50 ms measure as the gate (recommended: no schema change); (b)
+  add a partial index `ON users (id) WHERE suspended_at IS NOT NULL` (a schema change 0012b would
+  inherit); (c) a correlated scalar subquery, which forces a probe per listing (slower at scale).
 
 ## Verifier notes
 One round (2026-11-15, against `main` 5713d57). The verifier found 8 issues, and the orchestrator applied
