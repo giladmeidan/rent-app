@@ -46,6 +46,10 @@ PRODUCT.md "Launch (Slice 13)", Gilad 2026-11-15. The API is `0013c`'s.
   and `.env.example`. Production sets the real address in the web build (0013a's deploy checklist), on
   the domain Gilad buys.
 
+- **Gilad 2026-11-15: access logs kept and disclosed.** The server's access log (every request's IP and
+  path) stays on; privacy §1 i13 and §5 i9 disclose it, retention `[משך שמירת היומנים]` (security review
+  M3, option b over `--no-access-log`).
+
 ## Scope
 **In:**
 - **Profile** (`web/src/features/profile/ProfilePage.tsx`): a "מחיקת החשבון" section **after** the profile
