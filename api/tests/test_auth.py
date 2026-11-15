@@ -133,8 +133,17 @@ def test_ac2_signup_requires_profile_then_creates_user(
         ).one()
     assert (row.display_name, row.role, row.account_type) == ("נועה", "owner", "individual")
     assert response.json()["id"] == str(row.id)
-    user_keys = {"id", "email", "display_name", "role", "account_type", "created_at", "photo_url"}
-    assert set(response.json()) == user_keys  # photo_url: 0010j
+    user_keys = {
+        "id",
+        "email",
+        "display_name",
+        "role",
+        "account_type",
+        "created_at",
+        "photo_url",  # 0010j
+        "listing_cap",  # 0012a
+    }
+    assert set(response.json()) == user_keys
     assert response.json()["photo_url"] is None
     me = client.get("/me")
     assert me.status_code == 200

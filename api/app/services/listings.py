@@ -13,6 +13,10 @@ Timestamps (`updated_at`, `expires_at`) come from the database's `now()`, never 
 never moves `expires_at`; only `renew_listing` does, and a PATCH of a listing past `expires_at` is
 refused (`ListingExpiredError`, spec 0011a).
 
+A listing removed by homie (`removed_at`, spec 0012a; always paused) refuses every PATCH and a
+renewal (`ListingRemovedError`, checked on the locked row before anything else); `set_closure` is
+still allowed.
+
 Room fields (spec 0007a): `gender_preference`, `flatmates_count`, `flatmate_ages` and `lifestyle`.
 `ListingIn` checks them on create and on a PATCH's merged row: an apartment holds
 `ROOM_FIELD_DEFAULTS`, a room needs a count, ages never outnumber it. A listing's type is fixed at
@@ -64,6 +68,11 @@ class RenewalNotOpenError(Exception):
 
 class ListingExpiredError(Exception):
     """Past `expires_at`: not patchable; renew it."""
+
+
+class ListingRemovedError(Exception):
+    """Removed by homie (`removed_at` set, spec 0012a): the owner cannot resume, renew, edit or
+    change its photos."""
 
 
 class ListingLiveError(Exception):
@@ -174,9 +183,9 @@ def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:
 def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: ListingPatch) -> Listing:
     """Apply the sent fields of `patch` to the caller's listing and refresh `updated_at`. Resuming
     a paused listing re-applies the cap; a PATCH never moves `expires_at`; only `renew_listing`
-    does. Raises `ListingNotFoundError`, `ListingExpiredError` (past `expires_at`, checked first),
-    `UnknownAreaError`, `ListingCapReachedError` or `RequestValidationError` (nothing written).
-    Commits."""
+    does. Raises `ListingNotFoundError`, `ListingRemovedError` (checked first),
+    `ListingExpiredError` (past `expires_at`, checked next), `UnknownAreaError`,
+    `ListingCapReachedError` or `RequestValidationError` (nothing written). Commits."""
     try:
         # Row lock: a concurrent PATCH of the same listing waits and then merges onto this one's
         # result, so two individually valid patches can never combine into a CHECK failure.
@@ -188,6 +197,8 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
         if row is None:
             raise ListingNotFoundError
         listing, expired = row
+        if listing.removed_at is not None:
+            raise ListingRemovedError
         if expired:
             raise ListingExpiredError
         data = _merged(listing, patch)
@@ -231,11 +242,13 @@ def renew_listing(db: Session, owner: User, listing_id: uuid.UUID) -> Listing:
     """Make the caller's listing live for `LISTING_TTL_DAYS` from now and clear its closure answer.
     Opens `RENEWAL_WINDOW_DAYS` before `expires_at` and stays open after it. A listing that is not
     live takes a cap slot; a live one already holds its own. Raises `ListingNotFoundError`,
-    `RenewalNotOpenError` or `ListingCapReachedError` (nothing written). Commits."""
+    `ListingRemovedError`, `RenewalNotOpenError` or `ListingCapReachedError` (nothing written).
+    Commits."""
     try:
         # Lock order as `update_listing`: the listing row, then the owner row (`_enforce_cap`).
         row = db.execute(
             select(
+                Listing.removed_at.is_not(None),
                 Listing.expires_at > func.now() + dt.timedelta(days=RENEWAL_WINDOW_DAYS),
                 and_(Listing.status == "active", Listing.expires_at > func.now()),
             )
@@ -244,7 +257,9 @@ def renew_listing(db: Session, owner: User, listing_id: uuid.UUID) -> Listing:
         ).one_or_none()
         if row is None:
             raise ListingNotFoundError
-        too_early, live = row
+        removed, too_early, live = row
+        if removed:
+            raise ListingRemovedError
         if too_early:
             raise RenewalNotOpenError
         if not live:

@@ -1,15 +1,17 @@
 // Fixtures for the seeker profile screens (spec 0009r, `profile.screens.ts`), shaped as
 // features/profile/__tests__/fixtures.ts. Obviously fake data only.
-import type { AreaOut } from '../../src/api/client';
+import type { AreaOut, UserOut } from '../../src/api/client';
 import type { SeekerProfileOut } from '../../src/features/profile/api';
 
-export const SEEKER = {
+export const SEEKER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000bb',
   email: 'noa@example.com',
   display_name: 'נועה',
   role: 'seeker',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
 export const AREAS: AreaOut[] = [

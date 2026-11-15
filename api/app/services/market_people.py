@@ -14,10 +14,10 @@ This module is the only writer of `person_pairs` and the only caller of `chat.op
     card to like back (Q-B, Gilad 2026-11-13), and a room's lister invites from the room's own
     people page instead.
 - A **candidate** of the viewer (`_candidate`, written once): a `seeker_profiles` row `P` joined to
-  its `users` row that is visible (`people_visible`), not the viewer, fits the viewer both ways
-  (`matching.fit.person_fit`), and has no **mutual** pair with the viewer (a match lives in
-  `matches` and the chat). Hiding one's card hides one from browse, from other people's lists and
-  from new likes at once; stored likes stay.
+  its `users` row that is visible (`people_visible`), not the viewer, not suspended (spec 0012a),
+  fits the viewer both ways (`matching.fit.person_fit`), and has no **mutual** pair with the
+  viewer (a match lives in `matches` and the chat). Hiding one's card hides one from browse, from
+  other people's lists and from new likes at once; stored likes stay.
 - A **pair** is one `person_pairs` row, ordered in SQL (`least` / `greatest`, as `open_direct`).
   Mutual = both likes set; the likes stay set while matched. Removing a match clears both, so the
   two reappear in each other's browse, and a new mutual like reopens the same chat with its history
@@ -63,6 +63,7 @@ from app.services import chat as chat_service
 from app.services import chat_events
 from app.services.people import CARD_COLUMNS, count_like
 from app.services.rate_limit import count_or_raise
+from app.services.search import not_suspended
 
 # Per user, `GET /people` and the room side's `GET /listings/{id}/people` together, counted in
 # pages: an infinite query refetches every loaded page, and the room side refetches after each like.
@@ -177,6 +178,7 @@ def _candidate(viewer: Viewer) -> tuple[ColumnElement[bool], ...]:
     return (
         SeekerProfile.people_visible.is_(True),
         SeekerProfile.user_id != viewer.id,
+        not_suspended(SeekerProfile.user_id),
         person_fit(viewer.gender, viewer.flatmate_gender, SeekerProfile),
         ~exists().where(_ordered(_MATCHED, viewer.id, SeekerProfile.user_id), _mutual(_MATCHED)),
     )

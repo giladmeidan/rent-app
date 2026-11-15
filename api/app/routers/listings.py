@@ -13,7 +13,8 @@ listing that is not live: the same owner rule as PATCH, 409 `listing_live` while
 `POST /listings/{id}/renew` (spec 0011a) makes the caller's listing live for 90 days from now,
 from 7 days before it expires and any time after: the same owner rule as PATCH, 409
 `renewal_not_open` earlier, and the cap as a resume. PATCH refuses a listing past its expiry (409
-`listing_expired`).
+`listing_expired`). PATCH and renew refuse a listing removed by homie (409 `listing_removed`, spec
+0012a, checked first).
 
 Rate limits (spec 0011c, `app/limits.py`): the POST counts `create` (5 / h, 10 / day) after the
 `owner_only` check; PATCH, the renew POST and the closure PUT count the shared `write` budget,
@@ -121,8 +122,8 @@ def my_listings(user: UserDep, db: DbDep) -> list[MyListingOut]:
         **_NOT_FOUND,
         409: {
             "model": ErrorOut,
-            "description": "listing_cap_reached (a resume) or listing_expired (past expires_at: "
-            "renew it)",
+            "description": "listing_removed (removed by homie), listing_cap_reached (a resume) or "
+            "listing_expired (past expires_at: renew it)",
         },
         **_UNKNOWN_AREA,
         **limits.RATE_LIMITED,
@@ -139,6 +140,8 @@ def update_listing(
         listing = listings_service.update_listing(db, user, listing_id, body)
     except listings_service.ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
+    except listings_service.ListingRemovedError:
+        raise HTTPException(status_code=409, detail="listing_removed") from None
     except listings_service.ListingExpiredError:
         raise HTTPException(status_code=409, detail="listing_expired") from None
     except listings_service.ListingCapReachedError:
@@ -160,8 +163,8 @@ def update_listing(
         **_NOT_FOUND,
         409: {
             "model": ErrorOut,
-            "description": "renewal_not_open (more than 7 days before expires_at) or "
-            "listing_cap_reached",
+            "description": "listing_removed (removed by homie), renewal_not_open (more than 7 days "
+            "before expires_at) or listing_cap_reached",
         },
         422: {"description": "A malformed id (list `detail`)"},
         **limits.RATE_LIMITED,
@@ -173,6 +176,8 @@ def renew_listing(listing_id: uuid.UUID, user: UserDep, db: DbDep, r: RedisDep) 
         listing = listings_service.renew_listing(db, user, listing_id)
     except listings_service.ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
+    except listings_service.ListingRemovedError:
+        raise HTTPException(status_code=409, detail="listing_removed") from None
     except listings_service.RenewalNotOpenError:
         raise HTTPException(status_code=409, detail="renewal_not_open") from None
     except listings_service.ListingCapReachedError:

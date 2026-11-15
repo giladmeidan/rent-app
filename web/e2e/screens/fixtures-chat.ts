@@ -1,24 +1,29 @@
 // Fixtures for the chat screens (spec 0009s, `chat.screens.ts`), shaped as
 // features/chat/__tests__/fixtures.ts.
+import type { UserOut } from '../../src/api/client';
 import type { ConversationOut, MessageOut, ThreadOut } from '../../src/features/chat/api';
 
-export const OWNER = {
+export const OWNER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000aa',
   email: 'roni@example.com',
   display_name: 'רוני',
   role: 'owner',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
 /** A seeker who is also a flatmate in רוני's room. */
-export const FLATMATE = {
+export const FLATMATE: UserOut = {
   id: '00000000-0000-0000-0000-0000000000bb',
   email: 'dana@example.com',
   display_name: 'דנה',
   role: 'seeker',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
 const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;

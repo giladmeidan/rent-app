@@ -169,8 +169,11 @@ def _fits() -> tuple[ColumnElement[bool], ...]:
 
 
 def _shown() -> ColumnElement[bool]:
-    """Opted in (`people_visible`): people browse shows opted-in people only (spec 0010l)."""
-    return SeekerProfile.people_visible.is_(True)
+    """Opted in (`people_visible`): people browse shows opted-in people only (spec 0010l), and not
+    suspended (spec 0012a)."""
+    return and_(
+        SeekerProfile.people_visible.is_(True), search_service.not_suspended(SeekerProfile.user_id)
+    )
 
 
 def _own_room(db: Session, owner: User, listing_id: uuid.UUID, *, lock: bool = False) -> Listing:

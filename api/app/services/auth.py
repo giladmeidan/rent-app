@@ -76,6 +76,10 @@ class ProfileRequiredError(Exception):
     """Right code for an email with no account, and no profile to create one."""
 
 
+class AccountSuspendedError(Exception):
+    """Right code for a suspended account (spec 0012a): the code is consumed, nothing is written."""
+
+
 def normalise_email(email: str) -> str:
     return email.strip().lower()
 
@@ -137,7 +141,8 @@ def verify_otp(
     db: Session, r: RedisClient, email: str, code: str, profile: ProfileIn | None
 ) -> tuple[User, bool]:
     """Check the code and return `(user, created)`, creating the account from `profile` on first
-    use. Raises `InvalidCodeError` or `ProfileRequiredError`. Commits; the caller adds a session."""
+    use. Raises `InvalidCodeError`, `ProfileRequiredError` or `AccountSuspendedError`. Commits; the
+    caller adds a session."""
     email = normalise_email(email)
     key = [otp_key(email)]
     reserved = _eval(r, _RESERVE_ATTEMPT, key, OTP_MAX_ATTEMPTS)
@@ -156,6 +161,9 @@ def verify_otp(
     # Claim the code: of concurrent verifies with the same right code, exactly one gets past here.
     if not _eval(r, _SETTLE_CODE, key, stored, b"del"):
         raise InvalidCodeError
+    # After the claim and outside the `try` below, so a suspended account's code stays consumed.
+    if user is not None and user.suspended_at is not None:
+        raise AccountSuspendedError
     try:
         created = False
         if user is None:
@@ -208,7 +216,7 @@ def revoke_session(db: Session, token: str) -> None:
 
 
 def resolve_session(db: Session, token: str) -> User | None:
-    """The user of a live session (not revoked, not expired), in one query."""
+    """The user of a live session (not revoked, not expired, user not suspended), in one query."""
     return db.scalar(
         select(User)
         .join(SessionRow, SessionRow.user_id == User.id)
@@ -216,5 +224,6 @@ def resolve_session(db: Session, token: str) -> User | None:
             SessionRow.token_hash == _token_hash(token),
             SessionRow.revoked_at.is_(None),
             SessionRow.expires_at > func.now(),
+            User.suspended_at.is_(None),
         )
     )

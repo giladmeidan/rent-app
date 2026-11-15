@@ -1,3 +1,4 @@
+import type { UserOut } from '../../src/api/client';
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
@@ -179,13 +180,15 @@ function listings(seeker: boolean, map: MapFixtures = 'true') {
   return items;
 }
 
-const seekerUser = {
+const seekerUser: UserOut = {
   id: '00000000-0000-0000-0000-0000000000aa',
   email: 'noa@example.com',
   display_name: 'נועה',
   role: 'seeker',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 const seekerProfile = {
   budget_max_ils: 7500,

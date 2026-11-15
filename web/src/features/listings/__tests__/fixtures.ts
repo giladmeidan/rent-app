@@ -57,6 +57,7 @@ export function listing(overrides: Partial<MyListingOut> = {}): MyListingOut {
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',
+    removed: false, // spec 0012a
     photos: [], // spec 0010d
     applicant_count: 0,
     new_applicant_count: 0,

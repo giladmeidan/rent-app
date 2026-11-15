@@ -326,6 +326,8 @@ class ListingOut(BaseModel):
     created_at: dt.datetime
     updated_at: dt.datetime
     expires_at: dt.datetime
+    # Removed by homie (spec 0012a, `Listing.removed`): always paused; no resume, renew or edit.
+    removed: bool
     # The listing's photos in order, the first is the cover (spec 0010d). Not an ORM attribute:
     # `[]` from `model_validate(listing)`; the router fills it (`services/photos.py`).
     photos: list[PhotoOut] = Field(default_factory=list)
