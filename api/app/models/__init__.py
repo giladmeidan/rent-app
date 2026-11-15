@@ -7,7 +7,8 @@ class Base(DeclarativeBase):
     """Declarative base shared by all ORM models."""
 
 
-from app.models.application import Application  # noqa: E402  (models must see Base first)
+from app.models.admin_action import AdminAction  # noqa: E402  (models must see Base first)
+from app.models.application import Application  # noqa: E402
 from app.models.area import Area  # noqa: E402
 from app.models.cbs_rent_price import CbsRentPrice  # noqa: E402
 from app.models.conversation import Conversation, Message  # noqa: E402
@@ -25,6 +26,7 @@ from app.models.session import Session  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 __all__ = [
+    "AdminAction",
     "Application",
     "Area",
     "Base",

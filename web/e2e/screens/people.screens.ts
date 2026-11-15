@@ -1,6 +1,7 @@
 // The visual check for the room lister's people page (spec 0009p, AC5): one screenshot per state at
 // each project's size, in web/screens/0009p/. Every API request is answered here, so it needs only
 // the vite server: no sign-up, no OTP. An unmatched request fails the run.
+import type { UserOut } from '../../src/api/client';
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
@@ -12,13 +13,15 @@ import { test } from '../fixtures';
 
 // --- fixtures (obviously fake) ----------------------------------------------------------------------
 
-const OWNER = {
+const OWNER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000aa',
   email: 'dana@example.com',
   display_name: 'דנה',
   role: 'owner',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 const AREA_A = '00000000-0000-0000-0000-00000000a1a1';
 const AREA_B = '00000000-0000-0000-0000-00000000a2a2';
@@ -67,6 +70,7 @@ const ROOM: MyListingOut = {
   created_at: '2026-11-01T10:00:00Z',
   updated_at: '2026-11-01T10:00:00Z',
   expires_at: '2099-01-01T10:00:00Z',
+  removed: false, // spec 0012a
   photos: [], // spec 0010d
   applicant_count: 0,
   new_applicant_count: 0,

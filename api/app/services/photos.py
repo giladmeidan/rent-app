@@ -41,7 +41,7 @@ from app.config import get_settings
 from app.models import Listing, ListingPhoto, User
 from app.redis_client import RedisClient
 from app.schemas.photo import PhotoOut
-from app.services.listings import ListingNotFoundError
+from app.services.listings import ListingNotFoundError, ListingRemovedError
 from app.services.photo_store import PhotoStore, PhotoStoreUnavailable
 from app.services.rate_limit import RateLimitedError, count_or_raise
 
@@ -237,15 +237,18 @@ async def encode_upload(data: bytes) -> Encoded:
 
 def _lock_own_listing(db: Session, owner_id: uuid.UUID, listing_id: uuid.UUID) -> None:
     """Lock the caller's listing `FOR NO KEY UPDATE` until the transaction ends;
-    `ListingNotFoundError` when it is unknown or another owner's."""
-    found = db.scalar(
-        select(Listing.id)
+    `ListingNotFoundError` when it is unknown or another owner's, `ListingRemovedError` when homie
+    removed it (spec 0012a)."""
+    removed = db.scalar(
+        select(Listing.removed_at.is_not(None))
         .where(Listing.id == listing_id, Listing.owner_id == owner_id)
         # `key_share` without `read` renders `FOR NO KEY UPDATE` on PostgreSQL.
         .with_for_update(key_share=True)
     )
-    if found is None:
+    if removed is None:
         raise ListingNotFoundError
+    if removed:
+        raise ListingRemovedError
 
 
 def _photo_count(db: Session, listing_id: uuid.UUID) -> int:
@@ -256,13 +259,17 @@ def _photo_count(db: Session, listing_id: uuid.UUID) -> int:
 
 def check_listing_upload(db: Session, owner: User, listing_id: uuid.UUID) -> None:
     """Before an upload's body is read (no lock): `ListingNotFoundError` unless the listing is the
-    caller's, `PhotoLimitError` when it is full. `add_listing_photo` checks both again under the
-    lock."""
-    found = db.scalar(
-        select(Listing.id).where(Listing.id == listing_id, Listing.owner_id == owner.id)
+    caller's, `ListingRemovedError` when homie removed it, `PhotoLimitError` when it is full.
+    `add_listing_photo` checks all three again under the lock."""
+    removed = db.scalar(
+        select(Listing.removed_at.is_not(None)).where(
+            Listing.id == listing_id, Listing.owner_id == owner.id
+        )
     )
-    if found is None:
+    if removed is None:
         raise ListingNotFoundError
+    if removed:
+        raise ListingRemovedError
     if _photo_count(db, listing_id) >= MAX_LISTING_PHOTOS:
         raise PhotoLimitError
 
@@ -279,9 +286,9 @@ def add_listing_photo(
     db: Session, store: PhotoStore, owner: User, listing_id: uuid.UUID, encoded: Encoded
 ) -> ListingPhoto:
     """Store both copies of an encoded upload under a new key and add the photo last on the
-    caller's listing. Raises `PhotoStoreUnavailable`, `ListingNotFoundError` and
-    `PhotoLimitError` (re-checked under the listing lock); on any failure both objects are deleted
-    again."""
+    caller's listing. Raises `PhotoStoreUnavailable`, `ListingNotFoundError`,
+    `ListingRemovedError` and `PhotoLimitError` (re-checked under the listing lock); on any failure
+    both objects are deleted again."""
     key = new_key()
     names = object_names(key)
     try:

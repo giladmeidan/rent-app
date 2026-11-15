@@ -15,6 +15,7 @@ export const noa: UserOut = {
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
+  listing_cap: 3, // spec 0012a
 };
 
 export const json = (body: unknown, status = 200) =>

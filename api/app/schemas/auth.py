@@ -40,7 +40,8 @@ class OtpVerifyIn(BaseModel):
 
 class UserOut(BaseModel):
     """The caller's own account. `photo_url`: their person photo's small address (spec 0010j),
-    null without one."""
+    null without one. `listing_cap`: live listings allowed at once (spec 0012a; the admin may
+    raise it)."""
 
     id: uuid.UUID
     email: str
@@ -49,3 +50,4 @@ class UserOut(BaseModel):
     account_type: str
     created_at: dt.datetime
     photo_url: str | None
+    listing_cap: int

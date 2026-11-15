@@ -1,18 +1,21 @@
 // Fixtures for the seeker's list screens (spec 0009qa, `seeker-lists.screens.ts`), shaped as
 // features/applications/__tests__/fixtures.ts, features/likes/__tests__/fixtures.ts and
 // features/profile/__tests__/fixtures.ts.
+import type { UserOut } from '../../src/api/client';
 import type { MyApplicationOut } from '../../src/features/applications/api';
 import type { LikedRoomOut, MyLikesOut } from '../../src/features/likes/api';
 import type { ListingPublic } from '../../src/features/listings/api';
 import type { SeekerProfileOut } from '../../src/features/profile/api';
 
-export const SEEKER = {
+export const SEEKER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000bb',
   email: 'noa@example.com',
   display_name: 'נועה',
   role: 'seeker',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
 const year = new Date().getUTCFullYear();

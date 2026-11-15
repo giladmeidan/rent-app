@@ -541,6 +541,42 @@ describe('EditListingPage', () => {
     }
   });
 
+  it('ac13_removed_listing', async () => {
+    // Spec 0012a: removed (and past expiry, so the removed check comes first): the refusal as the
+    // focused <h1> and tab title, the back link, and no card, form or renew button.
+    const a = stored({ status: 'paused', removed: true, expires_at: '2020-01-01T00:00:00Z' });
+    mockApi({
+      'GET /me': [() => json(owner)],
+      'GET /me/listings': [() => json([a]), never],
+      'GET /areas': [() => json([gushDan])],
+    });
+    const view = renderEdit(a.id);
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: he.listings.errors.removed,
+    });
+    await vi.waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    expect(document.title).toContain(he.listings.errors.removed);
+    expect(backLink()).toHaveAttribute('href', '/me/listings');
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.queryByRole('button', { name: he.listings.actions.renew })).toBeNull();
+    expect(screen.queryByText(he.listings.edit.expiredBody)).toBeNull();
+    for (const role of ['textbox', 'combobox', 'spinbutton']) {
+      expect(screen.queryAllByRole(role)).toHaveLength(0);
+    }
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Removed while the page was open: the PATCH's 409 shows the same text, not the cap error.
+    const b = stored();
+    const opened = await changePriceAndSave(b, [json({ detail: 'listing_removed' }, 409)]);
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.listings.errors.removed);
+    expect(screen.queryByText(i18n.t('listings.errors.capReached', { cap: 3 }))).toBeNull();
+    opened.view.unmount();
+  });
+
   it('ac3_live_and_paused_before_expiry_still_editable', async () => {
     for (const other of [stored(), stored({ status: 'paused' })]) {
       const opened = await openEdit(other);

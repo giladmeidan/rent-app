@@ -1,24 +1,29 @@
 // Fixtures for the flatmates screens (spec 0009qb, `flatmates.screens.ts`), shaped as
 // features/flatmates/__tests__/fixtures.ts and features/listings/__tests__/fixtures.ts.
+import type { UserOut } from '../../src/api/client';
 import type { FlatmateOut, InvitePreviewOut, MyFlatOut } from '../../src/features/flatmates/api';
 import type { MyListingOut } from '../../src/features/listings/api';
 
-export const OWNER = {
+export const OWNER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000aa',
   email: 'roni@example.com',
   display_name: 'רוני',
   role: 'owner',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
-export const SEEKER = {
+export const SEEKER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000bb',
   email: 'noa@example.com',
   display_name: 'נועה',
   role: 'seeker',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
 /** A room in Ramat Gan, listed by רוני, with no invite link unless overridden. */
@@ -63,6 +68,7 @@ export function room(overrides: Partial<MyListingOut> = {}): MyListingOut {
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',
+    removed: false, // spec 0012a
     photos: [], // spec 0010d
     applicant_count: 0,
     new_applicant_count: 0,

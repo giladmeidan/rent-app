@@ -1,7 +1,7 @@
 ---
 id: 0012a
 title: "A suspended account is signed out and hidden, a listing removed by homie stays off the site, and an account's own listing cap shows in the app"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa, perf, ux]   # security: login and session rule; qa: every place a listing or card is shown; perf: the search, browse and likes hot paths (Sonnet/medium); ux: the new states (login, my listings, edit page)
 estimate: 1 coder run   # coder Opus/high (auth + migration; Speed rule 6); on the large side
@@ -27,6 +27,8 @@ schema lands in one migration and `0012b` has none.
   - the suspended user's chats, applications and likes stay as they are;
   - a hidden listing reads "removed by homie" to its owner, has resume, renew and edit blocked, and frees
     its cap slot.
+- Partial index users(id) WHERE suspended_at IS NOT NULL (Gilad, 2026-11-15), so the owner check stays
+  flat as users grows.
 - PRODUCT.md "Trust (MVP)": reports are stored only (0011b). This spec still never hides anything because
   of a report; only the admin's action does.
 - Visibility already lives in a few rules, and this spec adds one condition to each rather than a check
@@ -39,8 +41,8 @@ schema lands in one migration and `0012b` has none.
 ## Scope
 **In:**
 - **Migration and models:**
-  - migration `0023_admin_moderation` (Data). It takes the next free number if `0015a`'s migration lands
-    first, with `down_revision` set to `main`'s head at build time;
+  - migration `0024_admin_moderation` (Data): `0015a`'s `0023_listing_shelter` landed first, so
+    `down_revision` is 0023;
   - `api/app/models/user.py` (`suspended_at`), `listing.py` (`removed_at` + CHECK; its docstring's
     migration list gains this one), `report.py` (`resolved_at`), and a new `admin_action.py`
     (`AdminAction`), exported from `app/models/__init__.py`.
@@ -126,12 +128,12 @@ schema lands in one migration and `0012b` has none.
 **New dependencies:** none.
 
 ## Data
-Migration `api/alembic/versions/0023_admin_moderation.py` (the number may change, see Scope), with a
+Migration `api/alembic/versions/0024_admin_moderation.py` (`down_revision` 0023, `0015a`'s), with a
 working `downgrade` that drops all four in reverse order:
 
 | Table | Change | Rule |
 | --- | --- | --- |
-| `users` | `suspended_at timestamptz NULL` | NULL = not suspended. Only the dashboard writes it |
+| `users` | `suspended_at timestamptz NULL`; index `ix_users_suspended ON users (id) WHERE suspended_at IS NOT NULL` | NULL = not suspended. Only the dashboard writes it. The partial index holds only the suspended rows, so the "not suspended" check reads a handful of rows however large `users` grows (Gilad, 2026-11-15) |
 | `listings` | `removed_at timestamptz NULL` | NULL = not removed. `ck_listings_removed_paused CHECK (removed_at IS NULL OR status = 'paused')`: a removed listing is never active, so it is never live and never takes a cap slot |
 | `reports` | `resolved_at timestamptz NULL` | NULL = open. Only the dashboard writes it |
 | `admin_actions` (new) | `id uuid PK default gen_random_uuid()`, `action text NOT NULL`, `target_type text NOT NULL`, `target_id uuid NOT NULL`, `detail text NULL`, `created_at timestamptz NOT NULL default now()` | `ck_admin_actions_action`: `'suspend'`, `'unsuspend'`, `'hide_listing'`, `'unhide_listing'`, `'set_listing_cap'`, `'resolve_reports'`, `'read_chat'`. `ck_admin_actions_target_type`: `'user'`, `'listing'`, `'report'`, `'chat'`. `ck_admin_actions_detail_length`: `char_length(detail) BETWEEN 1 AND 200`. No FK on `target_id` (it points into four tables; the log outlives its target) |
@@ -289,11 +291,13 @@ i18n keys added: `auth.errors.suspended`, `listings.status.removed`, `listings.m
 - [ ] AC13 Given a removed listing, When its edit page opens, or a PATCH there answers 409
   `listing_removed`, Then `listings.errors.removed` shows (as the focused `<h1>` on open), and no form,
   card or renew button is offered — `__tests__/EditListingPage.test.tsx::ac13_removed_listing`
-- [ ] NF1 Given the search page statement, When it is EXPLAINed (FORMAT JSON) with `SET LOCAL
-  enable_seqscan = off`, as `test_market_people.py::_explain` does, Then every scan of `users` is an
-  Index or Index Only Scan on `users_pkey` with an Index Cond. `test_market_people.py::test_ac13_statement_counts_and_plan`
-  still passes. The perf reviewer re-measures 0003a's NF2 (each search statement under 50 ms at 10,000
-  live apartments) and writes it into the digest — `test_moderation.py::test_nf1_owner_check_uses_pk`
+- [ ] NF1 Given the search's count and page statements, When they are EXPLAIN ANALYZEd (FORMAT JSON)
+  with `SET LOCAL enable_seqscan = off` at 2,000 live apartments with fresh statistics, Then the owner
+  check is one filtered pass over users or a primary-key probe, never a per-listing scan, served by the
+  partial index on suspended users (`ix_users_suspended`, one loop under a Hash or Materialize).
+  `test_market_people.py::test_ac13_statement_counts_and_plan` still passes. The perf reviewer
+  re-measures 0003a's NF2 (each search statement under 50 ms at 10,000 live apartments) —
+  `test_moderation.py::test_nf1_owner_check_is_one_pass`
 - [ ] NF2 No log line carries a suspended user's email. The 403 is logged like other auth errors, with no
   user id — `test_moderation.py::test_nf2_no_email_in_logs` (caplog)
 
@@ -365,7 +369,7 @@ From `graphify affected` on `main` (5713d57), checked against the code with grep
   `people/RoomInviteHint.tsx` → `MarketPeoplePage`: live-only, unaffected).
 - Models `User`, `Listing`, `Report`, `AdminAction`: nullable columns and a new table; the new CHECK bites
   only on writes that set `status = 'active'` (`update_listing`'s resume, `renew_listing`), which refuse
-  first. `Listing`'s docstring list of migrations gains 0023. `test_migrations.py` round trip and
+  first. `Listing`'s docstring list of migrations gains 0024. `test_migrations.py` round trip and
   autogenerate.
 
 ## Risks / open questions
@@ -382,7 +386,9 @@ From `graphify affected` on `main` (5713d57), checked against the code with grep
   also revokes the user's live sessions (`sessions.revoked_at`, orchestrator 2026-11-15, the safer
   default), so a lifted account signs in afresh.
 - **Open product questions:** none. Gilad decided all three behaviours on 2026-11-15.
-
+- **NF1 reworded (2026-11-15).** At realistic scale Postgres plans the `NOT EXISTS` as one pass over
+  the suspended users, not a per-listing primary-key probe. Gilad chose the partial index (option b),
+  and NF1 now asks for that one-pass shape.
 ## Verifier notes
 One round (2026-11-15, against `main` 5713d57). The verifier found 8 issues, and the orchestrator applied
 all of them to the text above:
@@ -395,6 +401,12 @@ all of them to the text above:
 6. real routes and test names;
 7. the admin log targets and the migration number;
 8. the stream timing and the old-sessions risk.
+
+Perf review (2026-11-15, EXPLAIN ANALYZE at 10,000 live apartments, before → after 0012a, before the
+partial index; count / page in ms): no params 3.7/17.0 → 6.5/23.0; filtered 2.5/6.4 → 3.6/7.8; offset
+10000 3.6/20.8 → 6.0/25.3; bbox 3.8/17.8 → 6.1/22.9; market rooms 2.0/3.1 → 3.1/4.8; match sort
+5.4/69.0 → 6.9/71.0 (over 50 ms before 0012a too, FOLLOWUPS); people browse 19.1 → 20.7; people likes
+5.6 → 6.5.
 
 ## Digest (filled by orchestrator after verification)
 Spec 0012a — Suspension, removed listings and the per-account cap in the public app   (verified 2026-11-15; part 1 of 2, 0012b is the dashboard)

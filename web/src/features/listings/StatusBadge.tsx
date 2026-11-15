@@ -4,13 +4,15 @@ import { Badge, type BadgeTone } from '../../components/Badge';
 import type { ListingOut } from './api';
 import { RENEWAL_WINDOW_DAYS } from './constants';
 
-export type ListingState = 'live' | 'paused' | 'expired';
+export type ListingState = 'live' | 'paused' | 'expired' | 'removed';
 
-/** Live = active and not yet expired (spec 0002a); a paused listing reads paused even if expired. */
+/** Removed by homie wins (spec 0012a); live = active and not yet expired (spec 0002a); a paused
+ * listing reads paused even if expired. */
 export function listingState(
-  listing: Pick<ListingOut, 'status' | 'expires_at'>,
+  listing: Pick<ListingOut, 'status' | 'expires_at' | 'removed'>,
   now: Date,
 ): ListingState {
+  if (listing.removed) return 'removed';
   if (listing.status === 'active' && new Date(listing.expires_at) > now) return 'live';
   if (listing.status === 'paused') return 'paused';
   return 'expired';
@@ -30,6 +32,7 @@ const tone: Record<ListingState, BadgeTone> = {
   live: 'accent',
   paused: 'neutral',
   expired: 'warning',
+  removed: 'danger',
 };
 
 export function StatusBadge({ state }: { state: ListingState }) {
@@ -38,6 +41,7 @@ export function StatusBadge({ state }: { state: ListingState }) {
     live: t('listings.status.live'),
     paused: t('listings.status.paused'),
     expired: t('listings.status.expired'),
+    removed: t('listings.status.removed'),
   }[state];
   return (
     <Badge tone={tone[state]} data-testid="status-badge" className="shrink-0">

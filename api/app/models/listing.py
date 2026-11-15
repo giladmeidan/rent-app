@@ -1,8 +1,8 @@
 """`listings` table (spec 0002a). Enumerations are text with named CHECKs; money is integer ILS.
 
 Every CHECK, FK, unique constraint and index here matches migrations 0003, 0004, 0005, 0007, 0009,
-0010, 0012, 0016, 0020 and 0023 exactly (autogenerate must see no diff). A listing is **live** while
-`status = 'active' AND expires_at > now()`.
+0010, 0012, 0016, 0020, 0023 and 0024 exactly (autogenerate must see no diff). A listing is
+**live** while `status = 'active' AND expires_at > now()`.
 
 Room fields (spec 0007a): `gender_preference` (who the room is for), `flatmates_count` (people
 already living there), `flatmate_ages` (optional: none, some or all of them) and `lifestyle` (the
@@ -158,6 +158,10 @@ class Listing(Base):
         CheckConstraint(
             "(close_reason IS NULL) = (closed_at IS NULL)", name="ck_listings_closed_at"
         ),
+        # Removed by homie (spec 0012a): never active, so never live and never in the cap.
+        CheckConstraint(
+            "removed_at IS NULL OR status = 'paused'", name="ck_listings_removed_paused"
+        ),
         # NULLs never collide: many listings have no live invite link (spec 0008d).
         UniqueConstraint("flatmate_invite_hash", name="uq_listings_flatmate_invite_hash"),
         Index("ix_listings_owner_id", "owner_id"),
@@ -240,6 +244,9 @@ class Listing(Base):
     close_reason: Mapped[str | None] = mapped_column(Text)
     final_rent_ils: Mapped[int | None] = mapped_column(Integer)  # monthly
     closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Removed by homie (spec 0012a; written only by the admin dashboard, 0012b), NULL = not. The
+    # owner cannot resume, renew, edit or change its photos (`ListingRemovedError`).
+    removed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -275,3 +282,8 @@ class Listing(Base):
         func.ST_X(cast(location, PLAIN_GEOMETRY), type_=Float),
         deferred=True,
     )
+
+    @property
+    def removed(self) -> bool:
+        """Removed by homie (spec 0012a); the owner's `ListingOut.removed`."""
+        return self.removed_at is not None

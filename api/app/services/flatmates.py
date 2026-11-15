@@ -75,6 +75,7 @@ from app.services.applications import AlreadyAppliedError
 from app.services.auth import _token_hash
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
+from app.services.search import owner_not_suspended
 
 # The `FlatmatesCount` bound (spec 0007a): at most 7 people share a room's flat with its lister.
 FLATMATES_MAX = 7
@@ -154,7 +155,8 @@ def preview(db: Session, r: RedisClient, me: User, token: str) -> Row[Any]:
     """The room a live invite token is for, as `me` sees it before joining: a row of the `Listing`,
     `owner_name` and `member` (whether `me` is already a flatmate there). Counts the attempt first
     (`RateLimitedError`), then raises `ListingNotFoundError` (an unknown, rotated or disabled token,
-    or an apartment) or `OwnListingError`. One SELECT after the limiter."""
+    an apartment, a room removed by homie or one whose owner is suspended, spec 0012a) or
+    `OwnListingError`. One SELECT after the limiter."""
     _count_attempt(r, me)
     owner = aliased(User, name="owner")
     member = exists().where(
@@ -163,7 +165,12 @@ def preview(db: Session, r: RedisClient, me: User, token: str) -> Row[Any]:
     row = db.execute(
         select(Listing, owner.display_name.label("owner_name"), member.label("member"))
         .join(owner, owner.id == Listing.owner_id)
-        .where(Listing.flatmate_invite_hash == _token_hash(token), Listing.listing_type == "room")
+        .where(
+            Listing.flatmate_invite_hash == _token_hash(token),
+            Listing.listing_type == "room",
+            Listing.removed_at.is_(None),
+            owner_not_suspended(),
+        )
     ).one_or_none()
     if row is None:
         raise ListingNotFoundError
@@ -176,7 +183,8 @@ def join(db: Session, r: RedisClient, me: User, token: str, shown: bool) -> uuid
     """Make `me` a flatmate of the room a live invite token is for and return its id; `shown` is
     their choice to appear on the room's page (spec 0010f). Counts the
     attempt first (`RateLimitedError`); then locks the listing by hash (`ListingNotFoundError` for
-    an unknown, rotated or disabled token or an apartment), and raises `OwnListingError`,
+    an unknown, rotated or disabled token, an apartment, or a removed room or suspended owner,
+    spec 0012a), and raises `OwnListingError`,
     `AlreadyAppliedError` (a submitted or shortlisted application of `me` to it), `DeclinedError`
     (a declined one) or `FlatmatesFullError`. A
     member gets the listing id again, membership untouched (`shown` and `joined_at` as stored).
@@ -188,6 +196,8 @@ def join(db: Session, r: RedisClient, me: User, token: str, shown: bool) -> uuid
             .where(
                 Listing.flatmate_invite_hash == _token_hash(token),
                 Listing.listing_type == "room",
+                Listing.removed_at.is_(None),
+                owner_not_suspended(),
             )
             .with_for_update()
         ).one_or_none()
@@ -409,6 +419,7 @@ def shown_people(db: Session, listing: Listing, viewer_id: uuid.UUID) -> Sequenc
         .where(
             ListingFlatmate.listing_id == listing.id,
             ListingFlatmate.shown.is_(True),
+            User.suspended_at.is_(None),
             _fits_room(listing, viewer_id),
             _fits_viewer(flatmate_profile, viewer_id),
         )

@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 
 import { ApiError, renewListing, type MyListingOut } from './api';
-import { LISTING_CAP } from './constants';
 import { MY_LISTINGS_KEY } from './useMyListings';
 
 export function useRenewListing(id: string) {
@@ -23,11 +22,20 @@ export function useRenewListing(id: string) {
   });
 }
 
-/** The alert text for a failed pause, resume or renewal: by the 409's `detail`, else generic. */
-export function actionErrorText(t: TFunction, error: unknown, online: boolean): string {
+/** The alert text for a failed pause, resume or renewal: by the 409's `detail`, else generic.
+ * `cap` is the account's `listing_cap` (`GET /me`, spec 0012a). */
+export function actionErrorText(
+  t: TFunction,
+  error: unknown,
+  online: boolean,
+  cap: number | undefined,
+): string {
   const detail = error instanceof ApiError ? error.detail : undefined;
-  if (detail === 'listing_cap_reached')
-    return t('listings.errors.capReached', { cap: LISTING_CAP });
+  // Without the cap (`/me` not loaded or failed) the generic text, never a bare `{{cap}}`.
+  if (detail === 'listing_cap_reached' && cap !== undefined) {
+    return t('listings.errors.capReached', { cap });
+  }
+  if (detail === 'listing_removed') return t('listings.errors.removed');
   if (detail === 'renewal_not_open') return t('listings.renew.notOpen');
   if (detail === 'listing_expired') return t('listings.errors.expired');
   return online ? t('common.error') : t('common.offline');

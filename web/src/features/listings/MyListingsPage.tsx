@@ -14,9 +14,9 @@ import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { useOnline } from '../../components/useOnline';
+import { useMe } from '../auth/useMe';
 import type { ListingType, MyListingOut } from './api';
 import { ClosureDialog, closeReasonLabel } from './ClosureDialog';
-import { LISTING_CAP } from './constants';
 import { formatDate, todayInIsrael } from './format';
 import { ListingCard } from './ListingCard';
 import { inRenewalWindow, isPastExpiry, listingState, StatusBadge } from './StatusBadge';
@@ -69,6 +69,7 @@ function ListingRow({
   const patch = usePatchListing(listing.id);
   const renew = useRenewListing(listing.id);
   const online = useOnline();
+  const me = useMe();
   // The row's own clock: a failed pause or renewal re-renders the row alone, and a listing that
   // expired meanwhile must then read expired (0011a).
   const now = new Date();
@@ -100,8 +101,11 @@ function ListingRow({
   });
 
   // A listing past its expiry cannot be paused, resumed (0011a) or edited (0002f): only renewed.
+  // A removed one (0012a, `state` 'removed') cannot be resumed, renewed or edited at all.
+  const removed = state === 'removed';
   const next = state === 'live' ? 'paused' : state === 'paused' && !past ? 'active' : null;
-  const canRenew = inRenewalWindow(listing, now);
+  const canRenew = !removed && inRenewalWindow(listing, now);
+  const canEdit = !removed && !past;
   const failed = patch.isError ? patch.error : renew.isError ? renew.error : null;
 
   return (
@@ -115,11 +119,13 @@ function ListingRow({
       >
         <div className="flex flex-col gap-3 pt-1">
           <p className="text-caption text-ink-muted">
-            {t(past ? 'listings.mine.expiredOn' : 'listings.mine.expiresOn', {
-              date: formatDate(todayInIsrael(new Date(listing.expires_at))),
-            })}
+            {removed
+              ? t('listings.mine.removedHint')
+              : t(past ? 'listings.mine.expiredOn' : 'listings.mine.expiresOn', {
+                  date: formatDate(todayInIsrael(new Date(listing.expires_at))),
+                })}
           </p>
-          {(next !== null || canRenew || !past) && (
+          {(next !== null || canRenew || canEdit) && (
             <div className="flex flex-wrap gap-2">
               {next !== null && (
                 <Button
@@ -166,7 +172,7 @@ function ListingRow({
                   {t('listings.actions.renew')}
                 </Button>
               )}
-              {!past && (
+              {canEdit && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -237,7 +243,7 @@ function ListingRow({
           </div>
           {failed !== null && (
             <p role="alert" className="text-label text-danger">
-              {actionErrorText(t, failed, online)}
+              {actionErrorText(t, failed, online, me.data?.listing_cap)}
             </p>
           )}
         </div>
@@ -295,6 +301,7 @@ function MyListingsRoute({ type }: { type: ListingType }) {
 function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   const { t } = useTranslation();
   const listings = useMyListings();
+  const me = useMe();
   const room = type === 'room';
   const newPath = `/listings/new?type=${type}`;
   const location = useLocation();
@@ -376,8 +383,10 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
   // Both types: the cap is shared.
   const live = listings.data?.filter((l) => listingState(l, now) === 'live').length;
 
+  // No count until `GET /me` gives the account's cap (0012a): never a guessed one.
+  const cap = me.data?.listing_cap;
   const count =
-    live === undefined ? undefined : t('listings.mine.count', { live, cap: LISTING_CAP });
+    live === undefined || cap === undefined ? undefined : t('listings.mine.count', { live, cap });
   // The only "new" action, empty state included: the empty state has no button of its own.
   const newButton = (
     <Button variant="primary" to={newPath}>

@@ -474,6 +474,37 @@ describe('ListingWizard', () => {
     ]);
   });
 
+  it('ac12_cap_from_me', async () => {
+    // Spec 0012a: the cap error names the account's own cap from `GET /me`.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json({ detail: 'listing_cap_reached' }, 409)],
+    });
+    let client = meClient({ ...owner, listing_cap: 10 });
+    let view = await toPreview(client);
+    fireEvent.click(publishButton());
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(i18n.t('listings.errors.capReached', { cap: 10 }));
+    expect(alert).not.toHaveTextContent(i18n.t('listings.errors.capReached', { cap: 3 }));
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Without `me` (gone from the cache): the generic text, never a bare `{{cap}}`.
+    mockApi({
+      'GET /areas': [json([gushDan])],
+      'POST /listings': [json({ detail: 'listing_cap_reached' }, 409)],
+    });
+    client = meClient();
+    view = await toPreview(client);
+    act(() => {
+      client.setQueryData(ME_KEY, null);
+    });
+    fireEvent.click(publishButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent(he.common.error);
+    expect(screen.queryByText(/\{\{cap\}\}/)).toBeNull();
+    view.unmount();
+  });
+
   it('ac5_publish_errors', async () => {
     const alertText = () => screen.getByRole('alert').textContent;
 

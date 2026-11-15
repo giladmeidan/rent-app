@@ -85,6 +85,51 @@ describe('OtpForm', () => {
     expect(code).toHaveAccessibleDescription(he.common.error);
   });
 
+  it('ac10_suspended_account', async () => {
+    // Spec 0012a: the right code for a suspended account. The alert, not a field error (the code
+    // was right and is used up), an emptied field, and no navigation.
+    mockApi({
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json({ detail: 'account_suspended' }, 403)],
+    });
+    renderAt('/login', <OtpForm withProfile={false} />);
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: noa.email },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    const code = screen.getByLabelText(he.auth.code.label);
+    fireEvent.change(code, { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+    await flush();
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(he.auth.errors.suspended);
+    expect(code).toHaveValue('');
+    expect(code).not.toHaveAttribute('aria-invalid', 'true');
+    expect(code).toHaveAccessibleDescription(he.auth.errors.suspended);
+    expect(screen.getByTestId('location')).toHaveTextContent('/login');
+  });
+
+  it('ac10_other_403_is_a_failure', async () => {
+    // Only `account_suspended` is the suspended alert; another 403 is the generic failure.
+    mockApi({
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json({ detail: 'forbidden' }, 403)],
+    });
+    renderAt('/login', <OtpForm withProfile={false} />);
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: noa.email },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+    await flush();
+    expect(screen.getByRole('alert')).toHaveTextContent(he.common.error);
+    expect(screen.queryByText(he.auth.errors.suspended)).toBeNull();
+  });
+
   it('ac3_resend_countdown_singular', async () => {
     mockApi({ 'POST /auth/otp/request': [empty(204)] });
     renderAt('/login', <OtpForm withProfile={false} />);

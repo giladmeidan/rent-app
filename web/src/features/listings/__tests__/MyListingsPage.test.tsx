@@ -17,7 +17,7 @@ import {
   deferred,
   empty,
   json,
-  mockApi,
+  mockApi as harnessMockApi,
   networkError,
   renderAt,
   renderRoutes,
@@ -27,14 +27,18 @@ import { formatDate, todayInIsrael } from '../format';
 import { MY_LISTINGS_KEY } from '../useMyListings';
 import { usePatchListing } from '../usePatchListing';
 import { MyListingsPage } from '../MyListingsPage';
-import type { MyListingOut } from '../api';
-import { listing, withoutCounts } from './fixtures';
+import { ApiError, type MyListingOut } from '../api';
+import { actionErrorText } from '../useRenewListing';
+import { listing, owner, withoutCounts } from './fixtures';
 
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
+/** The harness's `mockApi` with the owner's `GET /me` (its `listing_cap`, spec 0012a). */
+const mockApi = (routes: Parameters<typeof harnessMockApi>[0]) =>
+  harnessMockApi({ 'GET /me': [json(owner)], ...routes });
 const render = () => renderAt('/me/listings', <MyListingsPage />);
 /** The rooms, as the market's "שלי" embeds them (spec 0010a). */
 const renderRooms = () => renderAt('/market/mine', <MyListingsPage type="room" panel />);
@@ -928,6 +932,88 @@ describe('MyListingsPage', () => {
     const [resumed, kept] = client.getQueryData<MyListingOut[]>(MY_LISTINGS_KEY) ?? [];
     expect(resumed).toMatchObject({ status: 'active', close_reason: null, final_rent_ils: null });
     expect(kept).toMatchObject(answer);
+  });
+
+  it('ac11_removed_row', async () => {
+    // Spec 0012a: removed (and past expiry: removed wins), an apartment and a room.
+    const removed = listing({
+      street: 'אחד',
+      status: 'paused',
+      removed: true,
+      expires_at: days(-1),
+    });
+    const removedRoom = listing({
+      street: 'שתיים',
+      listing_type: 'room',
+      flatmates_count: 2,
+      status: 'paused',
+      removed: true,
+    });
+    mockApi({ 'GET /me/listings': [json([removed, removedRoom])] });
+    let view = render();
+    const card = (await screen.findByRole('article')) as HTMLElement;
+    expect(badge(card)).toHaveTextContent(he.listings.status.removed);
+    expect(within(card).getByText(he.listings.mine.removedHint)).toBeVisible();
+    for (const line of [he.listings.mine.expiresOn, he.listings.mine.expiredOn]) {
+      expect(within(card).queryByText(new RegExp(line.split('{{')[0] ?? line))).toBeNull();
+    }
+    expect(actionsRow(card)).toEqual([]);
+    expect(controls(card)).toEqual([c.title, i18n.t('applicants.link', { count: 0 })]);
+    expect(
+      within(card).getByRole('link', { name: i18n.t('applicants.link', { count: 0 }) }),
+    ).toHaveAttribute('href', `/me/listings/${removed.id}/applicants`);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The room, in the market's "שלי": its applicants and flatmates links only.
+    mockApi({ 'GET /me/listings': [json([removed, removedRoom])] });
+    view = renderRooms();
+    const room = (await screen.findByRole('article')) as HTMLElement;
+    expect(badge(room)).toHaveTextContent(he.listings.status.removed);
+    expect(controls(room)).toEqual([
+      i18n.t('applicants.link', { count: 0 }),
+      i18n.t('listings.mine.flatmates', { count: 0 }),
+    ]);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Removed while the page was open: a resume answering 409 listing_removed.
+    const stale = listing({ status: 'paused' });
+    mockApi({
+      'GET /me/listings': [json([stale])],
+      [`PATCH /listings/${stale.id}`]: [json({ detail: 'listing_removed' }, 409)],
+    });
+    render();
+    const staleCard = (await screen.findByRole('article')) as HTMLElement;
+    fireEvent.click(within(staleCard).getByRole('button', { name: act0011a.resume }));
+    expect(await within(staleCard).findByRole('alert')).toHaveTextContent(
+      he.listings.errors.removed,
+    );
+  });
+
+  it('ac12_cap_from_me', async () => {
+    // Spec 0012a: the count names the account's cap from `GET /me`, and none while it loads.
+    const me = deferred();
+    harnessMockApi({ 'GET /me': [me.promise], 'GET /me/listings': [json([listing()])] });
+    render();
+    await screen.findByRole('article');
+    // No count line at all (its fixed tail, from he.json), so never a 3.
+    const countTail = he.listings.mine.count.split('}}').pop()?.trim() ?? '';
+    expect(screen.queryByText(new RegExp(countTail))).toBeNull();
+    me.resolve(json({ ...owner, listing_cap: 10 }));
+    expect(
+      await screen.findByText(i18n.t('listings.mine.count', { live: 1, cap: 10 })),
+    ).toBeVisible();
+    expect(screen.queryByText(i18n.t('listings.mine.count', { live: 1, cap: 3 }))).toBeNull();
+
+    // A row's cap error without the cap (`/me` failed): the generic text, never a bare `{{cap}}`.
+    const capError = new ApiError('POST', '/listings/x/renew', 409, {
+      detail: 'listing_cap_reached',
+    });
+    expect(actionErrorText(i18n.t, capError, true, undefined)).toBe(he.common.error);
+    expect(actionErrorText(i18n.t, capError, true, 10)).toBe(
+      i18n.t('listings.errors.capReached', { cap: 10 }),
+    );
   });
 
   it('ac10_renew_button_in_window', async () => {

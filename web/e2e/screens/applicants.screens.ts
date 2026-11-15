@@ -2,6 +2,7 @@
 // per state at each project's size, in web/screens/0009u/. The `d-*` states are the desktop layout
 // (0009u) and run in the desktop project only; the 390 set shows the phone layout is unchanged. Every API request is answered here, so it needs only
 // the vite server: no sign-up, no OTP. An unmatched request fails the run.
+import type { UserOut } from '../../src/api/client';
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
@@ -13,13 +14,15 @@ import { test } from '../fixtures';
 
 // --- fixtures, shaped as features/applicants/__tests__/fixtures.ts ---------------------------------
 
-const OWNER = {
+const OWNER: UserOut = {
   id: '00000000-0000-0000-0000-0000000000aa',
   email: 'dana@example.com',
   display_name: 'דנה',
   role: 'owner',
   account_type: 'standard',
   created_at: '2026-11-10T10:00:00Z',
+  photo_url: null,
+  listing_cap: 3,
 };
 
 function listing(overrides: Partial<MyListingOut>): MyListingOut {
@@ -63,6 +66,7 @@ function listing(overrides: Partial<MyListingOut>): MyListingOut {
     created_at: '2026-11-01T10:00:00Z',
     updated_at: '2026-11-01T10:00:00Z',
     expires_at: '2099-01-01T10:00:00Z',
+    removed: false, // spec 0012a
     photos: [], // spec 0010d
     applicant_count: 5,
     new_applicant_count: 2,

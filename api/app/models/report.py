@@ -54,6 +54,8 @@ class Report(Base):
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)  # NULL = no note
+    # Closed by the admin (spec 0012a; written only by the dashboard, 0012b), NULL = open.
+    resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

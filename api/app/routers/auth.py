@@ -2,7 +2,8 @@
 
 POST /auth/otp/request, POST /auth/otp/verify and POST /auth/logout are public; GET /me requires a
 session (`current_user`). `UserOut` is always built by `user_out` (also `PUT /me/photo`'s, spec
-0010j)."""
+0010j). A suspended account (spec 0012a): the right code answers 403 `account_suspended` with no
+session, and its sessions no longer resolve."""
 
 from typing import Annotated
 
@@ -38,6 +39,7 @@ def user_out(user: User) -> UserOut:
         account_type=user.account_type,
         created_at=user.created_at,
         photo_url=person_photo_url(user.photo_key),
+        listing_cap=user.listing_cap,
     )
 
 
@@ -73,6 +75,7 @@ def request_otp(
     responses={
         201: {"model": UserOut, "description": "Account created and logged in"},
         401: {"model": ErrorOut, "description": "invalid_code"},
+        403: {"model": ErrorOut, "description": "account_suspended (the code is consumed)"},
         422: {"description": "profile_required, or a malformed body"},
         503: {"model": ErrorOut, "description": "Redis or the database is unreachable"},
     },
@@ -84,6 +87,8 @@ def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:
         raise HTTPException(status_code=401, detail="invalid_code") from None
     except auth_service.ProfileRequiredError:
         raise HTTPException(status_code=422, detail="profile_required") from None
+    except auth_service.AccountSuspendedError:
+        raise HTTPException(status_code=403, detail="account_suspended") from None
     token = auth_service.create_session(db, user)
     response = JSONResponse(
         status_code=201 if created else 200,
