@@ -461,6 +461,36 @@ def test_ac2_window_rules(
         assert response.status_code == 422 and isinstance(response.json()["detail"], list)
 
 
+def test_ac2_dst_wall_times(
+    owner: TestClient, listing: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The clock-change days of 2027, inside a widened horizon so only the DST rules can refuse:
+    # a wall time that does not exist or is ambiguous, and a window whose real length breaks the
+    # rules (a whole number of slots, at most 12 hours) though its wall length does not.
+    monkeypatch.setattr(tours_service, "HORIZON_DAYS", 400)
+
+    def post(day: dt.date, start: str, end: str, slot: int) -> httpx.Response:
+        response: httpx.Response = owner.post(
+            f"/listings/{listing}/tour-windows", json=_window_body(day, start, end, slot)
+        )
+        return response
+
+    spring, autumn = dt.date(2027, 3, 26), dt.date(2027, 10, 31)
+    for day, start, end, slot in (
+        (spring, "02:30", "03:30", 15),  # 02:30 does not exist
+        (autumn, "01:30", "02:30", 15),  # 01:30 happens twice
+        (spring, "01:00", "04:00", 45),  # 3 wall hours, 2 real: not whole 45-minute slots
+        (autumn, "00:00", "12:00", 30),  # 12 wall hours, 13 real
+        (dt.date(1, 1, 1), "18:00", "20:00", 20),  # the calendar's ends: no 500
+        (dt.date(9999, 12, 31), "18:00", "20:00", 20),
+    ):
+        response = post(day, start, end, slot)
+        assert (response.status_code, response.json()) == (422, _err("invalid_window")), day
+    # The same day's valid windows open (the horizon is not what refused the others).
+    _ok(post(spring, "03:00", "04:00", 15), 201)
+    _ok(post(autumn, "02:00", "03:00", 15), 201)
+
+
 def test_ac3_slots_for_shortlisted_seeker_only(
     owner: TestClient,
     seeker: TestClient,
@@ -688,6 +718,19 @@ def test_ac7_reschedule_by_seeker_only(
     ]
     assert published.calls == [({owner_id, seeker_id}, application, "message")]
 
+    # A cancelled tour and a started one cannot move.
+    cancelled = make_tour(db_engine, room, application, seeker_id, _at(base, 155))
+    _execute(
+        db_engine,
+        "UPDATE tours SET status = 'cancelled', cancelled_by = 'seeker', cancelled_at = now()"
+        " WHERE id = :id",
+        id=cancelled,
+    )
+    started = make_tour(db_engine, room, application, seeker_id, base - 25 * MIN)
+    for tour_id in (cancelled, started):
+        response = _reschedule(seeker, tour_id, _at(base, 125))
+        assert (response.status_code, response.json()) == (409, _err("tour_not_cancellable"))
+
     # Not shortlisted any more: 404; listing not live: 409.
     _execute(db_engine, "UPDATE listings SET status = 'paused' WHERE id = :id", id=room)
     response = _reschedule(seeker, tour["id"], _at(base, 125))
@@ -697,6 +740,89 @@ def test_ac7_reschedule_by_seeker_only(
     )
     response = _reschedule(seeker, tour["id"], _at(base, 125))
     assert (response.status_code, response.json()) == (404, NOT_FOUND)
+
+
+def test_ac3_ac5_suspended_owner_listing_not_live(
+    seeker: TestClient,
+    owner_id: uuid.UUID,
+    application: uuid.UUID,
+    window: uuid.UUID,
+    base: dt.datetime,
+    db_engine: Engine,
+) -> None:
+    # A suspended (or deleted) owner's listing is not live: no slots, no booking.
+    assert _slots_of(seeker, application)
+    _execute(db_engine, "UPDATE users SET suspended_at = now() WHERE id = :id", id=owner_id)
+    body = _ok(seeker.get(f"/applications/{application}/tour-slots"))
+    assert (body["listing_live"], body["slots"], body["tour"]) == (False, [], None)
+    response = _book(seeker, application, _at(base, 65))
+    assert (response.status_code, response.json()) == (409, _err("listing_not_live"))
+
+
+def test_ac4_ac7_unique_slot_violation_is_slot_unavailable(
+    seeker: TestClient,
+    other_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    seeker_id: uuid.UUID,
+    listing: uuid.UUID,
+    application: uuid.UUID,
+    window: uuid.UUID,
+    base: dt.datetime,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The fallback: a slot taken between the free check and the write (`uq_tours_listing_slot`)
+    # answers 409 `slot_unavailable` and leaves no tour row and no chat line behind.
+    others = shortlisted(db_engine, listing, other_id, owner_id)
+    make_tour(db_engine, listing, others, other_id, _at(base, 95))
+    # The free check passes as if it ran before the other booking committed.
+    monkeypatch.setattr(tours_service, "_slot_end", lambda _db, _l, at, _now: at + 30 * MIN)
+
+    def lines() -> int:
+        count: int = _scalar(
+            db_engine, "SELECT count(*) FROM messages WHERE conversation_id = :a", a=application
+        )
+        return count
+
+    response = _book(seeker, application, _at(base, 95))
+    assert (response.status_code, response.json()) == (409, _err("slot_unavailable"))
+    assert (
+        _scalar(db_engine, "SELECT count(*) FROM tours WHERE application_id = :a", a=application)
+        == 0
+    )
+    assert lines() == 0
+
+    tour = _ok(_book(seeker, application, _at(base, 65)), 201)
+    response = _reschedule(seeker, tour["id"], _at(base, 95))
+    assert (response.status_code, response.json()) == (409, _err("slot_unavailable"))
+    row = tour_row(db_engine, tour["id"])
+    assert (row.status, row.starts_at) == ("booked", _at(base, 65))
+    assert lines() == 1  # the booking's line only
+
+
+_ROUTES = [
+    ("GET", "/listings/{id}/tour-windows", None),
+    ("POST", "/listings/{id}/tour-windows", _window_body(dt.date(2027, 1, 12))),
+    ("DELETE", "/tour-windows/{id}", None),
+    ("GET", "/applications/{id}/tour-slots", None),
+    ("POST", "/applications/{id}/tour", {"starts_at": "2027-01-12T16:00:00Z"}),
+    ("POST", "/tours/{id}/reschedule", {"starts_at": "2027-01-12T16:00:00Z"}),
+    ("POST", "/tours/{id}/cancel", None),
+]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"), _ROUTES, ids=[f"{m} {p}" for m, p, _ in _ROUTES]
+)
+def test_ac16_session_and_malformed_id(
+    client: TestClient, owner: TestClient, method: str, path: str, payload: Any
+) -> None:
+    # Every tour route: no session is 401 `unauthenticated`; a malformed id is FastAPI's 422.
+    client.cookies.clear()
+    response = client.request(method, path.format(id=uuid.uuid4()), json=payload)
+    assert (response.status_code, response.json()) == (401, {"detail": "unauthenticated"})
+    response = owner.request(method, path.format(id="not-a-uuid"), json=payload)
+    assert response.status_code == 422 and isinstance(response.json()["detail"], list)
 
 
 def test_ac8_cancel_either_side(

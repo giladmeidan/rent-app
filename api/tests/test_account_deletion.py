@@ -930,10 +930,23 @@ def test_ac15_upload_racing_deletion_leaves_no_photo(
 
 
 def test_nf1_failure_rolls_back_everything(
-    client: TestClient, db_engine: Engine, photo_store: FilePhotoStore, world: World
+    client: TestClient,
+    db_engine: Engine,
+    photo_store: FilePhotoStore,
+    world: World,
+    gush_dan: uuid.UUID,
 ) -> None:
     _action(db_engine, "suspend", "user", world.u)  # so step 2 writes too
+    # An upcoming tour of U's (spec 0018a): its cancel and chat line roll back with the rest.
+    lister = make_owner(db_engine, "tour-owner@example.com")
+    listing = make_listing(db_engine, lister, gush_dan)
+    application = tours_tests.shortlisted(db_engine, listing, world.u, lister)
+    now = tours_tests.db_now(db_engine)
+    tour = tours_tests.make_tour(
+        db_engine, listing, application, world.u, now + dt.timedelta(hours=3)
+    )
     before, files = _snapshot(db_engine), _files(photo_store)
+    assert "tours" in before and "messages" in before  # `_snapshot` covers every model table
 
     def fail_at_step_11(_conn: Any, _cursor: Any, statement: str, *_: Any) -> None:
         if statement.startswith("DELETE FROM sessions"):
@@ -951,6 +964,7 @@ def test_nf1_failure_rolls_back_everything(
 
     assert _snapshot(db_engine) == before
     assert _files(photo_store) == files
+    assert tours_tests.tour_row(db_engine, tour).status == "booked"
 
 
 def test_nf2_no_pii_in_logs(

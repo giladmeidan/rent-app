@@ -80,7 +80,11 @@ def suspend(session: Session, user_ids: Sequence[uuid.UUID]) -> int:
             .values(revoked_at=func.now())
             .execution_options(**_NO_SYNC)
         )
-        hosted = select(Listing.id).where(Listing.owner_id.in_(ids))
+        # Lock their listings first, as a booking does (`tours.book`), so a booking in flight
+        # either commits before this cancel sees it or finds the owner suspended (not live).
+        hosted = session.scalars(
+            select(Listing.id).where(Listing.owner_id.in_(ids)).with_for_update()
+        ).all()
         _cancel_tours(session, or_(Tour.seeker_id.in_(ids), Tour.listing_id.in_(hosted)))
     _log(session, "suspend", "user", [(i, None) for i in ids])
     session.commit()

@@ -8,7 +8,12 @@ NULLable and `ck_messages_kind` makes a row either a typed message or a tour lin
 Existing messages satisfy it (their body is NOT NULL).
 
 The migration role's default privileges grant SELECT on every new table to `homie_admin`; the
-REVOKE below closes that window on `tour_feeds` before `scripts/admin_role.py` runs again.
+REVOKE below closes that window on `tour_feeds`, and the GRANT gives it the `tours` columns its
+hide and suspend write, so neither waits for `scripts/admin_role.py` to run again.
+
+`ADD CONSTRAINT ck_messages_kind` validates every message under a lock and `ix_messages_tour_id`
+is built without CONCURRENTLY: fine, nothing is deployed yet (spec 0013a open) and `messages` is
+small in every environment.
 
 Downgrade deletes the tour lines (**they are lost**), restores `messages`, and drops the three
 tables (**tours and windows are lost**).
@@ -137,7 +142,9 @@ def upgrade() -> None:
     )
     op.execute(
         "DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'homie_admin') THEN"
-        " REVOKE ALL ON tour_feeds FROM homie_admin; END IF; END $$"
+        " REVOKE ALL ON tour_feeds FROM homie_admin;"
+        " GRANT UPDATE (status, cancelled_by, cancelled_at, updated_at) ON tours TO homie_admin;"
+        " END IF; END $$"
     )
 
     op.alter_column("messages", "body", existing_type=sa.Text(), nullable=True)

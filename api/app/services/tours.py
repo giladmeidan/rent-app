@@ -165,9 +165,12 @@ def _slots(
 def _israel(day: dt.date, wall: dt.time) -> dt.datetime:
     """`day` at Israel wall time `wall`, in UTC. A wall time that does not exist (the
     spring-forward hour) or is ambiguous (the autumn hour) is `InvalidWindowError`: its two folds
-    are two different instants."""
+    are two different instants; so is a day at the calendar's ends (year 1 or 9999)."""
     naive = dt.datetime.combine(day, wall)
-    instants = {naive.replace(tzinfo=ISRAEL, fold=fold).astimezone(dt.UTC) for fold in (0, 1)}
+    try:
+        instants = {naive.replace(tzinfo=ISRAEL, fold=fold).astimezone(dt.UTC) for fold in (0, 1)}
+    except OverflowError:
+        raise InvalidWindowError from None
     if len(instants) != 1:
         raise InvalidWindowError
     return instants.pop()
