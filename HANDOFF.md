@@ -13,7 +13,11 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
-Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a` done.
+Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a`/`0015b`/`0013h` done.
+**Slice 16 (login upgrade) done 2026-11-16:** `0016a` password login (PR #114, migration `0029_login_methods`,
+hashes in `user_passwords`, unreadable by the admin role) and `0016b` Google sign-in (PR #115, no migration). Emailed
+code unchanged. Decisions in PRODUCT.md "Login". Gilad's Google OAuth client id is in the main checkout's `.env`
+(`GOOGLE_VERIFIER=google`); production keeps Google `off` until 0013a.
 **Slice 13 (Launch readiness) is built except `0013a` (production deploy), which Gilad parked on 2026-11-15:
 "everything that costs money put on the side".**
 
@@ -27,14 +31,14 @@ Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done t
   whose only failures were the 5 load-flaky e2e tests; #105 and #108 ran e2e green; #106 and #109 skipped it. No e2e
   has run on `main` with `0013f`'s sign-up/consent changes and `0013d`'s shard changes together: the next PR with
   e2e on is the first. Ask Gilad before using `skip-e2e` in a later slice.
-- Alembic head `0026`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
+- Alembic head `0029`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
 - `specs/0015b-shelter-preference.md` (`status: verified`) appeared on `main` from another chat (commit `d840e0e`);
   not built, not this orchestrator's queue unless Gilad says so.
 - Main checkout `../rent-app` is on `main` at `f30feeb`, 54 commits behind `origin/main`, still with Gilad's
   uncommitted `Makefile` / `.gitignore` edits and untracked seed/promo work. Its stack (`rent-app`, 6 containers incl.
   `admin`) runs the old code and has not run migrations `0025`/`0026` (Next Steps 3).
 
-Last updated: 2026-11-15 (handoff refreshed after Slice 13; verified against `origin/main` `029d110`).
+Last updated: 2026-11-16 (after Slice 16; Current Status top lines and Next Steps 2 updated, the rest from 2026-11-15).
 
 ## Current Work
 Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
@@ -58,7 +62,9 @@ Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../r
 1. Parked until Gilad approves paid services: build/deploy `0013a`; buy the domain; Fly, Cloudflare and an
    email-provider account (free tier ≥ 300/day); Sentry or no alerts; a second API machine (+~$7/month).
    **homie must not go public before `0013b` is deployed with `TRUST_PROXY=fly`** (runbook §9).
-2. Legal text (`web/src/locales/he.json`, Gilad fills, lawyer's read advised): `legal.date`;
+2. **Before going public (Gilad 2026-11-16):** a security-email spec ("your password was changed" / "your account was
+   deleted"), FOLLOWUPS 0016a. Gilad to approve the 0016b privacy draft (`legal.privacy.s1.i1`, `s3.i6`).
+3. Legal text (`web/src/locales/he.json`, Gilad fills, lawyer's read advised): `legal.date`;
    `legal.terms.intro` + `legal.privacy.intro` (operator name and ID); `legal.terms.s2.i1` (18+) and
    `legal.terms.s11.p1` (Tel Aviv-Yafo courts) to confirm; approve 0013h's retention text (privacy s5, s6, s1/s7/s8
    fixes, terms s9.p1);
@@ -167,6 +173,8 @@ Redis 6430–6506, API/admin 8050–8133, web 5191–5266: start above those). T
 CORS). Local login code: newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-16: Slice 16 login upgrade specced, verified, built and merged: #114 (`0016a` password), #115 (`0016b`
+  Google).
 - 2026-11-15: Slice 13 built and merged except `0013a` (parked: costs money): #104 (g), #105 (e), #107 (c), #106 (b),
   #109 (f), #108 (d). `skip-e2e` CI label added; migrations renumbered (e `0025`, c `0026`); a brittle plan-shape test
   (`test_nf1_owner_check_is_one_pass`) fixed in #106.

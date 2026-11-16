@@ -208,6 +208,11 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
          domain into the build;
        - MapLibre needs `blob:` workers and `data:`/`blob:` images;
        - `font-src data:` covers a font Vite might inline below its 4 kB asset limit.
+     - **Google sign-in (0016b, merged 2026-11-16):** the CSP also allows Google Identity Services: `script-src`
+       and `style-src` add `https://accounts.google.com/gsi/client` / `https://accounts.google.com/gsi/style`,
+       `frame-src https://accounts.google.com/gsi/`, `connect-src` already has `https:`; and `make deploy-web` passes
+       `VITE_GOOGLE_CLIENT_ID` when set (the API gets `GOOGLE_VERIFIER=google` + `GOOGLE_CLIENT_ID`). Re-verify against
+       0016b's code before building.
      - `Strict-Transport-Security: max-age=31536000; includeSubDomains`;
      - `X-Content-Type-Options: nosniff`;
      - `Referrer-Policy: strict-origin-when-cross-origin`. Not `no-referrer`: OSM's tile policy requires a
