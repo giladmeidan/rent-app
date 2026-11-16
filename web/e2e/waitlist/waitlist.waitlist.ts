@@ -8,7 +8,7 @@ import { WAITLIST_PORT } from './port';
 
 // The waitlist page (spec 0017), served from waitlist/public by playwright.waitlist.config.ts. Every
 // API call is stubbed; the page gets the real `_headers` CSP, and any request that leaves the page's
-// own origin fails the test (AC17).
+// own origin fails the test (AC17), except the Turnstile script (spec 0017b), which is routed to a fake.
 
 const HEADERS_FILE = fileURLToPath(new URL('../../../waitlist/public/_headers', import.meta.url));
 const CSP = /Content-Security-Policy:\s*(.+)/.exec(readFileSync(HEADERS_FILE, 'utf8'))?.[1] ?? '';
@@ -23,6 +23,86 @@ const MESSAGES = {
   consent: 'כדי להירשם צריך לסמן את האישור',
 };
 const ERROR_BANNER = 'משהו השתבש. אפשר לנסות שוב בעוד רגע.';
+const CHALLENGE_BANNER = 'לא הצלחנו לוודא שזה לא בוט. אפשר לנסות שוב.';
+const SENDING = 'בשליחה…';
+
+// Turnstile (spec 0017b). Matched by host and path: a glob is unsafe with the `?render=` query.
+const TURNSTILE_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+const isTurnstileScript = (url: URL) =>
+  url.hostname === 'challenges.cloudflare.com' && url.pathname === '/turnstile/v0/api.js';
+
+/**
+ * A fake `api.js`: `render` records its options and calls `callback('fake-token')` at once; `reset` is
+ * counted and issues a new token the same way. `window.__turnstileFlags` (set with addInitScript) changes
+ * that: `tokenDelay` (ms), `noToken`, or `error` (calls `error-callback` instead and records its return).
+ * `window.__turnstileIssue(i)` hands widget i a token later.
+ */
+const FAKE_TURNSTILE = `(() => {
+  const flags = window.__turnstileFlags || {};
+  const record = { renders: [], resets: 0, errorReturns: [] };
+  const widgets = [];
+  window.__turnstileFake = record;
+  function issue(options) {
+    if (flags.error) {
+      record.errorReturns.push(options['error-callback']('110100'));
+      return;
+    }
+    if (flags.noToken) return;
+    if (flags.tokenDelay) setTimeout(() => options.callback('fake-token'), flags.tokenDelay);
+    else options.callback('fake-token');
+  }
+  window.turnstile = {
+    render(element, options) {
+      record.renders.push({
+        side: element.closest('form').dataset.side,
+        sitekey: options.sitekey,
+        action: options.action,
+        appearance: options.appearance,
+        language: options.language,
+        responseField: options['response-field'],
+      });
+      widgets.push(options);
+      issue(options);
+      return 'widget-' + (widgets.length - 1);
+    },
+    reset(id) {
+      record.resets += 1;
+      issue(widgets[Number(String(id).slice('widget-'.length))]);
+    },
+  };
+  window.__turnstileIssue = (index) => widgets[index].callback('fake-token');
+})();`;
+
+type FakeRender = {
+  side: string;
+  sitekey: string;
+  action: string;
+  appearance: string;
+  language: string;
+  responseField: boolean;
+};
+type FakeRecord = { renders: FakeRender[]; resets: number; errorReturns: unknown[] };
+type FakeFlags = { tokenDelay?: number; noToken?: boolean; error?: boolean };
+
+function serveFakeTurnstile(route: Route) {
+  return route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE });
+}
+
+function fake(page: Page): Promise<FakeRecord> {
+  return page.evaluate(
+    () => (window as unknown as { __turnstileFake: FakeRecord }).__turnstileFake,
+  );
+}
+
+async function renderedSides(page: Page) {
+  return (await fake(page)).renders.map((render) => render.side);
+}
+
+function setTurnstileFlags(page: Page, flags: FakeFlags) {
+  return page.addInitScript((value) => {
+    (window as unknown as { __turnstileFlags: FakeFlags }).__turnstileFlags = value;
+  }, flags);
+}
 
 type Guard = { foreign: string[]; cspViolations: string[] };
 const guards = new WeakMap<Page, Guard>();
@@ -33,6 +113,7 @@ test.beforeEach(async ({ page }) => {
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.protocol === 'data:' || url.protocol === 'blob:') return;
+    if (isTurnstileScript(url)) return;
     if (!['127.0.0.1', 'localhost'].includes(url.hostname)) guard.foreign.push(request.url());
   });
   page.on('console', (message) => {
@@ -52,6 +133,7 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
+  await page.route(isTurnstileScript, serveFakeTurnstile);
   await page.route('**/api/count', (route) => json(route, 200, { total: null }));
   await page.route('**/api/signup', (route) => json(route, 500, { error: 'server' }));
 });
@@ -215,6 +297,7 @@ test('ac12_success_and_other_side', async ({ page }) => {
       city: 'tel-aviv',
       consent: true,
       website: '',
+      turnstile: 'fake-token',
     },
   ]);
 
@@ -249,6 +332,7 @@ test('ac12_success_and_other_side', async ({ page }) => {
     available: 'now',
     consent: true,
     website: '',
+    turnstile: 'fake-token',
   });
 });
 
@@ -398,6 +482,11 @@ test('ac16_axe_and_reduced_motion', async ({ page }) => {
     await expect(seekerPanel(page).getByRole('alert')).toHaveText(ERROR_BANNER);
     await expectNoAxeViolations(page, `error banner ${size}`);
 
+    await page.route('**/api/signup', (route) => json(route, 403, { error: 'challenge' }));
+    await submitButton(seekerPanel(page)).click();
+    await expect(seekerPanel(page).getByRole('alert')).toHaveText(CHALLENGE_BANNER);
+    await expectNoAxeViolations(page, `challenge banner ${size}`);
+
     await page.route('**/api/signup', (route) => json(route, 200, { ok: true }));
     await submitButton(seekerPanel(page)).click();
     await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
@@ -445,13 +534,196 @@ test('ac17_no_third_party_requests', async ({ page }) => {
   await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
   await page.waitForLoadState('networkidle');
 
-  // Fonts, images, the poster and both APIs were all fetched, and only from the page's own origin.
+  // Fonts, images, the poster and both APIs were all fetched, and only from the page's own origin; the
+  // one exception is the Turnstile script (routed to the fake), requested once.
   const origin = new URL(page.url()).origin;
   expect(seen.length).toBeGreaterThan(10);
   for (const url of seen) {
-    if (url.startsWith('data:')) continue;
+    if (url.startsWith('data:') || url === TURNSTILE_URL) continue;
     expect(url.startsWith(`${origin}/`), url).toBe(true);
   }
+  expect(seen.filter((url) => url === TURNSTILE_URL)).toHaveLength(1);
   expect(seen.some((url) => url.endsWith('.woff2'))).toBe(true);
   // The afterEach guard also fails on any CSP violation under `_headers`' policy.
+});
+
+// ---------------------------------------------------------------------------------------------
+// Spec 0017b: Turnstile, against the fake api.js.
+
+test('ac6b_token_sent', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = [];
+  await page.route('**/api/signup', (route) => {
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, 200, { ok: true });
+  });
+  await open(page);
+
+  // The default tab's widget, with the committed page's placeholder key; the lister's is not rendered yet.
+  await expect
+    .poll(() => fake(page).then((record) => record.renders))
+    .toEqual([
+      {
+        side: 'seeker',
+        sitekey: 'TURNSTILE_SITE_KEY_PLACEHOLDER',
+        action: 'signup',
+        appearance: 'interaction-only',
+        language: 'he',
+        responseField: false,
+      },
+    ]);
+  await expect(
+    page.locator('form[data-side="seeker"] input[name="cf-turnstile-response"]'),
+  ).toHaveCount(0);
+
+  const seeker = seekerPanel(page);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  expect(bodies).toEqual([expect.objectContaining({ side: 'seeker', turnstile: 'fake-token' })]);
+
+  // "The other side" after a success shows the lister panel for the first time: its widget renders.
+  await seeker.getByRole('button', { name: 'גם משכירים? להרשמה גם שם' }).click();
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker', 'lister']);
+  expect((await fake(page)).renders[1]).toMatchObject({
+    sitekey: 'TURNSTILE_SITE_KEY_PLACEHOLDER',
+    action: 'signup',
+    appearance: 'interaction-only',
+  });
+  // Switching tabs again renders nothing more: one widget per form.
+  await seekerTab(page).click();
+  await listerTab(page).click();
+  await seekerTab(page).click();
+  expect(await renderedSides(page)).toEqual(['seeker', 'lister']);
+
+  // A tab click, an arrow key, a hero link and the deep link each render the lister widget on first show.
+  await open(page);
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker']);
+  await listerTab(page).click();
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker', 'lister']);
+
+  await open(page);
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker']);
+  await seekerTab(page).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker', 'lister']);
+
+  await open(page);
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker']);
+  await page.getByRole('link', { name: 'משכירים נכס' }).click();
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker', 'lister']);
+
+  await open(page, '/?side=lister');
+  await expect.poll(() => renderedSides(page)).toEqual(['lister']);
+});
+
+test('ac7b_waits_for_token', async ({ page }) => {
+  let requests: Record<string, unknown>[] = [];
+  await page.route('**/api/signup', (route) => {
+    requests.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, 200, { ok: true });
+  });
+  // The page's timers stand still from the start; the test moves them.
+  await page.clock.install({ time: new Date('2026-11-16T10:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-16T10:00:01Z'));
+
+  // The token comes 2 s after the click: "בשליחה…" meanwhile, then one request with it.
+  await setTurnstileFlags(page, { tokenDelay: 2000 });
+  await open(page);
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker']);
+  const seeker = seekerPanel(page);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  const busy = seeker.getByRole('button', { name: SENDING });
+  await expect(busy).toHaveAttribute('aria-disabled', 'true');
+  await page.clock.runFor(1999);
+  await expect(busy).toBeVisible();
+  expect(requests).toEqual([]);
+  await page.clock.runFor(1);
+  await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  expect(requests).toEqual([expect.objectContaining({ turnstile: 'fake-token' })]);
+
+  // No token within 10 s: the challenge banner, and nothing is sent.
+  requests = [];
+  await setTurnstileFlags(page, { noToken: true });
+  await open(page);
+  await expect.poll(() => renderedSides(page)).toEqual(['seeker']);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  await expect(busy).toHaveAttribute('aria-disabled', 'true');
+  await page.clock.runFor(9999);
+  await expect(busy).toBeVisible();
+  await expect(seeker.locator('.banner')).toBeEmpty();
+  await page.clock.runFor(1);
+  await expect(seeker.getByRole('alert')).toHaveText(CHALLENGE_BANNER);
+  await expect(submitButton(seeker)).not.toHaveAttribute('aria-disabled');
+  expect(requests).toEqual([]);
+});
+
+test('ac8b_challenge_banner_and_reset', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = [];
+  await page.route('**/api/signup', (route) => {
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, 403, { error: 'challenge' });
+  });
+  await open(page);
+  const seeker = seekerPanel(page);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+
+  const alert = seeker.getByRole('alert');
+  await expect(alert).toHaveText(CHALLENGE_BANNER);
+  await expect(seeker.getByLabel('אימייל')).toHaveValue('noa@example.com');
+  await expect(seeker.getByRole('radio', { name: 'חדר בדירת שותפים' })).toBeChecked();
+  await expect(seeker.getByLabel('באיזו עיר?')).toHaveValue('tel-aviv');
+  await expect(seeker.getByRole('checkbox')).toBeChecked();
+  await expect(submitButton(seeker)).not.toHaveAttribute('aria-disabled');
+  expect((await fake(page)).resets).toBe(1);
+
+  // A 500 keeps the generic banner and also resets; the new token went with the retry.
+  await page.route('**/api/signup', (route) => {
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, 500, { error: 'server' });
+  });
+  await submitButton(seeker).click();
+  await expect(alert).toHaveText(ERROR_BANNER);
+  expect((await fake(page)).resets).toBe(2);
+  expect(bodies).toHaveLength(2);
+  expect(bodies.every((body) => body.turnstile === 'fake-token')).toBe(true);
+});
+
+test('ac9b_script_blocked', async ({ page }) => {
+  let requests = 0;
+  await page.route('**/api/signup', (route) => {
+    requests += 1;
+    return json(route, 200, { ok: true });
+  });
+
+  // The script is blocked: the banner at once (well within the 10 s wait), nothing sent.
+  await page.route(isTurnstileScript, (route) => route.abort());
+  await open(page);
+  const seeker = seekerPanel(page);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  await expect(seeker.getByRole('alert')).toHaveText(CHALLENGE_BANNER, { timeout: 3000 });
+  await expect(submitButton(seeker)).not.toHaveAttribute('aria-disabled');
+  expect(requests).toBe(0);
+
+  // The widget fires error-callback: handled (returns true), the banner on submit, nothing sent.
+  await page.unroute(isTurnstileScript);
+  await page.route(isTurnstileScript, serveFakeTurnstile);
+  await setTurnstileFlags(page, { error: true });
+  await open(page);
+  await expect.poll(() => fake(page).then((record) => record.errorReturns)).toEqual([true]);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  await expect(seeker.getByRole('alert')).toHaveText(CHALLENGE_BANNER, { timeout: 3000 });
+  expect(requests).toBe(0);
+
+  // A later token clears the failure: the next submit goes out.
+  await page.evaluate(() =>
+    (window as unknown as { __turnstileIssue: (index: number) => void }).__turnstileIssue(0),
+  );
+  await submitButton(seeker).click();
+  await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  expect(requests).toBe(1);
 });

@@ -1025,6 +1025,20 @@ a:hover {
   overflow: hidden;
 }
 
+/* The Turnstile widget (spec 0017b), centred, no frame of its own. Most visitors never see it
+   (interaction-only), so by default it adds no space: its zero height and the negative end margin cancel the
+   form's gap. When Turnstile asks for a click, app.js adds .is-interactive and the widget sits 16 px from
+   the field above and the banner or button below. */
+.turnstile {
+  display: flex;
+  justify-content: center;
+  margin-block-end: calc(-1 * var(--space-6));
+}
+
+.turnstile.is-interactive {
+  margin-block: calc(var(--space-4) - var(--space-6));
+}
+
 .banner {
   display: none;
 }

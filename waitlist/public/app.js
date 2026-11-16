@@ -1,5 +1,6 @@
 // The waitlist page (spec 0017): tabs, the two forms, the counter, the video and the small motion.
-// No framework; the field rules are validate.js's, the same module the server runs.
+// No framework; the field rules are validate.js's, the same module the server runs. Spec 0017b: each form
+// carries a Cloudflare Turnstile token, from the page's one third-party script.
 import { CITIES } from './cities.js';
 import { validateSignup } from './validate.js';
 
@@ -7,6 +8,7 @@ const TEXT = {
   sending: 'בשליחה…',
   error: 'משהו השתבש. אפשר לנסות שוב בעוד רגע.',
   offline: 'אין חיבור לאינטרנט',
+  challenge: 'לא הצלחנו לוודא שזה לא בוט. אפשר לנסות שוב.',
   videoError: 'הסרטון לא נטען. אפשר לנסות שוב מאוחר יותר.',
   counter: (n) => ['כבר ', n, ' נרשמו לרשימה'],
   success: (email) => ['נעדכן ב-', email, ' ברגע שהומי עולה לאוויר. לאט לאט? ממש לא.'],
@@ -56,6 +58,124 @@ function setMessage(element, text) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Turnstile (spec 0017b). app.js adds the script itself, so its load and error events say whether it
+// came (a blocked script is the error event). A side's widget is rendered the first time its panel shows.
+
+const TURNSTILE_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+/** How long a submit waits for a token that has not come yet, "בשליחה…" showing meanwhile. */
+const TOKEN_WAIT_MS = 10000;
+
+/** 'loading' until the script's load event, then 'ready'; 'failed' when it did not load. */
+let turnstileStatus = 'loading';
+/** Per form: its widget id, its current token, whether the widget failed, and who waits for a token. */
+const challenges = new Map();
+
+function challengeOf(form) {
+  let state = challenges.get(form);
+  if (state === undefined) {
+    state = { rendered: false, widgetId: undefined, token: null, failed: false, waiters: new Set() };
+    challenges.set(form, state);
+  }
+  return state;
+}
+
+/** Hands `token` (null: none is coming) to every submit waiting on this form. */
+function wake(state, token) {
+  for (const waiter of [...state.waiters]) waiter(token);
+}
+
+function renderWidget(side) {
+  if (turnstileStatus !== 'ready') return;
+  const form = document.querySelector(`form[data-side="${side}"]`);
+  const state = challengeOf(form);
+  if (state.rendered) return;
+  state.rendered = true;
+  const element = form.querySelector('.turnstile');
+  try {
+    state.widgetId = window.turnstile.render(element, {
+      sitekey: element.dataset.sitekey,
+      action: 'signup',
+      appearance: 'interaction-only',
+      language: 'he',
+      'response-field': false,
+      callback(token) {
+        state.token = token;
+        state.failed = false;
+        wake(state, token);
+      },
+      // Turnstile fetches a fresh token itself (refresh-expired: 'auto').
+      'expired-callback'() {
+        state.token = null;
+      },
+      'error-callback'() {
+        state.token = null;
+        state.failed = true;
+        wake(state, null);
+        return true; // handled: Turnstile does not throw
+      },
+      'before-interactive-callback'() {
+        element.classList.add('is-interactive');
+      },
+    });
+  } catch {
+    state.failed = true;
+    wake(state, null);
+  }
+}
+
+/** The form's token, waiting up to TOKEN_WAIT_MS for one; null when none can come in time. */
+function tokenFor(form) {
+  const state = challengeOf(form);
+  if (state.token !== null) return Promise.resolve(state.token);
+  if (turnstileStatus === 'failed' || state.failed) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const done = (token) => {
+      clearTimeout(timer);
+      state.waiters.delete(done);
+      resolve(token);
+    };
+    const timer = setTimeout(() => done(null), TOKEN_WAIT_MS);
+    state.waiters.add(done);
+  });
+}
+
+/** Tokens are single-use and the server may have spent this one: drop it and ask for a new one. */
+function spendToken(form) {
+  const state = challengeOf(form);
+  state.token = null;
+  if (state.widgetId === undefined || turnstileStatus !== 'ready') return;
+  try {
+    window.turnstile.reset(state.widgetId);
+  } catch {
+    // A widget that cannot reset gives no token; the next submit shows the challenge banner.
+  }
+}
+
+function selectedSide() {
+  return document.querySelector('[role="tab"][aria-selected="true"]')?.dataset.side;
+}
+
+function loadTurnstile() {
+  const script = document.createElement('script');
+  script.src = TURNSTILE_SRC;
+  script.async = true;
+  script.onload = () => {
+    turnstileStatus = typeof window.turnstile?.render === 'function' ? 'ready' : 'failed';
+    if (turnstileStatus === 'ready') {
+      const side = selectedSide();
+      if (side !== undefined) renderWidget(side);
+    } else {
+      for (const state of challenges.values()) wake(state, null);
+    }
+  };
+  script.onerror = () => {
+    turnstileStatus = 'failed';
+    for (const state of challenges.values()) wake(state, null);
+  };
+  document.head.append(script);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Tabs (WAI-ARIA tabs; arrows follow the visual order, so in RTL the right arrow goes back).
 
 const tablist = document.querySelector('[role="tablist"]');
@@ -69,6 +189,7 @@ function selectSide(side, { focus = false } = {}) {
     document.getElementById(tab.getAttribute('aria-controls')).hidden = !selected;
     if (selected && focus) tab.focus({ preventScroll: true });
   }
+  renderWidget(side);
 }
 
 tablist.addEventListener('click', (event) => {
@@ -105,6 +226,8 @@ for (const link of document.querySelectorAll('a[data-side]')) {
     tabs.find((tab) => tab.dataset.side === side).focus({ preventScroll: true });
   });
 }
+
+loadTurnstile();
 
 const requested = new URLSearchParams(window.location.search).get('side');
 selectSide(SIDES.includes(requested) ? requested : 'seeker');
@@ -213,9 +336,9 @@ function banner(form) {
   return form.querySelector('.banner');
 }
 
-function showBanner(form) {
+function showBanner(form, text = navigator.onLine === false ? TEXT.offline : TEXT.error) {
   const element = banner(form);
-  setMessage(element, navigator.onLine === false ? TEXT.offline : TEXT.error);
+  setMessage(element, text);
   element.classList.add('is-shown');
 }
 
@@ -284,17 +407,35 @@ async function submit(form) {
     return;
   }
   setBusy(form, true);
+  // True while the token is out with the server and not yet spent here.
+  let inFlight = false;
   try {
+    const token = await tokenFor(form);
+    if (token === null) {
+      showBanner(form, TEXT.challenge);
+      return;
+    }
+    inFlight = true;
     const response = await fetch('/api/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, turnstile: token }),
       signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined,
     });
+    inFlight = false;
     if (response.ok) {
+      challengeOf(form).token = null;
       hideBanner(form);
       showSuccess(form, result.value.email);
       return;
+    }
+    spendToken(form);
+    if (response.status === 403) {
+      const data = await response.json().catch(() => null);
+      if (data?.error === 'challenge') {
+        showBanner(form, TEXT.challenge);
+        return;
+      }
     }
     if (response.status === 400) {
       const data = await response.json().catch(() => null);
@@ -306,6 +447,7 @@ async function submit(form) {
     }
     showBanner(form);
   } catch {
+    if (inFlight) spendToken(form);
     showBanner(form);
   } finally {
     setBusy(form, false);

@@ -1,8 +1,9 @@
 // Spec 0017: POST /api/signup and GET /api/count, called through the Functions' `onRequest` with a fake
 // D1 over the real migration (fake-d1.js). Run with `node --test 'waitlist/test/*.test.js'` (Node 22).
+// Spec 0017b: siteverify is the global `fetch`, stubbed in beforeEach (it never reaches the network).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { afterEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'node:test';
 
 import { onRequest as countRequest } from '../functions/api/count.js';
 import { onRequest as signupRequest } from '../functions/api/signup.js';
@@ -12,12 +13,15 @@ import { fakeD1 } from './fake-d1.js';
 
 const ORIGIN = 'https://join.example.com';
 
+const SECRET = 'test-secret-not-cloudflare';
+
 function env(DB = fakeD1()) {
-  return { DB, ALLOWED_ORIGIN: ORIGIN };
+  return { DB, ALLOWED_ORIGIN: ORIGIN, TURNSTILE_SECRET: SECRET };
 }
 
-function signupRequestFor(body, { url = `${ORIGIN}/api/signup`, origin, type, method } = {}) {
+function signupRequestFor(body, { url = `${ORIGIN}/api/signup`, origin, type, method, ip } = {}) {
   const headers = { 'Content-Type': type ?? 'application/json' };
+  if (ip !== undefined) headers['CF-Connecting-IP'] = ip;
   const sent = origin === undefined ? new URL(url).origin : origin;
   if (sent !== null) headers.Origin = sent;
   return new Request(url, {
@@ -44,6 +48,7 @@ const SEEKER = {
   city: 'tel-aviv',
   consent: true,
   website: '',
+  turnstile: 'tok',
 };
 
 const LISTER = {
@@ -57,10 +62,30 @@ const LISTER = {
   phone: '+972 52-123-4567',
   consent: true,
   website: '',
+  turnstile: 'tok',
 };
+
+// The siteverify stub: every call is recorded; `answer` makes the response (or throws), per test.
+const PASS = { success: true, action: 'signup', hostname: 'join.example.com' };
+const realFetch = globalThis.fetch;
+let siteverify;
+
+function answerJson(body, status = 200) {
+  return () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+beforeEach(() => {
+  siteverify = { calls: [], answer: answerJson(PASS) };
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), lib.SITEVERIFY_URL, 'the only fetch is siteverify');
+    siteverify.calls.push({ url: String(url), init });
+    return siteverify.answer();
+  };
+});
 
 afterEach(() => {
   delete globalThis.caches;
+  globalThis.fetch = realFetch;
 });
 
 test('ac1_seeker_signup_stored', async () => {
@@ -389,7 +414,7 @@ test('ac8_db_failure_logged_without_pii', async (t) => {
     }),
   };
   const logged = t.mock.method(console, 'error', () => undefined);
-  const { response, json } = await post({ DB: failing, ALLOWED_ORIGIN: ORIGIN }, LISTER);
+  const { response, json } = await post(env(failing), LISTER);
 
   assert.equal(response.status, 500);
   assert.deepEqual(json, { error: 'server' });
@@ -427,7 +452,8 @@ test('ac17_headers_file', () => {
   );
   const csp =
     "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self'; " +
-    "script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; " +
+    "script-src 'self' https://challenges.cloudflare.com; connect-src 'self'; font-src 'self'; " +
+    "frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; " +
     "base-uri 'none'; form-action 'self'";
   assert.deepEqual(
     Object.fromEntries(headers),
@@ -439,4 +465,171 @@ test('ac17_headers_file', () => {
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     },
   );
+});
+
+// ---------------------------------------------------------------------------------------------
+// Spec 0017b: Turnstile.
+
+const IP = '203.0.113.7';
+const TOKEN = 'tok-0017b-a-real-looking-token';
+
+test('ac1b_turnstile_ok_stores', async (t) => {
+  await t.test('a token siteverify accepts → 200, one row, one POST with secret, response, remoteip', async () => {
+    const environment = env();
+    const { response, json } = await post(environment, { ...SEEKER, turnstile: TOKEN }, { ip: IP });
+    assert.equal(response.status, 200);
+    assert.deepEqual(json, { ok: true });
+    const stored = rows(environment);
+    assert.equal(stored.length, 1);
+    assert.ok(!Object.hasOwn(stored[0], 'turnstile'), 'the token is not a column');
+    assert.ok(!Object.values(stored[0]).includes(TOKEN), 'the token is not stored');
+
+    assert.equal(siteverify.calls.length, 1);
+    const [{ url, init }] = siteverify.calls;
+    assert.equal(url, 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
+    assert.equal(init.method, 'POST');
+    assert.ok(init.body instanceof URLSearchParams, 'a form-urlencoded body');
+    assert.deepEqual(Object.fromEntries(init.body), { secret: SECRET, response: TOKEN, remoteip: IP });
+    assert.ok(init.signal instanceof AbortSignal, 'the call has a timeout');
+  });
+
+  await t.test('no CF-Connecting-IP → remoteip is left out', async () => {
+    const { response } = await post(env(), LISTER);
+    assert.equal(response.status, 200);
+    assert.deepEqual(Object.fromEntries(siteverify.calls[0].init.body), {
+      secret: SECRET,
+      response: 'tok',
+    });
+  });
+
+  await t.test("localhost with the test secret's answer (no action, example.com) → 200", async () => {
+    siteverify.answer = answerJson({ success: true, hostname: 'example.com' });
+    const environment = { ...env(), TURNSTILE_SECRET: '1x0000000000000000000000000000000AA' };
+    const { response } = await post(environment, SEEKER, { url: 'http://localhost:8788/api/signup' });
+    assert.equal(response.status, 200);
+    assert.equal(rows(environment).length, 1);
+    assert.equal(siteverify.calls.length, 1);
+  });
+});
+
+test('ac2b_turnstile_rejections', async (t) => {
+  const { turnstile: _turnstile, ...withoutToken } = SEEKER;
+  // [name, body, siteverify answer or null when siteverify must not be called]
+  const cases = [
+    ['a missing token', withoutToken, null],
+    ['a number', { ...SEEKER, turnstile: 12345 }, null],
+    ['an empty string', { ...SEEKER, turnstile: '' }, null],
+    ['a token of 2049 characters', { ...SEEKER, turnstile: 'x'.repeat(2049) }, null],
+    ['invalid-input-response', SEEKER, { success: false, 'error-codes': ['invalid-input-response'] }],
+    ['timeout-or-duplicate', SEEKER, { success: false, 'error-codes': ['timeout-or-duplicate'] }],
+    ['success: false with no codes', SEEKER, { success: false }],
+    ["action 'other'", SEEKER, { ...PASS, action: 'other' }],
+    ['no action', SEEKER, { success: true, hostname: 'join.example.com' }],
+    ["hostname 'evil.example'", SEEKER, { ...PASS, hostname: 'evil.example' }],
+  ];
+  for (const [name, body, answer] of cases) {
+    await t.test(name, async (tt) => {
+      const logged = tt.mock.method(console, 'error', () => undefined);
+      if (answer !== null) siteverify.answer = answerJson(answer);
+      const environment = env();
+      const { response, json } = await post(environment, body);
+      assert.equal(response.status, 403);
+      assert.deepEqual(json, { error: 'challenge' });
+      assert.equal(rows(environment).length, 0);
+      assert.equal(siteverify.calls.length, answer === null ? 0 : 1);
+      assert.equal(logged.mock.callCount(), 0, 'a rejected token is not logged');
+    });
+  }
+  await t.test('a token of exactly 2048 characters passes', async () => {
+    const environment = env();
+    const token = 'x'.repeat(2048);
+    const { response } = await post(environment, { ...LISTER, turnstile: token });
+    assert.equal(response.status, 200);
+    assert.equal(rows(environment).length, 1);
+    assert.equal(siteverify.calls[0].init.body.get('response'), token);
+  });
+});
+
+test('ac3b_turnstile_unavailable_fails_closed', async (t) => {
+  const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  const cases = [
+    ['siteverify throws', () => Promise.reject(new TypeError('fetch failed')), 'network'],
+    ['siteverify times out', () => Promise.reject(timeout), 'timeout'],
+    ['a 500', answerJson({ success: false }, 500), 'status 500'],
+    ['a body that is not JSON', () => new Response('<html>oops</html>', { status: 200 }), 'body'],
+    ['JSON that is not an answer', answerJson(['success']), 'body'],
+    ['invalid-input-secret', answerJson({ success: false, 'error-codes': ['invalid-input-secret'] }), 'invalid-input-secret'],
+    ['missing-input-secret', answerJson({ success: false, 'error-codes': ['missing-input-secret'] }), 'missing-input-secret'],
+    ['internal-error', answerJson({ success: false, 'error-codes': ['internal-error'] }), 'internal-error'],
+  ];
+  for (const [name, answer, reason] of cases) {
+    await t.test(name, async (tt) => {
+      const logged = tt.mock.method(console, 'error', () => undefined);
+      siteverify.answer = answer;
+      const environment = env();
+      const { response, json } = await post(environment, { ...LISTER, turnstile: TOKEN }, { ip: IP });
+      assert.equal(response.status, 503);
+      assert.deepEqual(json, { error: 'server' });
+      assert.equal(rows(environment).length, 0);
+      assert.equal(siteverify.calls.length, 1);
+      assert.equal(logged.mock.callCount(), 1);
+      const line = logged.mock.calls[0].arguments.map(String).join(' ');
+      assert.equal(line, `waitlist: turnstile unavailable (${reason})`);
+      for (const secret of [TOKEN, IP, SECRET, 'owner@example.com', '521234567', '52-123-4567']) {
+        assert.ok(!line.includes(secret), `the log line holds ${secret}: ${line}`);
+      }
+    });
+  }
+});
+
+test('ac4b_missing_secret_refuses', async (t) => {
+  const cases = [
+    ['no TURNSTILE_SECRET', undefined, 'waitlist: turnstile secret missing'],
+    ['an empty one', '', 'waitlist: turnstile secret missing'],
+    ['the always-pass test secret', '1x0000000000000000000000000000000AA', 'waitlist: turnstile test secret refused'],
+    ['the always-fail test secret', '2x0000000000000000000000000000000AA', 'waitlist: turnstile test secret refused'],
+    ['the spent-token test secret', '3x0000000000000000000000000000000AA', 'waitlist: turnstile test secret refused'],
+  ];
+  for (const [name, secret, message] of cases) {
+    await t.test(`${name} on the real host → 503, no siteverify call`, async (tt) => {
+      const logged = tt.mock.method(console, 'error', () => undefined);
+      const environment = env();
+      if (secret === undefined) delete environment.TURNSTILE_SECRET;
+      else environment.TURNSTILE_SECRET = secret;
+      const { response, json } = await post(environment, SEEKER);
+      assert.equal(response.status, 503);
+      assert.deepEqual(json, { error: 'server' });
+      assert.equal(rows(environment).length, 0);
+      assert.equal(siteverify.calls.length, 0);
+      assert.deepEqual(
+        logged.mock.calls.map((call) => call.arguments.join(' ')),
+        [message],
+      );
+    });
+  }
+});
+
+test('ac5b_order_validation_before_turnstile', async (t) => {
+  await t.test('invalid fields and no token → 400 with the fields, no siteverify call', async () => {
+    const { turnstile: _turnstile, ...withoutToken } = SEEKER;
+    const environment = env();
+    const { response, json } = await post(environment, { ...withoutToken, city: 'jerusalem', consent: false });
+    assert.equal(response.status, 400);
+    assert.deepEqual(json, { error: 'invalid', fields: ['city', 'consent'] });
+    assert.equal(siteverify.calls.length, 0);
+  });
+  await t.test('a filled honeypot → 200, no siteverify call, no row', async () => {
+    const environment = env();
+    const { response, json } = await post(environment, { ...SEEKER, website: 'https://spam.example' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(json, { ok: true });
+    assert.equal(rows(environment).length, 0);
+    assert.equal(siteverify.calls.length, 0);
+  });
+  await t.test('a bad Origin → 403 origin, no siteverify call', async () => {
+    const { response, json } = await post(env(), SEEKER, { origin: 'https://evil.example' });
+    assert.equal(response.status, 403);
+    assert.deepEqual(json, { error: 'origin' });
+    assert.equal(siteverify.calls.length, 0);
+  });
 });

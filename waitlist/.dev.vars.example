@@ -1,0 +1,3 @@
+# Local `wrangler pages dev` secrets (spec 0017b): copy to .dev.vars (git-ignored). This is Cloudflare's
+# always-pass Turnstile test secret, which the Function accepts only on a localhost request.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
