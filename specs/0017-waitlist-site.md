@@ -23,7 +23,7 @@ both sides of the market before launch.
 - Built as a **normal spec** (coder → reviewers → `make merge`).
 - The page must look **enterprise-grade, modern and beautiful**, with the turtle and the promo video.
 
-**Orchestrator defaults that Gilad can change in the digest (the coder builds them as written):**
+**Defaults D1–D3, confirmed by Gilad 2026-11-16 ("defaults are fine"):**
 - D1. The counter shows only once there are **50 or more signups in total** (`COUNTER_MIN = 50` in `lib/signup.js`).
   Below that it is hidden, not "0".
 - D2. The video is the promo video `homie-promo.mp4` (16:9, 43 s, with music), re-encoded for the web. It plays
@@ -576,5 +576,5 @@ and a context `{request, env: {DB, ALLOWED_ORIGIN: "https://join.example.com"}}`
 ## Digest (filled by orchestrator after verification)
 Verified 2026-11-16 (one verifier round, 14 fixes applied in place). Build: one Opus/high coder run, reviewers code, security, ux, qa. Merging delegated by Gilad ("Yes, merge it").
 - Delivers: `join.<domain>` waitlist page (own Pages project + D1), `POST /api/signup`, `GET /api/count`, `make waitlist-migrate|deploy-waitlist|waitlist-stats|test-waitlist`.
-- Defaults for Gilad to confirm: D1 counter from 50 signups, D2 video click-to-play, D3 subdomain `join`.
+- Defaults confirmed by Gilad 2026-11-16: D1 counter from 50 signups, D2 video click-to-play, D3 subdomain `join`.
 - Risk: the Makefile overlaps with 0013a (`WRANGLER_VERSION`, `CONTACT_EMAIL`); whichever merges second keeps one definition.
