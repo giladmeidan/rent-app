@@ -1,7 +1,7 @@
 ---
 id: 0017b
 title: "The waitlist forms are protected by Cloudflare Turnstile, so bots cannot fill D1's free daily writes"
-status: in-review
+status: done
 depends_on: [0017]   # merged, PR #116
 reviewers: [code, security, qa]   # security: a bot check on a public write endpoint + a new secret + a CSP change; qa: endpoint + page
 estimate: 1 coder run   # small; coder Opus/high (security, Speed rule 6)
@@ -308,3 +308,9 @@ graphify's graph (`rent-app/graphify-out/graph.json`) predates 0017's merge and 
 
 ## Digest (filled by orchestrator after verification)
 Verified 2026-11-16 (one verifier round, 12 fixes applied in place). Build: one Opus/high coder run, reviewers code, security, qa. Merged by the orchestrator under Gilad's 0017 delegation. For Gilad: fail closed is the orchestrator's choice and can be flipped.
+
+Merged 2026-11-16 as PR #120 (`c62f342`), ci green on head `c5e9ddf` (one run, 14 min, no flaky warning), merged by the orchestrator.
+- Shipped: Turnstile (managed, interaction-only) on both waitlist forms; server siteverify for action `signup` and the site hostname, fail closed (503); CSP adds `challenges.cloudflare.com` to script-src and frame-src; `make waitlist-secret`; `deploy-waitlist` takes `TURNSTILE_SITE_KEY`.
+- Review (code, security, qa): blockers 0 · majors 0 · minors: 4 fixed, 3 in FOLLOWUPS.
+- Live: deployed 2026-11-16 to `homie-waitlist.pages.dev` with Gilad's widget; checked: site key in page, CSP header, no console errors, a tokenless POST gets 403 `challenge`.
+
