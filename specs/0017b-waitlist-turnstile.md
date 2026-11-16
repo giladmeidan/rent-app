@@ -1,7 +1,7 @@
 ---
 id: 0017b
 title: "The waitlist forms are protected by Cloudflare Turnstile, so bots cannot fill D1's free daily writes"
-status: in-progress
+status: in-review
 depends_on: [0017]   # merged, PR #116
 reviewers: [code, security, qa]   # security: a bot check on a public write endpoint + a new secret + a CSP change; qa: endpoint + page
 estimate: 1 coder run   # small; coder Opus/high (security, Speed rule 6)
