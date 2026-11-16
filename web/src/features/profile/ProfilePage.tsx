@@ -38,6 +38,7 @@ import type {
   ShelterNeeded,
 } from './api';
 import { DeleteAccountSection } from './DeleteAccountSection';
+import { PasswordSection } from './PasswordSection';
 import { PersonPhoto } from './PersonPhoto';
 import { useProfile } from './useProfile';
 import { useSaveProfile } from './useSaveProfile';
@@ -746,6 +747,7 @@ export function ProfilePage() {
           <p className={mutedNote}>{t('profile.privacy')}</p>
         </div>
         {body}
+        <PasswordSection className="lg:col-start-2" />
         <DeleteAccountSection className="lg:col-start-2" />
       </div>
     </PageContainer>

@@ -23,6 +23,7 @@ const ME: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3,
+  has_password: false, // spec 0016a
 };
 const AREA_A = '00000000-0000-0000-0000-00000000a1a1';
 const AREA_B = '00000000-0000-0000-0000-00000000a2a2';

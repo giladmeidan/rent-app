@@ -1020,6 +1020,7 @@ describe('ProfilePage', () => {
         he.profile.about.title,
         he.profile.sections.search,
         he.profile.people.title,
+        he.profile.password.title, // the password section, above the delete one (spec 0016a)
         he.profile.delete.title, // the delete section, after the form (spec 0013f)
       ]);
       expect(

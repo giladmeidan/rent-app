@@ -12,6 +12,7 @@ export const OWNER: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3,
+  has_password: false, // spec 0016a
 };
 
 /** A seeker who is also a flatmate in רוני's room. */
@@ -24,6 +25,7 @@ export const FLATMATE: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3,
+  has_password: false, // spec 0016a
 };
 
 const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;

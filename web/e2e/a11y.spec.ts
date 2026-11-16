@@ -40,6 +40,17 @@ test('ac5_public_pages_pass_axe', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: he.auth.login.title })).toBeVisible();
   await settled(page);
   await expectNoAxeViolations(page, '/login');
+  // Password mode (spec 0016a AC16): the switch, the shown password and a 401's alert.
+  await page.getByRole('tab', { name: he.auth.login.mode.password }).click();
+  const panel = page.getByRole('tabpanel');
+  await panel.getByLabel(he.auth.email.label).fill(`a11y-${randomUUID()}@example.com`);
+  await panel.getByLabel(he.auth.password.label, { exact: true }).fill('not the password');
+  await panel.getByRole('button', { name: he.auth.password.show }).click();
+  await expect(panel.getByRole('button', { name: he.auth.password.hide })).toBeVisible();
+  await panel.getByRole('button', { name: he.auth.password.submit, exact: true }).click();
+  await expect(panel.getByRole('alert')).toHaveText(he.auth.password.invalid);
+  await settled(page);
+  await expectNoAxeViolations(page, '/login (password)');
   await page.goto('/signup');
   await expect(page.getByRole('heading', { level: 1, name: he.auth.signup.title })).toBeVisible();
   await settled(page);

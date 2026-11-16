@@ -189,6 +189,7 @@ const seekerUser: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3,
+  has_password: false, // spec 0016a
 };
 const seekerProfile = {
   budget_max_ils: 7500,

@@ -19,6 +19,7 @@ dependencies = [
   "pillow==13.0.0",       # photo decode, orient, resize, WebP re-encode (spec 0010d)
   "boto3==1.44.2",        # the R2 photo store over the S3 API (spec 0010d)
   "openpyxl==3.1.5",      # the CBS rent table xlsx (spec 0014d)
+  "argon2-cffi==25.1.0",  # argon2id password hashes, a random salt each (spec 0016a)
 ]
 
 [dependency-groups]

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useSearchParams } from 'react-router';
 
@@ -10,10 +11,14 @@ import { Mascot } from '../../components/Mascot';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { TabPanel, Tabs } from '../../components/Tabs';
 import { usePageTitle } from '../../app/usePageTitle';
 import { safeNext } from './next';
 import { OtpForm } from './OtpForm';
+import { PasswordForm } from './PasswordForm';
 import { useMe } from './useMe';
+
+const PANEL_ID = 'login-mode-panel';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -21,6 +26,10 @@ export function LoginPage() {
   const me = useMe();
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));
+  // Spec 0016a: code (default) or password; switching unmounts the other form.
+  const [mode, setMode] = useState<'code' | 'password'>('code');
+  // The password form's "log in with a code" carries its typed email over.
+  const [codeEmail, setCodeEmail] = useState('');
 
   if (me.data) return <Navigate to={next} replace />;
 
@@ -41,7 +50,33 @@ export function LoginPage() {
             <Skeleton />
           </Loading>
         ) : (
-          <OtpForm withProfile={false} next={next} />
+          <div className="flex flex-col gap-6">
+            <Tabs
+              label={t('auth.login.mode.label')}
+              variant="pill"
+              className="self-start"
+              items={[
+                { value: 'code', label: t('auth.login.mode.code') },
+                { value: 'password', label: t('auth.login.mode.password') },
+              ]}
+              value={mode}
+              onChange={setMode}
+              panelId={PANEL_ID}
+            />
+            <TabPanel panelId={PANEL_ID} value={mode}>
+              {mode === 'code' ? (
+                <OtpForm withProfile={false} next={next} initialEmail={codeEmail} />
+              ) : (
+                <PasswordForm
+                  next={next}
+                  onUseCode={(email) => {
+                    setCodeEmail(email);
+                    setMode('code');
+                  }}
+                />
+              )}
+            </TabPanel>
+          </div>
         )}
       </Card>
       <p className="text-center text-body text-ink-muted">

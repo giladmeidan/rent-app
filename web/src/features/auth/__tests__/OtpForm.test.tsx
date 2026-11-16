@@ -630,3 +630,83 @@ describe('OtpForm', () => {
     });
   });
 });
+
+describe('OtpForm password at sign-up (spec 0016a AC14)', () => {
+  const optional = () => screen.getByLabelText(he.auth.password.optionalLabel);
+
+  async function signUp(password: string) {
+    const api = mockApi({
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json(noa, 201)],
+    });
+    renderAt('/signup', <OtpForm withProfile initialRole="owner" />);
+    fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'Dana' } });
+    fireEvent.change(optional(), { target: { value: password } });
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    return api;
+  }
+
+  async function verify() {
+    fireEvent.change(screen.getByLabelText(he.auth.code.label), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.verify }));
+    await flush();
+  }
+
+  it('ac14_password_is_sent_when_filled', async () => {
+    const api = await signUp('  a long password ');
+    await verify();
+    expect(api.calls('POST /auth/otp/verify')[0]?.body).toEqual({
+      email: 'dana@example.com',
+      code: '123456',
+      profile: { display_name: 'Dana', role: 'owner', password: '  a long password ' },
+    });
+  });
+
+  it('ac14_password_is_left_out_when_empty', async () => {
+    const api = await signUp('');
+    await verify();
+    expect(api.calls('POST /auth/otp/verify')[0]?.body).toEqual({
+      email: 'dana@example.com',
+      code: '123456',
+      profile: { display_name: 'Dana', role: 'owner' },
+    });
+  });
+
+  it('ac14_short_password_blocks_the_request', async () => {
+    const api = await signUp('123456789');
+    expect(api.calls('POST /auth/otp/request')).toHaveLength(0);
+    expect(optional()).toHaveFocus();
+    expect(optional()).toHaveAttribute('aria-invalid', 'true');
+    expect(optional()).toHaveAccessibleDescription(
+      `${he.auth.password.hint} ${he.auth.password.tooShort}`,
+    );
+    expect(optional()).toHaveAttribute('autocomplete', 'new-password');
+    expect(optional()).toHaveAttribute('maxlength', '128');
+
+    fireEvent.change(optional(), { target: { value: '1234567890' } });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    expect(api.calls('POST /auth/otp/request')).toHaveLength(1);
+  });
+
+  it('ac14_login_profile_step_has_no_password', async () => {
+    mockApi({
+      'POST /auth/otp/request': [empty(204)],
+      'POST /auth/otp/verify': [json({ detail: 'profile_required' }, 422)],
+    });
+    renderAt('/login', <OtpForm withProfile={false} />);
+    expect(screen.queryByLabelText(he.auth.password.optionalLabel)).toBeNull();
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    await verify();
+    expect(screen.getByLabelText(he.auth.name.label)).toBeVisible();
+    expect(screen.queryByLabelText(he.auth.password.optionalLabel)).toBeNull();
+  });
+});

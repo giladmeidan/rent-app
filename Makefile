@@ -162,8 +162,9 @@ i18n-check: web/node_modules/.modules.yaml
 ## A shard's failed tests run once more, after the keys are cleared again (so the retry's sign-ups fit);
 ## a shard that passes only then prints a "Flaky e2e" warning (an annotation in CI) and does not fail.
 ## Each shard keeps its own web/test-results/shard-N (and shard-N-retry) with the failed tests' traces.
-# shortcut: 8 shards (E2E_SHARDS) against OTP_RATE_LIMIT_IP = 10 codes per 15 min; the largest shards
-# request 7 codes (2/8: auth, flatmates; 7/8: market, people-market, people), 3 spare (4 shards put 12 on
+# shortcut: 8 shards (E2E_SHARDS) against OTP_RATE_LIMIT_IP = 10 codes per 15 min; the largest shard
+# requests 8 codes (2/8: auth, flatmates; 0016a's password login adds one), then 7 (7/8: market,
+# people-market, people), 2 spare (4 shards put 12 on
 # shard 4: 429s, spec 0013d; 6 left 9). 6/8 is empty today (map.spec fills 5/8), which Playwright allows.
 # Recount with `playwright test --list --shard=N/8` when a spec adds sign-ups; add a shard when one passes 8
 E2E_SHARDS ?= 8
