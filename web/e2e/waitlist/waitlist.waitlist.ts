@@ -657,6 +657,8 @@ test('ac7b_waits_for_token', async ({ page }) => {
   await expect(seeker.getByRole('alert')).toHaveText(CHALLENGE_BANNER);
   await expect(submitButton(seeker)).not.toHaveAttribute('aria-disabled');
   expect(requests).toEqual([]);
+  // The widget is reset, so the next try gets a fresh challenge without a reload.
+  expect((await fake(page)).resets).toBe(1);
 });
 
 test('ac8b_challenge_banner_and_reset', async ({ page }) => {
@@ -689,6 +691,13 @@ test('ac8b_challenge_banner_and_reset', async ({ page }) => {
   expect((await fake(page)).resets).toBe(2);
   expect(bodies).toHaveLength(2);
   expect(bodies.every((body) => body.turnstile === 'fake-token')).toBe(true);
+
+  // A thrown fetch (the request fails) shows the generic banner and resets as well.
+  await page.route('**/api/signup', (route) => route.abort());
+  await submitButton(seeker).click();
+  await expect(alert).toHaveText(ERROR_BANNER);
+  await expect(submitButton(seeker)).not.toHaveAttribute('aria-disabled');
+  expect((await fake(page)).resets).toBe(3);
 });
 
 test('ac9b_script_blocked', async ({ page }) => {
@@ -718,6 +727,8 @@ test('ac9b_script_blocked', async ({ page }) => {
   await submitButton(seeker).click();
   await expect(seeker.getByRole('alert')).toHaveText(CHALLENGE_BANNER, { timeout: 3000 });
   expect(requests).toBe(0);
+  // The failed widget is reset at once (here the fake fails again: the error-callback runs twice).
+  expect(await fake(page)).toMatchObject({ resets: 1, errorReturns: [true, true] });
 
   // A later token clears the failure: the next submit goes out.
   await page.evaluate(() =>

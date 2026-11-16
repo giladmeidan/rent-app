@@ -52,9 +52,10 @@ test/                    node --test (`make test-waitlist`); the page test is we
    `/api/signup`**, 5 requests per 10 s per IP → block for 10 s. The free plan's rule may only match on the URI
    path (not the hostname or the method), and that is enough: across the zone only this page serves
    `/api/signup` (the app's API has no `/api/` paths, and the apex web is static), and a GET there is a 405
-   anyway. `homie-waitlist.pages.dev` is outside the zone, so the Functions refuse it themselves (403 for a
-   signup, `{"total": null}` without D1 for the count). If 0013a needs the zone's one free rule later, widen
-   this one to an OR of both paths.
+   anyway. `homie-waitlist.pages.dev` is outside the zone, so the rule does not cover it: while it is
+   `ALLOWED_ORIGIN` (since PR #118) only Turnstile guards its signups; once `ALLOWED_ORIGIN` is the custom
+   domain, the Functions refuse it themselves (403 for a signup, `{"total": null}` without D1 for the count).
+   If 0013a needs the zone's one free rule later, widen this one to an OR of both paths.
 6. `make waitlist-stats` any time.
 7. To remove an entry on request (the privacy line promises it): `make waitlist-delete`, then type or paste
    the address and press Enter. It reads the address from stdin (never the command line, so no shell sees
@@ -98,8 +99,9 @@ It never selects an address or a phone number.
   `units, available, neighbourhood?, phone?`. It answers `200 {"ok": true}` whether the address is new or
   already on that side's list, so it never tells whether an address is on the list. The same address may join
   both sides. Guards, in order: method (405), the request's own origin must be `ALLOWED_ORIGIN` or localhost and
-  `Origin` must equal it (403; this also refuses `homie-waitlist.pages.dev`, which the rate-limit rule does not
-  cover), JSON only (415), 4 KB at most (413), bad JSON (400), a filled honeypot `website` (200, nothing
+  `Origin` must equal it (403; any other host is refused, so `homie-waitlist.pages.dev`, outside the zone's
+  rate-limit rule, is served only while it is `ALLOWED_ORIGIN`, as it is since PR #118, with Turnstile as its
+  bot check), JSON only (415), 4 KB at most (413), bad JSON (400), a filled honeypot `website` (200, nothing
   stored), then the field rules in `public/validate.js` (400 with the bad keys), then Turnstile (below). A D1
   failure is a 500, logged without the address or the phone.
 - Turnstile (spec 0017b): the body's `turnstile` token (1–2048 characters, else 403 `{"error": "challenge"}`)
@@ -114,8 +116,9 @@ It never selects an address or a phone number.
 - `GET /api/count` answers `{"total": n}` from 50 signups (`COUNTER_MIN` in `lib/signup.js`), else
   `{"total": null}`, and the page shows the counter only for a number. The response sits in the edge cache
   (`caches.default`) for 60 s, so D1 counts at most once a minute per Cloudflare location. The Cache API works
-  on the custom domain only, so on any other host (`*.pages.dev`) the count answers `{"total": null}` without
-  touching D1.
+  on the custom domain only, so on a host that is not `ALLOWED_ORIGIN` the count answers `{"total": null}`
+  without touching D1. While `ALLOWED_ORIGIN` is `homie-waitlist.pages.dev` (PR #118) the count is served
+  there, uncached, with one D1 read per request.
 - The page needs JavaScript to sign up: without it the forms render, but submitting does nothing useful.
 - The page's only third-party request is Cloudflare Turnstile's script and frame (`challenges.cloudflare.com`);
   no analytics, fonts or CDN. `_headers` sets a strict CSP that allows exactly that origin in `script-src` and

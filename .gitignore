@@ -19,5 +19,8 @@ graphify-out/
 api/tests/fixtures/rent_reference/raw/
 # The waitlist's deploy build, its local Pages secrets (0017b) and wrangler's local state (spec 0017).
 waitlist/.dist/
-waitlist/.dev.vars
+# Wrangler 4 also reads .dev.vars.<env>, .env.local and .env.<env>: none of them is ever committed.
+waitlist/.dev.vars*
+!waitlist/.dev.vars.example
+waitlist/.env.*
 waitlist/.wrangler/

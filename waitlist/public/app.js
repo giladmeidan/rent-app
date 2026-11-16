@@ -139,14 +139,20 @@ function tokenFor(form) {
   });
 }
 
-/** Tokens are single-use and the server may have spent this one: drop it and ask for a new one. */
+/**
+ * Drops the form's token and resets its widget: a token is single-use and the server may have spent it,
+ * and a widget that failed or gave no token in time starts a fresh challenge (a failure shows again
+ * through error-callback).
+ */
 function spendToken(form) {
   const state = challengeOf(form);
   state.token = null;
   if (state.widgetId === undefined || turnstileStatus !== 'ready') return;
   try {
+    state.failed = false;
     window.turnstile.reset(state.widgetId);
   } catch {
+    state.failed = true;
     // A widget that cannot reset gives no token; the next submit shows the challenge banner.
   }
 }
@@ -412,6 +418,8 @@ async function submit(form) {
   try {
     const token = await tokenFor(form);
     if (token === null) {
+      // No token in time, or the widget failed: a fresh challenge for the next try (no reload needed).
+      spendToken(form);
       showBanner(form, TEXT.challenge);
       return;
     }
