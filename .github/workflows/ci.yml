@@ -26,9 +26,11 @@ concurrency:
 jobs:
   ci:
     # Another label being added does not start a run; a push to a labelled PR does.
+    # Fork PRs never run: the repo is public and the default runner is the self-hosted Mac.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') &&
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'ready-to-merge') &&
        (github.event.action != 'labeled' || github.event.label.name == 'ready-to-merge'))
     runs-on: ${{ vars.CI_ON_GITHUB == 'on' && 'ubuntu-latest' || 'rent-app-mac' }}
     timeout-minutes: 25

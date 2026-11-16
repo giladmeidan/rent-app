@@ -18,6 +18,13 @@ COMPOSE := docker compose $(if $(wildcard .env),--env-file .env) -f infra/docker
 UV      := uv --directory api
 PNPM    := pnpm --dir web
 
+# Cloudflare's CLI, run through `pnpm dlx` at this pinned release (spec 0017): the newest 4.x that was at
+# least two weeks old when pinned. One definition only (0013a reuses it).
+WRANGLER_VERSION := 4.156.1
+# The public contact address written into the waitlist page at deploy (`make deploy-waitlist
+# CONTACT_EMAIL=…`, or `.env`). build.mjs reads it from the environment; no recipe line expands it.
+export CONTACT_EMAIL
+
 # Local defaults match infra/docker-compose.yml and .env.example.
 export DATABASE_URL      ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent
 export TEST_DATABASE_URL ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent_test
@@ -32,7 +39,7 @@ export EMAIL_BLOCK_KEY   ?= dev-only-email-block-key-0123456789abcdef
 export ADMIN_PORT        ?= 8001
 export ADMIN_DB_PASSWORD ?= dev-only-admin-db-password
 
-.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -119,14 +126,44 @@ cbs-rent-import:
 cbs-rent-history:
 	$(UV) run python scripts/import_cbs_rent.py --history
 
-## test: api pytest (needs Postgres at TEST_DATABASE_URL and Redis at REDIS_URL), then web vitest
-test: test-api test-web
+## test: api pytest (needs Postgres at TEST_DATABASE_URL and Redis at REDIS_URL), then web vitest, then
+## the waitlist's unit and page tests
+test: test-api test-web test-waitlist
 
 test-api:
 	$(UV) run pytest -q
 
 test-web: web/node_modules/.modules.yaml
 	$(PNPM) exec vitest run
+
+## test-waitlist: the waitlist (spec 0017): node --test over waitlist/test (Node 22: node:sqlite), then
+## the Playwright page test against waitlist/public on a static python server (port 4179; no stack, no
+## API, not `make e2e`). It installs Chromium itself: in CI `make test` runs before the e2e step
+test-waitlist: web/node_modules/.modules.yaml
+	node --test 'waitlist/test/*.test.js'
+	$(PNPM) exec playwright install --with-deps chromium
+	$(PNPM) exec playwright test -c playwright.waitlist.config.ts
+
+## waitlist-migrate: apply waitlist/migrations to the remote D1 database homie-waitlist (spec 0017)
+waitlist-migrate:
+	cd waitlist && pnpm dlx wrangler@$(WRANGLER_VERSION) d1 migrations apply homie-waitlist --remote
+
+## deploy-waitlist: build waitlist/.dist with the public contact address and the origin written in, then
+## deploy it to the Pages project homie-waitlist (spec 0017; waitlist/README.md has the one-time setup)
+deploy-waitlist:
+	@test -n "$$CONTACT_EMAIL" || { echo "usage: make deploy-waitlist CONTACT_EMAIL=<public contact address>" >&2; exit 1; }
+	cd waitlist && node build.mjs && pnpm dlx wrangler@$(WRANGLER_VERSION) pages deploy --project-name homie-waitlist --branch main
+
+## waitlist-stats: signups by side, city and type from the remote D1 (waitlist/stats.sql; never an
+## address or a phone number)
+waitlist-stats:
+	cd waitlist && pnpm dlx wrangler@$(WRANGLER_VERSION) d1 execute homie-waitlist --remote --command "$$(cat stats.sql)"
+
+## waitlist-delete: delete one address from the remote waitlist on request (spec 0017, Setup step 7). It
+## asks for the address on stdin (never on the command line), counts its rows, deletes them by the hex of
+## the address (no SQL or shell ever sees the text) and counts again
+waitlist-delete:
+	cd waitlist && WRANGLER_VERSION=$(WRANGLER_VERSION) node delete.mjs
 
 ## lint: api ruff (lint + format) and mypy --strict, then web eslint, prettier --check, tsc --noEmit
 lint: lint-api lint-web

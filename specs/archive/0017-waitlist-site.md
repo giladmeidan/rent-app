@@ -1,7 +1,7 @@
 ---
 id: 0017
 title: "Before launch, people looking for a home and people renting one out can join homie's waitlist on join.<domain>, and Gilad can count them by side, city and type"
-status: verified
+status: done
 depends_on: []   # own Cloudflare Pages project + D1; shares only the domain and DNS zone with 0013a (see Blast radius for the Makefile overlap)
 reviewers: [code, security, ux, qa]   # security: emails and optional phone numbers (PII), public write endpoint; ux: new page; qa: endpoint + page
 estimate: 1 coder run (large)   # coder Opus/high (PII + a design-heavy page; Speed rule 6)
@@ -128,6 +128,11 @@ both sides of the market before launch.
      - `lister_phone`: how many listers left a phone.
 
      It never selects `email` or `phone`.
+   - `waitlist-delete` (review B1): `cd waitlist && WRANGLER_VERSION=$(WRANGLER_VERSION) node delete.mjs`.
+     `delete.mjs` (Node built-ins only) reads the address from stdin (never argv or a make variable), normalises
+     it with `normaliseEmail`, matches on `hex(email) = '<upper-case hex of the UTF-8 address>'`, prints the
+     `SELECT COUNT(*)`, runs the `DELETE` and counts again, calling wrangler with `execFileSync` (no shell).
+     Unit test: `waitlist/test/delete.test.js::b1_delete_by_hex_is_injection_safe`.
    - `test-waitlist: web/node_modules/.modules.yaml`:
      1. `node --test 'waitlist/test/*.test.js'` (a quoted glob: Node 22 does not expand a directory argument);
      2. `$(PNPM) exec playwright install --with-deps chromium` (as `make e2e` does; a no-op when present);
@@ -419,8 +424,8 @@ the existing e2e files.
    `join.<domain>` and path equals `/api/signup`, method POST, 5 requests per 10 s per IP → block for 10 s. If 0013a
    needs the zone's one free rule later, that is its call; this rule can be widened to an OR of both paths.
 6. Run `make waitlist-stats` any time.
-7. To remove an entry on request: `pnpm dlx wrangler@<v> d1 execute homie-waitlist --remote --command "DELETE FROM
-   signups WHERE email = '<address, lower-case>'"`.
+7. To remove an entry on request: `make waitlist-delete`, then type or paste the address (stdin). Never paste an
+   address into a `d1 execute --command` by hand: the email rule allows quotes, `$(…)` and backticks (review B1).
 
 ## Acceptance criteria
 Unit tests run under `node --test`. `waitlist/test/signup.test.js` calls the Functions' `onRequest` with a `Request`
@@ -578,3 +583,11 @@ Verified 2026-11-16 (one verifier round, 14 fixes applied in place). Build: one 
 - Delivers: `join.<domain>` waitlist page (own Pages project + D1), `POST /api/signup`, `GET /api/count`, `make waitlist-migrate|deploy-waitlist|waitlist-stats|test-waitlist`.
 - Defaults confirmed by Gilad 2026-11-16: D1 counter from 50 signups, D2 video click-to-play, D3 subdomain `join`.
 - Risk: the Makefile overlaps with 0013a (`WRANGLER_VERSION`, `CONTACT_EMAIL`); whichever merges second keeps one definition.
+
+Merged 2026-11-16 as PR #116 (`1b4b53e`), ci green on head `60bad1e` (one run, no flaky warning), merged by the orchestrator (delegated).
+- Shipped: `waitlist/` Hebrew RTL page (own Pages project + D1), seeker and lister forms, counter from 50, click-to-play video; `POST /api/signup`, `GET /api/count`; make `waitlist-migrate`, `deploy-waitlist`, `waitlist-stats`, `waitlist-delete`, `test-waitlist`. 56 unit + 8 page tests in `make test`.
+- Measured: video 3.1 MB, page 158 KB before video, Lighthouse mobile 99/100/100/100 (run before the review fixes).
+- Review (code, security, ux, qa): blockers 1 (fixed: delete-on-request command injectable, now `make waitlist-delete` reading stdin) · majors 1 (fixed: `/api/count` on `*.pages.dev` skipped host check and cache) · minors 15: 12 fixed, 3 in FOLLOWUPS.
+- Deviations: `compatibility_date` 2026-11-01 (pinned wrangler 4.156.1 refuses later); `robots.txt` added; `+972 (0)52-…` phones accepted.
+- Decision for Gilad: D1's free 100k writes/day could be exhausted by a few IPs at the rate limit. (a) Turnstile, (b) daily insert cap, (c) watch `waitlist-stats` — recommended (c) now, (a) if junk appears.
+- Go live: Gilad follows `waitlist/README.md` Setup (Cloudflare login, `d1 create`, `waitlist-migrate`, Pages project + `join.<domain>`, rate-limit rule, `deploy-waitlist CONTACT_EMAIL=…`).

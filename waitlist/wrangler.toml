@@ -1,0 +1,16 @@
+# The waitlist page (spec 0017): its own Cloudflare Pages project, apart from the app.
+# This file is the source of truth for the project's vars and bindings; the dashboard does not edit them.
+# Setup step 2 (README.md) replaces ALLOWED_ORIGIN and database_id; neither is a secret.
+name = "homie-waitlist"
+# The release date of the pinned WRANGLER_VERSION: its local runtime refuses later dates.
+compatibility_date = "2026-11-01"
+pages_build_output_dir = ".dist"
+
+[vars]
+ALLOWED_ORIGIN = "https://homie-waitlist.pages.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "homie-waitlist"
+database_id = "3707c4b0-28ff-4870-a0c8-23a6b2eb1211"
+migrations_dir = "migrations"
