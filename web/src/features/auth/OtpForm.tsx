@@ -22,7 +22,7 @@ import { signedIn } from './signedIn';
 
 type OtpVerifyIn = components['schemas']['OtpVerifyIn'];
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_RE = /^[0-9]{6}$/;
 const RESEND_COOLDOWN_S = 30;
 

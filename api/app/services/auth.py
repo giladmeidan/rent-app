@@ -277,23 +277,28 @@ def password_login(db: Session, r: RedisClient, email: str, password: str, netwo
     email = normalise_email(email)
     _count_password(r, email, network)
     row = db.execute(
-        select(User, UserPassword.hash)
+        select(User.id, UserPassword.hash)
         .outerjoin(UserPassword, UserPassword.user_id == User.id)
         .where(User.email == email)
     ).one_or_none()
+    db.rollback()  # hand the pooled connection back while argon2 waits and runs
     if row is None or row.hash is None:
         passwords.verify_password(passwords.DUMMY_HASH, password)  # the same cost as a real one
         raise InvalidCredentialsError
-    user, stored = row.tuple()
+    user_id, stored = row
     if not passwords.verify_password(stored, password):
+        raise InvalidCredentialsError
+    user = db.get(User, user_id)
+    if user is None:  # deleted while we verified
         raise InvalidCredentialsError
     if user.suspended_at is not None:
         raise AccountSuspendedError
     user.last_login_at = dt.datetime.now(dt.UTC)
     if passwords.needs_rehash(stored):
+        # Only over the hash we verified: a `set_password` that committed meanwhile wins (AC7).
         db.execute(
             update(UserPassword)
-            .where(UserPassword.user_id == user.id)
+            .where(UserPassword.user_id == user_id, UserPassword.hash == stored)
             .values(hash=passwords.hash_password(password))
         )
     db.commit()

@@ -346,3 +346,24 @@ def test_nf3_rehash_on_login(client: TestClient, outbox: Outbox, db_engine: Engi
     assert upgraded is not None and upgraded != weaker and upgraded.startswith(HASH_PREFIX)
     assert not passwords.needs_rehash(upgraded)
     assert _login(client, PASSWORD).status_code == 200
+
+
+def test_ac7_rehash_does_not_undo_a_new_password(
+    client: TestClient, outbox: Outbox, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _signup(client, outbox)
+    weaker = PasswordHasher(time_cost=1, memory_cost=8192, parallelism=1).hash(PASSWORD)
+    _execute(db_engine, "UPDATE user_passwords SET hash = :h", h=weaker)
+    changed = passwords.hash_password("a brand new password")
+    real_hash = passwords.hash_password
+
+    def racing_change(raw: str) -> str:  # a `set_password` commits between read and rehash
+        _execute(db_engine, "UPDATE user_passwords SET hash = :h", h=changed)
+        return real_hash(raw)
+
+    monkeypatch.setattr(passwords, "hash_password", racing_change)
+    assert _login(client, PASSWORD).status_code == 200
+
+    assert _hash_of(db_engine) == changed
+    client.cookies.clear()
+    assert _login(client, PASSWORD).status_code == 401

@@ -31,7 +31,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
             aria-controls={inputId}
             onClick={() => setShown((value) => !value)}
             className={cx(
-              'inline-flex min-h-tap items-center rounded-sm px-1 font-medium text-accent hover:text-accent-strong',
+              'inline-flex min-h-tap min-w-tap items-center justify-center rounded-sm px-1 font-medium text-accent hover:text-accent-strong',
               focusRing,
             )}
           >

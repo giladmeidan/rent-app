@@ -243,6 +243,8 @@ def set_my_password(
     limits.check(r, user.id, limits.WRITE)
     token = request.cookies[COOKIE_NAME]  # `current_user` resolved it
     created_at = auth_service.session_created_at(db, token)  # as DELETE /me
+    if created_at is None and accounts.is_deleted(db, user.id):
+        raise HTTPException(status_code=401, detail="unauthenticated")  # a racing DELETE /me
     if created_at is None or dt.datetime.now(dt.UTC) - created_at > dt.timedelta(
         seconds=DELETE_REAUTH_S
     ):

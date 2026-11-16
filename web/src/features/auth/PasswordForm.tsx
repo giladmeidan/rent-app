@@ -10,9 +10,8 @@ import { PasswordInput } from '../../components/PasswordInput';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
 import { TextInput } from '../../components/TextInput';
 import { useOnline } from '../../components/useOnline';
+import { EMAIL_RE } from './OtpForm';
 import { signedIn } from './signedIn';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type LoginResult =
   | { kind: 'ok'; user: UserOut }
@@ -140,6 +139,7 @@ export function PasswordForm({ next, onUseCode }: Props) {
             autoComplete="current-password"
             maxLength={128}
             value={password}
+            invalid={result?.kind === 'invalid'}
             aria-describedby={alert !== null ? alertId : undefined}
             onChange={(e) => {
               setPassword(e.target.value);
