@@ -39,7 +39,7 @@ export EMAIL_BLOCK_KEY   ?= dev-only-email-block-key-0123456789abcdef
 export ADMIN_PORT        ?= 8001
 export ADMIN_DB_PASSWORD ?= dev-only-admin-db-password
 
-.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate deploy-waitlist waitlist-stats lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -158,6 +158,12 @@ deploy-waitlist:
 ## address or a phone number)
 waitlist-stats:
 	cd waitlist && pnpm dlx wrangler@$(WRANGLER_VERSION) d1 execute homie-waitlist --remote --command "$$(cat stats.sql)"
+
+## waitlist-delete: delete one address from the remote waitlist on request (spec 0017, Setup step 7). It
+## asks for the address on stdin (never on the command line), counts its rows, deletes them by the hex of
+## the address (no SQL or shell ever sees the text) and counts again
+waitlist-delete:
+	cd waitlist && WRANGLER_VERSION=$(WRANGLER_VERSION) node delete.mjs
 
 ## lint: api ruff (lint + format) and mypy --strict, then web eslint, prettier --check, tsc --noEmit
 lint: lint-api lint-web

@@ -13,6 +13,7 @@ lib/signup.js            guards, validation (public/validate.js), insert and cou
 migrations/              the D1 schema
 stats.sql                the one SELECT `make waitlist-stats` runs
 build.mjs                public/ → .dist/ with the contact address and the origin written in
+delete.mjs               `make waitlist-delete`: one address off the list, matched by its hex (no SQL or shell text)
 test/                    node --test (`make test-waitlist`); the page test is web/e2e/waitlist/
 ```
 
@@ -31,12 +32,19 @@ test/                    node --test (`make test-waitlist`); the page test is we
 3. `make waitlist-migrate`
 4. `make deploy-waitlist CONTACT_EMAIL=<public contact address>` (or put `CONTACT_EMAIL=…` in the checkout's
    `.env`). In the Pages project, add the custom domain `join.<domain>` (Cloudflare adds the DNS record).
-5. Cloudflare → Security → WAF → Rate limiting rules (the free plan includes one rule): hostname equals
-   `join.<domain>` and path equals `/api/signup`, method POST, 5 requests per 10 s per IP → block for 10 s. If
-   0013a needs the zone's one free rule later, widen this one to an OR of both paths.
+5. Cloudflare → Security → WAF → Rate limiting rules (the free plan includes one rule): **URI path equals
+   `/api/signup`**, 5 requests per 10 s per IP → block for 10 s. The free plan's rule may only match on the URI
+   path (not the hostname or the method), and that is enough: across the zone only this page serves
+   `/api/signup` (the app's API has no `/api/` paths, and the apex web is static), and a GET there is a 405
+   anyway. `homie-waitlist.pages.dev` is outside the zone, so the Functions refuse it themselves (403 for a
+   signup, `{"total": null}` without D1 for the count). If 0013a needs the zone's one free rule later, widen
+   this one to an OR of both paths.
 6. `make waitlist-stats` any time.
-7. To remove an entry on request (the privacy line promises it), with the address in lower case:
-   `pnpm dlx wrangler@<v> d1 execute homie-waitlist --remote --command "DELETE FROM signups WHERE email = '<address>'"`
+7. To remove an entry on request (the privacy line promises it): `make waitlist-delete`, then type or paste
+   the address and press Enter. It reads the address from stdin (never the command line, so no shell sees
+   it), normalises it as the signup did, prints how many rows match (one per side), deletes them by the hex of
+   the address (so a quote in an address cannot change the SQL) and counts again. Never paste an address into
+   a `wrangler d1 execute --command` by hand: the email rule allows quotes, `$(…)` and backticks.
 
 ## Deploying
 
@@ -76,8 +84,9 @@ It never selects an address or a phone number.
   without the address or the phone.
 - `GET /api/count` answers `{"total": n}` from 50 signups (`COUNTER_MIN` in `lib/signup.js`), else
   `{"total": null}`, and the page shows the counter only for a number. The response sits in the edge cache
-  (`caches.default`) for 60 s, so D1 counts at most once a minute per Cloudflare location (the Cache API works
-  on the custom domain, not on `*.pages.dev`).
+  (`caches.default`) for 60 s, so D1 counts at most once a minute per Cloudflare location. The Cache API works
+  on the custom domain only, so on any other host (`*.pages.dev`) the count answers `{"total": null}` without
+  touching D1.
 - The page needs JavaScript to sign up: without it the forms render, but submitting does nothing useful.
 - The page makes no third-party request (no analytics, fonts or CDN); `_headers` sets a strict CSP.
 
