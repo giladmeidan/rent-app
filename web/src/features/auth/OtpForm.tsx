@@ -1,23 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Trans, useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
 import { CONTACT_EMAIL_INLINE } from '../../app/contact';
-import { sideOf } from '../../app/side';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { ErrorState } from '../../components/ErrorState';
 import { Field } from '../../components/Field';
-import { focusRing } from '../../components/focusRing';
 import { PasswordInput } from '../../components/PasswordInput';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
 import { TextInput } from '../../components/TextInput';
 import { useOnline } from '../../components/useOnline';
 import { passwordTooShort } from './password';
+import { askRoleFor, ConsentLine, nameIsValid, ProfileFields } from './ProfileFields';
 import { signedIn } from './signedIn';
 
 type OtpVerifyIn = components['schemas']['OtpVerifyIn'];
@@ -26,14 +24,8 @@ export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_RE = /^[0-9]{6}$/;
 const RESEND_COOLDOWN_S = 30;
 
-/** 2–40 code points after trimming, as Postgres `char_length` counts them. */
-const nameIsValid = (name: string) => {
-  const length = [...name.trim()].length;
-  return length >= 2 && length <= 40;
-};
-
 /** A 429 carries the API's `Retry-After` in seconds, or null when it is missing. */
-type TooMany = { kind: 'tooMany'; retryAfter: number | null };
+export type TooMany = { kind: 'tooMany'; retryAfter: number | null };
 type RequestResult = { kind: 'ok' } | { kind: 'invalidEmail' } | TooMany | { kind: 'failed' };
 
 async function requestCode(email: string): Promise<RequestResult> {
@@ -59,10 +51,7 @@ type VerifyResult =
   | { kind: 'failed' };
 
 /** True only for a body that is exactly `{"detail": <detail>}`. */
-function hasDetail(
-  body: unknown,
-  detail: 'profile_required' | 'account_suspended' | 'signup_blocked',
-): boolean {
+export function hasDetail(body: unknown, detail: string): boolean {
   return (
     typeof body === 'object' &&
     body !== null &&
@@ -96,29 +85,8 @@ async function verifyCode(body: OtpVerifyIn): Promise<VerifyResult> {
   }
 }
 
-/** `next`'s path alone (already `safeNext`-ed): its query and hash dropped. */
-function nextPath(next: string): string {
-  return next.split(/[?#]/, 1)[0] ?? next;
-}
-
 /** The request errors' line (too many, a failed verify): the kit `Field`'s error text. */
-const errorText = 'text-body-sm text-danger';
-
-/** One of the consent line's two links: a new tab, announced as such to screen readers. */
-function ConsentLink({ to, children }: { to: string; children?: ReactNode }) {
-  const { t } = useTranslation();
-  return (
-    <Link
-      to={to}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`rounded-sm font-medium text-accent underline underline-offset-4 ${focusRing}`}
-    >
-      {children}
-      <span className="sr-only"> {t('common.newTab')}</span>
-    </Link>
-  );
-}
+export const errorText = 'text-body-sm text-danger';
 
 type Props = {
   /** Signup: step 1 collects role and name too. Login: email only; the profile is asked for only
@@ -154,7 +122,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/', initialEm
 
   // No roles in the market (spec 0010b): a signup or a new email's login headed there is not asked
   // owner or seeker. An explicit role (`?role=`) still shows the question, preset.
-  const askRole = !(initialRole === null && sideOf(nextPath(next)) === 'market');
+  const askRole = askRoleFor(initialRole, next);
   const [step, setStep] = useState<'request' | 'verify'>('request');
   const [role, setRole] = useState<Role | null>(askRole ? initialRole : 'seeker');
   const [name, setName] = useState('');
@@ -339,38 +307,20 @@ export function OtpForm({ withProfile, initialRole = null, next = '/', initialEm
     backToEmailRef.current = true;
   }
 
-  const roleOptions: readonly ChoiceOption<Role>[] = [
-    // Owner first: it sits at the inline start (the right, in RTL).
-    { value: 'owner', label: t('auth.role.owner') },
-    { value: 'seeker', label: t('auth.role.seeker') },
-  ];
-  const roleChoice = (
-    <ChoiceGroup
-      legend={t('auth.role.label')}
-      name="role"
-      options={roleOptions}
-      value={role}
-      onChange={setRole}
+  const profileFields = (
+    <ProfileFields
+      id={id}
+      askRole={askRole}
+      role={role}
+      onRoleChange={setRole}
+      name={name}
+      onNameChange={(value) => {
+        setName(value);
+        setNameError(false);
+      }}
+      nameError={nameError}
+      nameRef={nameRef}
     />
-  );
-
-  const nameField = (
-    <Field
-      id={`${id}-name`}
-      label={t('auth.name.label')}
-      error={nameError ? t('auth.errors.nameLength') : undefined}
-    >
-      <TextInput
-        ref={nameRef}
-        type="text"
-        autoComplete="nickname"
-        value={name}
-        onChange={(e) => {
-          setName(e.target.value);
-          setNameError(false);
-        }}
-      />
-    </Field>
   );
 
   const passwordField = (
@@ -402,8 +352,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/', initialEm
   if (step === 'request') {
     return (
       <form noValidate onSubmit={onRequestSubmit} className="flex flex-col gap-6">
-        {withProfile && askRole && roleChoice}
-        {withProfile && nameField}
+        {withProfile && profileFields}
         {withProfile && passwordField}
         <Field
           id={`${id}-email`}
@@ -511,24 +460,12 @@ export function OtpForm({ withProfile, initialRole = null, next = '/', initialEm
       {profileNeeded && (
         <Card variant="muted" padding="md" className="flex flex-col gap-6">
           <p className="text-body">{t('auth.noAccountYet')}</p>
-          {askRole && roleChoice}
-          {nameField}
+          {profileFields}
         </Card>
       )}
       <div className="flex flex-col gap-1.5">
-        {askProfile && (
-          // The verify that sends the profile creates the account. New tab: this form's email and
-          // code live in its state only, and a link in this tab would lose them.
-          <p className="text-body-sm text-ink-muted">
-            <Trans
-              i18nKey="auth.signup.consent"
-              components={{
-                terms: <ConsentLink to="/terms" />,
-                privacy: <ConsentLink to="/privacy" />,
-              }}
-            />
-          </p>
-        )}
+        {/* The verify that sends the profile creates the account. */}
+        {askProfile && <ConsentLine />}
         <Button
           variant="primary"
           size="lg"

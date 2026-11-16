@@ -4,7 +4,7 @@ import { expect, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { routeTiles } from './helpers';
+import { GIS_STUB_BUTTON, routeTiles, uniqueEmail } from './helpers';
 import { test } from './fixtures';
 
 // No sign-up and no data (spec 0009c): every page here is public and renders the same on an empty
@@ -55,6 +55,18 @@ test('ac5_public_pages_pass_axe', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: he.auth.signup.title })).toBeVisible();
   await settled(page);
   await expectNoAxeViolations(page, '/signup');
+  // Spec 0016b NF2 (CI renders the stub Google button): the "one more step" panel of a new email.
+  await page.addInitScript(
+    (value) => Object.assign(window, { __GSI_CREDENTIAL__: value }),
+    `fake:a11y-${randomUUID()}:${uniqueEmail()}`,
+  );
+  await page.goto('/signup');
+  await page.getByRole('button', { name: GIS_STUB_BUTTON }).click();
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.auth.google.step.title }),
+  ).toBeVisible();
+  await settled(page);
+  await expectNoAxeViolations(page, '/signup (Google panel)');
 
   // The join page without a token: its "invalid link" state.
   await page.goto('/flatmates/join');

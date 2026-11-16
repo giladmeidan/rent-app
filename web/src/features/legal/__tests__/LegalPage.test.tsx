@@ -83,6 +83,18 @@ describe('LegalPage', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.legal.privacy.title);
   });
 
+  it('ac14_privacy_names_google_sign_in', async () => {
+    await visit('/privacy');
+    const { s1, s3 } = he.legal.privacy;
+    // Spec 0016b: the Google item is in section 3's list, right after OpenStreetMap.
+    const section = screen.getByRole('heading', { level: 2, name: s3.title }).parentElement;
+    const items = [...(section?.querySelectorAll('li') ?? [])].map((li) => li.textContent);
+    expect(items.indexOf(s3.i6)).toBe(items.indexOf(s3.i3) + 1);
+    expect(s3.i6).toContain('Google');
+    expect(s1.i1).toContain('Google');
+    expect(document.body.textContent).toContain(s1.i1);
+  });
+
   it('ac12_privacy_states_retention_periods', async () => {
     await visit('/privacy');
     const page = document.body.textContent ?? '';

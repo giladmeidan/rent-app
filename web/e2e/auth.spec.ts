@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, latestCode, requestCode, uniqueEmail } from './helpers';
+import { API, GIS_STUB_BUTTON, latestCode, requestCode, uniqueEmail } from './helpers';
 import { test } from './fixtures';
 
 test('ac7_signup_via_outbox_and_logout', async ({ page }) => {
@@ -63,6 +63,38 @@ test('0016a_signup_with_password_then_password_login', async ({ page }) => {
   await panel.getByLabel(he.auth.password.label, { exact: true }).fill(password);
   await panel.getByRole('button', { name: he.auth.password.submit, exact: true }).click();
 
+  await expect(page).toHaveURL('/me/listings');
+  await expect(header.getByText(he.header.greeting.replace('{{name}}', name))).toBeVisible();
+});
+
+test('ac13_google_signup_then_login', async ({ page }) => {
+  // Spec 0016b, CI only (its env renders the button): the GIS script is the stub, the API's
+  // verifier is `fake`, so the credential is `fake:<sub>:<email>`.
+  const name = 'גל';
+  const email = uniqueEmail();
+  // `uniqueEmail()`'s local part (`e2e-…`) is a valid fake `sub`.
+  const credential = `fake:${email.split('@')[0] ?? 'e2e'}:${email}`;
+  const header = page.getByRole('banner');
+  await page.addInitScript(
+    (value) => Object.assign(window, { __GSI_CREDENTIAL__: value }),
+    credential,
+  );
+
+  await page.goto('/signup');
+  await page.getByRole('button', { name: GIS_STUB_BUTTON }).click();
+  await expect(
+    page.getByRole('heading', { level: 2, name: he.auth.google.step.title }),
+  ).toBeVisible();
+  await page.getByText(he.auth.role.owner, { exact: true }).click();
+  await page.getByLabel(he.auth.name.label).fill(name);
+  await page.getByRole('button', { name: he.auth.google.step.submit }).click();
+  await expect(page).toHaveURL('/me/listings');
+  await expect(header.getByText(he.header.greeting.replace('{{name}}', name))).toBeVisible();
+
+  await header.getByRole('button', { name: he.header.logout }).click();
+  await expect(header.getByRole('link', { name: he.header.login })).toBeVisible();
+  await page.goto('/login');
+  await page.getByRole('button', { name: GIS_STUB_BUTTON }).click();
   await expect(page).toHaveURL('/me/listings');
   await expect(header.getByText(he.header.greeting.replace('{{name}}', name))).toBeVisible();
 });

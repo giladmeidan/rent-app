@@ -13,6 +13,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { TabPanel, Tabs } from '../../components/Tabs';
 import { usePageTitle } from '../../app/usePageTitle';
+import { GoogleButton } from './GoogleButton';
 import { safeNext } from './next';
 import { OtpForm } from './OtpForm';
 import { PasswordForm } from './PasswordForm';
@@ -50,33 +51,35 @@ export function LoginPage() {
             <Skeleton />
           </Loading>
         ) : (
-          <div className="flex flex-col gap-6">
-            <Tabs
-              label={t('auth.login.mode.label')}
-              variant="pill"
-              className="self-start"
-              items={[
-                { value: 'code', label: t('auth.login.mode.code') },
-                { value: 'password', label: t('auth.login.mode.password') },
-              ]}
-              value={mode}
-              onChange={setMode}
-              panelId={PANEL_ID}
-            />
-            <TabPanel panelId={PANEL_ID} value={mode}>
-              {mode === 'code' ? (
-                <OtpForm withProfile={false} next={next} initialEmail={codeEmail} />
-              ) : (
-                <PasswordForm
-                  next={next}
-                  onUseCode={(email) => {
-                    setCodeEmail(email);
-                    setMode('code');
-                  }}
-                />
-              )}
-            </TabPanel>
-          </div>
+          <GoogleButton next={next} context="signin">
+            <div className="flex flex-col gap-6">
+              <Tabs
+                label={t('auth.login.mode.label')}
+                variant="pill"
+                className="self-start"
+                items={[
+                  { value: 'code', label: t('auth.login.mode.code') },
+                  { value: 'password', label: t('auth.login.mode.password') },
+                ]}
+                value={mode}
+                onChange={setMode}
+                panelId={PANEL_ID}
+              />
+              <TabPanel panelId={PANEL_ID} value={mode}>
+                {mode === 'code' ? (
+                  <OtpForm withProfile={false} next={next} initialEmail={codeEmail} />
+                ) : (
+                  <PasswordForm
+                    next={next}
+                    onUseCode={(email) => {
+                      setCodeEmail(email);
+                      setMode('code');
+                    }}
+                  />
+                )}
+              </TabPanel>
+            </div>
+          </GoogleButton>
         )}
       </Card>
       <p className="text-center text-body text-ink-muted">

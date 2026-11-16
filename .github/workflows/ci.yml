@@ -40,6 +40,9 @@ jobs:
       REDIS_PORT: "6399"
       API_PORT: "8099"
       WEB_PORT: "5299"
+      # Renders the Google button so e2e can press it (spec 0016b; the API stays on the fake verifier).
+      # The GIS script is stubbed in every e2e test; this value never reaches Google.
+      VITE_GOOGLE_CLIENT_ID: "e2e-stub.apps.googleusercontent.com"
     steps:
       - uses: actions/checkout@v4
       # Node first: pnpm's installer needs `node`, which the Mac runner's PATH lacks (the Mac's is nvm's).
