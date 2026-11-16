@@ -9,6 +9,7 @@ import { deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harn
 import { RequireUser } from '../../auth/RequireUser';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut } from '../api';
+import type { TourLineOut } from '../../tours/api';
 import { ChatListPage } from '../ChatListPage';
 import { formatMessageTime } from '../format';
 import { type Conversation, conversation, directConversation } from './fixtures';
@@ -432,5 +433,28 @@ describe('ChatListPage', () => {
     expect(within(link).getByText(he.chat.list.closed)).toBeVisible();
     expect(link).not.toHaveTextContent('null');
     view.unmount();
+  });
+
+  it('ac3_tour_preview', async () => {
+    // A tour line previews as its text, never a null body ("You: null"); `body` is null there.
+    const when = 'יום ג׳ 17.11 · 18:20';
+    const last = (change: TourLineOut['change'], mine: boolean) => ({
+      body: null,
+      tour: { change, starts_at: '2026-11-17T16:20:00Z' },
+      mine,
+      created_at: '2026-11-10T10:00:00Z',
+    });
+    const booked = conversation({ last_message: last('booked', true) });
+    const theirs = conversation({ last_message: last('cancelled_by_lister', false) });
+    const mine = conversation({ last_message: last('cancelled_by_seeker', true) });
+    const { view } = renderPage([json([booked, theirs, mine])]);
+    await heading();
+    const previews = (await screen.findAllByTestId('last-message')).map((el) => el.textContent);
+    expect(previews).toEqual([
+      `נקבע סיור: ${when}`,
+      `הסיור של ${when} בוטל על ידי ${theirs.other_name}`,
+      `הסיור של ${when} בוטל`,
+    ]);
+    reset(view);
   });
 });

@@ -491,6 +491,44 @@ describe('MyListingsPage', () => {
     expect(hrefs(cApartment as HTMLElement).some((h) => h.endsWith('/flatmates'))).toBe(false);
   });
 
+  it('ac5_tours_link', async () => {
+    const live = listing();
+    const paused = listing({ status: 'paused' });
+    const expired = listing({ expires_at: '2020-01-01T00:00:00Z' });
+    const room = listing({ listing_type: 'room' });
+    const pausedRoom = listing({ listing_type: 'room', status: 'paused' });
+    const removed = listing({ removed: true });
+    const all = [live, paused, expired, room, pausedRoom, removed];
+    const tours = (card: HTMLElement) =>
+      within(card).queryByRole('link', { name: he.listings.mine.tours });
+
+    mockApi({ 'GET /me/listings': [json(all)] });
+    let view = render();
+    const apartments = (await screen.findAllByRole('article')) as HTMLElement[];
+    // A live apartment links to its tour times; paused, expired and removed ones do not.
+    const [cLive, cPaused, cExpired, cRemoved] = apartments as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(tours(cLive)).toHaveAttribute('href', `/me/listings/${live.id}/tours`);
+    expect(tours(cPaused)).toBeNull();
+    expect(tours(cExpired)).toBeNull();
+    expect(tours(cRemoved)).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    mockApi({ 'GET /me/listings': [json(all)] });
+    view = renderRooms();
+    const [cRoom, cPausedRoom] = (await screen.findAllByRole('article')) as [
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(tours(cRoom)).toHaveAttribute('href', `/me/listings/${room.id}/tours`);
+    expect(tours(cPausedRoom)).toBeNull();
+  });
+
   it('ac1_owner_block', async () => {
     const live = listing({
       street: '\u05d0\u05d7\u05d3',
@@ -548,6 +586,7 @@ describe('MyListingsPage', () => {
       he.listings.actions.pause,
       he.listings.actions.edit,
       a(12, 5),
+      he.listings.mine.tours,
     ]);
     expect(order(cPaused as HTMLElement)).toEqual([
       he.listings.actions.resume,
@@ -583,6 +622,7 @@ describe('MyListingsPage', () => {
       he.listings.actions.pause,
       he.listings.actions.edit,
       a(room.applicant_count, room.new_applicant_count),
+      he.listings.mine.tours,
       he.listings.mine.people,
       i18n.t('listings.mine.flatmates', { count: 1 }),
     ]);

@@ -1,7 +1,7 @@
 ---
 id: 0018e
 title: The lister's tour-times page and the seeker's slot picker in the chat thread, with tour lines in the thread and the chat list (web half of 0018a)
-status: verified
+status: in-review
 depends_on: [0018a]   # all 7 endpoints, the chat fields (`MessageOut.tour`, `LastMessageOut.tour`, `ThreadOut.tour`) and the error codes are 0018a's. Branch from 0018a's branch once its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [qa, ux]   # qa: two flows (open times, book/move/cancel), error mapping; ux: a new page, a thread card, a dialog, a system line. No security: no new endpoint or rule (0018a's are reviewed there). No perf
 estimate: 1 coder run   # coder Sonnet/medium: UI over a finished API, no migration
@@ -78,7 +78,7 @@ No artboard covers tours (PRODUCT.md "Brand": no new artboards); anatomy from th
   `listing_not_live` = `tours.times.notLive`; others via `tourErrorText` (offline, 429, generic). Errors in
   `role="alert"`; success moves focus to the new window's heading.
 - Windows list grouped by Israeli day (`formatTourDay`), each window a `Card`: "18:00–20:00 · 20 דקות"
-  (`tours.times.window`), its slots as a list: free → `tours.times.free` "פנוי"; booked → `tours.times.booked`
+  (the window heading is JSX: a `<bdi dir="ltr">` time range plus `tours.times.slotOption`; no `tours.times.window` key), its slots as a list: free → `tours.times.free` "פנוי"; booked → `tours.times.booked`
   "תפוס · {{name}}" + a ghost link `tours.times.toChat` "לצ'אט" (`/chat/:conversation_id`). A ghost `Button`
   `tours.times.delete` "מחיקה" (confirm `Dialog`: `tours.times.deleteConfirm` "למחוק את החלון הזה?"); a 409
   `window_has_tours` → `tours.times.errors.hasTours` "יש סיורים שנקבעו בחלון הזה. אפשר לבטל אותם מהצ'אט ואז למחוק".
@@ -109,7 +109,7 @@ No artboard covers tours (PRODUCT.md "Brand": no new artboards); anatomy from th
 `formatTourWhen(tour.starts_at)` and `name` = sender name (or `account.deletedName`):
 - `booked` "נקבע סיור: {{when}}"; `rescheduled` "הסיור הועבר ל־{{when}}"; `cancelled_by_seeker` and
   `cancelled_by_lister` "הסיור של {{when}} בוטל על ידי {{name}}"; `cancelled_by_system` "הסיור של {{when}} בוטל".
-  Mine: `tours.line.cancelledMine` "ביטלת את הסיור של {{when}}" for a cancel I sent (impersonal-enough, no gender).
+  My own cancel reads impersonally, as `cancelled_by_system` ("הסיור של {{when}} בוטל"): the brand voice has no second person (UX review: `cancelledMine` "ביטלת…" dropped).
 
 **i18n keys added** (`web/src/locales/he.json`, voice impersonal, no gendered forms): every key quoted above under
 `tours.times.*`, `tours.card.*`, `tours.picker.*`, `tours.line.*`, `tours.errors.*` (`slotUnavailable`,
@@ -125,7 +125,7 @@ No artboard covers tours (PRODUCT.md "Brand": no new artboards); anatomy from th
   owner sees the hint link or the cancel; nothing for a flatmate, a direct chat, or `can_send = false` with no tour —
   `web/src/features/tours/__tests__/TourCard.test.tsx`
 - [ ] AC3 A tour message renders as a centred system line with the right text for each `change` (and
-  `cancelledMine` for my own cancel), and as the list preview —
+  the impersonal text for my own cancel), and as the list preview —
   `web/src/features/chat/__tests__/ChatThreadPage.test.tsx::ac3_tour_line`,
   `web/src/features/chat/__tests__/ChatListPage.test.tsx::ac3_tour_preview`
 - [ ] AC4 `formatTourWhen`, `formatTourTime`, `tourDay` show Israeli wall time across both DST changes (e.g.
@@ -157,9 +157,14 @@ From `graphify affected` on `main` (2026-11-16):
 - **R1 0018b overlap.** 0018b's web half reuses this spec's `features/tours/api.ts::cancelTour`, `format.ts` and the
   `tours` i18n object; it should branch from this spec's branch (orchestrator: 0018b `depends_on` gains 0018e for its
   web half).
-- **R2 Gender-neutral copy.** `tours.line.cancelledMine` "ביטלת…" is second person; the UX reviewer checks it against
-  the voice rule (no gender, no slash forms) and may switch to the impersonal "הסיור של {{when}} בוטל".
+- **R2 Gender-neutral copy.** Resolved by the UX review: no `tours.line.cancelledMine`; my own cancel uses the impersonal "הסיור של {{when}} בוטל".
 - Product questions stay on 0018a (R3, R6, R7, R8, R12).
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0018e — tour times page, slot picker, tour lines in chat   PR #122 (CI pending at push; merges after #119)
+Shipped: a lister opens "זמני סיור" on a live card and adds tour times; a shortlisted seeker books, moves or cancels a slot from the chat; the lister can cancel too; every change is a centred line in the thread and the chat-list preview.
+Demo: 1. as a lister, my listings → "זמני סיור" → add a 2 h window. 2. as a shortlisted seeker, open the chat → "קביעת סיור" → pick a slot. 3. "שינוי מועד" / "ביטול הסיור" and watch the thread line.
+Tests: +25 unit/component (vitest), +0 integration, +0 e2e (spec Out)
+Findings: 0 blockers, 1 major fixed, 8 minors fixed, 1 follow-up logged (SlotPicker labels need a ReactNode ChoiceGroup label)
+Changed in PRODUCT.md: nothing (R2 copy: my own cancel reads impersonally, "הסיור של {{when}} בוטל")
+Next spec: 0018b (tours page) reuses `features/tours/` api/format/errors/useCancelTour
