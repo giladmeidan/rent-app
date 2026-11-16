@@ -16,10 +16,10 @@ function copyWaitlist(origin) {
     cpSync(join(WAITLIST, entry), join(dir, entry), { recursive: true });
   }
   const toml = readFileSync(join(WAITLIST, 'wrangler.toml'), 'utf8');
-  assert.match(toml, /^ALLOWED_ORIGIN = "https:\/\/join\.example\.com"$/m);
+  assert.match(toml, /^ALLOWED_ORIGIN = "[^"]+"$/m);
   writeFileSync(
     join(dir, 'wrangler.toml'),
-    toml.replace('ALLOWED_ORIGIN = "https://join.example.com"', `ALLOWED_ORIGIN = "${origin}"`),
+    toml.replace(/^ALLOWED_ORIGIN = "[^"]+"$/m, `ALLOWED_ORIGIN = "${origin}"`),
   );
   return dir;
 }
