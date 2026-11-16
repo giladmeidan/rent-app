@@ -511,6 +511,7 @@ and `ci.yml`.
 - **Overlap with siblings, by design:** see Risks (shared files).
 
 ## Risks / open questions
+- **0017 overlap (orchestrator 2026-11-16):** spec 0017 (waitlist) defines `WRANGLER_VERSION` (an exact `:=` literal) and a `CONTACT_EMAIL` make variable in the Makefile. Whichever of 0013a / 0017 merges second reuses the existing definitions and keeps a single `WRANGLER_VERSION` line.
 - **Server log retention (Gilad, 2026-11-15, PRODUCT.md "Retention"):** server logs are kept 30 days, and the privacy policy says so (`0013h`). The runbook confirms Fly's own log retention is at most 30 days; a log shipper, if one is added later, is set to 30 days.
 - **Do not open homie to the public before 0013b is deployed.** Until then the API sees Fly's proxy address
   as every client, so the existing per-IP OTP limit (10 per IP per 15 minutes) is shared by everyone. That is
