@@ -8,6 +8,7 @@ conversations and messages are direct inserts. Spec 0013e (sessions and the lock
 
 import asyncio
 import base64
+import datetime as dt
 import hashlib
 import json
 import os
@@ -41,6 +42,7 @@ from app.db import make_engine
 from app.models import User
 from app.services import passwords
 from scripts.admin_role import apply_admin_role
+from tests import test_tours as tours_tests
 from tests.conftest import (
     API_DIR,
     TEST_DATABASE_URL,
@@ -1044,3 +1046,76 @@ def test_0016a_ac11_admin_cannot_read_passwords(
 
     for page in ("/admin/user/list", f"/admin/user/details/{owner}", "/admin/report/list"):
         assert signed_in.get(page).status_code == 200, page
+
+
+def test_ac13_admin_actions_cancel_tours(
+    db_engine: Engine, admin_role: str, gush_dan: uuid.UUID
+) -> None:
+    # Spec 0018a AC13: as `homie_admin`, hiding a listing cancels its upcoming tours, suspending a
+    # user cancels the upcoming tours they book or host; `system`, no chat line; past tours and
+    # other listings' tours stay booked.
+    now = tours_tests.db_now(db_engine)
+    hour = dt.timedelta(hours=1)
+
+    def booked(email: str, at: dt.timedelta, **listing: Any) -> tuple[uuid.UUID, ...]:
+        owner = make_owner(db_engine, f"owner-{email}")
+        seeker = make_seeker(db_engine, f"seeker-{email}")
+        listing_id = make_listing(db_engine, owner, gush_dan, **listing)
+        application = tours_tests.shortlisted(db_engine, listing_id, seeker, owner)
+        tour = tours_tests.make_tour(db_engine, listing_id, application, seeker, now + at)
+        return owner, seeker, listing_id, application, tour
+
+    _, _, hidden, hidden_app, hidden_tour = booked("h@example.com", 3 * hour)
+    past = tours_tests.make_tour(
+        db_engine, hidden, hidden_app, make_seeker(db_engine, "p@example.com"), now - 3 * hour
+    )
+    host, _, _, _, hosted_tour = booked("o@example.com", 4 * hour)
+    _, guest, _, _, guest_tour = booked("g@example.com", 5 * hour)
+    *_, untouched = booked("u@example.com", 6 * hour)
+
+    engine = create_engine(admin_role)
+    try:
+        with Session(engine) as session:
+            assert actions.hide_listings(session, [hidden]) == 1
+        with Session(engine) as session:
+            assert actions.suspend(session, [host, guest]) == 2
+    finally:
+        engine.dispose()
+
+    for tour in (hidden_tour, hosted_tour, guest_tour):
+        row = tours_tests.tour_row(db_engine, tour)
+        assert (row.status, row.cancelled_by, row.cancelled_at is not None) == (
+            "cancelled",
+            "system",
+            True,
+        )
+    for tour in (past, untouched):
+        assert tours_tests.tour_row(db_engine, tour).status == "booked"
+    assert _scalar(db_engine, "SELECT count(*) FROM messages WHERE tour_id IS NOT NULL") == 0
+
+
+def test_ac13_read_chat_shows_tour_lines(
+    signed_in: TestClient, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    # Spec 0018a AC13: a reported chat shows a tour line as "Tour <change>: <Israel time>".
+    owner = make_owner(db_engine, "owner@example.com")
+    seeker = make_seeker(db_engine, "seeker@example.com")
+    listing = make_listing(db_engine, owner, gush_dan)
+    chat = tours_tests.shortlisted(db_engine, listing, seeker, owner)
+    starts_at = dt.datetime(2026, 11, 18, 16, 20, tzinfo=dt.UTC)  # 18:20 in Israel (+02)
+    tour = tours_tests.make_tour(db_engine, listing, chat, seeker, starts_at)
+    _message(db_engine, chat, seeker, "hello", minutes_ago=10)
+    _execute(
+        db_engine,
+        "INSERT INTO messages (conversation_id, sender_id, tour_id, tour_change, tour_starts_at)"
+        " VALUES (:c, :s, :t, 'cancelled_by_lister', :at)",
+        c=chat,
+        s=owner,
+        t=tour,
+        at=starts_at,
+    )
+    report = _report(db_engine, seeker, owner, "chat", chat)
+    page = signed_in.get(f"/admin/report/chat/{report}")
+    assert page.status_code == 200
+    assert ">hello<" in page.text
+    assert ">Tour cancelled by lister: 2026-11-18 18:20<" in page.text

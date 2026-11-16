@@ -74,6 +74,7 @@ function conversation(n: number, overrides: Partial<ConversationOut>): Conversat
 
 const last = (body: string, mine = false, at = '2026-11-11T09:12:00Z') => ({
   body,
+  tour: null,
   mine,
   created_at: at,
 });
@@ -109,7 +110,7 @@ export const SIX_ROWS: ConversationOut[] = [
 let m = 0;
 function message(body: string, mine: boolean, sender: string, at: string): MessageOut {
   m += 1;
-  return { id: id(500 + m), body, mine, sender_name: sender, created_at: at };
+  return { id: id(500 + m), body, tour: null, mine, sender_name: sender, created_at: at };
 }
 
 const SIX_LINES = [
@@ -139,6 +140,7 @@ export function oneToOne(overrides: Partial<ThreadOut> = {}): ThreadOut {
     visible_from: null,
     can_send: true,
     truncated: false,
+    tour: null,
     messages: [
       message('היי, הדירה עדיין פנויה?', true, ME, '2026-11-10T08:00:00Z'),
       message('כן! מתי נוח לך לבוא?', false, MICHAL, '2026-11-10T08:05:00Z'),
@@ -175,6 +177,7 @@ export function group(): ThreadOut {
     visible_from: '2026-11-09T12:00:00Z',
     can_send: true,
     truncated: true,
+    tour: null,
     messages: [
       message('נעים מאוד, אני נועה', false, 'נועה', '2026-11-10T08:00:00Z'),
       message('מחפשת חדר מינואר', false, 'נועה', '2026-11-10T08:01:00Z'),

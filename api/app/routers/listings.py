@@ -36,6 +36,7 @@ from app.schemas.error import ErrorOut
 from app.schemas.listing import ClosureIn, ListingIn, ListingOut, ListingPatch, MyListingOut
 from app.services import listings as listings_service
 from app.services import photos as photos_service
+from app.services import tours
 
 router = APIRouter(tags=["listings"])
 
@@ -137,7 +138,7 @@ def update_listing(
     else:
         limits.check(r, user.id, limits.WRITE)
     try:
-        listing = listings_service.update_listing(db, user, listing_id, body)
+        listing, tour_changes = listings_service.update_listing(db, user, listing_id, body)
     except listings_service.ListingNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except listings_service.ListingRemovedError:
@@ -148,6 +149,7 @@ def update_listing(
         raise HTTPException(status_code=409, detail="listing_cap_reached") from None
     except listings_service.UnknownAreaError:
         raise HTTPException(status_code=422, detail="unknown_area") from None
+    tours.announce(r, tour_changes)
     photos = photos_service.photos_by_listing(db, [listing.id])[listing.id]
     return ListingOut.model_validate(listing).model_copy(
         update={"photos": photos_service.photos_out(photos)}

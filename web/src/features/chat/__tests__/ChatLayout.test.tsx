@@ -390,7 +390,7 @@ describe('ChatLayout', () => {
     ];
     const c = conversation({
       other_name: XSS,
-      last_message: { body: XSS, mine: false, created_at: '2026-11-10T10:00:00Z' },
+      last_message: { body: XSS, tour: null, mine: false, created_at: '2026-11-10T10:00:00Z' },
     });
     const t = thread({
       id: c.id,

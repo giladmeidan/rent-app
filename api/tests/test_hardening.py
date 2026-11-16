@@ -47,6 +47,14 @@ def _profile() -> dict[str, Any]:
     return _p(uuid.uuid4())
 
 
+def _tour_window() -> dict[str, Any]:
+    return {"date": "2027-01-12", "start": "18:00", "end": "20:00", "slot_minutes": 20}
+
+
+def _tour_start() -> dict[str, Any]:
+    return {"starts_at": "2027-01-12T16:00:00Z"}
+
+
 # (method, route path, `limits` bucket attribute, body or query). Path ids are random: the count
 # comes first, so the route need not find anything.
 LIMITED: list[tuple[str, str, str, Any]] = [
@@ -76,6 +84,15 @@ LIMITED: list[tuple[str, str, str, Any]] = [
     ("DELETE", "/me/photo", "WRITE", None),
     ("GET", "/rent-estimate", "ESTIMATE", {"city": "תל אביב", "street": "תירוש", "rooms": "4"}),
     ("PUT", "/me/password", "WRITE", {"password": "a-valid-password"}),  # 0016a
+    # 0018a
+    ("POST", "/listings/{listing_id}/tour-windows", "WRITE", _tour_window),
+    ("DELETE", "/tour-windows/{window_id}", "WRITE", None),
+    ("POST", "/applications/{application_id}/tour", "WRITE", _tour_start),
+    ("POST", "/applications/{application_id}/tour", "TOUR", _tour_start),
+    ("POST", "/tours/{tour_id}/reschedule", "WRITE", _tour_start),
+    ("POST", "/tours/{tour_id}/reschedule", "TOUR", _tour_start),
+    ("POST", "/tours/{tour_id}/cancel", "WRITE", None),
+    ("POST", "/tours/{tour_id}/cancel", "TOUR", None),
 ]
 # Write routes with their own limit, proved by their own specs.
 OWN = {
@@ -144,7 +161,7 @@ def test_ac1_every_write_route_has_a_limit() -> None:
         for method in (route.methods or set()) & WRITES
     }
     limited = {(method, path) for method, path, _, _ in LIMITED if method in WRITES}
-    assert len(limited) == 19
+    assert len(limited) == 24
     assert not (limited & OWN) and not (limited & EXEMPT) and not (OWN & EXEMPT)
     assert routes == limited | OWN | EXEMPT
 

@@ -31,6 +31,7 @@ from app.services import chat_events
 from app.services import flatmates as flatmates_service
 from app.services import people as people_service
 from app.services.flatmates import FLATMATES_MAX
+from tests import test_tours as tours_tests
 from tests.conftest import (
     Outbox,
     make_application,
@@ -634,6 +635,7 @@ def test_ac4_flatmate_sends_and_hears_events(
         assert item["unread_count"] == 1
         assert item["last_message"] == {
             "body": "m4",
+            "tour": None,
             "mine": False,
             "created_at": sent["created_at"],
         }
@@ -1134,19 +1136,26 @@ def test_ac12_statement_counts(
         assert len(sent) == 2, sent  # the session lookup, then the list
         assert "FROM conversations" in sent[1]
 
-    # The thread: session, header, messages, the flatmates (room only), the marker when new.
-    for caller, sender in ((owner, seeker), (seeker, owner), (mate, seeker)):
+    # The thread: session, header, messages, the flatmates (room only), the current tour (owner
+    # and seeker only, spec 0018a), the marker when new.
+    for caller, sender, tour in ((owner, seeker, 1), (seeker, owner, 1), (mate, seeker, 0)):
         _ok(_send(sender, chat, "new"), 201)
         first = measure(partial(_thread, caller, chat))
-        assert len(first) == 5, first
+        assert len(first) == 5 + tour, first
         assert "FROM listing_flatmates" in first[3]
-        assert first[4].lstrip().startswith(("UPDATE conversations", "INSERT INTO conversation"))
+        assert ("FROM tours" in first[4]) is bool(tour)
+        assert (
+            first[4 + tour]
+            .lstrip()
+            .startswith(("UPDATE conversations", "INSERT INTO conversation"))
+        )
         again = measure(partial(_thread, caller, chat))
-        assert len(again) == 4, again
+        assert len(again) == 4 + tour, again
     for caller in (owner, seeker):
         _ok(_thread(caller, flat))
         apartment_thread = measure(partial(_thread, caller, flat))
-        assert len(apartment_thread) == 3, apartment_thread  # as before 0008d: no flatmates SELECT
+        # as before 0008d: no flatmates SELECT; the current tour's (0018a)
+        assert len(apartment_thread) == 4, apartment_thread
 
     # A send adds none: session, the INSERT, the UPDATE (members from its RETURNING).
     for caller, conversation in ((owner, chat), (seeker, chat), (mate, chat), (owner, flat)):
@@ -1163,10 +1172,11 @@ def test_ac12_statement_counts(
         return response
 
     room_change = measure(partial(patch, room, chat, "submitted"))
-    assert len(room_change) == 4, room_change  # session, UPDATE, response row, member ids
+    # session, UPDATE, the tours UPDATE (0018a), response row, member ids
+    assert len(room_change) == 5, room_change
     assert "FROM applications" in room_change[3]
     assert len(measure(partial(patch, room, chat, "shortlisted"))) == 5  # plus the chat INSERT
-    assert len(measure(partial(patch, apartment, flat, "submitted"))) == 3
+    assert len(measure(partial(patch, apartment, flat, "submitted"))) == 4
 
 
 def _scans_of(node: dict[str, Any], relation: str) -> Iterator[dict[str, Any]]:
@@ -1243,3 +1253,44 @@ def test_ac13_non_member_send_is_404(
     assert _scalar(db_engine, "SELECT count(*) FROM messages") == 0
     assert _ids(stranger) == []
     assert _ids(mate) == [str(chat)]
+
+
+def test_ac14_flatmates_see_no_tours(
+    owner: TestClient,
+    owner_id: uuid.UUID,
+    seeker: TestClient,
+    seeker_id: uuid.UUID,
+    mate: TestClient,
+    mate_id: uuid.UUID,
+    room: str,
+    chat: uuid.UUID,
+    db_engine: Engine,
+    published: Published,
+) -> None:
+    # Spec 0018a AC14: a flatmate of the room never sees a tour line (thread, the list's newest
+    # message, the unread count) nor `ThreadOut.tour`, nor gets its event; owner and seeker do.
+    make_flatmate(db_engine, uuid.UUID(room), mate_id)
+    _ok(_send(seeker, chat, "hi all"), 201)
+    base = tours_tests.db_now(db_engine).replace(second=0, microsecond=0)
+    at = base + dt.timedelta(hours=3)
+    tours_tests.make_window(db_engine, uuid.UUID(room), at, at + dt.timedelta(hours=1))
+    published.calls.clear()
+    tour = _ok(seeker.post(f"/applications/{chat}/tour", json={"starts_at": at.isoformat()}), 201)
+    assert published.calls == [({owner_id, seeker_id}, chat, "message")]
+
+    mate_item = _item(mate, chat)
+    assert mate_item["last_message"]["body"] == "hi all" and mate_item["unread_count"] == 1
+    mate_thread = _ok(_thread(mate, chat))
+    assert [m["body"] for m in mate_thread["messages"]] == ["hi all"]
+    assert mate_thread["tour"] is None
+    for caller, unread in ((owner, 2), (seeker, 0)):
+        item = _item(caller, chat)
+        assert item["unread_count"] == unread
+        assert item["last_message"]["body"] is None
+        assert item["last_message"]["tour"]["change"] == "booked"
+        thread = _ok(_thread(caller, chat))
+        assert [m["tour"]["change"] if m["tour"] else m["body"] for m in thread["messages"]] == [
+            "hi all",
+            "booked",
+        ]
+        assert thread["tour"] == tour

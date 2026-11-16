@@ -40,8 +40,17 @@ from pydantic import ValidationError
 from sqlalchemy import and_, func, insert, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Application, Area, Listing, ListingFlatmate, ListingPriceChange, User
+from app.models import (
+    Application,
+    Area,
+    Listing,
+    ListingFlatmate,
+    ListingPriceChange,
+    Tour,
+    User,
+)
 from app.schemas.listing import ClosureIn, ListingIn, ListingPatch
+from app.services import tours
 
 LISTING_TTL_DAYS = 90
 # Policy (PRODUCT.md "Trust (MVP)"): a listing renews from this many days before `expires_at`.
@@ -186,12 +195,16 @@ def _merged(listing: Listing, patch: ListingPatch) -> ListingIn:
         ) from None
 
 
-def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: ListingPatch) -> Listing:
+def update_listing(
+    db: Session, owner: User, listing_id: uuid.UUID, patch: ListingPatch
+) -> tuple[Listing, list[tours.TourChange]]:
     """Apply the sent fields of `patch` to the caller's listing and refresh `updated_at`. Resuming
     a paused listing re-applies the cap; a PATCH never moves `expires_at`; only `renew_listing`
-    does. Raises `ListingNotFoundError`, `ListingRemovedError` (checked first),
-    `ListingExpiredError` (past `expires_at`, checked next), `UnknownAreaError`,
-    `ListingCapReachedError` or `RequestValidationError` (nothing written). Commits."""
+    does. Pausing a live listing cancels its upcoming tours (spec 0018a; `cancelled_by =
+    'system'`, the owner the lines' sender), returned for `tours.announce`. Raises
+    `ListingNotFoundError`, `ListingRemovedError` (checked first), `ListingExpiredError` (past
+    `expires_at`, checked next), `UnknownAreaError`, `ListingCapReachedError` or
+    `RequestValidationError` (nothing written). Commits."""
     try:
         # Row lock: a concurrent PATCH of the same listing waits and then merges onto this one's
         # result, so two individually valid patches can never combine into a CHECK failure.
@@ -221,6 +234,8 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
             # Live again, so it was not rented: the closure answer goes (spec 0014b).
             values.update(close_reason=None, final_rent_ils=None, closed_at=None)
         price_changed = data.price_ils != listing.price_ils
+        # Read before the UPDATE: its RETURNING refreshes `listing` itself (populate_existing).
+        pausing = patch.status == "paused" and listing.status == "active"
         if patch.status is not None:
             values["status"] = patch.status
         if any(getattr(data, name) != getattr(listing, name) for name in _ADDRESS_FIELDS):
@@ -239,11 +254,16 @@ def update_listing(db: Session, owner: User, listing_id: uuid.UUID, patch: Listi
                     listing_id=listing_id, price_ils=updated.price_ils
                 )
             )
+        changes = (
+            tours.cancel_upcoming(db, Tour.listing_id == listing_id, actor_id=owner.id, by="system")
+            if pausing
+            else []
+        )
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return updated
+    return updated, changes
 
 
 def renew_listing(db: Session, owner: User, listing_id: uuid.UUID) -> Listing:

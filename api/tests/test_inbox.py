@@ -885,9 +885,10 @@ def test_ac5_patch_returns_scored_applicant(
         statements.clear()
         body = _ok(_set_status(owner, listing, application, {"status": target}))
         sent = list(statements)
-        assert len(sent) == 3, (target, sent)
+        assert len(sent) == 4, (target, sent)
         assert "UPDATE applications" in sent[1]
-        assert "FROM applications" in sent[2]
+        assert sent[2].lstrip().startswith("UPDATE tours")  # cancels its tours (0018a)
+        assert "FROM applications" in sent[3]
         assert body == _by_id(_ok(_applicants(owner, listing)))[str(application)]
         assert body["match"] is not None
 

@@ -36,11 +36,16 @@ from app.models import (
     PersonPair,
     RoomPair,
     SeekerProfile,
+    Tour,
+    TourFeed,
     User,
     UserPassword,
 )
 from app.models import Session as SessionRow
-from app.services import auth  # a module import: auth.py imports this module too
+from app.services import (
+    auth,  # a module import: auth.py imports this module too
+    tours,
+)
 from app.services.photo_store import PhotoStore
 from app.services.photos import _discard, object_names
 
@@ -85,10 +90,11 @@ def email_blocked(db: Session, email: str) -> bool:
     return bool(db.scalar(select(exists().where(BlockedEmail.email_hmac == email_hmac(email)))))
 
 
-def delete_account(db: Session, store: PhotoStore, user: User) -> None:
+def delete_account(db: Session, store: PhotoStore, user: User) -> list[tours.TourChange]:
     """Delete `user`'s account (the spec's 13 steps, in order). A second call on the tombstone,
     including one that waited on the first's row lock, writes nothing. Commits; any failure before
-    the commit rolls everything back and deletes no object."""
+    the commit rolls everything back and deletes no object. Returns the tours it cancelled (spec
+    0018a) for `tours.announce`; `[]` on the tombstone."""
     me = user.id
     try:
         # 1. Lock the row, read as columns (the identity-mapped `user` predates the lock).
@@ -101,7 +107,7 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
         ).one()
         if locked.deleted_at is not None:
             db.rollback()
-            return
+            return []
         my_listings = select(Listing.id).where(Listing.owner_id == me).scalar_subquery()
         # 3. Listings off the site, before the photos: its row locks wait for a photo write that
         # holds `_lock_own_listing`, so step 4 sees that write's committed row. The personal
@@ -179,6 +185,13 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             .values(status="withdrawn", message=None, updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
+        # 6b. My upcoming tours, as seeker and on my listings (spec 0018a), with a line each.
+        changes = tours.cancel_upcoming(
+            db,
+            or_(Tour.seeker_id == me, Tour.listing_id.in_(my_listings)),
+            actor_id=me,
+            by="system",
+        )
         # 7.-11. Likes, matches, flats I joined, read markers, profile, every session, the
         # password (spec 0016a: a CHECK cannot see another table).
         for statement in (
@@ -191,6 +204,8 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             delete(SeekerProfile).where(SeekerProfile.user_id == me),
             delete(SessionRow).where(SessionRow.user_id == me),
             delete(UserPassword).where(UserPassword.user_id == me),
+            # The calendar feed (spec 0018a): a tombstone never fires the FK cascade.
+            delete(TourFeed).where(TourFeed.user_id == me),
         ):
             db.execute(statement.execution_options(synchronize_session=False))
         # 12. The tombstone.
@@ -216,3 +231,4 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
     if names:
         _discard(store, names)
     log.info("account deleted: %d photo objects", len(names))
+    return changes

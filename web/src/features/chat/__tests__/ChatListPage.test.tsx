@@ -76,7 +76,12 @@ describe('ChatListPage', () => {
 
     // Four chats, in the API's order.
     const mine = conversation({
-      last_message: { body: 'see you <b>soon</b>', mine: true, created_at: '2026-11-10T10:00:00Z' },
+      last_message: {
+        body: 'see you <b>soon</b>',
+        tour: null,
+        mine: true,
+        created_at: '2026-11-10T10:00:00Z',
+      },
     });
     const fresh = conversation({ last_message: null, is_new: true });
     const unread = conversation({
@@ -84,13 +89,14 @@ describe('ChatListPage', () => {
       is_new: true,
       last_message: {
         body: '\u05e9\u05dc\u05d5\u05dd',
+        tour: null,
         mine: false,
         created_at: '2026-11-10T10:00:00Z',
       },
     });
     const closed = conversation({
       can_send: false,
-      last_message: { body: 'bye', mine: false, created_at: '2026-11-10T10:00:00Z' },
+      last_message: { body: 'bye', tour: null, mine: false, created_at: '2026-11-10T10:00:00Z' },
     });
     const all = [mine, fresh, unread, closed];
     renderPage([json(all)]);
@@ -144,7 +150,7 @@ describe('ChatListPage', () => {
     const unread = conversation({
       other_name: 'Noa',
       unread_count: 2,
-      last_message: { body: 'hello there', mine: false, created_at: at },
+      last_message: { body: 'hello there', tour: null, mine: false, created_at: at },
     });
     const fresh = conversation({ other_name: 'Yael', is_new: true });
     // A flatmate in a group of 4, closed, unread: every mark and chip in one row.
@@ -154,7 +160,7 @@ describe('ChatListPage', () => {
       member_count: 4,
       can_send: false,
       unread_count: 2,
-      last_message: { body: 'bye now', mine: false, created_at: at },
+      last_message: { body: 'bye now', tour: null, mine: false, created_at: at },
     });
     const { view } = renderPage([json([unread, fresh, full])]);
     const link = (c: Conversation) => screen.findByRole('link', { name: new RegExp(c.other_name) });

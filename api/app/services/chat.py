@@ -79,6 +79,7 @@ from app.models import (
     User,
 )
 from app.redis_client import RedisClient
+from app.services import tours
 from app.services.rate_limit import count_or_raise
 
 CHAT_RATE_LIMIT_MINUTE = 20
@@ -134,13 +135,15 @@ class Thread:
     """`get_thread`'s result: the header row (`listing_*`, null for a direct chat; `other_name`,
     `can_send`, `my_role`, `visible_from`), the members (owner, flatmates by `joined_at`, seeker;
     a direct chat's are its two people, `owner_id` then `seeker_id`, both role `person`) and the
-    newest `THREAD_LIMIT` visible messages oldest first (rows of `id`, `body`, `mine`,
-    `sender_name`, `created_at`)."""
+    newest `THREAD_LIMIT` visible messages oldest first (rows of `id`, `body`, `tour_change`,
+    `tour_starts_at`, `mine`, `sender_name`, `created_at`) and, for the owner and the seeker of an
+    application chat, its current tour (`tours.current_tour`, spec 0018a)."""
 
     header: Row[Any]
     members: list[Member]
     messages: Sequence[Row[Any]]
     truncated: bool
+    tour: Row[Any] | None  # the application's current tour for its owner and seeker (0018a)
 
 
 def _is_room() -> Any:
@@ -236,6 +239,11 @@ def _is_party(me: User) -> Any:
     return or_(Conversation.owner_id == me.id, Conversation.seeker_id == me.id)
 
 
+def _tour_line_visible(me: User) -> Any:
+    """A tour line (spec 0018a) is seen by the owner and the seeker only, never a flatmate."""
+    return or_(Message.tour_change.is_(None), _is_party(me))
+
+
 def _visible_from(me: User) -> Any:
     """Where `me`'s view of the conversation begins: a flatmate's `joined_at`, else `-infinity`."""
     return case((_is_party(me), _NEG_INFINITY), else_=_F.joined_at)
@@ -294,12 +302,15 @@ def list_statement(me: User) -> Select[Any]:
     newest = (
         select(
             func.left(Message.body, PREVIEW_LENGTH).label("body"),
+            Message.tour_change.label("tour_change"),
+            Message.tour_starts_at.label("tour_starts_at"),
             (Message.sender_id == me.id).label("mine"),
             Message.created_at.label("created_at"),
         )
         .where(
             Message.conversation_id == Conversation.id,
             Message.created_at >= visible_from,
+            _tour_line_visible(me),
         )
         .order_by(Message.created_at.desc(), Message.id.desc())
         .limit(1)
@@ -315,6 +326,7 @@ def list_statement(me: User) -> Select[Any]:
             Message.created_at > since,
             Message.created_at >= visible_from,
             Message.sender_id != me.id,
+            _tour_line_visible(me),
         )
         .correlate_except(Message)
         .scalar_subquery()
@@ -344,6 +356,8 @@ def list_statement(me: User) -> Select[Any]:
             my_read_at.is_(None).label("is_new"),
             unread.label("unread_count"),
             newest.c.body.label("last_body"),
+            newest.c.tour_change.label("last_tour_change"),
+            newest.c.tour_starts_at.label("last_tour_starts_at"),
             newest.c.mine.label("last_mine"),
             newest.c.created_at.label("last_created_at"),
         )
@@ -381,7 +395,8 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
     """One of `me`'s conversations with its members and its newest `THREAD_LIMIT` visible messages
     (any application status), marking it read for `me`. Raises `ConversationNotFoundError`. Two
     statements (the header with the owner's and the seeker's names, then the messages), plus the
-    flatmates SELECT on a room application, plus one write (the owner's or seeker's UPDATE, a
+    flatmates SELECT on a room application, plus the current tour's SELECT for the owner and the
+    seeker of an application chat (spec 0018a), plus one write (the owner's or seeker's UPDATE, a
     flatmate's upsert) and a commit only when `me`'s read marker is null or older than the newest
     message (a poll with nothing new writes nothing, NF3)."""
     owner = aliased(User, name="owner_user")
@@ -430,6 +445,8 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
             select(
                 Message.id,
                 Message.body,
+                Message.tour_change,
+                Message.tour_starts_at,
                 (Message.sender_id == me.id).label("mine"),
                 sender.display_name.label("sender_name"),
                 Message.created_at,
@@ -439,12 +456,15 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
         )
         if visible_from is not None:
             messages_query = messages_query.where(Message.created_at >= visible_from)
+        role: Role = header.my_role
+        if role == "flatmate":
+            # `_tour_line_visible`, resolved by the header's role (no `conversations` join here).
+            messages_query = messages_query.where(Message.tour_change.is_(None))
         newest_first = db.execute(
             messages_query.order_by(Message.created_at.desc(), Message.id.desc()).limit(
                 THREAD_LIMIT + 1
             )
         ).all()
-        role: Role = header.my_role
         # By id, not by role: in a direct chat both people are `person`.
         i_am_seeker = header.seeker_id == me.id
         if role == "person":
@@ -501,6 +521,11 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
                     is_me=role == "seeker",
                 )
             )
+        tour = (
+            tours.current_tour(db, conversation_id)
+            if role in ("owner", "seeker") and header.application_listing_id is not None
+            else None
+        )
         my_read_at: dt.datetime | None = header.my_read_at
         last_message_at: dt.datetime | None = header.last_message_at
         if my_read_at is None or (last_message_at is not None and my_read_at < last_message_at):
@@ -535,6 +560,7 @@ def get_thread(db: Session, me: User, conversation_id: uuid.UUID) -> Thread:
         members=members,
         messages=messages,
         truncated=len(newest_first) > THREAD_LIMIT,
+        tour=tour,
     )
 
 

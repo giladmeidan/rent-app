@@ -1,7 +1,7 @@
 ---
 id: 0018a
 title: "API: a lister opens tour times on a listing (apartment or room); a seeker they shortlisted books, moves or cancels a tour, the lister can cancel it, each change is a line in the chat, and cleanup cancels the tours involved"
-status: verified
+status: in-review
 depends_on: []   # 0018b, 0018c, 0018d and 0018e (this spec's web half, split by the verifier 2026-11-16) depend on this one (shared contract in specs/TOURS-PLAN.md)
 reviewers: [code, security, qa]   # security: new gates on applications/listings, chat visibility (flatmates), admin grants, a new table holding a token hash; qa: 7 endpoints, 5 cleanup paths. No ux: no screen (0018e). No perf: ≤ 30 windows a listing, slots computed in Python, every query by primary key or a partial index
 estimate: 1 coder run   # coder Opus/high (migration on `messages`, row locks, cleanup in 5 transactions). 7 endpoints is above the checklist's ~3, but 3 are plain owner CRUD and the contract fixes them in this spec
@@ -169,8 +169,9 @@ No overlap constraint (that needs `btree_gist`): the service checks overlap unde
 `cancel_upcoming`, the admin cancels) sets it explicitly, and 0018c's `reminder_sent_at` write must not.
 
 CHECKs: `ck_tours_status` `status IN ('booked', 'cancelled')`; `ck_tours_cancelled` `(status = 'booked' AND
-cancelled_by IS NULL AND cancelled_at IS NULL) OR (status = 'cancelled' AND cancelled_by IN ('seeker', 'lister',
-'system') AND cancelled_at IS NOT NULL)`; `ck_tours_range` `ends_at > starts_at`. Indexes:
+cancelled_by IS NULL AND cancelled_at IS NULL) OR (status = 'cancelled' AND cancelled_by IS NOT NULL AND cancelled_by
+IN ('seeker', 'lister', 'system') AND cancelled_at IS NOT NULL)` (the `IS NOT NULL` closes the NULL hole: a NULL CHECK
+passes, coder 2026-11-16); `ck_tours_range` `ends_at > starts_at`. Indexes:
 `uq_tours_listing_slot` UNIQUE `(listing_id, starts_at) WHERE status = 'booked'` (never two booked tours on one
 slot; also serves 0018b's per-listing agenda); `ix_tours_application_id (application_id)`; `ix_tours_seeker_id
 (seeker_id) WHERE status = 'booked'` (contract; 0018b's seeker side, account deletion); `ix_tours_booked_starts_at (starts_at) WHERE status = 'booked'` (0018c's reminder scan). "At most one
@@ -184,9 +185,9 @@ rules; this spec's `delete_account` already deletes the row (contract: a tombsto
 
 **`messages`** (changed): `body` becomes NULLable; new `tour_id` uuid NULL FK `tours.id` ON DELETE CASCADE
 (`fk_messages_tour_id`), `tour_change` text NULL, `tour_starts_at` timestamptz NULL. New CHECK `ck_messages_kind`:
-`(tour_change IS NULL AND body IS NOT NULL AND tour_id IS NULL AND tour_starts_at IS NULL) OR (tour_change IN
-('booked', 'rescheduled', 'cancelled_by_seeker', 'cancelled_by_lister', 'cancelled_by_system') AND body IS NULL AND
-tour_id IS NOT NULL AND tour_starts_at IS NOT NULL)`. `ck_messages_body_length` stays (NULL passes it). Partial index
+`(tour_change IS NULL AND body IS NOT NULL AND tour_id IS NULL AND tour_starts_at IS NULL) OR (tour_change IS NOT
+NULL AND tour_change IN ('booked', 'rescheduled', 'cancelled_by_seeker', 'cancelled_by_lister', 'cancelled_by_system')
+AND body IS NULL AND tour_id IS NOT NULL AND tour_starts_at IS NOT NULL)` (`IS NOT NULL` as above). `ck_messages_body_length` stays (NULL passes it). Partial index
 `ix_messages_tour_id (tour_id) WHERE tour_id IS NOT NULL` (the cascade from `tours`). `tour_starts_at` is the
 snapshot the line shows (a reschedule moves the tour row, not old lines).
 
@@ -377,6 +378,11 @@ From `graphify affected` (main, 2026-11-16; re-run by the verifier) plus grep:
 - `api/scripts/admin_role.py::_COLUMN_GRANTS`, `_NO_ACCESS` → `tests/test_admin_isolation.py`; HANDOFF Next Steps 3
   (re-apply the admin role grants after this migration).
 - `app/limits.py` registry → `tests/test_hardening.py::LIMITED`.
+- Statement counts the cancel and the current-tour SELECT move (found by the coder): `set_applicant_status` +1 UPDATE
+  on a move to `submitted` / `declined` → `tests/test_inbox.py:888` (`test_ac5_patch_returns_scored_applicant`),
+  `tests/test_chat.py:292,306` (`test_ac1_shortlist_opens_one_conversation`), `test_flatmates.py::
+  test_ac12_statement_counts` (status changes and the apartment thread); the thread +1 → `tests/test_chat.py::
+  test_ac5_thread_reads_and_marks_read`.
 
 ## Risks / open questions
 - **R1 Size.** Resolved by the verifier: split into this spec (API, Opus/high) and `0018e-tour-slots-web` (web,

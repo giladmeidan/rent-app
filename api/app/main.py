@@ -34,6 +34,7 @@ from app.routers import (
     rent_estimate,
     reports,
     search,
+    tours,
 )
 from app.schemas.error import ErrorOut
 from app.services.accounts import AccountDeletedError
@@ -198,6 +199,7 @@ def create_app() -> FastAPI:
     app.include_router(photos.router)
     app.include_router(rent_estimate.router)
     app.include_router(reports.router)
+    app.include_router(tours.router)
     if settings.photo_backend == "file":
         # Dev, CI and e2e: the api serves the file photo store itself (spec 0010d). Created first:
         # `StaticFiles` refuses a missing directory. With `r2` nothing is mounted.
