@@ -10,7 +10,7 @@ import os
 import re
 import secrets
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -54,8 +54,8 @@ from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Application, Listing, SeekerProfile  # noqa: E402
 from app.redis_client import get_redis  # noqa: E402
-from app.services import listing_views  # noqa: E402
-from app.services.email import get_email_sender  # noqa: E402
+from app.services import listing_views, tour_mail  # noqa: E402
+from app.services.email import Attachment, get_email_sender  # noqa: E402
 from app.services.photo_store import FilePhotoStore, get_photo_store  # noqa: E402
 from scripts.admin_role import ROLE, apply_admin_role  # noqa: E402
 from scripts.seed import seed_areas  # noqa: E402
@@ -167,6 +167,14 @@ def views_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     """Listing views use `test-views:` (spec 0011e): the spec stack's own worker drains
     `views:pending` on the same Redis every minute."""
     monkeypatch.setattr(listing_views, "KEY_PREFIX", "test-views:")
+
+
+@pytest.fixture(autouse=True)
+def tour_mail_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tour mail uses `test-tour_mail` (spec 0018c), emptied before each test: the spec stack's own
+    worker drains `tour_mail` on the same Redis every 10 s."""
+    monkeypatch.setattr(tour_mail, "QUEUE_KEY", "test-tour_mail")
+    get_redis().delete("test-tour_mail")
 
 
 @pytest.fixture(autouse=True)
@@ -330,13 +338,18 @@ def cbs_figures(cbs_clean: Engine) -> Engine:
 
 
 class Outbox:
-    """In-memory `EmailSender`: collects `(to, subject, body)`."""
+    """In-memory `EmailSender`: collects `(to, subject, body)` in `messages` and, at the same
+    index, `(to, attachments)` in `attachments` (spec 0018c)."""
 
     def __init__(self) -> None:
         self.messages: list[tuple[str, str, str]] = []
+        self.attachments: list[tuple[str, Sequence[Attachment]]] = []
 
-    def send(self, to: str, subject: str, body: str) -> None:
+    def send(
+        self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
         self.messages.append((to, subject, body))
+        self.attachments.append((to, attachments))
 
 
 @pytest.fixture

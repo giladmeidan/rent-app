@@ -91,8 +91,14 @@ services:
       # Official rent figures (spec 0014a): `off` (no request) unless a deployment sets `nadlan`.
       RENT_REFERENCE: ${RENT_REFERENCE:-off}
       NADLAN_RENT_URL: ${NADLAN_RENT_URL:-https://data.nadlan.gov.il/api/pages}
+      # Tour emails (spec 0018c): the chat link uses this worktree's web port; mail lands in the
+      # same outbox as the api's login codes.
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:${WEB_PORT:-5173}}
+      EMAIL_BACKEND: file
+      EMAIL_OUTBOX_DIR: /outbox
     volumes:
       - ../api:/app
+      - ../.outbox:/outbox
     depends_on:
       db:
         condition: service_healthy

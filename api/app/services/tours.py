@@ -37,7 +37,7 @@ from app.models import Application, Conversation, Listing, Message, Tour, TourWi
 from app.redis_client import RedisClient
 from app.schemas.tours import TourChangeKind as TourChangeKind  # the services' name too
 from app.schemas.tours import TourWindowIn
-from app.services import chat_events, visibility
+from app.services import chat_events, tour_mail, visibility
 
 # Policy, PRODUCT.md "Tours" (Gilad 2026-11-16; may change).
 SLOT_MINUTES = (15, 20, 30, 45)
@@ -675,7 +675,8 @@ def cancel_upcoming(
 
 def announce(r: RedisClient, changes: Sequence[TourChange]) -> None:
     """The after-commit hook: a `message` chat event per change to its owner and seeker (never the
-    flatmates: they see no tour lines). Never raises (as `chat_events.publish`). Spec 0018c adds
-    its email enqueue here."""
+    flatmates: they see no tour lines), then the email items (spec 0018c). Never raises a Redis
+    error (as `chat_events.publish`)."""
     for c in changes:
         chat_events.publish(r, [c.owner_id, c.seeker_id], c.application_id, "message")
+    tour_mail.enqueue(r, changes)
