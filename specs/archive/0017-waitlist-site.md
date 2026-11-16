@@ -1,7 +1,7 @@
 ---
 id: 0017
 title: "Before launch, people looking for a home and people renting one out can join homie's waitlist on join.<domain>, and Gilad can count them by side, city and type"
-status: in-review
+status: done
 depends_on: []   # own Cloudflare Pages project + D1; shares only the domain and DNS zone with 0013a (see Blast radius for the Makefile overlap)
 reviewers: [code, security, ux, qa]   # security: emails and optional phone numbers (PII), public write endpoint; ux: new page; qa: endpoint + page
 estimate: 1 coder run (large)   # coder Opus/high (PII + a design-heavy page; Speed rule 6)
@@ -583,3 +583,11 @@ Verified 2026-11-16 (one verifier round, 14 fixes applied in place). Build: one 
 - Delivers: `join.<domain>` waitlist page (own Pages project + D1), `POST /api/signup`, `GET /api/count`, `make waitlist-migrate|deploy-waitlist|waitlist-stats|test-waitlist`.
 - Defaults confirmed by Gilad 2026-11-16: D1 counter from 50 signups, D2 video click-to-play, D3 subdomain `join`.
 - Risk: the Makefile overlaps with 0013a (`WRANGLER_VERSION`, `CONTACT_EMAIL`); whichever merges second keeps one definition.
+
+Merged 2026-11-16 as PR #116 (`1b4b53e`), ci green on head `60bad1e` (one run, no flaky warning), merged by the orchestrator (delegated).
+- Shipped: `waitlist/` Hebrew RTL page (own Pages project + D1), seeker and lister forms, counter from 50, click-to-play video; `POST /api/signup`, `GET /api/count`; make `waitlist-migrate`, `deploy-waitlist`, `waitlist-stats`, `waitlist-delete`, `test-waitlist`. 56 unit + 8 page tests in `make test`.
+- Measured: video 3.1 MB, page 158 KB before video, Lighthouse mobile 99/100/100/100 (run before the review fixes).
+- Review (code, security, ux, qa): blockers 1 (fixed: delete-on-request command injectable, now `make waitlist-delete` reading stdin) · majors 1 (fixed: `/api/count` on `*.pages.dev` skipped host check and cache) · minors 15: 12 fixed, 3 in FOLLOWUPS.
+- Deviations: `compatibility_date` 2026-11-01 (pinned wrangler 4.156.1 refuses later); `robots.txt` added; `+972 (0)52-…` phones accepted.
+- Decision for Gilad: D1's free 100k writes/day could be exhausted by a few IPs at the rate limit. (a) Turnstile, (b) daily insert cap, (c) watch `waitlist-stats` — recommended (c) now, (a) if junk appears.
+- Go live: Gilad follows `waitlist/README.md` Setup (Cloudflare login, `d1 create`, `waitlist-migrate`, Pages project + `join.<domain>`, rate-limit rule, `deploy-waitlist CONTACT_EMAIL=…`).
