@@ -37,6 +37,7 @@ from app.models import (
     RoomPair,
     SeekerProfile,
     User,
+    UserPassword,
 )
 from app.models import Session as SessionRow
 from app.services import auth  # a module import: auth.py imports this module too
@@ -178,7 +179,8 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             .values(status="withdrawn", message=None, updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
-        # 7.-11. Likes, matches, flats I joined, read markers, profile, every session.
+        # 7.-11. Likes, matches, flats I joined, read markers, profile, every session, the
+        # password (spec 0016a: a CHECK cannot see another table).
         for statement in (
             delete(RoomPair).where(
                 or_(RoomPair.seeker_id == me, RoomPair.listing_id.in_(my_listings))
@@ -188,6 +190,7 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
             delete(ConversationRead).where(ConversationRead.user_id == me),
             delete(SeekerProfile).where(SeekerProfile.user_id == me),
             delete(SessionRow).where(SessionRow.user_id == me),
+            delete(UserPassword).where(UserPassword.user_id == me),
         ):
             db.execute(statement.execution_options(synchronize_session=False))
         # 12. The tombstone.
@@ -200,6 +203,7 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> None:
                 display_name=None,
                 photo_key=None,
                 last_login_at=None,
+                google_sub=None,
             )
             .execution_options(synchronize_session=False)
         )

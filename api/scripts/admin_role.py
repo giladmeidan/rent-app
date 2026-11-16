@@ -27,6 +27,8 @@ _COLUMN_GRANTS = (
     ("reports", ("resolved_at",)),
     ("admin_logins", ("ended_at",)),
 )
+# Tables it may not even read (spec 0016a): password hashes.
+_NO_ACCESS = ("user_passwords",)
 
 
 def apply_admin_role(database_url: str, password: str) -> None:
@@ -65,6 +67,8 @@ def apply_admin_role(database_url: str, password: str) -> None:
             "GRANT INSERT ON admin_logins TO {role}",
         ):
             conn.execute(sql.SQL(statement).format(db=database, role=role))
+        for table in _NO_ACCESS:
+            conn.execute(sql.SQL("REVOKE ALL ON {} FROM {}").format(sql.Identifier(table), role))
         for table, columns in _COLUMN_GRANTS:
             conn.execute(
                 sql.SQL("GRANT UPDATE ({}) ON {} TO {}").format(

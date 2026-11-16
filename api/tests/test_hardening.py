@@ -75,6 +75,7 @@ LIMITED: list[tuple[str, str, str, Any]] = [
     ("PUT", "/listings/{listing_id}/photos/order", "WRITE", {"photo_ids": [_RANDOM_UUID]}),
     ("DELETE", "/me/photo", "WRITE", None),
     ("GET", "/rent-estimate", "ESTIMATE", {"city": "תל אביב", "street": "תירוש", "rooms": "4"}),
+    ("PUT", "/me/password", "WRITE", {"password": "a-valid-password"}),  # 0016a
 ]
 # Write routes with their own limit, proved by their own specs.
 OWN = {
@@ -88,6 +89,7 @@ OWN = {
     ("POST", "/listings/{listing_id}/photos"),  # 0010d
     ("PUT", "/me/photo"),  # 0010j
     ("POST", "/reports"),  # 0011b
+    ("POST", "/auth/password/login"),  # 0016a
 }
 # Signing in (5 guesses per code) and signing out (always works).
 # DELETE /me (spec 0013c): succeeds at most once per account, behind a sign-in of the last 15 min.
@@ -141,7 +143,7 @@ def test_ac1_every_write_route_has_a_limit() -> None:
         for method in (route.methods or set()) & WRITES
     }
     limited = {(method, path) for method, path, _, _ in LIMITED if method in WRITES}
-    assert len(limited) == 18
+    assert len(limited) == 19
     assert not (limited & OWN) and not (limited & EXEMPT) and not (OWN & EXEMPT)
     assert routes == limited | OWN | EXEMPT
 

@@ -26,6 +26,7 @@ from app.models.room_pair import RoomPair  # noqa: E402
 from app.models.seeker_profile import SeekerProfile  # noqa: E402
 from app.models.session import Session  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.models.user_password import UserPassword  # noqa: E402
 
 __all__ = [
     "AdminAction",
@@ -50,4 +51,5 @@ __all__ = [
     "SeekerProfile",
     "Session",
     "User",
+    "UserPassword",
 ]

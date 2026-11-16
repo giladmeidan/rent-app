@@ -10,11 +10,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models import Base
 from app.models._checks import photo_key_check
 
-# A live account has an email and a name; a deleted one (spec 0013c) has no email, name or photo.
+# A live account has an email and a name; a deleted one (spec 0013c) has no email, name, photo or
+# Google id (spec 0016a). Its password row is deleted by `services/accounts.py::delete_account`.
 DELETED_SCRUBBED_CHECK = (
     "(deleted_at IS NULL AND email IS NOT NULL AND display_name IS NOT NULL)"
     " OR (deleted_at IS NOT NULL AND email IS NULL AND display_name IS NULL"
-    " AND photo_key IS NULL)"
+    " AND photo_key IS NULL AND google_sub IS NULL)"
 )
 
 
@@ -32,6 +33,8 @@ class User(Base):
         CheckConstraint(photo_key_check("photo_key"), name="ck_users_photo_key"),
         # The person's market card id (spec 0010h migration 0017).
         UniqueConstraint("card_id", name="uq_users_card_id"),
+        # Google's stable account id (spec 0016a migration 0029; written only by 0016b).
+        UniqueConstraint("google_sub", name="uq_users_google_sub"),
         # The few suspended users (spec 0012a migration 0024, Gilad 2026-11-15): the visibility
         # rules' "not suspended" check reads only these, so it stays flat as `users` grows.
         Index("ix_users_suspended", "id", postgresql_where=text("suspended_at IS NOT NULL")),
@@ -74,3 +77,7 @@ class User(Base):
     # Deleted by its owner (spec 0013c, `DELETE /me`), NULL = a live account. Set once, never
     # cleared; the row stays as a tombstone with no PII and its sessions never resolve.
     deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Google's `sub` for a linked Google account (spec 0016b), NULL = none.
+    google_sub: Mapped[str | None] = mapped_column(Text)
+    # No relationship to `UserPassword` (spec 0016a): SQLAdmin's user page shows every mapper
+    # attribute and would load it as `homie_admin`, which may not read `user_passwords`.

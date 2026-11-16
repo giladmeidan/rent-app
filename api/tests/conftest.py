@@ -114,15 +114,15 @@ def migrated_db() -> Iterator[Engine]:
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
     """Per-test engine on clean `admin_logins`, `admin_actions`, `reports`, `listing_price_changes`,
     `listing_photos`, `conversation_reads`, `listing_flatmates`, `room_pairs`, `person_pairs`,
-    `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`, `sessions`, `users`
-    and `areas` tables."""
+    `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`, `sessions`,
+    `user_passwords`, `users` and `areas` tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
                 "TRUNCATE TABLE blocked_emails, admin_logins, admin_actions, reports,"
                 " listing_price_changes, listing_photos, conversation_reads, listing_flatmates,"
                 " room_pairs, person_pairs, seeker_profiles, messages, conversations, applications,"
-                " listings, sessions, users, areas"
+                " listings, sessions, user_passwords, users, areas"
             )
         )
     yield migrated_db

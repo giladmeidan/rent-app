@@ -15,15 +15,23 @@ also counted, at `client_ip.PREFIX48_FACTOR` times the per-network limits.
 
 OTP codes and rate-limit counters live in Redis with TTLs; only the HMAC of a code is stored, and
 only the sha256 of a session token reaches Postgres.
+
+Password login (spec 0016a): every attempt is counted before any hash check, per (email, network)
+(10 per 15 min, 30 a day), per network (30 per 15 min, 300 a day) and per email across networks
+(100 a day, `PW_RATE_LIMIT_EMAIL_ALL_DAY`): at most 100 guesses a day against one email. That
+ceiling stops only password logins; the emailed code still works, so it never locks a person out.
+Every failure answers the same and runs exactly one argon2 verify (against `DUMMY_HASH` when there
+is no stored hash). Only argon2id hashes are stored (`services/passwords.py`).
 """
 
 import datetime as dt
 import hashlib
 import hmac
 import secrets
+import uuid
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -31,10 +39,13 @@ from app import client_ip
 from app.config import get_settings
 from app.i18n import he
 from app.models import Session as SessionRow
-from app.models import User
+from app.models import User, UserPassword
 from app.redis_client import RedisClient
 from app.schemas.auth import ProfileIn
-from app.services import accounts  # a module import: accounts.py imports this module too
+from app.services import (
+    accounts,  # a module import: accounts.py imports this module too
+    passwords,
+)
 from app.services.email import EmailSender, EmailUnavailable
 from app.services.rate_limit import count_or_raise
 
@@ -48,6 +59,13 @@ OTP_RATE_DAY_S = 86_400
 OTP_RATE_LIMIT_IP = 10
 OTP_RATE_LIMIT_IP_DAY = 50
 SESSION_TTL_S = 30 * 24 * 3600
+PW_RATE_LIMIT_EMAIL = 10
+PW_RATE_WINDOW_S = 900
+PW_RATE_LIMIT_EMAIL_DAY = 30
+PW_RATE_LIMIT_EMAIL_ALL_DAY = 100
+PW_RATE_DAY_S = 86_400
+PW_RATE_LIMIT_IP = 30
+PW_RATE_LIMIT_IP_DAY = 300
 
 # Reserve one attempt: nil when no code is pending (never creates a key, so never one without a
 # TTL); otherwise {code_hmac, attempts after this one, PTTL}. A key past the limit is deleted.
@@ -95,6 +113,10 @@ class SignupBlockedError(Exception):
     0013c): the code is consumed, nothing is written."""
 
 
+class InvalidCredentialsError(Exception):
+    """Unknown email, no password, or a wrong password (deliberately one case, spec 0016a)."""
+
+
 def normalise_email(email: str) -> str:
     return email.strip().lower()
 
@@ -134,6 +156,26 @@ def _count_request(r: RedisClient, email: str, network: str) -> None:
     count_or_raise(r, counters)
 
 
+def _count_password(r: RedisClient, email: str, network: str) -> None:
+    """`_count_request`'s shape for a password login (spec 0016a), keys under `rl:pw:`."""
+    counters: list[tuple[str, int, int]] = []
+    p = client_ip.network48(network)
+    if p is not None:
+        factor = client_ip.PREFIX48_FACTOR
+        counters += [
+            (f"rl:pw:ip48:{p}", factor * PW_RATE_LIMIT_IP, PW_RATE_WINDOW_S),
+            (f"rl:pw:ip48:day:{p}", factor * PW_RATE_LIMIT_IP_DAY, PW_RATE_DAY_S),
+        ]
+    counters += [
+        (f"rl:pw:email:{email}:net:{network}", PW_RATE_LIMIT_EMAIL, PW_RATE_WINDOW_S),
+        (f"rl:pw:email:day:{email}:net:{network}", PW_RATE_LIMIT_EMAIL_DAY, PW_RATE_DAY_S),
+        (f"rl:pw:email:all:day:{email}", PW_RATE_LIMIT_EMAIL_ALL_DAY, PW_RATE_DAY_S),
+        (f"rl:pw:ip:{network}", PW_RATE_LIMIT_IP, PW_RATE_WINDOW_S),
+        (f"rl:pw:ip:day:{network}", PW_RATE_LIMIT_IP_DAY, PW_RATE_DAY_S),
+    ]
+    count_or_raise(r, counters)
+
+
 def request_otp(r: RedisClient, sender: EmailSender, email: str, network: str) -> None:
     """Issue a code for `email` and send it. Same outcome whether or not an account exists."""
     email = normalise_email(email)
@@ -165,8 +207,9 @@ def verify_otp(
     db: Session, r: RedisClient, email: str, code: str, profile: ProfileIn | None
 ) -> tuple[User, bool]:
     """Check the code and return `(user, created)`, creating the account from `profile` on first
-    use. Raises `InvalidCodeError`, `ProfileRequiredError`, `AccountSuspendedError` or
-    `SignupBlockedError`. Commits; the caller adds a session."""
+    use, with `profile.password` when set (spec 0016a; ignored for an existing account). Raises
+    `InvalidCodeError`, `ProfileRequiredError`, `AccountSuspendedError` or `SignupBlockedError`.
+    Commits; the caller adds a session."""
     email = normalise_email(email)
     key = [otp_key(email)]
     reserved = _eval(r, _RESERVE_ATTEMPT, key, OTP_MAX_ATTEMPTS)
@@ -193,6 +236,12 @@ def verify_otp(
     # After the claim and outside the `try` below, so a suspended account's code stays consumed.
     if user is not None and user.suspended_at is not None:
         raise AccountSuspendedError
+    # Outside the `try` and before any write: no row lock or transaction waits on the hash.
+    new_hash = (
+        passwords.hash_password(profile.password)
+        if user is None and profile is not None and profile.password is not None
+        else None
+    )
     try:
         created = False
         if user is None:
@@ -209,6 +258,8 @@ def verify_otp(
             if user is None:
                 user = _find_user(db, email)
                 assert user is not None  # the conflicting row exists once our INSERT returns
+            elif new_hash is not None:
+                db.add(UserPassword(user_id=user.id, hash=new_hash))
         user.last_login_at = dt.datetime.now(dt.UTC)
         db.commit()
     except Exception:
@@ -217,6 +268,62 @@ def verify_otp(
             _eval(r, _RESTORE_CODE, key, stored, int(attempts), int(ttl_ms))
         raise
     return user, created
+
+
+def password_login(db: Session, r: RedisClient, email: str, password: str, network: str) -> User:
+    """Log in with email and password (spec 0016a). Raises `RateLimitedError` (nothing checked),
+    `InvalidCredentialsError` or, for the right password only, `AccountSuspendedError` (nothing
+    written). Commits `last_login_at` (and an upgraded hash); the caller adds a session."""
+    email = normalise_email(email)
+    _count_password(r, email, network)
+    row = db.execute(
+        select(User, UserPassword.hash)
+        .outerjoin(UserPassword, UserPassword.user_id == User.id)
+        .where(User.email == email)
+    ).one_or_none()
+    if row is None or row.hash is None:
+        passwords.verify_password(passwords.DUMMY_HASH, password)  # the same cost as a real one
+        raise InvalidCredentialsError
+    user, stored = row.tuple()
+    if not passwords.verify_password(stored, password):
+        raise InvalidCredentialsError
+    if user.suspended_at is not None:
+        raise AccountSuspendedError
+    user.last_login_at = dt.datetime.now(dt.UTC)
+    if passwords.needs_rehash(stored):
+        db.execute(
+            update(UserPassword)
+            .where(UserPassword.user_id == user.id)
+            .values(hash=passwords.hash_password(password))
+        )
+    db.commit()
+    return user
+
+
+def set_password(db: Session, user: User, raw: str, keep_token: str) -> None:
+    """Set or replace `user`'s password and revoke every other live session of theirs (spec
+    0016a), in one commit. A racing `DELETE /me` that committed first: `AccountDeletedError`."""
+    new_hash = passwords.hash_password(raw)  # before the lock: nothing waits on the hash
+    accounts.lock_live_account(db, user.id)
+    db.execute(
+        insert(UserPassword)
+        .values(user_id=user.id, hash=new_hash)
+        .on_conflict_do_update(index_elements=[UserPassword.user_id], set_={"hash": new_hash})
+    )
+    db.execute(
+        update(SessionRow)
+        .where(
+            SessionRow.user_id == user.id,
+            SessionRow.revoked_at.is_(None),
+            SessionRow.token_hash != _token_hash(keep_token),
+        )
+        .values(revoked_at=dt.datetime.now(dt.UTC))
+    )
+    db.commit()
+
+
+def has_password(db: Session, user_id: uuid.UUID) -> bool:
+    return bool(db.scalar(select(exists().where(UserPassword.user_id == user_id))))
 
 
 def create_session(db: Session, user: User) -> str:

@@ -129,6 +129,7 @@ def test_ac2_signup_requires_profile_then_creates_user(
         "created_at",
         "photo_url",  # 0010j
         "listing_cap",  # 0012a
+        "has_password",  # 0016a
     }
     assert set(response.json()) == user_keys
     assert response.json()["photo_url"] is None

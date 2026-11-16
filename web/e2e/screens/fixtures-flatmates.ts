@@ -13,6 +13,7 @@ export const OWNER: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3,
+  has_password: false, // spec 0016a
 };
 
 export const SEEKER: UserOut = {
@@ -24,6 +25,7 @@ export const SEEKER: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3,
+  has_password: false, // spec 0016a
 };
 
 /** A room in Ramat Gan, listed by רוני, with no invite link unless overridden. */

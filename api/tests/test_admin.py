@@ -38,6 +38,8 @@ from admin.config import AdminSettings
 from admin.main import create_admin_app, main
 from admin.views import UserView
 from app.db import make_engine
+from app.models import User
+from app.services import passwords
 from scripts.admin_role import apply_admin_role
 from tests.conftest import (
     API_DIR,
@@ -804,6 +806,7 @@ def _check_role(admin_role: str, owner: uuid.UUID) -> None:
             "DELETE FROM admin_logins",
             "CREATE TABLE x()",
             "INSERT INTO users (email, display_name, role) VALUES ('y@example.com', 'yy', 'owner')",
+            "SELECT hash FROM user_passwords",  # 0016a
         ):
             with engine.connect() as conn, pytest.raises(ProgrammingError) as error:
                 conn.execute(text(statement))
@@ -1012,3 +1015,32 @@ def test_deleted_account_in_reports_and_chat(signed_in: TestClient, db_engine: E
     assert "אורי" in page.text
     assert signed_in.get("/admin/user/list").status_code == 200
     assert signed_in.get(f"/admin/user/details/{b}").status_code == 200
+
+
+def test_0016a_ac11_admin_cannot_read_passwords(
+    signed_in: TestClient, admin_role: str, db_engine: Engine
+) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    reporter = make_seeker(db_engine, "reporter@example.com")
+    _execute(
+        db_engine,
+        "INSERT INTO user_passwords (user_id, hash) VALUES (:u, :h)",
+        u=owner,
+        h=passwords.hash_password("a-valid-password"),
+    )
+    _execute(db_engine, "UPDATE users SET google_sub = 'g-sub-1' WHERE id = :u", u=owner)
+    _report(db_engine, reporter, owner, "chat", make_direct_chat(db_engine, owner, reporter))
+    engine = create_engine(admin_role)
+    try:
+        with engine.connect() as conn, pytest.raises(ProgrammingError) as error:
+            conn.execute(text("SELECT hash FROM user_passwords"))
+        assert isinstance(error.value.orig, InsufficientPrivilege)
+        columns = ", ".join(c.name for c in User.__table__.columns)
+        assert _rows(engine, f"SELECT {columns} FROM users WHERE id = :id", id=owner)[
+            0
+        ].google_sub == ("g-sub-1")
+    finally:
+        engine.dispose()
+
+    for page in ("/admin/user/list", f"/admin/user/details/{owner}", "/admin/report/list"):
+        assert signed_in.get(page).status_code == 200, page

@@ -23,11 +23,12 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import Engine, event, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Base, User
-from app.services import accounts
+from app.services import accounts, passwords
 from app.services import auth as auth_service
 from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore
@@ -1002,3 +1003,26 @@ def test_ac1_listing_attributes_cleared(
         id=room,
     )[0]
     assert tuple(row) == ("גבעתיים", "כצנלסון", 7200, Decimal("3.5"), {}, [], None, None, None)
+
+
+# --- spec 0016a --------------------------------------------------------------------------------
+
+
+def test_0016a_ac10_tombstone_clears_login_methods(
+    client: TestClient, db_engine: Engine, photo_store: FilePhotoStore
+) -> None:
+    u = make_seeker(db_engine, U_EMAIL)
+    _execute(
+        db_engine,
+        "INSERT INTO user_passwords (user_id, hash) VALUES (:u, :h)",
+        u=u,
+        h=passwords.hash_password("a-valid-password"),
+    )
+    _execute(db_engine, "UPDATE users SET google_sub = 'g-sub-1' WHERE id = :u", u=u)
+
+    assert _delete(_session(client, db_engine, u)).status_code == 204
+
+    assert _count(db_engine, "user_passwords WHERE user_id = :u", u=u) == 0
+    assert _scalar(db_engine, "SELECT google_sub FROM users WHERE id = :u", u=u) is None
+    with pytest.raises(IntegrityError, match="ck_users_deleted_scrubbed"):
+        _execute(db_engine, "UPDATE users SET google_sub = 'g-sub-1' WHERE id = :u", u=u)

@@ -1,7 +1,7 @@
 ---
 id: 0016a
 title: "A person can sign up with a password and log in with email and password; the emailed code stays as it is"
-status: verified
+status: in-progress
 depends_on: []
 reviewers: [code, security, ux, qa]   # security: password storage, login brute force, the admin role's grants; qa: two endpoints + three screens
 estimate: 1 coder run   # full stack (API + web), at the upper end; coder Opus/high (auth, migration; Speed rule 6)

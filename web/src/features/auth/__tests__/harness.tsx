@@ -16,6 +16,7 @@ export const noa: UserOut = {
   created_at: '2026-11-10T10:00:00Z',
   photo_url: null,
   listing_cap: 3, // spec 0012a
+  has_password: false, // spec 0016a
 };
 
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>

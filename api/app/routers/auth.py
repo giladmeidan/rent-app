@@ -5,7 +5,8 @@ session (`current_user`). `UserOut` is always built by `user_out` (also `PUT /me
 0010j). A suspended account (spec 0012a): the right code answers 403 `account_suspended` with no
 session, and its sessions no longer resolve. DELETE /me (spec 0013c) deletes the caller's account,
 from a session signed in within `DELETE_REAUTH_S`; a blocked email's right code answers 403
-`signup_blocked` with no session."""
+`signup_blocked` with no session. Spec 0016a: POST /auth/password/login (public, its own per-network
+limits) and PUT /me/password (a session younger than `DELETE_REAUTH_S`)."""
 
 import datetime as dt
 from typing import Annotated
@@ -14,13 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app import limits
 from app.auth import COOKIE_NAME, current_user
 from app.client_ip import client_network
 from app.config import get_settings
 from app.db import get_session
 from app.models import User
 from app.redis_client import RedisClient, get_redis
-from app.schemas.auth import OtpRequestIn, OtpVerifyIn, UserOut
+from app.schemas.auth import OtpRequestIn, OtpVerifyIn, PasswordIn, PasswordLoginIn, UserOut
 from app.schemas.error import ErrorOut
 from app.services import accounts
 from app.services import auth as auth_service
@@ -39,7 +41,7 @@ DbDep = Annotated[Session, Depends(get_session)]
 DELETE_REAUTH_S = 900
 
 
-def user_out(user: User) -> UserOut:
+def user_out(db: Session, user: User) -> UserOut:
     """The caller's own account, with their person photo's small address (spec 0010j)."""
     # Always a live account: a deleted one's sessions never resolve (spec 0013c).
     assert user.email is not None and user.display_name is not None
@@ -52,7 +54,32 @@ def user_out(user: User) -> UserOut:
         created_at=user.created_at,
         photo_url=person_photo_url(user.photo_key),
         listing_cap=user.listing_cap,
+        has_password=auth_service.has_password(db, user.id),
     )
+
+
+def _rate_limited(exc: RateLimitedError) -> HTTPException:
+    return HTTPException(
+        status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
+    )
+
+
+def _signed_in(db: Session, user: User, status_code: int) -> JSONResponse:
+    """`UserOut` with a new session cookie (code and password login)."""
+    token = auth_service.create_session(db, user)
+    response = JSONResponse(
+        status_code=status_code, content=user_out(db, user).model_dump(mode="json")
+    )
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        max_age=auth_service.SESSION_TTL_S,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=get_settings().cookie_secure,
+    )
+    return response
 
 
 @router.post(
@@ -72,9 +99,7 @@ def request_otp(
     try:
         auth_service.request_otp(r, sender, body.email, client_network(request))
     except RateLimitedError as exc:
-        raise HTTPException(
-            status_code=429, detail="rate_limited", headers={"Retry-After": str(exc.retry_after)}
-        ) from None
+        raise _rate_limited(exc) from None
     except EmailUnavailable:
         raise HTTPException(status_code=503, detail="email_unavailable") from None
     return Response(status_code=204)
@@ -105,21 +130,33 @@ def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:
         raise HTTPException(status_code=403, detail="account_suspended") from None
     except auth_service.SignupBlockedError:
         raise HTTPException(status_code=403, detail="signup_blocked") from None
-    token = auth_service.create_session(db, user)
-    response = JSONResponse(
-        status_code=201 if created else 200,
-        content=user_out(user).model_dump(mode="json"),
-    )
-    response.set_cookie(
-        COOKIE_NAME,
-        token,
-        max_age=auth_service.SESSION_TTL_S,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=get_settings().cookie_secure,
-    )
-    return response
+    return _signed_in(db, user, 201 if created else 200)
+
+
+@router.post(
+    "/auth/password/login",
+    response_model=UserOut,
+    responses={
+        401: {"model": ErrorOut, "description": "invalid_credentials (every failure alike)"},
+        403: {"model": ErrorOut, "description": "account_suspended (right password only)"},
+        429: {"model": ErrorOut, "description": "Too many attempts; see Retry-After"},
+        503: {"model": ErrorOut, "description": "Redis or the database is unreachable"},
+    },
+)
+def password_login(body: PasswordLoginIn, request: Request, db: DbDep, r: RedisDep) -> JSONResponse:
+    """Log in with email and password (spec 0016a). A sync handler: hashing runs in the
+    threadpool, bounded by `services/passwords.py`'s semaphore and the per-network limits."""
+    try:
+        user = auth_service.password_login(
+            db, r, body.email, body.password, client_network(request)
+        )
+    except RateLimitedError as exc:
+        raise _rate_limited(exc) from None
+    except auth_service.InvalidCredentialsError:
+        raise HTTPException(status_code=401, detail="invalid_credentials") from None
+    except auth_service.AccountSuspendedError:
+        raise HTTPException(status_code=403, detail="account_suspended") from None
+    return _signed_in(db, user, 200)
 
 
 @router.get(
@@ -127,8 +164,8 @@ def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:
     response_model=UserOut,
     responses={401: {"model": ErrorOut, "description": "unauthenticated"}},
 )
-def me(user: Annotated[User, Depends(current_user)]) -> UserOut:
-    return user_out(user)
+def me(user: Annotated[User, Depends(current_user)], db: DbDep) -> UserOut:
+    return user_out(db, user)
 
 
 def _signed_out() -> Response:
@@ -180,3 +217,35 @@ def delete_me(
         raise HTTPException(status_code=403, detail="reauth_required")
     accounts.delete_account(db, store, user)
     return _signed_out()
+
+
+@router.put(
+    "/me/password",
+    status_code=204,
+    responses={
+        401: {"model": ErrorOut, "description": "unauthenticated (also a deletion racing it)"},
+        403: {
+            "model": ErrorOut,
+            "description": "reauth_required: the session is older than 15 minutes; sign in again",
+        },
+        **limits.RATE_LIMITED,
+    },
+)
+def set_my_password(
+    body: PasswordIn,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: DbDep,
+    r: RedisDep,
+) -> Response:
+    """Set or change the caller's password and sign out every other device (spec 0016a). No
+    current password: the fresh sign-in is the proof."""
+    limits.check(r, user.id, limits.WRITE)
+    token = request.cookies[COOKIE_NAME]  # `current_user` resolved it
+    created_at = auth_service.session_created_at(db, token)  # as DELETE /me
+    if created_at is None or dt.datetime.now(dt.UTC) - created_at > dt.timedelta(
+        seconds=DELETE_REAUTH_S
+    ):
+        raise HTTPException(status_code=403, detail="reauth_required")
+    auth_service.set_password(db, user, body.password, token)
+    return Response(status_code=204)

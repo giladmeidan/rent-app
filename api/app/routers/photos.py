@@ -342,7 +342,7 @@ async def set_my_photo(
         raise _unsupported() from None
     except PhotoStoreUnavailable:
         raise _storage_unavailable() from None
-    return user_out(user)
+    return await run_in_threadpool(user_out, db, user)  # it reads `has_password`
 
 
 @router.delete("/me/photo", status_code=204, responses={**_AUTH, **limits.RATE_LIMITED})
