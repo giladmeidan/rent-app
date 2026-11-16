@@ -28,8 +28,10 @@ from app.schemas.chat import (
     MessageIn,
     MessageOut,
     ThreadOut,
+    TourLineOut,
 )
 from app.schemas.error import ErrorOut
+from app.schemas.tours import TourOut
 from app.services import chat as chat_service
 from app.services import chat_events
 from app.services.photos import person_photo_url
@@ -66,11 +68,24 @@ def _listing(row: Row[Any]) -> ApplicationListingOut | None:
     )
 
 
+def _tour_line(change: str | None, starts_at: Any) -> TourLineOut | None:
+    return (
+        None
+        if change is None
+        else TourLineOut.model_validate({"change": change, "starts_at": starts_at})
+    )
+
+
 def _conversation_out(row: Row[Any]) -> ConversationOut:
     last = (
         None
         if row.last_created_at is None
-        else LastMessageOut(body=row.last_body, mine=row.last_mine, created_at=row.last_created_at)
+        else LastMessageOut(
+            body=row.last_body,
+            tour=_tour_line(row.last_tour_change, row.last_tour_starts_at),
+            mine=row.last_mine,
+            created_at=row.last_created_at,
+        )
     )
     return ConversationOut(
         id=row.id,
@@ -121,6 +136,7 @@ def get_thread(conversation_id: uuid.UUID, me: UserDep, db: DbDep) -> ThreadOut:
             MessageOut(
                 id=m.id,
                 body=m.body,
+                tour=_tour_line(m.tour_change, m.tour_starts_at),
                 mine=m.mine,
                 sender_name=m.sender_name,
                 created_at=m.created_at,
@@ -128,6 +144,14 @@ def get_thread(conversation_id: uuid.UUID, me: UserDep, db: DbDep) -> ThreadOut:
             for m in thread.messages
         ],
         truncated=thread.truncated,
+        tour=None
+        if thread.tour is None
+        else TourOut(
+            id=thread.tour.id,
+            starts_at=thread.tour.starts_at,
+            ends_at=thread.tour.ends_at,
+            status=thread.tour.status,
+        ),
     )
 
 
@@ -168,6 +192,7 @@ def send_message(
     return MessageOut(
         id=message.id,
         body=message.body,
+        tour=None,  # a typed message always has a body
         mine=True,
         sender_name=me.display_name,
         created_at=message.created_at,

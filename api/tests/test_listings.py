@@ -19,8 +19,12 @@ from app.db import get_sessionmaker
 from app.models import User
 from app.schemas.listing import ListingIn
 from app.schemas.profile import LIFESTYLE_KEYS
+from app.services import chat_events
 from app.services import listings as listings_service
-from tests.conftest import Outbox, make_listing, signup
+from tests import test_tours as tours_tests
+from tests.conftest import Outbox, make_listing, make_seeker, signup
+
+_HOUR = dt.timedelta(hours=1)
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -1129,3 +1133,37 @@ def test_ac12_safe_room_removed(owner: TestClient, gush_dan: uuid.UUID, db_engin
     for item in (patched, renewed.json(), detail.json(), *owner.get("/me/listings").json()):
         assert "safe_room" not in item
         assert item["shelter"] == "mamad"
+
+
+def test_ac10_pause_cancels_tours(
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Spec 0018a AC10: pausing cancels the listing's upcoming tours (`system`, a line from the
+    # owner, a `message` event to owner and seeker); a field edit and a past tour are untouched.
+    owner_id = uuid.UUID(owner.get("/me").json()["id"])
+    listing = make_listing(db_engine, owner_id, gush_dan)
+    seeker_id = make_seeker(db_engine, "s@example.com", "Dana")
+    application = tours_tests.shortlisted(db_engine, listing, seeker_id, owner_id)
+    now = tours_tests.db_now(db_engine)
+    upcoming = tours_tests.make_tour(db_engine, listing, application, seeker_id, now + _HOUR * 3)
+    past = tours_tests.make_tour(db_engine, listing, application, seeker_id, now - _HOUR * 3)
+    published = tours_tests.Published()
+    monkeypatch.setattr(chat_events, "publish", published)
+
+    assert owner.patch(f"/listings/{listing}", json={"price_ils": 7000}).status_code == 200
+    assert tours_tests.tour_row(db_engine, upcoming).status == "booked"
+    assert published.calls == []
+
+    assert owner.patch(f"/listings/{listing}", json={"status": "paused"}).status_code == 200
+    row = tours_tests.tour_row(db_engine, upcoming)
+    assert (row.status, row.cancelled_by) == ("cancelled", "system")
+    assert tours_tests.tour_row(db_engine, past).status == "booked"
+    assert published.calls == [({owner_id, seeker_id}, application, "message")]
+    (line,) = tours_tests.tour_lines(owner, application)
+    assert line[0] == "cancelled_by_system" and line[1] == now + _HOUR * 3
+    # Pausing again (already paused) cancels nothing more.
+    assert owner.patch(f"/listings/{listing}", json={"status": "paused"}).status_code == 200
+    assert len(tours_tests.tour_lines(owner, application)) == 1

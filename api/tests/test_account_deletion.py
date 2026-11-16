@@ -28,10 +28,11 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Base, User
-from app.services import accounts, passwords
+from app.services import accounts, chat_events, passwords, tours
 from app.services import auth as auth_service
 from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore
+from tests import test_tours as tours_tests
 from tests.conftest import (
     Outbox,
     jpeg,
@@ -690,9 +691,9 @@ def test_ac13_concurrent_deletes_are_one_deletion(
     barrier = threading.Barrier(2, timeout=20)
     real_delete = accounts.delete_account
 
-    def delete_together(db: Session, store: Any, user: User) -> None:
+    def delete_together(db: Session, store: Any, user: User) -> list[tours.TourChange]:
         barrier.wait()
-        real_delete(db, store, user)
+        return real_delete(db, store, user)
 
     monkeypatch.setattr(accounts, "delete_account", delete_together)
     results: list[httpx.Response] = []
@@ -1026,3 +1027,54 @@ def test_0016a_ac10_tombstone_clears_login_methods(
     assert _scalar(db_engine, "SELECT google_sub FROM users WHERE id = :u", u=u) is None
     with pytest.raises(IntegrityError, match="ck_users_deleted_scrubbed"):
         _execute(db_engine, "UPDATE users SET google_sub = 'g-sub-1' WHERE id = :u", u=u)
+
+
+def test_ac12_deletion_cancels_tours(
+    client: TestClient, db_engine: Engine, gush_dan: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Spec 0018a AC12: DELETE /me of a seeker and of a lister cancels their upcoming tours
+    # (`system`, a line each, an event to both sides); past tours stay `booked`; the account's
+    # `tour_feeds` row goes.
+    published = tours_tests.Published()
+    monkeypatch.setattr(chat_events, "publish", published)
+    now = tours_tests.db_now(db_engine)
+    hour = dt.timedelta(hours=1)
+    lister, other_lister = (
+        make_owner(db_engine, "l@example.com"),
+        make_owner(db_engine, "m@example.com"),
+    )
+    seeker, other_seeker = make_seeker(db_engine, U_EMAIL), make_seeker(db_engine, "t@example.com")
+    listing = make_listing(db_engine, lister, gush_dan)
+    mine = tours_tests.shortlisted(db_engine, listing, seeker, lister)
+    upcoming = tours_tests.make_tour(db_engine, listing, mine, seeker, now + 3 * hour)
+    past = tours_tests.make_tour(db_engine, listing, mine, seeker, now - 3 * hour)
+    # The other seeker's tour on another lister's listing: untouched by the seeker's deletion.
+    hosted = make_listing(db_engine, other_lister, gush_dan)
+    theirs = tours_tests.shortlisted(db_engine, hosted, other_seeker, other_lister)
+    hosted_tour = tours_tests.make_tour(db_engine, hosted, theirs, other_seeker, now + 4 * hour)
+    for user_id in (seeker, other_lister):
+        _execute(
+            db_engine,
+            "INSERT INTO tour_feeds (user_id, token_hash) VALUES (:u, :h)",
+            u=user_id,
+            h=hashlib.sha256(str(user_id).encode()).hexdigest(),
+        )
+
+    assert _delete(_session(client, db_engine, seeker)).status_code == 204
+    row = tours_tests.tour_row(db_engine, upcoming)
+    assert (row.status, row.cancelled_by) == ("cancelled", "system")
+    assert tours_tests.tour_row(db_engine, past).status == "booked"
+    assert tours_tests.tour_row(db_engine, hosted_tour).status == "booked"
+    assert published.calls == [({lister, seeker}, mine, "message")]
+    assert (
+        _scalar(db_engine, "SELECT sender_id FROM messages WHERE tour_id = :t", t=upcoming)
+        == seeker
+    )  # the deleted account is the line's sender
+    assert _scalar(db_engine, "SELECT count(*) FROM tour_feeds WHERE user_id = :u", u=seeker) == 0
+
+    published.calls.clear()
+    assert _delete(_session(client, db_engine, other_lister)).status_code == 204
+    row = tours_tests.tour_row(db_engine, hosted_tour)
+    assert (row.status, row.cancelled_by) == ("cancelled", "system")
+    assert published.calls == [({other_lister, other_seeker}, theirs, "message")]
+    assert _scalar(db_engine, "SELECT count(*) FROM tour_feeds") == 0

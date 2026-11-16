@@ -32,7 +32,7 @@ from app.schemas.auth import (
     UserOut,
 )
 from app.schemas.error import ErrorOut
-from app.services import accounts, google
+from app.services import accounts, google, tours
 from app.services import auth as auth_service
 from app.services.email import EmailSender, EmailUnavailable, get_email_sender
 from app.services.photo_store import PhotoStore, get_photo_store
@@ -255,8 +255,10 @@ def delete_me(
     user: Annotated[User, Depends(current_user)],
     db: DbDep,
     store: Annotated[PhotoStore, Depends(get_photo_store)],
+    r: RedisDep,
 ) -> Response:
-    """Delete the caller's account for good and sign out every device (spec 0013c)."""
+    """Delete the caller's account for good and sign out every device (spec 0013c), telling the
+    other side of each tour it cancelled (spec 0018a)."""
     token = request.cookies[COOKIE_NAME]  # `current_user` resolved it
     created_at = auth_service.session_created_at(db, token)
     # The session went after `current_user` passed: a racing DELETE /me of this account (its
@@ -267,7 +269,7 @@ def delete_me(
         seconds=DELETE_REAUTH_S
     ):
         raise HTTPException(status_code=403, detail="reauth_required")
-    accounts.delete_account(db, store, user)
+    tours.announce(r, accounts.delete_account(db, store, user))
     return _signed_out()
 
 

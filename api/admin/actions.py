@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, insert, select, tuple_, update
+from sqlalchemy import ColumnElement, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -20,12 +20,29 @@ from app.models import (
     ListingFlatmate,
     Message,
     Report,
+    Tour,
     User,
 )
 from app.models import Session as UserSession
 from app.models.admin_action import AdminActionKind, AdminTargetType
 
 _NO_SYNC: dict[str, Any] = {"synchronize_session": False}
+
+
+def _cancel_tours(session: Session, where: ColumnElement[bool]) -> None:
+    """Cancel the upcoming booked tours matching `where` (`system`), silently: no chat line and no
+    event, the admin app imports nothing from `app.services` (spec 0018a R6). Same transaction."""
+    session.execute(
+        update(Tour)
+        .where(Tour.status == "booked", Tour.starts_at > func.now(), where)
+        .values(
+            status="cancelled",
+            cancelled_by="system",
+            cancelled_at=func.now(),
+            updated_at=func.now(),
+        )
+        .execution_options(**_NO_SYNC)
+    )
 
 
 def _log(
@@ -47,7 +64,8 @@ def _log(
 
 def suspend(session: Session, user_ids: Sequence[uuid.UUID]) -> int:
     """Suspend the users not suspended yet and revoke their live sessions, so lifting the
-    suspension does not revive them. Returns how many were suspended."""
+    suspension does not revive them; cancel the upcoming tours they book or host (spec 0018a).
+    Returns how many were suspended."""
     ids = session.scalars(
         update(User)
         .where(User.id.in_(user_ids), User.suspended_at.is_(None))
@@ -62,6 +80,8 @@ def suspend(session: Session, user_ids: Sequence[uuid.UUID]) -> int:
             .values(revoked_at=func.now())
             .execution_options(**_NO_SYNC)
         )
+        hosted = select(Listing.id).where(Listing.owner_id.in_(ids))
+        _cancel_tours(session, or_(Tour.seeker_id.in_(ids), Tour.listing_id.in_(hosted)))
     _log(session, "suspend", "user", [(i, None) for i in ids])
     session.commit()
     return len(ids)
@@ -82,7 +102,8 @@ def unsuspend(session: Session, user_ids: Sequence[uuid.UUID]) -> int:
 
 
 def hide_listings(session: Session, listing_ids: Sequence[uuid.UUID]) -> int:
-    """Pause and mark removed (`ck_listings_removed_paused`)."""
+    """Pause and mark removed (`ck_listings_removed_paused`); cancel their upcoming tours (spec
+    0018a)."""
     ids = session.scalars(
         update(Listing)
         .where(Listing.id.in_(listing_ids), Listing.removed_at.is_(None))
@@ -90,6 +111,8 @@ def hide_listings(session: Session, listing_ids: Sequence[uuid.UUID]) -> int:
         .returning(Listing.id)
         .execution_options(**_NO_SYNC)
     ).all()
+    if ids:
+        _cancel_tours(session, Tour.listing_id.in_(ids))
     _log(session, "hide_listing", "listing", [(i, None) for i in ids])
     session.commit()
     return len(ids)
@@ -208,7 +231,19 @@ def read_chat(session: Session, report_id: uuid.UUID) -> ReportedChat | None:
         select(
             name,
             func.to_char(func.timezone("Asia/Jerusalem", Message.created_at), "YYYY-MM-DD HH24:MI"),
-            Message.body,
+            # A tour line (spec 0018a) has no body: its change and Israel time, in English.
+            func.coalesce(
+                Message.body,
+                func.concat(
+                    "Tour ",
+                    func.replace(Message.tour_change, "_", " "),
+                    ": ",
+                    func.to_char(
+                        func.timezone("Asia/Jerusalem", Message.tour_starts_at),
+                        "YYYY-MM-DD HH24:MI",
+                    ),
+                ),
+            ),
         )
         .join(User, User.id == Message.sender_id)
         .where(Message.conversation_id == conversation.id)

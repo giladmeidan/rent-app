@@ -56,7 +56,7 @@ from app.schemas.application import (
 from app.schemas.error import ErrorOut
 from app.services import applications as applications_service
 from app.services import chat as chat_service
-from app.services import chat_events
+from app.services import chat_events, tours
 from app.services.listings import ListingNotFoundError
 from app.services.photos import person_photo_url
 from app.services.rate_limit import RateLimitedError
@@ -174,13 +174,14 @@ def withdraw(
 ) -> MyApplicationOut:
     limits.check(r, user.id, limits.WRITE)
     try:
-        application, listing = applications_service.withdraw(db, user, application_id)
+        application, listing, tour_changes = applications_service.withdraw(db, user, application_id)
     except applications_service.ApplicationNotFoundError:
         raise HTTPException(status_code=404, detail="not_found") from None
     except applications_service.NotWithdrawableError:
         raise HTTPException(status_code=409, detail="not_withdrawable") from None
     members = chat_service.event_members(db, application, listing.owner_id)
     chat_events.publish(r, members, application.id, "status")
+    tours.announce(r, tour_changes)
     return _out(application, listing)
 
 
@@ -274,7 +275,7 @@ def set_applicant_status(
 ) -> ApplicantOut:
     limits.check(r, user.id, limits.STATUS)
     try:
-        row, changed = applications_service.set_applicant_status(
+        row, changed, tour_changes = applications_service.set_applicant_status(
             db, user, listing_id, application_id, body.status
         )
     except (ListingNotFoundError, applications_service.ApplicationNotFoundError):
@@ -285,4 +286,5 @@ def set_applicant_status(
         application: Application = row.Application
         members = chat_service.event_members(db, application, user.id)
         chat_events.publish(r, members, application.id, "status")
+        tours.announce(r, tour_changes)
     return _applicant_out(row)

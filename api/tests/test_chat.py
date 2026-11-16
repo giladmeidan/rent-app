@@ -13,9 +13,11 @@ from sqlalchemy import Engine, event, text
 
 from app.redis_client import get_redis
 from app.schemas.application import ApplicationListingOut
+from tests import test_tours as tours_tests
 from tests.conftest import (
     Outbox,
     make_application,
+    make_direct_chat,
     make_listing,
     make_profile,
     make_seeker,
@@ -48,8 +50,16 @@ THREAD_KEYS = {
     "can_send",
     "messages",
     "truncated",
+    "tour",  # 0018a
 }
-MESSAGE_KEYS = {"id", "body", "mine", "sender_name", "created_at"}  # sender_name: 0008d
+MESSAGE_KEYS = {
+    "id",
+    "body",
+    "tour",
+    "mine",
+    "sender_name",
+    "created_at",
+}  # sender_name: 0008d; tour: 0018a
 APPLICANT_KEYS = {
     "id",
     "status",
@@ -279,7 +289,8 @@ def test_ac1_shortlist_opens_one_conversation(
     sent = list(statements)
     assert response.status_code == 200, response.text
     assert set(response.json()) == APPLICANT_KEYS
-    assert len(sent) == 3, sent  # an un-shortlist inserts nothing
+    assert len(sent) == 4, sent  # an un-shortlist inserts nothing; it cancels tours (0018a)
+    assert sent[2].lstrip().startswith("UPDATE tours")
     for status in ("shortlisted", "shortlisted"):  # a re-shortlist, then the same status again
         response = _set_status(owner, listing_a, submitted, status)
         assert response.status_code == 200, response.text
@@ -292,7 +303,7 @@ def test_ac1_shortlist_opens_one_conversation(
     sent = list(statements)
     assert response.status_code == 200, response.text
     assert set(response.json()) == APPLICANT_KEYS
-    assert len(sent) == 3, sent
+    assert len(sent) == 4, sent  # with the tours UPDATE (0018a)
     assert _conversation_row(db_engine, declined) is None
     assert _scalar(db_engine, "SELECT count(*) FROM conversations") == 1
 
@@ -372,6 +383,7 @@ def test_ac3_order_preview_unread_can_send(
     assert by_name["one"]["last_message"]["mine"] is True
     assert by_name["two"]["last_message"] == {
         "body": "from two",
+        "tour": None,
         "mine": False,
         "created_at": by_name["two"]["last_message"]["created_at"],
     }
@@ -484,17 +496,19 @@ def test_ac5_thread_reads_and_marks_read(
     # m1 and m3 are S's own.
     assert [m["mine"] for m in body["messages"]] == [True, False, True]
     assert [m["sender_name"] for m in body["messages"]] == ["Dana", "Noa", "Dana"]
-    assert len(first) == 4, first  # session, header, messages, the read marker
+    # session, header, messages, the current tour (0018a), the read marker
+    assert len(first) == 5, first
     assert "FROM conversations" in first[1]
     assert "FROM messages" in first[2]
-    assert "UPDATE conversations" in first[3]
+    assert "FROM tours" in first[3]
+    assert "UPDATE conversations" in first[4]
 
     statements.clear()
     repeat = _thread(seeker, chat)
     again = list(statements)
     assert repeat.status_code == 200, repeat.text
     assert repeat.json() == body
-    assert len(again) == 3, again  # nothing new: no UPDATE
+    assert len(again) == 4, again  # nothing new: no UPDATE
     assert not any("UPDATE" in statement for statement in again)
 
     seeker_item = _item(seeker, chat)
@@ -518,8 +532,8 @@ def test_ac5_thread_reads_and_marks_read(
     statements.clear()
     assert _thread(seeker, chat).status_code == 200
     after_new = list(statements)
-    assert len(after_new) == 4, after_new
-    assert "UPDATE conversations" in after_new[3]
+    assert len(after_new) == 5, after_new
+    assert "UPDATE conversations" in after_new[4]
     assert _item(seeker, chat)["unread_count"] == 0
 
 
@@ -760,3 +774,53 @@ def test_ac11_send_rate_limits(
     assert day_limited.json() == {"detail": "rate_limited"}
     assert 1 <= int(day_limited.headers["Retry-After"]) <= 86_400
     assert _message_count(db_engine) == 21
+
+
+def test_ac15_thread_current_tour(
+    owner: TestClient,
+    seeker: TestClient,
+    owner_id: uuid.UUID,
+    seeker_id: uuid.UUID,
+    listing_a: uuid.UUID,
+    chat: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    # Spec 0018a AC15: `ThreadOut.tour` is the application's current tour for its owner and
+    # seeker; null once it ended or was cancelled; null in a direct chat.
+    for caller in (owner, seeker):
+        assert _thread(caller, chat).json()["tour"] is None
+    now = tours_tests.db_now(db_engine)
+    tour = tours_tests.make_tour(db_engine, listing_a, chat, seeker_id, now + dt.timedelta(hours=3))
+    for caller in (owner, seeker):
+        current = _thread(caller, chat).json()["tour"]
+        assert current["id"] == str(tour) and current["status"] == "booked"
+        assert dt.datetime.fromisoformat(current["starts_at"]) == now + dt.timedelta(hours=3)
+    # Started but not over: still current.
+    _execute(
+        db_engine,
+        "UPDATE tours SET starts_at = now() - interval '10 minutes',"
+        " ends_at = now() + interval '20 minutes' WHERE id = :id",
+        id=tour,
+    )
+    assert _thread(owner, chat).json()["tour"]["id"] == str(tour)
+    _execute(
+        db_engine,
+        "UPDATE tours SET starts_at = now() - interval '40 minutes',"
+        " ends_at = now() - interval '10 minutes' WHERE id = :id",
+        id=tour,
+    )
+    assert _thread(seeker, chat).json()["tour"] is None
+    later = tours_tests.make_tour(
+        db_engine, listing_a, chat, seeker_id, now + dt.timedelta(hours=5)
+    )
+    assert _thread(seeker, chat).json()["tour"]["id"] == str(later)
+    _execute(
+        db_engine,
+        "UPDATE tours SET status = 'cancelled', cancelled_by = 'lister', cancelled_at = now()"
+        " WHERE id = :id",
+        id=later,
+    )
+    for caller in (owner, seeker):
+        assert _thread(caller, chat).json()["tour"] is None
+    direct = make_direct_chat(db_engine, owner_id, seeker_id)
+    assert _thread(owner, direct).json()["tour"] is None

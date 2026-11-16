@@ -19,16 +19,18 @@ from sqlalchemy.engine import make_url
 ROLE = "homie_admin"
 
 # Column-level writes only: suspend / un-suspend / cap, ending sessions, hide / un-hide, resolve,
-# logging in and out (`admin_logins`: INSERT below, then only `ended_at`).
+# logging in and out (`admin_logins`: INSERT below, then only `ended_at`), cancelling the tours a
+# hide or a suspension ends (spec 0018a).
 _COLUMN_GRANTS = (
     ("users", ("suspended_at", "listing_cap")),
     ("sessions", ("revoked_at",)),
     ("listings", ("status", "removed_at")),
     ("reports", ("resolved_at",)),
     ("admin_logins", ("ended_at",)),
+    ("tours", ("status", "cancelled_by", "cancelled_at", "updated_at")),
 )
-# Tables it may not even read (spec 0016a): password hashes.
-_NO_ACCESS = ("user_passwords",)
+# Tables it may not even read: password hashes (spec 0016a), calendar-feed token hashes (0018a).
+_NO_ACCESS = ("user_passwords", "tour_feeds")
 
 
 def apply_admin_role(database_url: str, password: str) -> None:

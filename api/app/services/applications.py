@@ -84,10 +84,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.matching.score import match_columns
-from app.models import Application, Conversation, Listing, SeekerProfile, User
+from app.models import Application, Conversation, Listing, SeekerProfile, Tour, User
 from app.redis_client import RedisClient
 from app.schemas.application import ApplicantSort, ApplicantStatus
-from app.services import accounts
+from app.services import accounts, tours
 from app.services import search as search_service
 from app.services.listings import ListingNotFoundError
 from app.services.rate_limit import count_or_raise
@@ -332,10 +332,13 @@ def list_my_applications(db: Session, seeker: User) -> Sequence[tuple[Applicatio
     return rows.all()
 
 
-def withdraw(db: Session, seeker: User, application_id: uuid.UUID) -> tuple[Application, Listing]:
+def withdraw(
+    db: Session, seeker: User, application_id: uuid.UUID
+) -> tuple[Application, Listing, list[tours.TourChange]]:
     """Withdraw one of `seeker`'s own `submitted` or `shortlisted` applications, whatever the
-    listing's state. Raises `ApplicationNotFoundError` (unknown or another seeker's) or
-    `NotWithdrawableError` (already withdrawn, or declined). Commits."""
+    listing's state, cancelling its upcoming tour (spec 0018a; `system`, the seeker the line's
+    sender), returned for `tours.announce`. Raises `ApplicationNotFoundError` (unknown or another
+    seeker's) or `NotWithdrawableError` (already withdrawn, or declined). Commits."""
     try:
         application = db.scalar(
             update(Application)
@@ -359,11 +362,14 @@ def withdraw(db: Session, seeker: User, application_id: uuid.UUID) -> tuple[Appl
             raise NotWithdrawableError
         listing = db.get(Listing, application.listing_id)
         assert listing is not None  # the FK cascades: an application never outlives its listing
+        changes = tours.cancel_upcoming(
+            db, Tour.application_id == application.id, actor_id=seeker.id, by="system"
+        )
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return application, listing
+    return application, listing, changes
 
 
 def applicant_count(db: Session, listing_id: uuid.UUID) -> int:
@@ -486,7 +492,7 @@ def set_applicant_status(
     listing_id: uuid.UUID,
     application_id: uuid.UUID,
     status: ApplicantStatus,
-) -> tuple[Row[Any], bool]:
+) -> tuple[Row[Any], bool, list[tours.TourChange]]:
     """Set an applicant of one of `owner`'s listings to `status` (`shortlisted`, `submitted` or
     `declined`), whatever the listing's state, and return its row as `list_applicants` does (the
     `_applicants` SELECT, run in the same transaction before the commit, so it sees the new
@@ -500,7 +506,9 @@ def set_applicant_status(
     between the UPDATE and the SELECT can turn a 404 into a 409, a no-op or the reverse; no data
     changes in any case and the client re-fetches. To `shortlisted`, also opens the application's
     chat in the same transaction (spec 0005a: one conversation per application, insert on conflict
-    do nothing). Commits."""
+    do nothing). Away from `shortlisted` (to `submitted` or `declined`), also cancels the
+    application's upcoming tour (spec 0018a; `system`, the owner the line's sender), returned for
+    `tours.announce`. Commits."""
     try:
         application = db.scalar(
             update(Application)
@@ -533,7 +541,7 @@ def set_applicant_status(
             row = db.execute(query.where(Application.id == application_id)).one_or_none()
             if row is None:
                 raise ApplicationNotFoundError
-            return row, False
+            return row, False, []
         if status == "shortlisted":
             # Opens the chat (spec 0005a), once per application ever: a re-shortlist finds the
             # row and inserts nothing; an un-shortlist or a decline never touches it.
@@ -548,6 +556,14 @@ def set_applicant_status(
                 )
                 .on_conflict_do_nothing(index_elements=["application_id"])
             )
+        # Only a shortlisted application books a tour, so any other target status ends it.
+        changes = (
+            []
+            if status == "shortlisted"
+            else tours.cancel_upcoming(
+                db, Tour.application_id == application.id, actor_id=owner.id, by="system"
+            )
+        )
         # The response row (0006c): the UPDATE's WHERE established ownership, and the row exists
         # and is locked by this transaction.
         query, _ = _applicants(listing_id)
@@ -556,4 +572,4 @@ def set_applicant_status(
     except Exception:
         db.rollback()
         raise
-    return row, True
+    return row, True, changes

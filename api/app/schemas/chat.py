@@ -20,6 +20,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Fie
 from app.schemas._text import visible_characters_only
 from app.schemas.application import ApplicationListingOut
 from app.schemas.listing import _lf_newlines
+from app.schemas.tours import TourChangeKind, TourOut
 
 BODY_MAX_LENGTH = 2000  # ck_messages_body_length (migration 0006)
 
@@ -58,12 +59,22 @@ class MemberOut(BaseModel):
     is_me: bool
 
 
+class TourLineOut(BaseModel):
+    """A tour line (spec 0018a): what changed and the tour's time it shows (UTC). The web renders
+    it from i18n keys; its sender is whoever caused the change."""
+
+    change: TourChangeKind
+    starts_at: dt.datetime
+
+
 class MessageOut(BaseModel):
     """One message of a thread. `mine`: the caller sent it; `sender_name` is the sender's display
-    name (the caller's own on `mine`; a flatmate who has since left keeps theirs)."""
+    name (the caller's own on `mine`; a flatmate who has since left keeps theirs). A tour line
+    (spec 0018a) has `body` null and `tour` set; a typed message the reverse."""
 
     id: uuid.UUID
-    body: str
+    body: str | None
+    tour: TourLineOut | None
     mine: bool
     sender_name: str | None  # null = a deleted account (0013c)
     created_at: dt.datetime
@@ -72,7 +83,8 @@ class MessageOut(BaseModel):
 class LastMessageOut(BaseModel):
     """The newest message of a conversation, as the chat list previews it."""
 
-    body: str  # its first 120 characters
+    body: str | None  # its first 120 characters; null exactly for a tour line
+    tour: TourLineOut | None
     mine: bool
     created_at: dt.datetime
 
@@ -112,3 +124,6 @@ class ThreadOut(BaseModel):
     can_send: bool
     messages: list[MessageOut]
     truncated: bool
+    # The application's current tour (booked, not over) for its owner and seeker (spec 0018a);
+    # null for a flatmate and in a direct chat.
+    tour: TourOut | None

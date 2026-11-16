@@ -132,12 +132,14 @@ const DIRECT: ThreadOut = {
     {
       id: '00000000-0000-0000-0000-00000000ee01',
       body: 'היי, ראיתי שאנחנו מחפשים באותו אזור',
+      tour: null,
       mine: false,
       sender_name: 'רותם שחר',
       created_at: '2026-11-12T09:05:00Z',
     },
   ],
   truncated: false,
+  tour: null,
 };
 
 // --- the mocked API --------------------------------------------------------------------------------

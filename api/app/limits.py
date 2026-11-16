@@ -36,6 +36,9 @@ STATUS = Bucket("status", 200, 1000)
 # One shared budget for the small writes.
 WRITE = Bucket("write", 200, 1000)
 ESTIMATE = Bucket("estimate", 300, 1500)
+# Each booking, move or cancel of a tour is a chat line and, from spec 0018c, an email to the other
+# side (PRODUCT.md "Tours").
+TOUR = Bucket("tour", 10, 20)
 
 
 @dataclass(frozen=True)

@@ -54,6 +54,7 @@ export function message(overrides: Partial<MessageOut> = {}): Message {
   return {
     id: uuid('d'),
     body: `message ${String(n)}`,
+    tour: null,
     mine: false,
     sender_name: 'מיכל',
     created_at: '2026-11-10T10:00:00Z',
@@ -83,6 +84,7 @@ export function thread(overrides: Partial<ThreadOut> = {}): Thread {
     can_send: true,
     messages: [],
     truncated: false,
+    tour: null,
     ...overrides,
   } as Thread;
 }
@@ -123,6 +125,7 @@ export function directThread(overrides: Partial<ThreadOut> = {}): Thread {
     can_send: true,
     messages: [],
     truncated: false,
+    tour: null,
     ...overrides,
   } as Thread;
 }

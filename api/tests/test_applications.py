@@ -23,6 +23,7 @@ from app.services import chat_events, listing_views
 from app.services import people as people_service
 from scripts.seed import GUSH_DAN_WKT
 from tests import test_people as people_tests
+from tests import test_tours as tours_tests
 from tests.conftest import (
     NO_LOOKING,
     Outbox,
@@ -1076,3 +1077,53 @@ def test_ac5_invite_never_outlives_an_apply(
     assert outcomes == {"apply": "submitted", "lister": "409"}
     assert people_tests._pair(db_engine, room, seeker_id).lister_liked_at is None
     assert _count(db_engine) == 1
+
+
+def test_ac11_status_change_cancels_tour(
+    client: TestClient,
+    outbox: Outbox,
+    seeker: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    published: Published,
+) -> None:
+    # Spec 0018a AC11: un-shortlisting, declining and withdrawing each cancel that application's
+    # upcoming tour (`system`), with a line from whoever acted; other applications' tours stay.
+    lister = signup(client, outbox, "own@example.com", "owner")
+    owner_id = uuid.UUID(lister.get("/me").json()["id"])
+    listing = make_listing(db_engine, owner_id, gush_dan)
+    now = tours_tests.db_now(db_engine)
+    seekers = {
+        "unshortlist": make_seeker(db_engine, "a@example.com", "Avi"),
+        "decline": make_seeker(db_engine, "b@example.com", "Ben"),
+        "withdraw": uuid.UUID(seeker.get("/me").json()["id"]),
+        "untouched": make_seeker(db_engine, "c@example.com", "Cai"),
+    }
+    applications, tour_ids = {}, {}
+    for i, (name, seeker_id) in enumerate(seekers.items()):
+        applications[name] = tours_tests.shortlisted(db_engine, listing, seeker_id, owner_id)
+        tour_ids[name] = tours_tests.make_tour(
+            db_engine, listing, applications[name], seeker_id, now + dt.timedelta(hours=3 + i)
+        )
+
+    def patch(name: str, status: str) -> None:
+        response = lister.patch(
+            f"/listings/{listing}/applications/{applications[name]}", json={"status": status}
+        )
+        assert response.status_code == 200, response.text
+
+    patch("unshortlist", "submitted")
+    patch("decline", "declined")
+    assert _withdraw(seeker, applications["withdraw"]).status_code == 200
+    for name, actor in (("unshortlist", owner_id), ("decline", owner_id), ("withdraw", None)):
+        row = tours_tests.tour_row(db_engine, tour_ids[name])
+        assert (row.status, row.cancelled_by) == ("cancelled", "system"), name
+        lines = _scalar(
+            db_engine,
+            "SELECT array_agg(tour_change) FROM messages WHERE tour_id = :t AND sender_id = :s",
+            t=tour_ids[name],
+            s=actor or seekers[name],
+        )
+        assert lines == ["cancelled_by_system"], name
+        assert ({owner_id, seekers[name]}, applications[name], "message") in published, name
+    assert tours_tests.tour_row(db_engine, tour_ids["untouched"]).status == "booked"
