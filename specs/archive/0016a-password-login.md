@@ -1,7 +1,7 @@
 ---
 id: 0016a
 title: "A person can sign up with a password and log in with email and password; the emailed code stays as it is"
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, security, ux, qa]   # security: password storage, login brute force, the admin role's grants; qa: two endpoints + three screens
 estimate: 1 coder run   # full stack (API + web), at the upper end; coder Opus/high (auth, migration; Speed rule 6)
@@ -352,3 +352,11 @@ From `graphify affected` (graph of an older `main`, confirmed by grep in `rent-a
 - No open product question.
 
 ## Digest (filled by orchestrator after verification)
+Merged 2026-11-16 as PR #114 (`67c6457`), ci green on head `095efc0`, merged by the orchestrator (Slice 16 delegated).
+- Shipped: optional password at sign-up and in the profile, `POST /auth/password/login`, `PUT /me/password` (fresh
+  sign-in, signs out other devices), argon2id with a random salt per hash (t=2, 19 MiB, p=1, at most 4 at once) in
+  the `user_passwords` table the admin role cannot read; `users.google_sub` for 0016b. Migration `0029_login_methods`.
+- Review (code, security, ux, qa): blockers 0 · majors 1 (fixed: a rehash on login could undo a just-changed
+  password) · minors 16 (7 fixed, rest in FOLLOWUPS) · nits 9.
+- Gilad 2026-11-16: a password login counts as a fresh sign-in for deleting the account and changing the password;
+  a security email spec comes before going public (FOLLOWUPS 0016a).

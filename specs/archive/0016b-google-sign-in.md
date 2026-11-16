@@ -1,7 +1,7 @@
 ---
 id: 0016b
 title: "A person can sign up and log in with their Google account"
-status: in-progress
+status: done
 depends_on: [0016a]   # 0016a adds `users.google_sub` (migration 0029), the scrub CHECK and the login page's mode switch
 reviewers: [code, security, ux, qa]   # security: ID-token verification, account linking, the fake verifier's guard; qa: new endpoint + screens
 estimate: 1 coder run   # full stack; coder Opus/high (auth; Speed rule 6)
@@ -376,3 +376,11 @@ From `graphify affected` (graph of an older `main`; checked with grep in this wo
 8. Added AC15 (availability), NF2 (axe); AC6 test approach made concrete; reviewers + `qa`.
 
 ## Digest (filled by orchestrator after verification)
+Merged 2026-11-16 as PR #115 (`e8c11ce`), ci green on head `66a5b44`, merged by the orchestrator (Slice 16 delegated).
+- Shipped: Google sign-in (GIS button, `POST /auth/google`), linking by `sub` then verified email, the "one more
+  step" panel for new accounts; `GOOGLE_VERIFIER` off/fake/google (fake refused on an https origin); Google keys
+  fetched with a 5 s timeout, one fetch at a time, 30 s back-off, stale keys up to 1 h. No migration.
+- Review (code, security, ux, qa): blockers 0 · majors 3 (fixed) · minors 9 fixed, 4 in FOLLOWUPS.
+- For Gilad: privacy draft text `legal.privacy.s1.i1` (updated) and `s3.i6` (Google) to approve; FOLLOWUPS asks
+  whether the fake verifier should be refused on every non-localhost origin, not only https. 0013a must add the
+  Google script/frame sources to its CSP.
