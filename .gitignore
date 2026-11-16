@@ -17,3 +17,6 @@ web/screens/
 graphify-out/
 # Untracked originals the rent reference fixtures are trimmed from (spec 0014a).
 api/tests/fixtures/rent_reference/raw/
+# The waitlist's deploy build and wrangler's local state (spec 0017).
+waitlist/.dist/
+waitlist/.wrangler/
