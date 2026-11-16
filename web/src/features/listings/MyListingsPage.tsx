@@ -218,6 +218,17 @@ function ListingRow({
                 </>
               )}
             </Button>
+            {/* Live cards of both types: tour times need a live listing. */}
+            {state === 'live' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                to={`/me/listings/${listing.id}/tours`}
+                aria-describedby={titleId}
+              >
+                {t('listings.mine.tours')}
+              </Button>
+            )}
             {/* Live rooms only: a paused or expired room has no people page (409). */}
             {listing.listing_type === 'room' && state === 'live' && (
               <Button

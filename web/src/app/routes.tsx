@@ -11,6 +11,7 @@ import { SignupPage } from '../features/auth/SignupPage';
 import { ChatLayout } from '../features/chat/ChatLayout';
 import { ChatListPage } from '../features/chat/ChatListPage';
 import { ChatThreadPage } from '../features/chat/ChatThreadPage';
+import { TourTimesPage } from '../features/tours/TourTimesPage';
 import { FlatmatesPage } from '../features/flatmates/FlatmatesPage';
 import { JoinFlatPage } from '../features/flatmates/JoinFlatPage';
 import { MyFlatsPage } from '../features/flatmates/MyFlatsPage';
@@ -83,6 +84,7 @@ export function AppRoutes() {
           <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
           <Route path="me/listings/:id/people" element={<PeoplePage />} />
           <Route path="me/listings/:id/flatmates" element={<FlatmatesPage />} />
+          <Route path="me/listings/:id/tours" element={<TourTimesPage />} />
           <Route path="me/likes" element={<MyLikesPage />} />
           <Route path="me/profile" element={<ProfilePage />} />
           {/* One layout for both: on a desktop the list stays beside the thread (spec 0009s). */}

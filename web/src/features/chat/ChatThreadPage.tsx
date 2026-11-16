@@ -17,6 +17,8 @@ import { ErrorState } from '../../components/ErrorState';
 import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { formatDay } from '../flatmates/format';
+import { tourLineText } from '../tours/tourLineText';
+import { TourCard } from '../tours/TourCard';
 import { cardTitle } from '../listings/cardTitle';
 import { formatIls } from '../listings/format';
 import { useRemoveMatch } from '../people/useMarketPeople';
@@ -290,6 +292,7 @@ function Thread({
         <WarningMark />
         <span>{t('chat.thread.warning')}</span>
       </p>
+      <TourCard id={id} thread={thread} />
       {thread.visible_from !== null && (
         <p className={systemLine}>
           {t('chat.joinedNote', { date: formatDay(thread.visible_from) })}
@@ -311,6 +314,19 @@ function Thread({
           <ol className="flex flex-col gap-2">
             {messages.map((message, i) => {
               const previous = messages[i - 1];
+              if (message.tour !== null) {
+                // A tour line: centred, no bubble and no sender name.
+                return (
+                  <li
+                    key={message.id}
+                    ref={message.id === lastId ? lastRef : undefined}
+                    data-testid="tour-line"
+                    className={`lg:scroll-mb-56 ${systemLine}`}
+                  >
+                    {tourLineText(t, message.tour, message.mine ? undefined : message.sender_name)}
+                  </li>
+                );
+              }
               const showName =
                 group &&
                 !message.mine &&

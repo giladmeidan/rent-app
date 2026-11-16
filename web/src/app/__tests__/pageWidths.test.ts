@@ -27,6 +27,7 @@ const PAGES: Record<string, { file: string; width: TableWidth }> = {
   ApplicantsPage: { file: 'features/applicants/ApplicantsPage.tsx', width: 'wide' },
   PeoplePage: { file: 'features/people/PeoplePage.tsx', width: 'wide' },
   FlatmatesPage: { file: 'features/flatmates/FlatmatesPage.tsx', width: 'default' },
+  TourTimesPage: { file: 'features/tours/TourTimesPage.tsx', width: 'default' },
   MyApplicationsPage: { file: 'features/applications/MyApplicationsPage.tsx', width: 'default' },
   // One width for both panels (spec 0010b), so switching tabs never moves the tablist; the
   // applications keep their reading column inside it.

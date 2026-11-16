@@ -302,6 +302,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0018c · api/app/services/tour_mail.py `send_pending` · the 3 attempts run within ~20 s (10 s cron), so an SMTP outage longer than ~30 s drops the mail; consider a not-before time on retries, or log non-zero `dropped` at WARNING · review qa minor
 - [ ] 0018c · api/app/services/tour_mail.py `send_pending` · a dead SMTP host can stall one run (BATCH 100 × 10 s timeout, past arq's 300 s job timeout, piling up threads); on the first `EmailUnavailable` re-push the rest and break, before 0013a goes live · review minor
 - [ ] 0018c · api/app/services/email.py `FileEmailSender` · with `EMAIL_BACKEND=file` the outbox JSON files hold tour PII (names, street, time) and no retention rule covers them; purge old outbox files or switch to SMTP before tours go live (0013a) · review security minor
+- [ ] 0018e · web/src/components/ChoiceGroup.tsx, features/tours/SlotPicker.tsx · SlotPicker radio labels are plain `formatTourTime` text (ChoiceGroup label is a string), not `<time><bdi>`; needs a ReactNode label in ChoiceGroup · minor (UX review of 0018e)
 
 ## 0017b
 - [ ] 0017b · waitlist/public/app.js `renderWidget` + styles.css `.turnstile` · at 375 px the interactive 300 px widget is 7 px wider than the 293 px form and spills into the card padding (measured with a stand-in); check the real widget at 375 px on the live page (README Setup step 4.4) and, if it overflows, render `size: 'compact'` under 360 px · not provable with the fake api.js; review qa minor
