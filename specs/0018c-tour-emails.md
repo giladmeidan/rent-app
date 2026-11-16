@@ -1,7 +1,7 @@
 ---
 id: 0018c
 title: The lister and the seeker get an email when a tour is booked, rescheduled or cancelled (with an .ics file on booking and reschedule), and both get a reminder the day before; tours are purged 12 months after their time and the privacy policy says so
-status: in-review
+status: done
 depends_on: [0018a]   # tours table (incl. reminder_sent_at), the after-commit hook `tours.announce`, cleanup cancels. 0018d (calendar feed) imports this spec's services/ics.py (contract; Risks R1)
 reviewers: [code, security, qa]   # security: PII in email (names, addresses, times) to the right person only, .ics text injection, a retention DELETE; qa: worker jobs, retries, idempotent reminders. No ux: no screen changes beyond privacy-policy copy. No perf: one indexed sweep every 15 min, a Redis list drained every 10 s
 estimate: 1 coder run   # coder Opus/high (personal data leaves the system by email; a retention DELETE: Speed rule 6). No migration (0018a owns it). About 15 files (incl. compose), half tests
