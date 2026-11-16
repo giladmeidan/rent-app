@@ -24,6 +24,10 @@ from app.config import get_settings
 CERTS_URL = "https://www.googleapis.com/oauth2/v1/certs"
 CERTS_TIMEOUT_S = 5.0
 CERTS_DEFAULT_MAX_AGE_S = 3600
+# After a failed fetch: no new attempt for this long, so an outage costs one 5 s fetch per 30 s.
+CERTS_RETRY_S = 30
+# A failed refresh keeps serving the expired keys this long past their expiry.
+CERTS_STALE_S = 3600
 CLOCK_SKEW_S = 10
 ISSUERS = frozenset({"accounts.google.com", "https://accounts.google.com"})
 
@@ -46,17 +50,19 @@ class GoogleUnavailable(Exception):  # noqa: N818  (name fixed by spec 0016b)
     """Google sign-in is off, or Google's keys cannot be fetched (503)."""
 
 
-# {kid: PEM certificate} and the monotonic time it expires; refreshed under `_lock`.
+# {kid: PEM certificate}, the monotonic time it expires, and when a failed fetch may be retried;
+# all under `_lock`.
 _certs: dict[str, str] = {}
 _certs_expire_at = 0.0
+_retry_at = 0.0
 _lock = threading.Lock()
 
 
 def _reset_cache() -> None:
-    """Forget the cached keys (tests)."""
-    global _certs, _certs_expire_at
+    """Forget the cached keys and any failed fetch (tests)."""
+    global _certs, _certs_expire_at, _retry_at
     with _lock:
-        _certs, _certs_expire_at = {}, 0.0
+        _certs, _certs_expire_at, _retry_at = {}, 0.0, 0.0
 
 
 def _max_age(cache_control: str | None) -> int:
@@ -64,28 +70,43 @@ def _max_age(cache_control: str | None) -> int:
     return int(match.group(1)) if match else CERTS_DEFAULT_MAX_AGE_S
 
 
+def _fetch_certs() -> tuple[dict[str, str], int] | None:
+    """Google's `{kid: PEM cert}` and its `max-age`, or None on any failure."""
+    try:
+        response = httpx.get(CERTS_URL, timeout=CERTS_TIMEOUT_S)
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        return None
+    if (
+        not isinstance(body, dict)
+        or not body
+        or not all(isinstance(k, str) and isinstance(v, str) for k, v in body.items())
+    ):
+        return None
+    return body, _max_age(response.headers.get("cache-control"))
+
+
 def _google_certs() -> dict[str, str]:
     """Google's signing certificates, cached for the response's `max-age`. One thread refetches
-    while the others wait. Any fetch failure: `GoogleUnavailable`, nothing cached."""
+    while the others wait. A failed fetch is not retried for `CERTS_RETRY_S`; meanwhile expired
+    keys are served for up to `CERTS_STALE_S` past expiry, else `GoogleUnavailable`."""
     # shortcut: no refetch on an unknown kid; Google publishes a new key well before signing with
     # it, so the max-age refresh is enough — upgrade if 401s show up after a rotation
-    global _certs, _certs_expire_at
+    global _certs, _certs_expire_at, _retry_at
     with _lock:
-        if _certs and time.monotonic() < _certs_expire_at:
+        now = time.monotonic()
+        if _certs and now < _certs_expire_at:
             return _certs
-        try:
-            response = httpx.get(CERTS_URL, timeout=CERTS_TIMEOUT_S)
-            body = response.json() if response.status_code == 200 else None
-        except (httpx.HTTPError, ValueError):
-            raise GoogleUnavailable from None
-        if (
-            not isinstance(body, dict)
-            or not body
-            or not all(isinstance(k, str) and isinstance(v, str) for k, v in body.items())
-        ):
+        stale = _certs if _certs and now < _certs_expire_at + CERTS_STALE_S else None
+        fetched = _fetch_certs() if now >= _retry_at else None
+        if fetched is None:
+            if now >= _retry_at:  # this call fetched and failed
+                _retry_at = time.monotonic() + CERTS_RETRY_S
+            if stale is not None:
+                return stale
             raise GoogleUnavailable
-        _certs = body
-        _certs_expire_at = time.monotonic() + _max_age(response.headers.get("cache-control"))
+        _certs, max_age = fetched
+        _certs_expire_at = time.monotonic() + max_age
         return _certs
 
 
@@ -104,6 +125,9 @@ def _fake(credential: str) -> GoogleIdentity:
 def _google(credential: str, client_id: str) -> GoogleIdentity:
     certs = _google_certs()  # before the try: a fetch failure is a 503, not a 401
     try:
+        # Google always names its key: without a `kid`, google-auth would try every cert.
+        if not isinstance(jwt.decode_header(credential).get("kid"), str):  # type: ignore[no-untyped-call]
+            raise InvalidGoogleToken
         claims = jwt.decode(  # type: ignore[no-untyped-call]  # google-auth is unannotated
             credential, certs=certs, audience=client_id, clock_skew_in_seconds=CLOCK_SKEW_S
         )

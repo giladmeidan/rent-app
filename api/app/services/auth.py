@@ -358,7 +358,9 @@ def _google_account(db: Session, sub: str, email: str) -> User | None:
             .values(google_sub=sub)
             .returning(User.id)
         )
-    except IntegrityError:  # `uq_users_google_sub`: another account took this sub meanwhile
+    # `uq_users_google_sub` (another account took this sub meanwhile), or 0016a's scrub CHECK (a
+    # racing DELETE /me made the row a tombstone, which must keep google_sub NULL).
+    except IntegrityError:
         db.rollback()
         raise GoogleAccountConflictError from None
     if linked is None:  # a concurrent link committed first: ours only if it linked this sub
@@ -407,7 +409,8 @@ def google_login(
             created = user is not None
             if user is None:
                 user = _google_account(db, identity.sub, email)
-                assert user is not None  # the conflicting row exists once our INSERT returns
+                if user is None:  # the conflicting row went meanwhile (a racing DELETE /me)
+                    raise GoogleAccountConflictError
         user.last_login_at = dt.datetime.now(dt.UTC)
         db.commit()
     except Exception:
