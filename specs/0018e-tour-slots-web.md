@@ -1,7 +1,7 @@
 ---
 id: 0018e
 title: The lister's tour-times page and the seeker's slot picker in the chat thread, with tour lines in the thread and the chat list (web half of 0018a)
-status: verified
+status: in-review
 depends_on: [0018a]   # all 7 endpoints, the chat fields (`MessageOut.tour`, `LastMessageOut.tour`, `ThreadOut.tour`) and the error codes are 0018a's. Branch from 0018a's branch once its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [qa, ux]   # qa: two flows (open times, book/move/cancel), error mapping; ux: a new page, a thread card, a dialog, a system line. No security: no new endpoint or rule (0018a's are reviewed there). No perf
 estimate: 1 coder run   # coder Sonnet/medium: UI over a finished API, no migration

@@ -15,6 +15,7 @@ import {
 } from '../../auth/__tests__/harness';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut, MessageOut, ThreadOut } from '../api';
+import type { TourLineOut } from '../../tours/api';
 import { readDraft, writeDraft } from '../../../app/drafts';
 import { CONVERSATIONS_KEY } from '../useConversations';
 import { conversation, directThread, message, thread } from './fixtures';
@@ -462,6 +463,47 @@ describe('ChatThreadPage', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: he.chat.composer.send })).toBeNull();
     expect(screen.getByText(he.chat.thread.closed)).toHaveAttribute('role', 'status');
+  });
+
+  it('ac3_tour_line', async () => {
+    // One centred line per change: no bubble, no sender name, the right text. 16:20Z = 18:20.
+    const when = 'יום ג׳ 17.11 · 18:20';
+    const line = (change: TourLineOut['change'], overrides: Partial<MessageOut> = {}) =>
+      message({
+        body: null,
+        tour: { change, starts_at: '2026-11-17T16:20:00Z' },
+        ...overrides,
+      });
+    const T = thread({
+      other_name: NAME,
+      messages: [
+        message({ body: 'hi' }),
+        line('booked'),
+        line('rescheduled'),
+        line('cancelled_by_lister'),
+        line('cancelled_by_seeker', { mine: true, sender_name: 'דנה' }),
+        line('cancelled_by_system'),
+        line('cancelled_by_lister', { sender_name: null }),
+      ],
+    });
+    renderThread(T, [json(T)]);
+    expect(await h1(NAME)).toBeVisible();
+    const items = bubbles();
+    expect(items).toHaveLength(7);
+    expect(items.slice(1).map((li) => li.textContent)).toEqual([
+      `נקבע סיור: ${when}`,
+      `הסיור הועבר ל־${when}`,
+      `הסיור של ${when} בוטל על ידי ${NAME}`,
+      `ביטלת את הסיור של ${when}`,
+      `הסיור של ${when} בוטל`,
+      `הסיור של ${when} בוטל על ידי ${he.account.deletedName}`,
+    ]);
+    for (const li of items.slice(1)) {
+      expect(li).toHaveClass('self-center');
+      expect(within(li).queryByTestId('message-body')).toBeNull();
+      expect(within(li).queryByTestId('sender-name')).toBeNull();
+    }
+    expect(items[0]).toHaveClass('self-start');
   });
 
   it('ac3_page_title', async () => {

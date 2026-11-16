@@ -17,6 +17,7 @@ import { Skeleton } from '../../components/Skeleton';
 import { Tag } from '../../components/Tag';
 import { useMyFlats } from '../flatmates/api';
 import { cardTitle } from '../listings/cardTitle';
+import { tourLineText } from '../tours/tourLineText';
 import type { ConversationOut } from './api';
 import { formatMessageTime } from './format';
 import { useConversations } from './useConversations';
@@ -105,7 +106,11 @@ function ConversationRow({
                 dir="auto"
                 className="min-w-0 flex-1 truncate text-body"
               >
-                {last.mine ? t('chat.list.you', { body: last.body }) : last.body}
+                {last.tour !== null
+                  ? tourLineText(t, last.tour, conversation.other_name, last.mine)
+                  : last.mine
+                    ? t('chat.list.you', { body: last.body })
+                    : last.body}
               </span>
               <time dateTime={last.created_at} className="flex-none text-caption text-ink-muted">
                 {formatMessageTime(last.created_at)}
