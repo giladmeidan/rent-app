@@ -20,6 +20,7 @@ dependencies = [
   "boto3==1.44.2",        # the R2 photo store over the S3 API (spec 0010d)
   "openpyxl==3.1.5",      # the CBS rent table xlsx (spec 0014d)
   "argon2-cffi==25.1.0",  # argon2id password hashes, a random salt each (spec 0016a)
+  "google-auth==2.62.2",  # Google ID-token checks, jwt.decode (spec 0016b); keys fetched with httpx
 ]
 
 [dependency-groups]
@@ -31,6 +32,7 @@ dev = [
   "types-redis==4.6.0.20241004",
   "boto3-stubs[s3]==1.44.2",  # mypy types for the R2 store
   "types-openpyxl==3.1.5.20261017",  # mypy types for the CBS xlsx parser
+  "cryptography==50.0.2",  # test RSA keys for Google ID tokens (spec 0016b)
 ]
 # The admin dashboard (spec 0012b): installed in the admin image, never in the public one.
 admin = [

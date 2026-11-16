@@ -1,7 +1,7 @@
 ---
 id: 0016b
 title: "A person can sign up and log in with their Google account"
-status: verified
+status: in-progress
 depends_on: [0016a]   # 0016a adds `users.google_sub` (migration 0029), the scrub CHECK and the login page's mode switch
 reviewers: [code, security, ux, qa]   # security: ID-token verification, account linking, the fake verifier's guard; qa: new endpoint + screens
 estimate: 1 coder run   # full stack; coder Opus/high (auth; Speed rule 6)

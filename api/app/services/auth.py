@@ -22,6 +22,11 @@ Password login (spec 0016a): every attempt is counted before any hash check, per
 ceiling stops only password logins; the emailed code still works, so it never locks a person out.
 Every failure answers the same and runs exactly one argon2 verify (against `DUMMY_HASH` when there
 is no stored hash). Only argon2id hashes are stored (`services/passwords.py`).
+
+Google sign-in (spec 0016b): every attempt is counted per network before the credential is
+verified (30 per 15 min, 300 a day). A Google account is found by its `sub`, else linked to the
+live account of its (Google-verified) email, else creates one; nothing from Google is stored but
+`sub` (and a new account's email).
 """
 
 import datetime as dt
@@ -33,6 +38,7 @@ from typing import Any
 
 from sqlalchemy import exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import client_ip
@@ -41,9 +47,10 @@ from app.i18n import he
 from app.models import Session as SessionRow
 from app.models import User, UserPassword
 from app.redis_client import RedisClient
-from app.schemas.auth import ProfileIn
+from app.schemas.auth import GoogleProfileIn, ProfileIn
 from app.services import (
     accounts,  # a module import: accounts.py imports this module too
+    google,
     passwords,
 )
 from app.services.email import EmailSender, EmailUnavailable
@@ -66,6 +73,8 @@ PW_RATE_LIMIT_EMAIL_ALL_DAY = 100
 PW_RATE_DAY_S = 86_400
 PW_RATE_LIMIT_IP = 30
 PW_RATE_LIMIT_IP_DAY = 300
+GOOGLE_RATE_LIMIT_IP = 30  # per OTP_RATE_WINDOW_S
+GOOGLE_RATE_LIMIT_IP_DAY = 300
 
 # Reserve one attempt: nil when no code is pending (never creates a key, so never one without a
 # TTL); otherwise {code_hmac, attempts after this one, PTTL}. A key past the limit is deleted.
@@ -115,6 +124,10 @@ class SignupBlockedError(Exception):
 
 class InvalidCredentialsError(Exception):
     """Unknown email, no password, or a wrong password (deliberately one case, spec 0016a)."""
+
+
+class GoogleAccountConflictError(Exception):
+    """The Google email's account is linked to another Google account (spec 0016b)."""
 
 
 def normalise_email(email: str) -> str:
@@ -172,6 +185,24 @@ def _count_password(r: RedisClient, email: str, network: str) -> None:
         (f"rl:pw:email:all:day:{email}", PW_RATE_LIMIT_EMAIL_ALL_DAY, PW_RATE_DAY_S),
         (f"rl:pw:ip:{network}", PW_RATE_LIMIT_IP, PW_RATE_WINDOW_S),
         (f"rl:pw:ip:day:{network}", PW_RATE_LIMIT_IP_DAY, PW_RATE_DAY_S),
+    ]
+    count_or_raise(r, counters)
+
+
+def _count_google(r: RedisClient, network: str) -> None:
+    """`_count_request`'s per-network shape for a Google sign-in (spec 0016b), keys under
+    `rl:google:`."""
+    counters: list[tuple[str, int, int]] = []
+    p = client_ip.network48(network)
+    if p is not None:
+        factor = client_ip.PREFIX48_FACTOR
+        counters += [
+            (f"rl:google:ip48:{p}", factor * GOOGLE_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
+            (f"rl:google:ip48:day:{p}", factor * GOOGLE_RATE_LIMIT_IP_DAY, OTP_RATE_DAY_S),
+        ]
+    counters += [
+        (f"rl:google:ip:{network}", GOOGLE_RATE_LIMIT_IP, OTP_RATE_WINDOW_S),
+        (f"rl:google:ip:day:{network}", GOOGLE_RATE_LIMIT_IP_DAY, OTP_RATE_DAY_S),
     ]
     count_or_raise(r, counters)
 
@@ -303,6 +334,86 @@ def password_login(db: Session, r: RedisClient, email: str, password: str, netwo
         )
     db.commit()
     return user
+
+
+def _google_account(db: Session, sub: str, email: str) -> User | None:
+    """Steps 3-4 and 6 of `google_login`: the account of `sub`, else the live account of `email`,
+    linked to `sub` (uncommitted). None when neither exists. Raises `AccountSuspendedError` or
+    `GoogleAccountConflictError` before any write."""
+    user = db.scalar(select(User).where(User.google_sub == sub))  # tombstones have NULL
+    if user is None:
+        user = _find_user(db, email)
+        if user is None:
+            return None
+    if user.suspended_at is not None:
+        raise AccountSuspendedError
+    if user.google_sub == sub:
+        return user
+    if user.google_sub is not None:
+        raise GoogleAccountConflictError
+    try:
+        linked = db.scalar(
+            update(User)
+            .where(User.id == user.id, User.google_sub.is_(None))
+            .values(google_sub=sub)
+            .returning(User.id)
+        )
+    except IntegrityError:  # `uq_users_google_sub`: another account took this sub meanwhile
+        db.rollback()
+        raise GoogleAccountConflictError from None
+    if linked is None:  # a concurrent link committed first: ours only if it linked this sub
+        db.refresh(user)
+        if user.google_sub != sub:
+            raise GoogleAccountConflictError
+    return user
+
+
+def google_login(
+    db: Session,
+    r: RedisClient,
+    credential: str,
+    profile: GoogleProfileIn | None,
+    network: str,
+) -> tuple[User, bool]:
+    """Sign in with a Google credential (spec 0016b) and return `(user, created)`. Raises
+    `RateLimitedError` (nothing verified), `google.InvalidGoogleToken`,
+    `google.GoogleUnavailable`, `AccountSuspendedError`, `GoogleAccountConflictError`,
+    `SignupBlockedError` or `ProfileRequiredError`, with nothing written. Commits; the caller adds
+    a session."""
+    _count_google(r, network)
+    identity = google.verify_credential(credential)
+    email = normalise_email(identity.email)
+    try:
+        created = False
+        user = _google_account(db, identity.sub, email)
+        if user is None:
+            if accounts.email_blocked(db, email):
+                raise SignupBlockedError
+            if profile is None:
+                raise ProfileRequiredError
+            # No conflict target: a concurrent sign-in (Google or code) that inserted this email
+            # or this sub first wins, and this request becomes a login of that row.
+            user = db.scalar(
+                insert(User)
+                .values(
+                    email=email,
+                    display_name=profile.display_name,
+                    role=profile.role,
+                    google_sub=identity.sub,
+                )
+                .on_conflict_do_nothing()
+                .returning(User)
+            )
+            created = user is not None
+            if user is None:
+                user = _google_account(db, identity.sub, email)
+                assert user is not None  # the conflicting row exists once our INSERT returns
+        user.last_login_at = dt.datetime.now(dt.UTC)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return user, created
 
 
 def set_password(db: Session, user: User, raw: str, keep_token: str) -> None:

@@ -41,6 +41,10 @@ TEST_DATABASE_URL: str = _required_env("TEST_DATABASE_URL")
 _required_env("REDIS_URL")
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# The code default (`off`) everywhere, whatever a worktree's `.env` says: tests opt into the fake
+# verifier with `set_env` (spec 0016b), and `test_config.py`'s https settings stay valid.
+os.environ.pop("GOOGLE_VERIFIER", None)
+os.environ.pop("GOOGLE_CLIENT_ID", None)
 
 from fastapi.testclient import TestClient  # noqa: E402
 

@@ -6,7 +6,8 @@ session (`current_user`). `UserOut` is always built by `user_out` (also `PUT /me
 session, and its sessions no longer resolve. DELETE /me (spec 0013c) deletes the caller's account,
 from a session signed in within `DELETE_REAUTH_S`; a blocked email's right code answers 403
 `signup_blocked` with no session. Spec 0016a: POST /auth/password/login (public, its own per-network
-limits) and PUT /me/password (a session younger than `DELETE_REAUTH_S`)."""
+limits) and PUT /me/password (a session younger than `DELETE_REAUTH_S`). Spec 0016b: POST
+/auth/google (public, its own per-network limits) signs in or up with a Google ID token."""
 
 import datetime as dt
 from typing import Annotated
@@ -22,9 +23,16 @@ from app.config import get_settings
 from app.db import get_session
 from app.models import User
 from app.redis_client import RedisClient, get_redis
-from app.schemas.auth import OtpRequestIn, OtpVerifyIn, PasswordIn, PasswordLoginIn, UserOut
+from app.schemas.auth import (
+    GoogleLoginIn,
+    OtpRequestIn,
+    OtpVerifyIn,
+    PasswordIn,
+    PasswordLoginIn,
+    UserOut,
+)
 from app.schemas.error import ErrorOut
-from app.services import accounts
+from app.services import accounts, google
 from app.services import auth as auth_service
 from app.services.email import EmailSender, EmailUnavailable, get_email_sender
 from app.services.photo_store import PhotoStore, get_photo_store
@@ -65,7 +73,7 @@ def _rate_limited(exc: RateLimitedError) -> HTTPException:
 
 
 def _signed_in(db: Session, user: User, status_code: int) -> JSONResponse:
-    """`UserOut` with a new session cookie (code and password login)."""
+    """`UserOut` with a new session cookie (code, password and Google login)."""
     token = auth_service.create_session(db, user)
     response = JSONResponse(
         status_code=status_code, content=user_out(db, user).model_dump(mode="json")
@@ -157,6 +165,50 @@ def password_login(body: PasswordLoginIn, request: Request, db: DbDep, r: RedisD
     except auth_service.AccountSuspendedError:
         raise HTTPException(status_code=403, detail="account_suspended") from None
     return _signed_in(db, user, 200)
+
+
+@router.post(
+    "/auth/google",
+    response_model=UserOut,
+    responses={
+        201: {"model": UserOut, "description": "Account created and logged in"},
+        401: {"model": ErrorOut, "description": "invalid_google_token"},
+        403: {"model": ErrorOut, "description": "account_suspended, or signup_blocked"},
+        409: {
+            "model": ErrorOut,
+            "description": "google_account_conflict: the email's account has another Google sub",
+        },
+        422: {"description": "profile_required, or a malformed body"},
+        429: {"model": ErrorOut, "description": "Too many attempts; see Retry-After"},
+        503: {
+            "model": ErrorOut,
+            "description": "google_unavailable (off, or Google's keys unreachable), or Redis or "
+            "the database is unreachable",
+        },
+    },
+)
+def google_login(body: GoogleLoginIn, request: Request, db: DbDep, r: RedisDep) -> JSONResponse:
+    """Sign in or up with a Google ID token (spec 0016b). A sync handler: the key fetch and the
+    signature check run in the threadpool."""
+    try:
+        user, created = auth_service.google_login(
+            db, r, body.credential, body.profile, client_network(request)
+        )
+    except RateLimitedError as exc:
+        raise _rate_limited(exc) from None
+    except google.InvalidGoogleToken:
+        raise HTTPException(status_code=401, detail="invalid_google_token") from None
+    except google.GoogleUnavailable:
+        raise HTTPException(status_code=503, detail="google_unavailable") from None
+    except auth_service.ProfileRequiredError:
+        raise HTTPException(status_code=422, detail="profile_required") from None
+    except auth_service.AccountSuspendedError:
+        raise HTTPException(status_code=403, detail="account_suspended") from None
+    except auth_service.SignupBlockedError:
+        raise HTTPException(status_code=403, detail="signup_blocked") from None
+    except auth_service.GoogleAccountConflictError:
+        raise HTTPException(status_code=409, detail="google_account_conflict") from None
+    return _signed_in(db, user, 201 if created else 200)
 
 
 @router.get(
