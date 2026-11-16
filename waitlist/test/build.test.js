@@ -16,12 +16,11 @@ function copyWaitlist(origin) {
   for (const entry of ['build.mjs', 'public']) {
     cpSync(join(WAITLIST, entry), join(dir, entry), { recursive: true });
   }
+  // Whatever origin the committed wrangler.toml holds (the placeholder, or the live one since PR #118).
   const toml = readFileSync(join(WAITLIST, 'wrangler.toml'), 'utf8');
-  assert.match(toml, /^ALLOWED_ORIGIN = "https:\/\/join\.example\.com"$/m);
-  writeFileSync(
-    join(dir, 'wrangler.toml'),
-    toml.replace('ALLOWED_ORIGIN = "https://join.example.com"', `ALLOWED_ORIGIN = "${origin}"`),
-  );
+  const line = /^ALLOWED_ORIGIN = "[^"]*"$/m;
+  assert.equal(toml.match(new RegExp(line.source, 'gm'))?.length, 1, 'one ALLOWED_ORIGIN line');
+  writeFileSync(join(dir, 'wrangler.toml'), toml.replace(line, `ALLOWED_ORIGIN = "${origin}"`));
   return dir;
 }
 

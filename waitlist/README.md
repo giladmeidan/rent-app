@@ -33,9 +33,11 @@ test/                    node --test (`make test-waitlist`); the page test is we
       truth for the project's binding and vars; do not edit them in the dashboard.
 3. `make waitlist-migrate`
 4. Turnstile, then the first deploy:
-   1. Cloudflare → Turnstile → Add widget: mode **Managed**, hostname `join.<domain>` (or
-      `homie-waitlist.pages.dev` instead, only if `ALLOWED_ORIGIN` is that origin: the Function checks that
-      siteverify's hostname is `ALLOWED_ORIGIN`'s). Cloudflare shows a site key (public) and a secret key.
+   1. Cloudflare → Turnstile → Add widget: mode **Managed**, hostname `homie-waitlist.pages.dev` (the live
+      `ALLOWED_ORIGIN` since PR #118), plus `join.<domain>` once the custom domain exists. The Function
+      accepts only a token whose siteverify hostname is `ALLOWED_ORIGIN`'s, so when `ALLOWED_ORIGIN` moves to
+      `https://join.<domain>` the widget must list that hostname first. Cloudflare shows a site key (public)
+      and a secret key.
    2. `make waitlist-secret`, and paste the **secret key** at wrangler's prompt (it is never on a command line
       and never in `wrangler.toml`). It sets the Pages secret `TURNSTILE_SECRET` for production. Pages applies
       a changed secret to new deployments only, so set it before deploying, or deploy again after changing it.
