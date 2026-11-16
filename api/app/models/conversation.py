@@ -2,7 +2,7 @@
 an owner opens by shortlisting an applicant (or a mutual like opens), and the direct chat two
 people share with no room and no application.
 
-Every CHECK, FK and index matches migrations 0006 and 0014 exactly (autogenerate must see no
+Every CHECK, FK and index matches migrations 0006, 0014 and 0030 exactly (autogenerate must see no
 diff). A conversation has its own `id`. One conversation per application, ever, and an
 application chat's `id` equals its application's id (kept for links, PRODUCT.md "Chat", Q4;
 `ck_conversations_application_id`); a direct chat's is random. A direct chat has no application:
@@ -17,6 +17,14 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
+
+MESSAGE_KIND_CHECK = (
+    "(tour_change IS NULL AND body IS NOT NULL AND tour_id IS NULL AND tour_starts_at IS NULL)"
+    " OR (tour_change IS NOT NULL"
+    " AND tour_change IN ('booked', 'rescheduled', 'cancelled_by_seeker', 'cancelled_by_lister',"
+    " 'cancelled_by_system') AND body IS NULL AND tour_id IS NOT NULL"
+    " AND tour_starts_at IS NOT NULL)"
+)
 
 
 class Conversation(Base):
@@ -83,8 +91,12 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         CheckConstraint("char_length(body) BETWEEN 1 AND 2000", name="ck_messages_body_length"),
+        # A typed message or a tour line (spec 0018a), never both.
+        CheckConstraint(MESSAGE_KIND_CHECK, name="ck_messages_kind"),
         # Serves the thread (newest 200), the newest message and the unread count.
         Index("ix_messages_conversation_created", "conversation_id", "created_at", "id"),
+        # The cascade from `tours`.
+        Index("ix_messages_tour_id", "tour_id", postgresql_where=text("tour_id IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -99,8 +111,16 @@ class Message(Base):
     sender_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    # Plain text, stored and returned as validated by `MessageIn`; never HTML.
-    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Plain text, stored and returned as validated by `MessageIn`; never HTML. NULL exactly on a
+    # tour line (spec 0018a).
+    body: Mapped[str | None] = mapped_column(Text)
+    # A tour line (spec 0018a): the tour, the change and the time it showed (a reschedule moves
+    # the tour, not its old lines). Its sender is whoever caused the change.
+    tour_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tours.id", ondelete="CASCADE", name="fk_messages_tour_id")
+    )
+    tour_change: Mapped[str | None] = mapped_column(Text)
+    tour_starts_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

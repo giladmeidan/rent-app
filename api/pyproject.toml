@@ -21,6 +21,7 @@ dependencies = [
   "openpyxl==3.1.5",      # the CBS rent table xlsx (spec 0014d)
   "argon2-cffi==25.1.0",  # argon2id password hashes, a random salt each (spec 0016a)
   "google-auth==2.62.2",  # Google ID-token checks, jwt.decode (spec 0016b); keys fetched with httpx
+  "tzdata==2026.6",       # the IANA zones for zoneinfo (spec 0018a: Asia/Jerusalem); the slim image has none
 ]
 
 [dependency-groups]

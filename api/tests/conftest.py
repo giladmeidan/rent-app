@@ -116,14 +116,16 @@ def migrated_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_engine(migrated_db: Engine) -> Iterator[Engine]:
-    """Per-test engine on clean `admin_logins`, `admin_actions`, `reports`, `listing_price_changes`,
-    `listing_photos`, `conversation_reads`, `listing_flatmates`, `room_pairs`, `person_pairs`,
-    `seeker_profiles`, `messages`, `conversations`, `applications`, `listings`, `sessions`,
-    `user_passwords`, `users` and `areas` tables."""
+    """Per-test engine on clean `tour_feeds`, `tours`, `tour_windows` (0018a), `admin_logins`,
+    `admin_actions`, `reports`, `listing_price_changes`, `listing_photos`, `conversation_reads`,
+    `listing_flatmates`, `room_pairs`, `person_pairs`, `seeker_profiles`, `messages`,
+    `conversations`, `applications`, `listings`, `sessions`, `user_passwords`, `users` and `areas`
+    tables."""
     with migrated_db.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE blocked_emails, admin_logins, admin_actions, reports,"
+                "TRUNCATE TABLE tour_feeds, tours, tour_windows, blocked_emails, admin_logins,"
+                " admin_actions, reports,"
                 " listing_price_changes, listing_photos, conversation_reads, listing_flatmates,"
                 " room_pairs, person_pairs, seeker_profiles, messages, conversations, applications,"
                 " listings, sessions, user_passwords, users, areas"
