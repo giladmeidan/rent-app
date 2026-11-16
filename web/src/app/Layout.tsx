@@ -35,27 +35,30 @@ export function Layout() {
     <ChatStreamProvider>
       <SkipLink />
       <RouteFocus />
-      <header className="border-b border-border bg-surface">
-        <PageContainer width="wide">
-          <div className="flex min-h-16 flex-row-reverse flex-wrap items-center gap-x-3 gap-y-2 py-2 md:flex-nowrap">
-            {/* The lockup's alt (app.title, "Homie") names the link. */}
-            <Link
-              to="/"
-              className={`flex min-h-tap shrink-0 items-center rounded-md px-1 ${focusRing}`}
-            >
-              <Logo variant="lockup" lang="en" className="h-8" />
-            </Link>
-            <div data-side-switch-row="" className="order-last w-full md:w-auto">
-              <SideSwitch />
+      {/* A column at least the viewport tall, so a short page keeps the footer at the bottom. */}
+      <div className="flex min-h-dvh flex-col">
+        <header className="border-b border-border bg-surface">
+          <PageContainer width="wide">
+            <div className="flex min-h-16 flex-row-reverse flex-wrap items-center gap-x-3 gap-y-2 py-2 md:flex-nowrap">
+              {/* The lockup's alt (app.title, "Homie") names the link. */}
+              <Link
+                to="/"
+                className={`flex min-h-tap shrink-0 items-center rounded-md px-1 ${focusRing}`}
+              >
+                <Logo variant="lockup" lang="en" className="h-8" />
+              </Link>
+              <div data-side-switch-row="" className="order-last w-full md:w-auto">
+                <SideSwitch />
+              </div>
+              <AuthMenu />
             </div>
-            <AuthMenu />
-          </div>
-        </PageContainer>
-      </header>
-      <main id="main" tabIndex={-1} className="pb-8 pt-6 focus:outline-none">
-        <Outlet />
-      </main>
-      {footer && <SiteFooter />}
+          </PageContainer>
+        </header>
+        <main id="main" tabIndex={-1} className="flex-1 pb-8 pt-6 focus:outline-none">
+          <Outlet />
+        </main>
+        {footer && <SiteFooter />}
+      </div>
     </ChatStreamProvider>
   );
 }
