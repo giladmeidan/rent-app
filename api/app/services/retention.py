@@ -5,8 +5,8 @@ section 5; changing one changes the policy text too.
 Each rule is one set-based statement whose period is compared in SQL (`now() - interval`), never
 with a Python clock, and returns its row count. An **unresolved report** (`resolved_at IS NULL`)
 keeps what it points at (`services/reports.py::_LOOKUPS`: a `listing` id, a `chat` conversation
-id, an `applicant` application id): R1, R4 and R5 skip it, so the admin can still read it. Nothing
-here logs an id or a value."""
+id, an `applicant` application id): R1, R4, R5 and R11 skip it, so the admin can still read it.
+R11 (spec 0018c): a tour 12 months after its time. Nothing here logs an id or a value."""
 
 from collections.abc import Callable
 
@@ -23,6 +23,7 @@ REPORT = "3 years"  # R7, after resolution
 ADMIN_ACTION = "3 years"  # R8
 BLOCKED_EMAIL = "5 years"  # R9, from blocking
 SESSION = "30 days"  # R10, after expiry or revocation
+TOUR = "12 months"  # R11, after the tour's time
 
 _CUTOFF = "now() - CAST(:period AS interval)"
 
@@ -162,11 +163,29 @@ def purge_sessions(db: Session) -> int:
     )
 
 
+def purge_tours(db: Session) -> int:
+    """R11: a tour (booked or cancelled) 12 months after its start; its chat lines cascade
+    (`fk_messages_tour_id`). Skipped while an unresolved report targets its listing, its
+    application or its conversation."""
+    return _run(
+        db,
+        "DELETE FROM tours t"
+        f" WHERE t.starts_at < {_CUTOFF}"
+        " AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.resolved_at IS NULL AND ("
+        " (r.target_type = 'listing' AND r.target_id = t.listing_id)"
+        " OR (r.target_type = 'applicant' AND r.target_id = t.application_id)"
+        " OR (r.target_type = 'chat' AND r.target_id IN"
+        " (SELECT c.id FROM conversations c WHERE c.application_id = t.application_id))))",
+        TOUR,
+    )
+
+
 # The order matters: R4 before R5 (an application whose chat R4 deletes is R5's the same night).
 _RULES: tuple[tuple[str, Callable[[Session], int]], ...] = (
     ("r1_deleted_owner_listings", purge_deleted_owner_listings),
     ("r4_conversations", purge_conversations),
     ("r5_decided_applications", purge_decided_applications),
+    ("r11_tours", purge_tours),  # after R1/R4/R5, whose cascades may already have taken some
     ("r2_price_history", purge_price_history),
     ("r3_final_rent", purge_final_rent),
     ("r6_report_notes", purge_report_notes),

@@ -18,7 +18,7 @@ from sqlalchemy import Engine, text
 from app.redis_client import get_redis
 from app.services import geocoding
 from app.services.geocoding import FakeGeocoder, NominatimGeocoder
-from tests.conftest import make_listing, make_owner
+from tests.conftest import Outbox, make_application, make_listing, make_owner, make_seeker
 
 
 @pytest.fixture
@@ -206,3 +206,59 @@ async def test_ac5_worker_flushes_views_every_minute(
         ).scalar_one()
     assert views == 2
     assert not get_redis().exists("test-views:pending")
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("httpx_log_level")
+async def test_ac13_tour_mail_crons_registered_and_log_counts(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    # Spec 0018c: the mail drain every 10 s and the reminder sweep every 15 min, counts-only logs.
+    from app import worker
+
+    importlib.reload(worker)
+    jobs = {j.coroutine: j for j in worker.WorkerSettings.cron_jobs}
+    mail, reminders = jobs[worker.send_tour_mail_job], jobs[worker.tour_reminders_job]
+    assert mail.second == {5, 15, 25, 35, 45, 55} and mail.minute is None
+    assert reminders.minute == {0, 15, 30, 45} and reminders.second == 0
+    assert mail.unique is True and reminders.unique is True
+
+    outbox = Outbox()
+    monkeypatch.setattr(worker, "get_email_sender", lambda: outbox)
+    owner_id = make_owner(db_engine, "owner@example.com")
+    seeker_id = make_seeker(db_engine, "seeker@example.com", "Dana")
+    listing_id = make_listing(db_engine, owner_id, gush_dan)
+    application_id = make_application(db_engine, listing_id, seeker_id, status="shortlisted")
+    with db_engine.begin() as conn:
+        tour_id = conn.execute(
+            text(
+                "INSERT INTO tours (listing_id, application_id, seeker_id, starts_at, ends_at,"
+                " updated_at) VALUES (:l, :a, :s, now() + interval '23 hours',"
+                " now() + interval '23 hours 30 minutes', now() - interval '3 days') RETURNING id"
+            ),
+            {"l": listing_id, "a": application_id, "s": seeker_id},
+        ).scalar_one()
+
+    with caplog.at_level(logging.INFO, logger="app"):
+        assert await worker.send_tour_mail_job({}) == {
+            "sent": 0,
+            "skipped": 0,
+            "retried": 0,
+            "dropped": 0,
+        }
+        assert await worker.tour_reminders_job({}) == 1
+        assert await worker.tour_reminders_job({}) == 0
+        counts = await worker.send_tour_mail_job({})
+
+    assert counts["sent"] == 2 and len(outbox.messages) == 2
+    # One line per job run that did something, counts only.
+    assert [r.getMessage() for r in caplog.records if r.name == "app.worker"] == [
+        "tour reminders: 1",
+        f"tour mail: {counts}",
+    ]
+    for leaked in ("owner@example.com", "seeker@example.com", "Dana", str(tour_id)):
+        assert leaked not in caplog.text
+    assert "כצנלסון" not in caplog.text  # the street

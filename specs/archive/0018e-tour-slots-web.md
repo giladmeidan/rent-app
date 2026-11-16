@@ -1,7 +1,7 @@
 ---
 id: 0018e
 title: The lister's tour-times page and the seeker's slot picker in the chat thread, with tour lines in the thread and the chat list (web half of 0018a)
-status: in-review
+status: done
 depends_on: [0018a]   # all 7 endpoints, the chat fields (`MessageOut.tour`, `LastMessageOut.tour`, `ThreadOut.tour`) and the error codes are 0018a's. Branch from 0018a's branch once its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [qa, ux]   # qa: two flows (open times, book/move/cancel), error mapping; ux: a new page, a thread card, a dialog, a system line. No security: no new endpoint or rule (0018a's are reviewed there). No perf
 estimate: 1 coder run   # coder Sonnet/medium: UI over a finished API, no migration
@@ -161,7 +161,7 @@ From `graphify affected` on `main` (2026-11-16):
 - Product questions stay on 0018a (R3, R6, R7, R8, R12).
 
 ## Digest (filled by orchestrator after verification)
-Spec 0018e — tour times page, slot picker, tour lines in chat   PR #122 (CI pending at push; merges after #119)
+Spec 0018e — tour times page, slot picker, tour lines in chat   MERGED eead653 (PR #122, head d3fb0c1, green ci)
 Shipped: a lister opens "זמני סיור" on a live card and adds tour times; a shortlisted seeker books, moves or cancels a slot from the chat; the lister can cancel too; every change is a centred line in the thread and the chat-list preview.
 Demo: 1. as a lister, my listings → "זמני סיור" → add a 2 h window. 2. as a shortlisted seeker, open the chat → "קביעת סיור" → pick a slot. 3. "שינוי מועד" / "ביטול הסיור" and watch the thread line.
 Tests: +25 unit/component (vitest), +0 integration, +0 e2e (spec Out)

@@ -47,17 +47,18 @@ Gilad merges, or delegates merging to the orchestrator for a slice (he has for e
    setting `WEB_PORT`); check `lsof -nP -iTCP:$WEB_PORT -sTCP:LISTEN` is empty before `make dev`. The spec is
    pushed **once**, when it is finished (build + review fixes), with the PR opened and the `ready-to-merge`
    label added at that push so CI runs once. A further push is allowed only to fix a CI failure.
-8. **CI runs once per merge attempt, on the Mac (Gilad, 2026-11-13).** The `ci` workflow is one job — lint,
-   types, i18n-check, pytest, vitest, build + build-check, e2e — on the self-hosted Mac runner (`rent-app-mac`,
-   no Actions minutes; the account has 2,000 a month). It runs only while the PR carries the `ready-to-merge`
+8. **CI runs once per merge attempt, on GitHub's runners (Gilad, 2026-11-13; moved off the Mac 2026-11-16).** The
+   `ci` workflow is one job — lint, types, i18n-check, pytest, vitest, build + build-check, e2e — on `ubuntu-latest`,
+   because the repo variable `CI_ON_GITHUB` is `on` (~16 Actions minutes a run while the repo is private; the
+   account has 2,000 a month; free once public). PRs from forks never run it. It runs only while the PR carries the `ready-to-merge`
    label (rule 7's push; a later push to the PR runs it again) or by hand (Actions → ci → Run workflow). Plain
    pushes, pushes to `main`, and PRs that change only `*.md`, `specs/` or `design/` run nothing. e2e runs a
    shard's failed tests once more; a pass on that retry is a "Flaky e2e" warning on the run: log it in
    `specs/FOLLOWUPS.md`, never ignore it. **Merge only with `make merge PR=N`**: it refuses unless the `ci`
    check passed on the PR's head and the head contains `origin/main`, so the PR's run tested exactly what lands
    on `main` (no re-run after the merge). A PR behind `main`: merge `origin/main` into its branch and push; CI
-   runs again. Mac away: `gh variable set CI_ON_GITHUB --body on` (GitHub-hosted, ~16 paid minutes a run);
-   `gh variable delete CI_ON_GITHUB` when it is back.
+   runs again. The self-hosted Mac runner was deregistered on 2026-11-16 (the repo is going public, and a fork PR
+   can name any self-hosted runner in its own ci.yml); never re-register one while the repo is public.
 
 9. **Consult Gilad on high-value calls (Gilad, 2026-11-10).** While a spec is being built or reviewed, anything
    that changes what the product does, what it costs, or what a later slice can do is Gilad's choice, not the

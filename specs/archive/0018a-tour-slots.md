@@ -1,7 +1,7 @@
 ---
 id: 0018a
 title: "API: a lister opens tour times on a listing (apartment or room); a seeker they shortlisted books, moves or cancels a tour, the lister can cancel it, each change is a line in the chat, and cleanup cancels the tours involved"
-status: in-review
+status: done
 depends_on: []   # 0018b, 0018c, 0018d and 0018e (this spec's web half, split by the verifier 2026-11-16) depend on this one (shared contract in specs/TOURS-PLAN.md)
 reviewers: [code, security, qa]   # security: new gates on applications/listings, chat visibility (flatmates), admin grants, a new table holding a token hash; qa: 7 endpoints, 5 cleanup paths. No ux: no screen (0018e). No perf: ≤ 30 windows a listing, slots computed in Python, every query by primary key or a partial index
 estimate: 1 coder run   # coder Opus/high (migration on `messages`, row locks, cleanup in 5 transactions). 7 endpoints is above the checklist's ~3, but 3 are plain owner CRUD and the contract fixes them in this spec
@@ -453,5 +453,11 @@ Questions for Gilad (defaults written in Risks; the coder builds the default, no
 R3 (expiry keeps booked tours), R6 (admin hide/suspend cancel silently: no chat line, no email), R7 (flatmates see no
 tour lines), R8 (keep the "הצעת סיור" chip), R12 (lead 60 min, horizon 30 days, 30 windows, 12 h, 10/h 20/day) — all decided 2026-11-16 (Gilad: all defaults; R12's limit lowered to 10/20 per 0018c R5).
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest
+Spec 0018a — API: tour slots (windows, booking, reschedule, cancel, chat lines, cleanup)   MERGED e58b2dd (PR #119, head dbb2f5d)
+Shipped: a lister opens tour windows (Israel date/time, 15/20/30/45-minute slots, ≤12 h, ≤30 days ahead, ≤30 upcoming windows) on a live apartment or room listing. A shortlisted seeker books a free slot instantly, can move it or cancel it, and the lister can cancel it. Each change is a chat line pushed to owner and seeker only; flatmates see nothing. Pause, un-shortlist, decline, withdraw, DELETE /me, admin hide and suspend each cancel the upcoming tours involved. Migration 0030 adds tour_windows, tours and tour_feeds, plus tour lines on messages. 7 endpoints; TOUR bucket 10/h 20/day.
+Demo: POST /listings/{id}/tour-windows as the owner → GET tour-slots as a shortlisted seeker → POST a booking and watch the tour line appear in the chat thread (screens: 0018e).
+Tests: new test_tours.py (AC1–9, 16, 18, DST and slot unit tests) plus AC10–17 in their own modules; pytest 964, vitest 813; +0 e2e (R10).
+Findings: 0 blockers; 2 majors fixed (DST test vs horizon refusal; 401/422 tests on the 7 routes); 9 minors fixed (year-1 date 500 → 422; homie_admin GRANTs on tours columns; suspend locks listings before cancelling; tests for the unique-slot race fallback, moving a cancelled or started tour, a suspended owner's listing, deletion rollback with a tour; migration lock note; spec CHECK texts and Blast radius corrected); 7 nits dropped; 0 follow-ups. Code and security judged the coder's 6 spec deviations sound (CHECKs tightened with IS NOT NULL).
+CI: first run (Mac) failed in e2e only on 30 s timeouts at load ~20; green on GitHub for dbb2f5d after merging origin/main (#120). The PR's waitlist ac19 test fix was superseded by main's own fix at merge. "Workers Builds: homie" (Cloudflare) fails on PR branches; not the gate.
+Changed in PRODUCT.md: nothing.

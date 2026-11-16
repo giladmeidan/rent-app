@@ -1,12 +1,14 @@
 """Email and SMS adapters (spec 0001a): SMTP URL parsing, failures as `EmailUnavailable`."""
 
+import json
 import logging
 import smtplib
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.email import EmailUnavailable, SmtpEmailSender
+from app.services.email import Attachment, EmailUnavailable, FileEmailSender, SmtpEmailSender
 from app.services.sms import NoopSmsSender
 
 
@@ -94,3 +96,40 @@ def test_noop_sms_sender_logs_length_only(caplog: pytest.LogCaptureFixture) -> N
     assert "123456" not in caplog.text
     assert "+972500000000" not in caplog.text
     assert "length 11" in caplog.text
+
+
+def test_ac12_attachments_file_and_smtp(
+    smtp_mocks: tuple[MagicMock, MagicMock], tmp_path: Path
+) -> None:
+    # Spec 0018c: the outbox file gains `attachments` only when given; SMTP adds a text/calendar
+    # part after the body.
+    ics_text = "BEGIN:VCALENDAR\r\nMETHOD:CANCEL\r\nEND:VCALENDAR\r\n"
+    attachment = Attachment("tour.ics", "text/calendar; method=CANCEL; charset=utf-8", ics_text)
+    sender = FileEmailSender(tmp_path)
+    sender.send("a@example.com", "קוד", "123456")
+    (otp_file,) = tmp_path.iterdir()
+    assert list(json.loads(otp_file.read_text("utf-8"))) == ["to", "subject", "body", "sent_at"]
+    otp_file.unlink()
+    sender.send("a@example.com", "s", "b", [attachment])
+    (tour_file,) = tmp_path.iterdir()
+    assert json.loads(tour_file.read_text("utf-8"))["attachments"] == [
+        {
+            "filename": "tour.ics",
+            "content_type": "text/calendar; method=CANCEL; charset=utf-8",
+            "content": ics_text,
+        }
+    ]
+
+    plain, _ = smtp_mocks
+    SmtpEmailSender("smtp://mail.example.com", "n@example.com").send(
+        "a@example.com", "s", "גוף", [attachment]
+    )
+    message = plain.return_value.send_message.call_args.args[0]
+    body, part = message.iter_parts()
+    assert body.get_content() == "גוף\n"  # set_content(body) stays the first part
+    assert part.get_content_type() == "text/calendar"
+    assert part.get_param("method") == "CANCEL"
+    assert part.get_content_charset() == "utf-8"
+    assert part.get_filename() == "tour.ics"
+    # The message keeps lines as "\n"; smtplib writes every line end as CRLF on the wire.
+    assert part.get_content() == ics_text.replace("\r\n", "\n")

@@ -5,7 +5,7 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from http.cookies import Morsel, SimpleCookie
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,7 @@ from app.models import User
 from app.redis_client import get_redis
 from app.schemas.auth import ProfileIn
 from app.services import auth as auth_service
-from app.services.email import EmailUnavailable, get_email_sender
+from app.services.email import Attachment, EmailUnavailable, get_email_sender
 from tests.conftest import Outbox
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
@@ -404,7 +404,9 @@ def test_ac16_daily_email_rate_limit(client: TestClient, outbox: Outbox) -> None
 
 def test_ac17_email_failure_is_503_and_counted(client: TestClient, outbox: Outbox) -> None:
     class FailingSender:
-        def send(self, to: str, subject: str, body: str) -> None:
+        def send(
+            self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+        ) -> None:
             raise EmailUnavailable
 
     client.app.dependency_overrides[get_email_sender] = FailingSender  # type: ignore[attr-defined]

@@ -549,6 +549,8 @@ def test_ac11_idempotent(db_engine: Engine, gush_dan: uuid.UUID) -> None:
     _action(db_engine, "read_chat", "chat", uuid.uuid4(), "4 years")  # R8
     _block(db_engine, "old@example.com", "6 years")  # R9
     _session(db_engine, seeker, expires="31 days")  # R10
+    toured = make_application(db_engine, listing, reporter, status="shortlisted")
+    _tour(db_engine, listing, toured, OUT_12M)  # R11
 
     first = _purge(db_engine)
 
@@ -556,6 +558,7 @@ def test_ac11_idempotent(db_engine: Engine, gush_dan: uuid.UUID) -> None:
         "r1_deleted_owner_listings",
         "r4_conversations",
         "r5_decided_applications",
+        "r11_tours",
         "r2_price_history",
         "r3_final_rent",
         "r6_report_notes",
@@ -620,3 +623,73 @@ def test_ac13_unresolved_report_keeps_target(db_engine: Engine, gush_dan: uuid.U
         counts["r5_decided_applications"],
     ) == (3, 2, 1)
     assert not any(_exists(db_engine, table, row) for table, row in targets)
+
+
+# --- R11 ---------------------------------------------------------------------------------------
+
+
+def _tour(engine: Engine, listing_id: uuid.UUID, application_id: uuid.UUID, age: str) -> uuid.UUID:
+    """A tour that started `age` ago, with its tour line in the application's chat if it has one."""
+    row: uuid.UUID = _execute(
+        engine,
+        "INSERT INTO tours (listing_id, application_id, seeker_id, starts_at, ends_at)"
+        " SELECT :l, a.id, a.seeker_id, now() - CAST(:age AS interval),"
+        " now() - CAST(:age AS interval) + interval '30 minutes'"
+        " FROM applications a WHERE a.id = :a RETURNING id",
+        l=listing_id,
+        a=application_id,
+        age=age,
+    )
+    _execute(
+        engine,
+        "INSERT INTO messages (conversation_id, sender_id, tour_id, tour_change, tour_starts_at)"
+        " SELECT c.id, c.seeker_id, t.id, 'booked', t.starts_at FROM tours t"
+        " JOIN conversations c ON c.id = t.application_id WHERE t.id = :t",
+        t=row,
+    )
+    return row
+
+
+def test_r11_tours(db_engine: Engine, gush_dan: uuid.UUID) -> None:
+    # Spec 0018c AC14: a tour 12 months after its time, its chat line with it; an unresolved report
+    # on its listing, application or conversation keeps it.
+    owner = make_owner(db_engine, "owner@example.com")
+    listing, reported_listing = (make_listing(db_engine, owner, gush_dan) for _ in range(2))
+
+    def application(name: str, on: uuid.UUID = listing) -> uuid.UUID:
+        seeker = make_seeker(db_engine, f"{name}@example.com")
+        return _chat(
+            db_engine, make_application(db_engine, on, seeker, status="shortlisted"), "1 day"
+        )
+
+    apps = {n: application(n) for n in ("old", "recent", "by_application", "by_chat")}
+    apps["by_listing"] = application("by_listing", reported_listing)
+    tours = {
+        "old": _tour(db_engine, listing, apps["old"], OUT_12M),
+        "recent": _tour(db_engine, listing, apps["recent"], IN_12M),
+        "by_listing": _tour(db_engine, reported_listing, apps["by_listing"], OUT_12M),
+        "by_application": _tour(db_engine, listing, apps["by_application"], OUT_12M),
+        "by_chat": _tour(db_engine, listing, apps["by_chat"], OUT_12M),
+    }
+    _execute(
+        db_engine,
+        "UPDATE tours SET status = 'cancelled', cancelled_by = 'system',"
+        " cancelled_at = starts_at WHERE id = :t",
+        t=tours["by_chat"],
+    )  # either status
+    reporter = make_seeker(db_engine, "reporter@example.com")
+    reports = [
+        _report(db_engine, reporter, owner, "listing", reported_listing),
+        _report(db_engine, owner, reporter, "applicant", apps["by_application"]),
+        _report(db_engine, owner, reporter, "chat", apps["by_chat"]),
+    ]
+
+    assert _purge(db_engine)["r11_tours"] == 1
+    assert {n for n, t in tours.items() if not _exists(db_engine, "tours", t)} == {"old"}
+    assert not _exists(db_engine, "messages", tours["old"], key="tour_id")  # the line cascades
+    assert _exists(db_engine, "messages", tours["recent"], key="tour_id")
+
+    for report in reports:
+        _ago(db_engine, "reports", "resolved_at", report, "0 days")
+    assert _purge(db_engine)["r11_tours"] == 3
+    assert {n for n, t in tours.items() if _exists(db_engine, "tours", t)} == {"recent"}

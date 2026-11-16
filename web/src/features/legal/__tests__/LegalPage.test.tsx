@@ -115,12 +115,18 @@ describe('LegalPage', () => {
       [s5.i10, ['3 שנים', '12 חודשים']],
       [s5.i11, ['3 שנים']],
       [s5.i12, ['5 שנים']],
+      [s5.i13, ['12 חודשים']],
       [s6.i7, ['5 שנים']],
       [s1.i13, ['30 יום']],
     ];
     for (const [line, expected] of periods) {
       for (const period of expected) expect(line).toContain(period);
     }
+    // Spec 0018c: tours in section 1 (with the account email's use) and with the email provider.
+    expect(page).toContain(s1.i16);
+    expect(page).toContain(s5.i13);
+    expect(s1.i1).toContain('ולסיורים');
+    expect(he.legal.privacy.s3.i2).toContain('סיורים');
     // The terms point to section 5.
     expect(he.legal.terms.s9.p1).toContain('סעיף 5');
     expect(he.legal.terms.s9.p1).toContain(s5.title.replace(/^5\. /, ''));

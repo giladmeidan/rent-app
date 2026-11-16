@@ -1,7 +1,7 @@
 ---
 id: 0018c
 title: The lister and the seeker get an email when a tour is booked, rescheduled or cancelled (with an .ics file on booking and reschedule), and both get a reminder the day before; tours are purged 12 months after their time and the privacy policy says so
-status: verified
+status: done
 depends_on: [0018a]   # tours table (incl. reminder_sent_at), the after-commit hook `tours.announce`, cleanup cancels. 0018d (calendar feed) imports this spec's services/ics.py (contract; Risks R1)
 reviewers: [code, security, qa]   # security: PII in email (names, addresses, times) to the right person only, .ics text injection, a retention DELETE; qa: worker jobs, retries, idempotent reminders. No ux: no screen changes beyond privacy-policy copy. No perf: one indexed sweep every 15 min, a Redis list drained every 10 s
 estimate: 1 coder run   # coder Opus/high (personal data leaves the system by email; a retention DELETE: Speed rule 6). No migration (0018a owns it). About 15 files (incl. compose), half tests
@@ -244,54 +244,54 @@ WHERE t.starts_at < now() - CAST(:period AS interval)
 Set-based, `_run(db, …, TOUR)`, compared in SQL as every rule.
 
 ## Acceptance criteria
-- [ ] AC1 A seeker books a slot → after `send_pending`, the lister gets `TOUR_BOOKED_SUBJECT` with a `tour.ics`
+- [x] AC1 A seeker books a slot → after `send_pending`, the lister gets `TOUR_BOOKED_SUBJECT` with a `tour.ics`
   (`METHOD:PUBLISH`, `STATUS:CONFIRMED`, `UID:{id}@homie`, the UTC start/end) and the seeker gets the
   confirmation with the same UID; neither body contains the other's email address —
   `api/tests/test_tour_mail.py::test_ac1_booking_emails_both_with_ics`
-- [ ] AC2 A reschedule → both get the rescheduled email; the `.ics` keeps the UID and its `SEQUENCE` is greater than
+- [x] AC2 A reschedule → both get the rescheduled email; the `.ics` keeps the UID and its `SEQUENCE` is greater than
   the booking's; DTSTART is the new time (the test sends the booking mail, then backdates `updated_at` by one minute
   with SQL before rescheduling, so both changes never share an epoch second) — `test_tour_mail.py::test_ac2_reschedule_same_uid_higher_sequence`
-- [ ] AC3 Seeker cancels → only the lister gets `TOUR_CANCELLED_SUBJECT` with `METHOD:CANCEL`/`STATUS:CANCELLED`;
+- [x] AC3 Seeker cancels → only the lister gets `TOUR_CANCELLED_SUBJECT` with `METHOD:CANCEL`/`STATUS:CANCELLED`;
   lister cancels → only the seeker; a system cancel (pause the listing; withdraw) → both, with
   `TOUR_CANCELLED_SYSTEM_BODY`; every CANCEL keeps the UID with a SEQUENCE ≥ the booking's —
   `test_tour_mail.py::test_ac3_cancel_recipients_by_cancelled_by`
-- [ ] AC4 A deleted or suspended recipient gets nothing; the other side still does, and a deleted other side's name
+- [x] AC4 A deleted or suspended recipient gets nothing; the other side still does, and a deleted other side's name
   reads `TOUR_DELETED_NAME` —
   `test_tour_mail.py::test_ac4_skips_deleted_and_suspended`
-- [ ] AC5 A stale item sends nothing: a `booked` item for a tour now cancelled, a `cancelled_by_*` item for a
+- [x] AC5 A stale item sends nothing: a `booked` item for a tour now cancelled, a `cancelled_by_*` item for a
   booked tour, an item for a deleted tour, a malformed item, an unknown `change`; an item whose load raises a
   non-email error is dropped and the next item is still sent — `test_tour_mail.py::test_ac5_stale_items_skipped`
-- [ ] AC6 `EmailUnavailable` for one recipient re-queues only that side with `attempt + 1`; the third failure drops
+- [x] AC6 `EmailUnavailable` for one recipient re-queues only that side with `attempt + 1`; the third failure drops
   it; the other side is sent once — `test_tour_mail.py::test_ac6_retry_per_recipient_then_drop`
-- [ ] AC7 `tours.announce` enqueues one item per change with 0018a's `change` kind, for booking, reschedule, both
+- [x] AC7 `tours.announce` enqueues one item per change with 0018a's `change` kind, for booking, reschedule, both
   cancels and the system cancels (pause, un-shortlist, withdraw, `DELETE /me`), and the API call succeeds with Redis
   down (the item is lost, the tour and chat line are not) —
   `test_tour_mail.py::test_ac7_hook_enqueues_and_survives_redis_down`
-- [ ] AC8 Reminders: a tour starting in 23 h booked 3 days ago is claimed and both sides get `TOUR_REMINDER_SUBJECT`;
+- [x] AC8 Reminders: a tour starting in 23 h booked 3 days ago is claimed and both sides get `TOUR_REMINDER_SUBJECT`;
   one starting in 25 h, one booked 10 h before its start, a cancelled one and a past one are not —
   `test_tour_mail.py::test_ac8_reminder_window`
-- [ ] AC9 A second `queue_reminders` run claims nothing; a reschedule after a reminder (0018a sets
+- [x] AC9 A second `queue_reminders` run claims nothing; a reschedule after a reminder (0018a sets
   `reminder_sent_at = NULL`) re-arms it for the new time — `test_tour_mail.py::test_ac9_reminder_idempotent_and_rearmed`
-- [ ] AC10 The email shows the time in Asia/Jerusalem with the Hebrew weekday (a tour at 15:20Z in November reads
+- [x] AC10 The email shows the time in Asia/Jerusalem with the Hebrew weekday (a tour at 15:20Z in November reads
   `17:20`; one in July reads `18:20`), the listing's street and city, the other side's display name and the chat
   link `{WEB_ORIGIN}/chat/{conversation_id}` — `test_tour_mail.py::test_ac10_body_local_time_and_fields`
-- [ ] AC11 `.ics` rules: CRLF endings, every line ≤ 75 octets and folds never split a UTF-8 character (a 40-letter
+- [x] AC11 `.ics` rules: CRLF endings, every line ≤ 75 octets and folds never split a UTF-8 character (a 40-letter
   Hebrew name), `;` `,` `\` and a newline in a name/street are escaped (no injected property line), DTSTART/DTEND end
   in `Z`, `tour_uid` is `{id}@homie`, CANCEL carries `ORGANIZER`, and `vcalendar(…, name=…, refresh=1 h)` adds
   `X-WR-CALNAME` and `REFRESH-INTERVAL` (the feed's options, 0018d) — `api/tests/test_ics.py::test_ac11_fold_escape_utc`
-- [ ] AC12 `FileEmailSender` writes `attachments` only when given (an OTP file has exactly the old four keys);
+- [x] AC12 `FileEmailSender` writes `attachments` only when given (an OTP file has exactly the old four keys);
   `SmtpEmailSender` sends a `text/calendar` part with `method=` and filename `tour.ics` —
   `api/tests/test_email.py::test_ac12_attachments_file_and_smtp`
-- [ ] AC13 Both crons are registered (`send_tour_mail_job` every 10 s at `second={5,…,55}`, `tour_reminders_job` at
+- [x] AC13 Both crons are registered (`send_tour_mail_job` every 10 s at `second={5,…,55}`, `tour_reminders_job` at
   `minute={0,15,30,45}`, both `unique`), and their log lines hold counts only (no email, name, street or id) —
   `api/tests/test_worker.py::test_ac13_tour_mail_crons_registered_and_log_counts`
-- [ ] AC14 R11 deletes a tour 12 months + 1 day after its start, keeps one 11 months after, and keeps an old one
+- [x] AC14 R11 deletes a tour 12 months + 1 day after its start, keeps one 11 months after, and keeps an old one
   whose listing, application or conversation has an unresolved report —
   `api/tests/test_retention.py::test_r11_tours`
-- [ ] AC15 The privacy page shows `s1.i16` and `s5.i13` with "12 חודשים", and `s1.i1`/`s3.i2` mention tours —
+- [x] AC15 The privacy page shows `s1.i16` and `s5.i13` with "12 חודשים", and `s1.i1`/`s3.i2` mention tours —
   `web/src/features/legal/__tests__/LegalPage.test.tsx::ac12_privacy_states_retention_periods` (extended) and
   `make i18n-check`
-- [ ] AC16 `latestCode` returns the login code when a tour email to the same address is newer —
+- [x] AC16 `latestCode` returns the login code when a tour email to the same address is newer —
   covered by the existing e2e that sign up (CI); the helper change is one line
 
 ## Tests to write
@@ -393,5 +393,19 @@ Open, for the orchestrator (no coder guess needed; the spec states the default):
 Gilad questions (digest): D1–D4 defaults; R11's 12 months (PRODUCT.md "Retention" gains R11 after his yes); R5's
 rate (recommend `TOUR` 10/h, 20/day in 0018a).
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest
+Spec 0018c — Tour emails with .ics, day-before reminders and 12-month tour retention   MERGED 643b556 (PR #121, head 537a00e, ci green 14m1s)
+Shipped: each tour change is emailed off the request path to the person who didn't make it; system cancels go to both
+sides. Booking and reschedule emails carry an `.ics` with the same UID and a rising SEQUENCE; a cancel carries
+`METHOD:CANCEL`. Both sides get a reminder about 24 h before. Retention R11 deletes tours 12 months after their time,
+and the privacy policy says so. Production sending waits for 0013a's email provider.
+Demo (`make dev`, `EMAIL_BACKEND=file`): book a slot → within ~10 s `.outbox/` holds two emails with `invite.ics`;
+reschedule → same UID, higher SEQUENCE; pause the listing → both get a `METHOD:CANCEL` email.
+Tests: +15 API (10 test_tour_mail, 2 test_ics, 1 each email/retention/worker), 1 web test extended; e2e `latestCode`
+skips tour mail. pytest 979, vitest 838.
+Findings: 0 blockers, 0 majors, 10 minors (6 fixed: bare-address ORGANIZER, stale claimed reminder skipped, a failed
+retry push drops only that side, negative attempt = malformed, U+2028/2029 dropped from `.ics` text, AC3 asserts a
+strictly higher SEQUENCE; 5 logged in FOLLOWUPS, incl. outbox files holding tour personal data under
+`EMAIL_BACKEND=file` and an SMTP stall to fix before 0013a), 11 nits dropped.
+For 0018d: its spec was corrected (orchestrator, 2026-11-16) to import 0018c's public `ics` functions.
+Changed in PRODUCT.md: nothing.
