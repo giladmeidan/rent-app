@@ -1,7 +1,7 @@
 ---
 id: 0018a
 title: "API: a lister opens tour times on a listing (apartment or room); a seeker they shortlisted books, moves or cancels a tour, the lister can cancel it, each change is a line in the chat, and cleanup cancels the tours involved"
-status: verified
+status: in-review
 depends_on: []   # 0018b, 0018c, 0018d and 0018e (this spec's web half, split by the verifier 2026-11-16) depend on this one (shared contract in specs/TOURS-PLAN.md)
 reviewers: [code, security, qa]   # security: new gates on applications/listings, chat visibility (flatmates), admin grants, a new table holding a token hash; qa: 7 endpoints, 5 cleanup paths. No ux: no screen (0018e). No perf: ≤ 30 windows a listing, slots computed in Python, every query by primary key or a partial index
 estimate: 1 coder run   # coder Opus/high (migration on `messages`, row locks, cleanup in 5 transactions). 7 endpoints is above the checklist's ~3, but 3 are plain owner CRUD and the contract fixes them in this spec
