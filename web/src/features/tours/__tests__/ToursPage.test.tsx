@@ -6,12 +6,11 @@ import he from '../../../locales/he.json';
 import { currentPath, deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
 import { RequireUser } from '../../auth/RequireUser';
 import { seeker } from '../../listings/__tests__/fixtures';
-import { todayInIsrael } from '../../listings/format';
 import type { TourAgendaItemOut } from '../api';
-import { formatTourDay, formatTourTime, tourDay } from '../format';
 import { ToursPage } from '../ToursPage';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -67,36 +66,36 @@ const cancelButton = (row: HTMLElement) => within(row).getByRole('button', { nam
 
 describe('ToursPage', () => {
   it('ac10_sections_and_days', async () => {
-    const soon = item(1);
-    const later = item(72);
-    const mine = item(2, { role: 'seeker' });
-    renderPage([json([soon, mine, later])]);
+    // 22:00 on 17 November in Israel (UTC+2). The expected headings are literals, not the
+    // page's own helpers.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime('2026-11-17T20:00:00Z');
+    const at = (start: string, end: string, overrides: Partial<TourAgendaItemOut> = {}) =>
+      item(0, { starts_at: start, ends_at: end, ...overrides });
+    const late = at('2026-11-17T21:00:00Z', '2026-11-17T21:30:00Z');
+    const later = at('2026-11-17T21:30:00Z', '2026-11-17T22:00:00Z');
+    const midnight = at('2026-11-17T22:30:00Z', '2026-11-17T23:00:00Z');
+    const friday = at('2026-11-20T08:00:00Z', '2026-11-20T08:30:00Z');
+    const mine = at('2026-11-17T21:00:00Z', '2026-11-17T21:30:00Z', { role: 'seeker' });
+    renderPage([json([late, mine, later, midnight, friday])]);
     expect(await screen.findByRole('heading', { level: 1, name: t.title })).toBeVisible();
-    await screen.findByRole('heading', { level: 2, name: t.sections.lister });
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      t.sections.lister,
-      t.sections.seeker,
+    await screen.findByRole('heading', { level: 2, name: 'מגיעים לראות' });
+    const h2 = screen.getAllByRole('heading', { level: 2 });
+    expect(h2.map((h) => h.textContent)).toEqual(['מגיעים לראות', 'סיורים שקבעתי']);
+    const sections = h2.map((h) => within(h.closest('section') as HTMLElement));
+    const days = (section: (typeof sections)[number]) =>
+      section.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    // 23:00 and 23:30 share the 17th; 00:30 is already the 18th; Friday 20.11.
+    expect(days(sections[0] as (typeof sections)[number])).toEqual([
+      'היום',
+      'מחר',
+      'יום שישי, 20.11.26',
     ]);
-    const today = todayInIsrael();
-    const sections = screen.getAllByRole('heading', { level: 2 }).map((h) => h.closest('section'));
-    const days = (section: HTMLElement | null) =>
-      within(section as HTMLElement)
-        .getAllByRole('heading', { level: 3 })
-        .map((h) => h.textContent);
-    expect(days(sections[0] ?? null)).toEqual([
-      formatTourDay(tourDay(soon.starts_at), today),
-      formatTourDay(tourDay(later.starts_at), today),
-    ]);
-    expect(days(sections[1] ?? null)).toEqual([formatTourDay(tourDay(mine.starts_at), today)]);
-    // The row: time range, the listing, who.
-    const row = rowOf(soon);
-    expect(
-      within(row).getByText(
-        t.row.time
-          .replace('{{start}}', formatTourTime(soon.starts_at))
-          .replace('{{end}}', formatTourTime(soon.ends_at)),
-      ),
-    ).toBeVisible();
+    const today = (sections[0] as (typeof sections)[number]).getAllByRole('list')[0] as HTMLElement;
+    expect(within(today).getAllByRole('listitem')).toHaveLength(2);
+    expect(days(sections[1] as (typeof sections)[number])).toEqual(['היום']);
+    expect(within(rowOf(midnight)).getByText('00:30–01:00')).toBeVisible();
+    expect(within(rowOf(late)).getByText('23:00–23:30')).toBeVisible();
   });
 
   it('ac10_lister_only_has_no_seeker_heading', async () => {
@@ -110,7 +109,7 @@ describe('ToursPage', () => {
     const pending = deferred();
     renderPage([pending.promise]);
     await screen.findByRole('heading', { level: 1, name: t.title });
-    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(document.querySelector('[aria-busy="true"] ul')).not.toBeNull();
     cleanup();
 
     // Error with a working retry.
@@ -132,7 +131,7 @@ describe('ToursPage', () => {
     const a = item(5);
     const b = item(6);
     const started = item(-0.1);
-    const { api } = renderPage([json([started, a, b])], {
+    const { api } = renderPage([json([started, a, b]), () => json([started, b])], {
       [cancelRoute(a.id)]: [
         json({ id: a.id, starts_at: a.starts_at, ends_at: a.ends_at, status: 'cancelled' }),
       ],
@@ -166,7 +165,7 @@ describe('ToursPage', () => {
   it('ac12_cancel_conflict_and_failure', async () => {
     const a = item(5);
     const b = item(6);
-    const { api } = renderPage([json([a, b]), json([b])], {
+    const { api } = renderPage([json([a, b]), () => json([b])], {
       [cancelRoute(a.id)]: [json({ detail: 'tour_not_cancellable' }, 409)],
       [cancelRoute(b.id)]: [json({ detail: 'boom' }, 500)],
     });
@@ -179,7 +178,7 @@ describe('ToursPage', () => {
       expect(screen.queryByText(t.row.with.replace('{{name}}', a.other_name))).toBeNull();
     });
     expect(screen.getByText(t.cancel.gone)).toHaveAttribute('role', 'status');
-    expect(api.calls(AGENDA)).toHaveLength(2);
+    expect(api.calls(AGENDA).length).toBeGreaterThanOrEqual(2);
 
     // 500: an alert under the row, the row stays.
     fireEvent.click(cancelButton(rowOf(b)));
@@ -187,6 +186,70 @@ describe('ToursPage', () => {
     const alert = await within(rowOf(b)).findByRole('alert');
     expect(alert).toHaveTextContent(t.errors.generic);
     expect(rowOf(b)).toBeVisible();
+  });
+
+  it('ac12_cancel_404_is_gone', async () => {
+    const a = item(5);
+    const b = item(6);
+    const { api } = renderPage([json([a, b]), () => json([b])], {
+      [cancelRoute(a.id)]: [json({ detail: 'not_found' }, 404)],
+    });
+    await screen.findByText(t.row.with.replace('{{name}}', a.other_name));
+    fireEvent.click(cancelButton(rowOf(a)));
+    fireEvent.click(within(await confirmDialog()).getByRole('button', { name: t.cancel.confirm }));
+    await waitFor(() => {
+      expect(screen.queryByText(t.row.with.replace('{{name}}', a.other_name))).toBeNull();
+    });
+    expect(screen.getByText(t.cancel.gone)).toHaveAttribute('role', 'status');
+    expect(api.calls(AGENDA).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('ac12_last_row_leaves_day_and_page', async () => {
+    const a = item(1);
+    const b = item(72);
+    let rest = [a, b];
+    const done = (x: TourAgendaItemOut) => () => {
+      rest = rest.filter((r) => r.id !== x.id);
+      return json({ id: x.id, starts_at: x.starts_at, ends_at: x.ends_at, status: 'cancelled' });
+    };
+    renderPage([() => json(rest)], {
+      [cancelRoute(a.id)]: [done(a)],
+      [cancelRoute(b.id)]: [done(b)],
+    });
+    await screen.findByText(t.row.with.replace('{{name}}', a.other_name));
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2);
+
+    // A's day is emptied: its heading goes, B's stays.
+    fireEvent.click(cancelButton(rowOf(a)));
+    fireEvent.click(within(await confirmDialog()).getByRole('button', { name: t.cancel.confirm }));
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
+    });
+    expect(screen.getByText(t.row.with.replace('{{name}}', b.other_name))).toBeVisible();
+
+    // The last row: no sections, the empty state.
+    fireEvent.click(cancelButton(rowOf(b)));
+    fireEvent.click(within(await confirmDialog()).getByRole('button', { name: t.cancel.confirm }));
+    expect(await screen.findByText(t.empty.title)).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+  });
+
+  it('ac12_pending_cancel_is_busy', async () => {
+    const a = item(5);
+    const pending = deferred();
+    renderPage([json([a]), () => json([])], { [cancelRoute(a.id)]: [pending.promise] });
+    await screen.findByText(t.row.with.replace('{{name}}', a.other_name));
+    fireEvent.click(cancelButton(rowOf(a)));
+    fireEvent.click(within(await confirmDialog()).getByRole('button', { name: t.cancel.confirm }));
+    await waitFor(() => {
+      expect(cancelButton(rowOf(a))).toHaveAttribute('aria-busy', 'true');
+    });
+    expect(cancelButton(rowOf(a))).toHaveAttribute('aria-disabled', 'true');
+    pending.resolve(
+      json({ id: a.id, starts_at: a.starts_at, ends_at: a.ends_at, status: 'cancelled' }),
+    );
+    expect(await screen.findByText(t.empty.title)).toBeVisible();
   });
 
   it('ac13_links', async () => {

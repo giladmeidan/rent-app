@@ -4,13 +4,15 @@ import { hasStatus } from '../applications/api';
 import { CONVERSATIONS_KEY } from '../chat/useConversations';
 import { threadKey } from '../chat/useThread';
 import { bookTour, cancelTour, rescheduleTour } from './api';
+import { AGENDA_KEY } from './useAgenda';
 import { tourSlotsKey } from './useTourSlots';
 
-/** A tour change shows as a line in the thread and as the list's preview: refetch all three. */
+/** A tour change shows as a line in the thread, the list's preview and the tours agenda: refetch all four. */
 function refresh(queryClient: QueryClient, conversationId: string) {
   void queryClient.invalidateQueries({ queryKey: threadKey(conversationId), exact: true });
   void queryClient.invalidateQueries({ queryKey: tourSlotsKey(conversationId), exact: true });
   void queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY, exact: true });
+  void queryClient.invalidateQueries({ queryKey: AGENDA_KEY, exact: true });
 }
 
 /** On a 409 the slots (and the thread) are out of date: refetch them. */

@@ -311,7 +311,50 @@ def test_ac8_one_statement(
     _tour(db_engine, owner_id, room, yael_id, now + 3 * HOUR)
     statements.clear()
     assert len(_ok(owner.get("/tours"))) == 2
-    # The session lookup is the other one; the agenda itself is a single `tours` read.
-    agenda = [s for s in statements if "FROM tours" in s]
-    assert len(agenda) == 1
-    assert sum("UNION ALL" in s for s in statements) == 1
+    # The session's user lookup, then the agenda: nothing per row.
+    assert len(statements) == 2
+    assert statements[0].startswith("SELECT users.id")
+    assert "FROM tours" in statements[1] and statements[1].count("UNION ALL") == 1
+
+
+def test_ac7_ties_cut_by_id(
+    owner: TestClient,
+    owner_id: uuid.UUID,
+    seeker_id: uuid.UUID,
+    apartment: uuid.UUID,
+    room: uuid.UUID,
+    gush_dan: uuid.UUID,
+    now: dt.datetime,
+    db_engine: Engine,
+) -> None:
+    """198 distinct starts, then three tours at one instant on three listings (the unique slot
+    index allows one per listing): 201 rows, so the cut falls inside the tie and keeps the two
+    lowest ids."""
+    application = shortlisted(db_engine, apartment, seeker_id, owner_id)
+    _execute(
+        db_engine,
+        "INSERT INTO tours (listing_id, application_id, seeker_id, starts_at, ends_at)"
+        " SELECT :l, :a, :s, :t + make_interval(mins => 60 * n),"
+        " :t + make_interval(mins => 60 * n + 30)"
+        " FROM generate_series(1, 198) AS n",
+        l=apartment,
+        a=application,
+        s=seeker_id,
+        t=now,
+    )
+    third_listing = make_listing(db_engine, owner_id, gush_dan)
+    tied = [
+        make_tour(
+            db_engine,
+            listing,
+            application
+            if listing == apartment
+            else shortlisted(db_engine, listing, seeker_id, owner_id),
+            seeker_id,
+            now + 199 * HOUR,
+        )
+        for listing in (apartment, room, third_listing)
+    ]
+    rows = _ok(owner.get("/tours"))
+    assert len(rows) == 200
+    assert [r["id"] for r in rows[198:]] == [str(i) for i in sorted(tied)[:2]]

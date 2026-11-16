@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -10,6 +10,7 @@ import { cx } from '../../components/cx';
 import { useConfirm, type ConfirmFn } from '../../components/Dialog';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
+import { focusMainIfLost } from '../../components/focus';
 import { focusRing } from '../../components/focusRing';
 import { Loading } from '../../components/Loading';
 import { PageContainer } from '../../components/PageContainer';
@@ -42,6 +43,15 @@ function TourRow({
   const queryClient = useQueryClient();
   const cancel = useCancelTour(item.conversation_id);
   const timeId = useId();
+  const titleId = useId();
+  // Focus was on this row's button: when the row goes, it falls back to `#main` (spec 0009t).
+  const removed = useRef(false);
+  useLayoutEffect(
+    () => () => {
+      if (removed.current) focusMainIfLost();
+    },
+    [],
+  );
   // A started tour answers 409 `tour_not_cancellable`: an in-progress row only has the chat link.
   const cancellable = new Date(item.starts_at) > new Date();
   const gone = cancel.isError && (hasStatus(cancel.error, 404) || hasStatus(cancel.error, 409));
@@ -57,7 +67,10 @@ function TourRow({
     if (!ok) return;
     onStatus(null);
     cancel.mutate(item.id, {
-      onSuccess: () => {
+      onSuccess: async () => {
+        // An agenda refetch in flight would put the cancelled row back.
+        await queryClient.cancelQueries({ queryKey: AGENDA_KEY });
+        removed.current = true;
         queryClient.setQueryData<TourAgendaItemOut[]>(AGENDA_KEY, (old) =>
           old?.filter((tour) => tour.id !== item.id),
         );
@@ -66,6 +79,7 @@ function TourRow({
       onError: (error) => {
         if (hasStatus(error, 404) || hasStatus(error, 409)) {
           onStatus('gone');
+          removed.current = true;
           void queryClient.invalidateQueries({ queryKey: AGENDA_KEY, exact: true });
         }
       },
@@ -85,6 +99,7 @@ function TourRow({
         </p>
         <p className="text-body [overflow-wrap:anywhere]">
           <Link
+            id={titleId}
             to={`/listings/${item.listing.id}`}
             className={cx(
               'inline-flex min-h-tap items-center rounded text-accent underline underline-offset-4',
@@ -102,7 +117,7 @@ function TourRow({
             variant="ghost"
             size="sm"
             to={`/chat/${item.conversation_id}`}
-            aria-describedby={timeId}
+            aria-describedby={`${timeId} ${titleId}`}
           >
             {t('tours.row.chat')}
           </Button>
@@ -111,7 +126,7 @@ function TourRow({
               variant="secondary"
               size="sm"
               busy={cancel.isPending}
-              aria-describedby={timeId}
+              aria-describedby={`${timeId} ${titleId}`}
               onClick={() => void onCancel()}
             >
               {t('tours.row.cancel')}

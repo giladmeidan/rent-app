@@ -703,9 +703,9 @@ def agenda_statement(me: User) -> CompoundSelect[Any]:
     `TOURS_AGENDA_LIMIT`. No listing-visibility filter: a booked tour on an expired listing stays
     booked (specs/TOURS-PLAN.md), as in 0018c's reminders and 0018d's feed. The other party must
     not be suspended or deleted."""
-    seeker, owner = aliased(User), aliased(User)
 
-    def branch(role: str, other: Any, mine: ColumnElement[bool], other_id: Any) -> Any:
+    def branch(role: str, mine: ColumnElement[bool], other_id: Any) -> Any:
+        other = aliased(User)  # the other party: the seeker for the lister, the owner otherwise
         return (
             select(
                 Tour.id,
@@ -722,8 +722,7 @@ def agenda_statement(me: User) -> CompoundSelect[Any]:
             )
             .select_from(Tour)
             .join(Listing, Listing.id == Tour.listing_id)
-            .join(seeker, seeker.id == Tour.seeker_id)
-            .join(owner, owner.id == Listing.owner_id)
+            .join(other, other.id == other_id)
             .where(
                 Tour.status == "booked",
                 Tour.ends_at > func.now(),
@@ -732,8 +731,8 @@ def agenda_statement(me: User) -> CompoundSelect[Any]:
             )
         )
 
-    lister = branch("lister", seeker, Listing.owner_id == me.id, Tour.seeker_id)
-    as_seeker = branch("seeker", owner, Tour.seeker_id == me.id, Listing.owner_id)
+    lister = branch("lister", Listing.owner_id == me.id, Tour.seeker_id)
+    as_seeker = branch("seeker", Tour.seeker_id == me.id, Listing.owner_id)
     return union_all(lister, as_seeker).order_by("starts_at", "id").limit(TOURS_AGENDA_LIMIT)
 
 
