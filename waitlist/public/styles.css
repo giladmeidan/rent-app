@@ -231,7 +231,7 @@ a:hover {
 }
 
 .btn--sm {
-  min-block-size: 40px;
+  min-block-size: 44px;
   padding-inline: 16px;
   font-size: 14px;
 }
@@ -251,7 +251,7 @@ a:hover {
 }
 
 .btn--ink:hover {
-  background: #2b2b2b;
+  background: color-mix(in srgb, var(--ink) 82%, var(--on-ink));
   color: var(--on-ink);
 }
 
@@ -720,7 +720,12 @@ a:hover {
 }
 
 .video-error {
-  display: none;
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* The file did not load: the poster stays, with the line over it. */
@@ -737,6 +742,11 @@ a:hover {
   inset-inline: var(--space-4);
   inset-block-end: var(--space-4);
   display: block;
+  inline-size: auto;
+  block-size: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
   padding-block: var(--space-3);
   padding-inline: var(--space-4);
   border: 1px solid var(--border);
@@ -883,12 +893,11 @@ a:hover {
   position: absolute;
   inset-inline-end: 16px;
   inset-block-start: 50%;
-  inline-size: 8px;
+  inline-size: 12px;
   block-size: 8px;
-  margin-block-start: -6px;
-  border-block-end: 2px solid var(--ink-muted);
-  border-inline-end: 2px solid var(--ink-muted);
-  transform: rotate(45deg);
+  margin-block-start: -4px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1.5 1.75 6 6.25l4.5-4.5' fill='none' stroke='%235B6370' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
   pointer-events: none;
 }
 
@@ -966,8 +975,9 @@ a:hover {
 
 .consent {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
+  min-block-size: 44px;
   font-size: 14px;
   line-height: 22px;
   cursor: pointer;
@@ -975,8 +985,8 @@ a:hover {
 
 .consent__box {
   flex: none;
-  inline-size: 22px;
-  block-size: 22px;
+  inline-size: 24px;
+  block-size: 24px;
   margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
@@ -1125,7 +1135,7 @@ a:hover {
 .site-footer__contact {
   display: inline-flex;
   align-items: center;
-  min-block-size: 24px;
+  min-block-size: 44px;
   color: var(--accent-strong);
 }
 

@@ -108,6 +108,10 @@ for (const link of document.querySelectorAll('a[data-side]')) {
 
 const requested = new URLSearchParams(window.location.search).get('side');
 selectSide(SIDES.includes(requested) ? requested : 'seeker');
+// A deep link (?side=lister) opens on the form; a hash of its own is left to the browser.
+if (SIDES.includes(requested) && window.location.hash === '') {
+  document.getElementById('join').scrollIntoView({ block: 'start' });
+}
 
 // ---------------------------------------------------------------------------------------------
 // Forms
@@ -239,6 +243,10 @@ const joinedEmail = new Map();
 
 function showSuccess(form, email) {
   joinedEmail.set(form.dataset.side, email);
+  // Once both sides have joined there is no other side left to offer.
+  for (const other of document.querySelectorAll('.success__other')) {
+    other.hidden = joinedEmail.has(other.dataset.side);
+  }
   const panel = form.closest('[role="tabpanel"]');
   const success = panel.querySelector('.success');
   const line = success.querySelector('.success__line');
@@ -354,9 +362,13 @@ const video = document.getElementById('promo');
 const play = document.getElementById('video-play');
 
 function showVideoError() {
+  const line = document.getElementById('video-error');
+  const hadFocus = frame.contains(document.activeElement);
   frame.classList.add('has-error');
   play.hidden = true;
-  document.getElementById('video-error').textContent = TEXT.videoError;
+  line.textContent = TEXT.videoError;
+  // The video is hidden now; focus the line (it is announced) rather than leave focus on nothing.
+  if (hadFocus) line.focus({ preventScroll: true });
 }
 
 video.addEventListener('error', showVideoError);

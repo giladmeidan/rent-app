@@ -1,9 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { WAITLIST_PORT } from './e2e/waitlist/port';
+
 // The waitlist page test (spec 0017): waitlist/public served as static files, every API call stubbed
 // with page.route. Not `make e2e` (testMatch is `*.waitlist.ts`): no compose stack, no API. It runs from
-// `make test` (test-waitlist). A port taken by another worktree fails instead of serving other files.
-export const WAITLIST_PORT = 4179;
+// `make test` (test-waitlist). A port taken by another worktree fails instead of serving other files;
+// WAITLIST_PORT (default 4179) picks another one.
 
 export default defineConfig({
   testDir: 'e2e/waitlist',

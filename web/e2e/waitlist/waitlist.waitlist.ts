@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 
 import { expectNoAxeViolations } from '../a11y';
+import { WAITLIST_PORT } from './port';
 
 // The waitlist page (spec 0017), served from waitlist/public by playwright.waitlist.config.ts. Every
 // API call is stubbed; the page gets the real `_headers` CSP, and any request that leaves the page's
@@ -40,7 +41,9 @@ test.beforeEach(async ({ page }) => {
   });
   // The deployed page carries `_headers`' CSP; the python server sends none, so add it here.
   await page.route(
-    (url) => url.port === '4179' && (url.pathname === '/' || url.pathname.endsWith('.html')),
+    (url) =>
+      url.port === String(WAITLIST_PORT) &&
+      (url.pathname === '/' || url.pathname.endsWith('.html')),
     async (route) => {
       const response = await route.fetch();
       await route.fulfill({
@@ -99,10 +102,12 @@ test('ac10_tabs_and_deep_link', async ({ page }) => {
   await page.locator('#sides').getByRole('link', { name: 'להצטרפות ←' }).first().click();
   await expect(seekerTab(page)).toHaveAttribute('aria-selected', 'true');
 
-  // The deep link.
+  // The deep link selects the tab and, with no hash of its own, opens on the form.
   await open(page, '/?side=lister');
   await expect(listerTab(page)).toHaveAttribute('aria-selected', 'true');
   await expect(listerPanel(page)).toBeVisible();
+  await expect(listerTab(page)).toBeInViewport();
+  await expect(page.locator('#hero-title')).not.toBeInViewport();
 
   // Arrows follow the visual order: in RTL the first tab is on the right, so the left arrow moves on
   // and the right arrow moves back; neither wraps.
@@ -228,7 +233,11 @@ test('ac12_success_and_other_side', async ({ page }) => {
   await lister.getByRole('checkbox').check();
   await submitButton(lister).click();
   await expect(lister.getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
-  await expect(lister.getByRole('button', { name: 'גם מחפשים? להרשמה גם שם' })).toBeVisible();
+  // Both sides have joined: neither success state offers the other side any more.
+  await expect(lister.getByRole('button', { name: 'גם מחפשים? להרשמה גם שם' })).toBeHidden();
+  await seekerTab(page).click();
+  await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  await expect(seeker.getByRole('button', { name: 'גם משכירים? להרשמה גם שם' })).toBeHidden();
   expect(bodies[1]).toEqual({
     side: 'lister',
     email: 'noa@example.com',
@@ -347,9 +356,13 @@ test('ac15_video_click_to_play', async ({ page }) => {
     await page.evaluate(() => (window as unknown as { __plays: number[] }).__plays.length),
   ).toBe(1);
 
-  // A file that fails to load leaves the poster and a line saying so.
+  // A file that fails to load leaves the poster and a line saying so, which takes the focus.
   await video.dispatchEvent('error');
-  await expect(page.getByText('הסרטון לא נטען. אפשר לנסות שוב מאוחר יותר.')).toBeVisible();
+  const failed = page
+    .getByRole('status')
+    .filter({ hasText: 'הסרטון לא נטען. אפשר לנסות שוב מאוחר יותר.' });
+  await expect(failed).toBeVisible();
+  await expect(failed).toBeFocused();
 });
 
 /** Scrolls every fading section into view and waits until it is fully shown. */
@@ -390,6 +403,20 @@ test('ac16_axe_and_reduced_motion', async ({ page }) => {
     await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
     await expectNoAxeViolations(page, `success ${size}`);
   }
+
+  // Tap targets: the small header button, the footer link and the consent row are 44 px tall at least.
+  await page.setViewportSize({ width: 375, height: 812 });
+  await open(page);
+  for (const target of [
+    page.getByRole('link', { name: 'הצטרפות לרשימה' }),
+    page.locator('.site-footer__contact'),
+    seekerPanel(page).locator('label.consent'),
+  ]) {
+    expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+  expect(
+    (await seekerPanel(page).getByRole('checkbox').boundingBox())?.height ?? 0,
+  ).toBeGreaterThanOrEqual(24);
 
   // With motion welcome the turtle floats, so the check below can see an animation when there is one.
   await open(page);
