@@ -5,7 +5,6 @@ import { Link, useNavigate } from 'react-router';
 
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
-import { clearDraftsExcept } from '../../app/drafts';
 import { CONTACT_EMAIL_INLINE } from '../../app/contact';
 import { sideOf } from '../../app/side';
 import { Button } from '../../components/Button';
@@ -14,12 +13,12 @@ import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { ErrorState } from '../../components/ErrorState';
 import { Field } from '../../components/Field';
 import { focusRing } from '../../components/focusRing';
+import { PasswordInput } from '../../components/PasswordInput';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
 import { TextInput } from '../../components/TextInput';
 import { useOnline } from '../../components/useOnline';
-import { safeNext } from './next';
-import { clearSession } from './useLogout';
-import { ME_KEY } from './useMe';
+import { passwordTooShort } from './password';
+import { signedIn } from './signedIn';
 
 type OtpVerifyIn = components['schemas']['OtpVerifyIn'];
 
@@ -129,6 +128,8 @@ type Props = {
   initialRole?: Role | null;
   /** Where a successful verify goes: a path already checked by `safeNext`. */
   next?: string;
+  /** The email field's first value (the password form's "log in with a code", spec 0016a). */
+  initialEmail?: string;
 };
 
 type Step1Error = TooMany | { kind: 'failed' } | null;
@@ -144,7 +145,7 @@ type Step2Error =
  * Two-step email-code form shared by /signup and /login. The email and code live in this
  * component's state only (never storage or the URL).
  */
-export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) {
+export function OtpForm({ withProfile, initialRole = null, next = '/', initialEmail = '' }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -157,7 +158,10 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const [step, setStep] = useState<'request' | 'verify'>('request');
   const [role, setRole] = useState<Role | null>(askRole ? initialRole : 'seeker');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
+  // Signup only (spec 0016a): optional, sent as `profile.password` when not empty.
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
   const [code, setCode] = useState('');
   // Login only: the email has no account yet, so step 2 also asks for role (unless `askRole` is
   // false) and name.
@@ -173,6 +177,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
   const [resendStatus, setResendStatus] = useState<'resent' | 'ready' | null>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -223,12 +228,18 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
 
   function sendRequest() {
     const nameOk = !withProfile || nameIsValid(name);
+    const passwordOk = !withProfile || !passwordTooShort(password);
     const emailOk = EMAIL_RE.test(email.trim());
     setNameError(!nameOk);
+    setPasswordError(!passwordOk);
     setEmailError(!emailOk);
     setStep1Error(null);
     if (!nameOk) {
       nameRef.current?.focus();
+      return;
+    }
+    if (!passwordOk) {
+      passwordRef.current?.focus();
       return;
     }
     if (!emailOk) {
@@ -270,6 +281,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
       }
       setNameError(false);
       profile = { display_name: name.trim(), role };
+      if (withProfile && password !== '') profile.password = password;
     }
     setStep2Error(null);
     verify.mutate(
@@ -277,14 +289,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
       {
         onSuccess: (result) => {
           if (result.kind === 'ok') {
-            // Drop whatever the previous person in this tab left under ['me', …] first. A stashed
-            // invite token stays: it is this login's way back to the join page (0008e A1).
-            clearSession(queryClient, { keepInviteToken: true });
-            // Another person's unsent text in this tab is never theirs (spec 0009g).
-            clearDraftsExcept(result.user.id);
-            queryClient.setQueryData<UserOut | null>(ME_KEY, result.user);
-            // `replace`: Back does not return to /login. `safeNext` again, as defence in depth.
-            navigate(safeNext(next), { replace: true });
+            signedIn(queryClient, navigate, result.user, next);
             return;
           }
           if (result.kind === 'profileRequired' && !withProfile) {
@@ -368,6 +373,27 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
     </Field>
   );
 
+  const passwordField = (
+    <Field
+      id={`${id}-password`}
+      label={t('auth.password.optionalLabel')}
+      hint={t('auth.password.hint')}
+      error={passwordError ? t('auth.password.tooShort') : undefined}
+    >
+      <PasswordInput
+        ref={passwordRef}
+        name="password"
+        autoComplete="new-password"
+        maxLength={128}
+        value={password}
+        onChange={(e) => {
+          setPassword(e.target.value);
+          setPasswordError(false);
+        }}
+      />
+    </Field>
+  );
+
   const hintId = `${id}-submit-hint`;
   // Why the submit button is disabled for a missing input; never while a request is pending.
   const requestHint =
@@ -378,6 +404,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/' }: Props) 
       <form noValidate onSubmit={onRequestSubmit} className="flex flex-col gap-6">
         {withProfile && askRole && roleChoice}
         {withProfile && nameField}
+        {withProfile && passwordField}
         <Field
           id={`${id}-email`}
           label={t('auth.email.label')}
