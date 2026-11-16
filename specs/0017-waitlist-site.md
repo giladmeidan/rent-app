@@ -1,7 +1,7 @@
 ---
 id: 0017
 title: "Before launch, people looking for a home and people renting one out can join homie's waitlist on join.<domain>, and Gilad can count them by side, city and type"
-status: verified
+status: in-review
 depends_on: []   # own Cloudflare Pages project + D1; shares only the domain and DNS zone with 0013a (see Blast radius for the Makefile overlap)
 reviewers: [code, security, ux, qa]   # security: emails and optional phone numbers (PII), public write endpoint; ux: new page; qa: endpoint + page
 estimate: 1 coder run (large)   # coder Opus/high (PII + a design-heavy page; Speed rule 6)
@@ -128,6 +128,11 @@ both sides of the market before launch.
      - `lister_phone`: how many listers left a phone.
 
      It never selects `email` or `phone`.
+   - `waitlist-delete` (review B1): `cd waitlist && WRANGLER_VERSION=$(WRANGLER_VERSION) node delete.mjs`.
+     `delete.mjs` (Node built-ins only) reads the address from stdin (never argv or a make variable), normalises
+     it with `normaliseEmail`, matches on `hex(email) = '<upper-case hex of the UTF-8 address>'`, prints the
+     `SELECT COUNT(*)`, runs the `DELETE` and counts again, calling wrangler with `execFileSync` (no shell).
+     Unit test: `waitlist/test/delete.test.js::b1_delete_by_hex_is_injection_safe`.
    - `test-waitlist: web/node_modules/.modules.yaml`:
      1. `node --test 'waitlist/test/*.test.js'` (a quoted glob: Node 22 does not expand a directory argument);
      2. `$(PNPM) exec playwright install --with-deps chromium` (as `make e2e` does; a no-op when present);
@@ -419,8 +424,8 @@ the existing e2e files.
    `join.<domain>` and path equals `/api/signup`, method POST, 5 requests per 10 s per IP → block for 10 s. If 0013a
    needs the zone's one free rule later, that is its call; this rule can be widened to an OR of both paths.
 6. Run `make waitlist-stats` any time.
-7. To remove an entry on request: `pnpm dlx wrangler@<v> d1 execute homie-waitlist --remote --command "DELETE FROM
-   signups WHERE email = '<address, lower-case>'"`.
+7. To remove an entry on request: `make waitlist-delete`, then type or paste the address (stdin). Never paste an
+   address into a `d1 execute --command` by hand: the email rule allows quotes, `$(…)` and backticks (review B1).
 
 ## Acceptance criteria
 Unit tests run under `node --test`. `waitlist/test/signup.test.js` calls the Functions' `onRequest` with a `Request`
