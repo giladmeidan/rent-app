@@ -51,6 +51,9 @@ services:
       PHOTO_BACKEND: file
       PHOTO_DIR: /media
       PHOTO_PUBLIC_BASE_URL: http://localhost:${API_PORT:-8000}/media
+      # Google sign-in (spec 0016b): `fake` credentials unless `.env` says otherwise.
+      GOOGLE_VERIFIER: ${GOOGLE_VERIFIER:-fake}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       # As in the image: two glibc malloc arenas, so photo decodes do not pin memory per thread.
       MALLOC_ARENA_MAX: "2"
     ports:
@@ -130,6 +133,8 @@ services:
       # The MapLibre style (spec 0003d): public OSM raster tiles until self-hosted Protomaps.
       VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-/map/osm-raster.json}
       VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-}
+      # Empty: no Google button (spec 0016b).
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     ports:
       - "127.0.0.1:${WEB_PORT:-5173}:5173"
     volumes:

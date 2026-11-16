@@ -12,6 +12,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import type { Role } from '../../api/client';
 import { usePageTitle } from '../../app/usePageTitle';
+import { GoogleButton } from './GoogleButton';
 import { safeNext } from './next';
 import { OtpForm } from './OtpForm';
 import { useMe } from './useMe';
@@ -26,6 +27,7 @@ export function SignupPage() {
   const me = useMe();
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));
+  const role = roleFromQuery(params.get('role'));
 
   if (me.data) return <Navigate to={next} replace />;
 
@@ -46,7 +48,9 @@ export function SignupPage() {
             <Skeleton />
           </Loading>
         ) : (
-          <OtpForm withProfile initialRole={roleFromQuery(params.get('role'))} next={next} />
+          <GoogleButton initialRole={role} next={next} context="signup">
+            <OtpForm withProfile initialRole={role} next={next} />
+          </GoogleButton>
         )}
       </Card>
       <p className="text-center text-body text-ink-muted">

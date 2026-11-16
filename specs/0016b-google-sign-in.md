@@ -1,7 +1,7 @@
 ---
 id: 0016b
 title: "A person can sign up and log in with their Google account"
-status: verified
+status: in-progress
 depends_on: [0016a]   # 0016a adds `users.google_sub` (migration 0029), the scrub CHECK and the login page's mode switch
 reviewers: [code, security, ux, qa]   # security: ID-token verification, account linking, the fake verifier's guard; qa: new endpoint + screens
 estimate: 1 coder run   # full stack; coder Opus/high (auth; Speed rule 6)
@@ -31,7 +31,8 @@ Email code and password login stay as they are. PRODUCT.md "Login" (Gilad, 2026-
     - `off` → `GoogleUnavailable` (the endpoint answers 503).
     - `fake` → accepts exactly `fake:<sub>:<email>`: `sub` matches `[A-Za-z0-9_-]{1,64}`, `email` passes
       pydantic's `EmailStr` (`TypeAdapter`); anything else → `InvalidGoogleToken`. Always "verified".
-    - `google` → `_google_certs()` then `google.auth.jwt.decode(credential, certs=certs,
+    - `google` → `_google_certs()`, a `kid` header required (without one google-auth tries every cert; review
+      round), then `google.auth.jwt.decode(credential, certs=certs,
       audience=settings.google_client_id, clock_skew_in_seconds=10)` (checks the RS256 signature against the
       key named by the token's `kid`, `exp` and `iat` (both required), and `aud`), then `iss` in
       `{"accounts.google.com", "https://accounts.google.com"}`, `email_verified is True`, and `sub` / `email`
@@ -45,8 +46,10 @@ Email code and password login stay as they are. PRODUCT.md "Login" (Gilad, 2026-
   - `_google_certs() -> dict[str, str]`: `https://www.googleapis.com/oauth2/v1/certs` (`{kid: PEM cert}`)
     fetched with `httpx.get(url, timeout=5.0)` (httpx is already a dependency), kept in a module-level cache
     until the response's `Cache-Control: max-age` (fallback 3600 s if absent), behind a `threading.Lock` so
-    one thread refetches while the others wait. A timeout, connection error, non-200 or malformed JSON →
-    `GoogleUnavailable` (nothing cached). Comment: `shortcut: no refetch on an unknown kid; Google publishes a
+    one thread refetches while the others wait. A timeout, connection error, non-200 or malformed JSON is
+    a failed fetch: no new fetch for 30 s (`CERTS_RETRY_S`; callers meanwhile get an answer at once), the
+    expired keys are served for up to 1 h past their expiry (`CERTS_STALE_S`), else `GoogleUnavailable`.
+    Comment: `shortcut: no refetch on an unknown kid; Google publishes a
     new key well before signing with it, so the max-age refresh is enough — upgrade if 401s show up after a
     rotation`. A `_reset_cache()` for tests.
 - `api/app/services/auth.py`: `google_login(db, r, credential, profile, network) -> tuple[User, bool]`, the
@@ -346,8 +349,9 @@ From `graphify affected` (graph of an older `main`; checked with grep in this wo
   its style and its button frame. Whichever of 0013a / 0016b merges second adds the GIS sources (Scope, last
   bullet); the orchestrator should add the same line to 0013a's Scope 9 now if 0013a builds after 0016b.
 - Key fetch: handled in Scope (`_google_certs`: httpx, 5 s timeout, cached for `max-age`, 503 on failure).
-  During a Google outage a cache refresh holds one worker for at most 5 s per attempt; logins with Google fail
-  (503) while code and password logins work.
+  During a Google outage one refresh is tried every 30 s and holds the lock (and the workers waiting on it)
+  for at most 5 s; the expired keys keep working for up to 1 h, then logins with Google fail (503) while code
+  and password logins work (review round, 2026-11-16).
 - Each worktree's `WEB_PORT` is a different origin, so the real button works only on origins listed in Setup
   step 2; builds and CI use the fake verifier and the stub, and need no origins.
 - Linking by `email_verified` trusts Google's past verification of a non-Gmail address (Google is authoritative

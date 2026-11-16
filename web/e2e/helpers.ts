@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 
@@ -244,6 +244,33 @@ export async function routeTiles(page: Page, failing = 0) {
       ? route.fulfill({ status: 500, body: '' })
       : route.fulfill({ status: 200, contentType: 'image/png', body: TILE });
   });
+}
+
+// Google Identity Services, stubbed (spec 0016b): `initialize` keeps the callback and `renderButton`
+// draws a plain button that hands the page `window.__GSI_CREDENTIAL__` (set with `addInitScript`).
+const GIS_STUB = `window.google = { accounts: { id: {
+  initialize: (cfg) => { window.__GSI_CFG__ = cfg; },
+  renderButton: (el) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Google (stub)';
+    button.addEventListener('click', () =>
+      window.__GSI_CFG__.callback({ credential: window.__GSI_CREDENTIAL__ }));
+    el.replaceChildren(button);
+  },
+} } };`;
+
+/** The stub button's accessible name. */
+export const GIS_STUB_BUTTON = 'Google (stub)';
+
+/** Answers Google's GIS script with the stub and aborts every other `accounts.google.com` request,
+ * for every page of `context`: no e2e test reaches Google (CI renders the button). */
+export async function routeGis(context: BrowserContext) {
+  await context.route('https://accounts.google.com/**', (route) =>
+    route.request().url() === 'https://accounts.google.com/gsi/client'
+      ? route.fulfill({ status: 200, contentType: 'text/javascript', body: GIS_STUB })
+      : route.abort(),
+  );
 }
 
 /**

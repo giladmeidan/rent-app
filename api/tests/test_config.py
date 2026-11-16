@@ -360,3 +360,31 @@ def test_ac9_email_block_key_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     assert DEV_EMAIL_BLOCK_KEY not in str(exc.value)
     configured = Settings(**https)
     assert "b" * 32 not in repr(configured)
+
+
+def test_ac10_google_verifier_guard() -> None:
+    """Spec 0016b AC10: `google` needs GOOGLE_CLIENT_ID everywhere; `fake` is refused on https;
+    the default `off` needs nothing."""
+    http: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "secret_key": _SECRET,
+        "email_block_key": "b" * 32,
+    }
+    https: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "web_origin": "https://rent.example",
+        **_HTTPS_READY,
+    }
+    for base in (http, https):
+        for client_id in ("", "   "):
+            with pytest.raises(ValidationError, match="GOOGLE_CLIENT_ID is required"):
+                Settings(**base, google_verifier="google", google_client_id=client_id)
+    with pytest.raises(ValidationError, match="GOOGLE_VERIFIER must not be fake"):
+        Settings(**https, google_verifier="fake")
+
+    assert Settings(**http, google_verifier="fake").google_verifier == "fake"
+    assert Settings(**https).google_verifier == "off"
+    configured = Settings(**https, google_verifier="google", google_client_id=" id.example ")
+    assert (configured.google_verifier, configured.google_client_id) == ("google", "id.example")

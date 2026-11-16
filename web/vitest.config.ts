@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}', 'scripts/__tests__/**/*.test.ts'],
     setupFiles: ['src/test-setup.ts'],
-    env: { VITE_API_URL: 'http://api.test' },
+    // No Google button unless a test stubs the client id (spec 0016b), locally and in CI alike.
+    env: { VITE_API_URL: 'http://api.test', VITE_GOOGLE_CLIENT_ID: '' },
   },
 });

@@ -90,6 +90,7 @@ OWN = {
     ("PUT", "/me/photo"),  # 0010j
     ("POST", "/reports"),  # 0011b
     ("POST", "/auth/password/login"),  # 0016a
+    ("POST", "/auth/google"),  # 0016b
 }
 # Signing in (5 guesses per code) and signing out (always works).
 # DELETE /me (spec 0013c): succeeds at most once per account, behind a sign-in of the last 15 min.

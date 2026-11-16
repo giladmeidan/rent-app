@@ -95,6 +95,11 @@ class Settings(DatabaseSettings):
     # CBS small-flat rent figures (spec 0014d), worker only. `off` = no request (dev, tests, CI);
     # `cbs` = the monthly import of Table 4.9 from cbs.gov.il.
     cbs_rent: Literal["off", "cbs"] = "off"
+    # Google sign-in (spec 0016b). `off` = POST /auth/google answers 503 (a deployment that sets
+    # nothing); `fake` = `fake:<sub>:<email>` credentials (compose, tests, e2e; never on https);
+    # `google` = real ID tokens for the OAuth client `google_client_id` (not a secret).
+    google_verifier: Literal["off", "fake", "google"] = "off"
+    google_client_id: str = ""
 
     @field_validator("photo_public_base_url")
     @classmethod
@@ -147,6 +152,11 @@ class Settings(DatabaseSettings):
             raise ValueError(rule)
         return value
 
+    @field_validator("google_client_id")
+    @classmethod
+    def _google_client_id_is_trimmed(cls, value: str) -> str:
+        return value.strip()
+
     @field_validator("nominatim_user_agent")
     @classmethod
     def _user_agent_identifies_without_email(cls, value: str) -> str:
@@ -180,6 +190,8 @@ class Settings(DatabaseSettings):
             parse_smtp_url(self.smtp_url.get_secret_value())
         if self.email_backend == "smtp" and self.smtp_url is None:
             raise ValueError("SMTP_URL is required when EMAIL_BACKEND=smtp")
+        if self.google_verifier == "google" and not self.google_client_id:
+            raise ValueError("GOOGLE_CLIENT_ID is required when GOOGLE_VERIFIER=google")
         if self.photo_backend == "r2" and not all(
             value is not None
             and (value.get_secret_value() if isinstance(value, SecretStr) else value).strip()
@@ -221,6 +233,8 @@ class Settings(DatabaseSettings):
                 raise ValueError(
                     "PHOTO_PUBLIC_BASE_URL must be https and not localhost when WEB_ORIGIN is https"
                 )
+            if self.google_verifier == "fake":
+                raise ValueError("GOOGLE_VERIFIER must not be fake when WEB_ORIGIN is https")
             # The last https check: the key is never rotated, so a public one cannot be fixed later.
             if self.email_block_key.get_secret_value() == DEV_EMAIL_BLOCK_KEY:
                 raise ValueError(
