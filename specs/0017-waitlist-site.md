@@ -1,7 +1,7 @@
 ---
 id: 0017
 title: "Before launch, people looking for a home and people renting one out can join homie's waitlist on join.<domain>, and Gilad can count them by side, city and type"
-status: verified
+status: in-progress
 depends_on: []   # own Cloudflare Pages project + D1; shares only the domain and DNS zone with 0013a (see Blast radius for the Makefile overlap)
 reviewers: [code, security, ux, qa]   # security: emails and optional phone numbers (PII), public write endpoint; ux: new page; qa: endpoint + page
 estimate: 1 coder run (large)   # coder Opus/high (PII + a design-heavy page; Speed rule 6)
