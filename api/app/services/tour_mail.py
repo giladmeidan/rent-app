@@ -15,8 +15,10 @@ import json
 import logging
 import uuid
 from collections.abc import Sequence
+from email.utils import parseaddr
 from typing import TYPE_CHECKING, Any, Literal
 
+from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -66,7 +68,8 @@ _CANCEL = {"cancelled_by_seeker", "cancelled_by_lister", "cancelled_by_system"}
 # so the image needs no tzdata).
 _LOAD = text(
     "SELECT t.id, t.status, t.application_id, t.starts_at, t.ends_at, t.updated_at,"
-    " t.starts_at > now() AS upcoming, now() AS now, l.street, l.city,"
+    " t.starts_at > now() AS upcoming, t.reminder_sent_at IS NOT NULL AS reminded,"
+    " now() AS now, l.street, l.city,"
     " o.email AS lister_email, o.display_name AS lister_name,"
     " o.suspended_at IS NOT NULL AS lister_suspended,"
     " s.email AS seeker_email, s.display_name AS seeker_name,"
@@ -112,6 +115,7 @@ def _parse(raw: bytes) -> tuple[uuid.UUID, str, int, Side | None]:
     if (
         change not in _MAIL
         or type(attempt) is not int
+        or attempt < 0
         or (to is not None and to not in _MAIL[change][1])
     ):
         raise ValueError("unknown item")
@@ -128,7 +132,10 @@ def _current(row: Any, change: str) -> bool:
     """The item still describes the row (a later item tells the newer story)."""
     if change in _CANCEL:
         return bool(row.status == "cancelled")
-    return bool(row.status == "booked" and (change != "reminder" or row.upcoming))
+    # A reminder needs its claim: a reschedule after the claim clears it (the old "tomorrow").
+    return bool(
+        row.status == "booked" and (change != "reminder" or (row.upcoming and row.reminded))
+    )
 
 
 def _calendar(row: Any, change: str) -> list[Attachment]:
@@ -149,7 +156,7 @@ def _calendar(row: Any, change: str) -> list[Attachment]:
         stamp=row.now,
         sequence=int(row.updated_at.timestamp()),
         status="CONFIRMED" if publish else "CANCELLED",
-        organizer=settings.email_from,
+        organizer=parseaddr(settings.email_from)[1],  # "homie <a@b>" → a@b
     )
     return [
         Attachment(
@@ -206,10 +213,14 @@ def send_pending(db: Session, r: RedisClient, sender: EmailSender) -> dict[str, 
                     sender.send(email, subject, _body(row, template, side), attachments)
                     counts["sent"] += 1
                 except EmailUnavailable:
-                    if attempt + 1 < MAX_ATTEMPTS:
+                    if attempt + 1 >= MAX_ATTEMPTS:
+                        counts["dropped"] += 1
+                        continue
+                    try:
                         r.rpush(QUEUE_KEY, _item(tour_id, change, attempt + 1, side))
                         counts["retried"] += 1
-                    else:
+                    except RedisError as exc:  # only this side is lost; the other still goes
+                        log.error("tour mail retry not queued: %s", type(exc).__name__)
                         counts["dropped"] += 1
         except Exception as exc:  # one item's bug never loses or loops the others
             db.rollback()

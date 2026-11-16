@@ -31,7 +31,7 @@ def _unfold(text: str) -> list[str]:
 
 
 def test_ac11_fold_escape_utc() -> None:
-    hostile = "דנה; X,\\ y\nDTSTART:19700101T000000Z\r\nSTATUS:CANCELLED\x07"
+    hostile = "דנה; X,\\ y\nDTSTART:19700101T000000Z\r\nSTATUS:CANCELLED\x07\u2028UID:x\u2029"
     long_name = "א" * 40
     calendar = ics.vcalendar(
         [_event(summary=hostile, location=long_name * 3, sequence=7)], method="PUBLISH"
@@ -58,7 +58,8 @@ def test_ac11_fold_escape_utc() -> None:
     assert "X-WR-TIMEZONE:Asia/Jerusalem" in lines
     assert f"LOCATION:{long_name * 3}" in lines  # unfolds back to the original
     # Escaped: no injected property line, the control character dropped.
-    assert "SUMMARY:דנה\\; X\\,\\\\ y\\nDTSTART:19700101T000000Z\\nSTATUS:CANCELLED" in lines
+    # U+2028/2029 (line and paragraph separators) are dropped too.
+    assert "SUMMARY:דנה\\; X\\,\\\\ y\\nDTSTART:19700101T000000Z\\nSTATUS:CANCELLEDUID:x" in lines
     assert [line for line in lines if line.startswith("DTSTART")] == ["DTSTART:20261120T152000Z"]
     assert [line for line in lines if line.startswith("STATUS")] == ["STATUS:CONFIRMED"]
     assert "DTEND:20261120T155000Z" in lines

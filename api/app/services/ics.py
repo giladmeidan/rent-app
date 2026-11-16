@@ -13,15 +13,15 @@ _LINE_OCTETS = 75
 
 
 def escape_text(value: str) -> str:
-    """A TEXT value: `\\`, `;` and `,` escaped, a newline as `\\n`, other control characters
-    dropped, so user text can never start a new property."""
+    """A TEXT value: `\\`, `;` and `,` escaped, a newline as `\\n`, other control characters and
+    the Unicode line/paragraph separators dropped, so user text can never start a new property."""
     out = []
     for ch in value.replace("\r\n", "\n"):
         if ch == "\n":
             out.append("\\n")
         elif ch in "\\;,":
             out.append("\\" + ch)
-        elif unicodedata.category(ch) != "Cc":
+        elif unicodedata.category(ch) not in ("Cc", "Zl", "Zp"):  # U+2028/2029 break lines too
             out.append(ch)
     return "".join(out)
 

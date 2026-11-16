@@ -10,7 +10,7 @@ import datetime as dt
 import json
 import logging
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import pytest
@@ -155,6 +155,20 @@ def _mail(outbox: Outbox) -> dict[str, tuple[str, str, dict[str, str] | None]]:
     }
 
 
+def _claimed(engine: Engine, tour_id: Any) -> None:
+    """Mark the tour's reminder claimed, as `queue_reminders` does before it pushes the item."""
+    _execute(engine, "UPDATE tours SET reminder_sent_at = now() WHERE id = :t", t=tour_id)
+
+
+def _backdate(engine: Engine, tour_id: Any) -> None:
+    """`updated_at` one minute back, so the next change's SEQUENCE cannot tie within a second."""
+    _execute(
+        engine,
+        "UPDATE tours SET updated_at = updated_at - interval '1 minute' WHERE id = :t",
+        t=tour_id,
+    )
+
+
 def _counts(sent: int = 0, skipped: int = 0, retried: int = 0, dropped: int = 0) -> dict[str, int]:
     return {"sent": sent, "skipped": skipped, "retried": retried, "dropped": dropped}
 
@@ -231,11 +245,16 @@ def test_ac3_cancel_recipients_by_cancelled_by(
     gush_dan: uuid.UUID,
     outbox: Outbox,
     db_engine: Engine,
+    set_env: Callable[..., None],
 ) -> None:
+    set_env(EMAIL_FROM="homie <tours@homie.example>")
+
     def book_then_sequence(starts_at: dt.datetime) -> tuple[Any, int]:
         tour_id = _booked_tour(seeker, application, starts_at)
         _send(db_engine, _fresh(outbox))
-        return tour_id, int(_mail(outbox)[O_EMAIL][2]["SEQUENCE"])  # type: ignore[index]
+        _backdate(db_engine, tour_id)
+        # What the backdated booking's SEQUENCE reads.
+        return tour_id, int(_mail(outbox)[O_EMAIL][2]["SEQUENCE"]) - 60  # type: ignore[index]
 
     def cancel_mail(tour_id: Any, sequence: int) -> dict[str, tuple[str, str]]:
         mail = _mail(outbox)
@@ -244,8 +263,9 @@ def test_ac3_cancel_recipients_by_cancelled_by(
             assert props is not None
             assert (props["METHOD"], props["STATUS"]) == ("CANCEL", "CANCELLED")
             assert props["UID"] == f"{tour_id}@homie"
-            assert int(props["SEQUENCE"]) >= sequence
-            assert props["ORGANIZER;CN=homie"] == f"mailto:{get_settings().email_from}"
+            assert int(props["SEQUENCE"]) > sequence
+            # The address alone, though EMAIL_FROM carries a display name.
+            assert props["ORGANIZER;CN=homie"] == "mailto:tours@homie.example"
         return {to: (subject, body) for to, (subject, body, _) in mail.items()}
 
     # The seeker cancels: only the lister hears.
@@ -280,6 +300,7 @@ def test_ac3_cancel_recipients_by_cancelled_by(
     other = make_listing(db_engine, owner_id, gush_dan)
     other_application = shortlisted(db_engine, other, seeker_id, owner_id)
     other_tour = make_tour(db_engine, other, other_application, seeker_id, db_now(db_engine) + HOUR)
+    _backdate(db_engine, other_tour)
     sequence = int(
         _scalar(
             db_engine,
@@ -306,6 +327,7 @@ def test_ac4_skips_deleted_and_suspended(
     db_engine: Engine,
 ) -> None:
     tour_id = make_tour(db_engine, listing, application, seeker_id, db_now(db_engine) + 3 * HOUR)
+    _claimed(db_engine, tour_id)
 
     # A suspended seeker gets nothing; the lister still does.
     _execute(db_engine, "UPDATE users SET suspended_at = now() WHERE id = :u", u=seeker_id)
@@ -385,6 +407,7 @@ def test_ac6_retry_per_recipient_then_drop(
     application: uuid.UUID,
     outbox: Outbox,
     db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class SeekerDown(Outbox):
         def send(
@@ -405,6 +428,27 @@ def test_ac6_retry_per_recipient_then_drop(
     assert _send(db_engine, sender) == _counts(dropped=1)
     assert _queue() == []
     assert [to for to, _, _ in sender.messages] == [O_EMAIL]  # the lister once
+
+    # Redis refuses the lister's retry: only that side is dropped, the seeker's is still queued.
+    class BothDown(Outbox):
+        def send(
+            self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+        ) -> None:
+            raise EmailUnavailable
+
+    _push(_item(tour_id, "booked"))
+    rpush = get_redis().rpush
+    refused: list[Any] = []
+
+    def first_refused(*args: Any) -> Any:
+        if not refused:
+            refused.append(args)
+            raise redis.ConnectionError("redis down")
+        return rpush(*args)
+
+    monkeypatch.setattr(get_redis(), "rpush", first_refused)
+    assert _send(db_engine, BothDown()) == _counts(retried=1, dropped=1)
+    assert _queue() == [_item(tour_id, "booked", to="seeker") | {"attempt": 1}]
 
 
 # --- AC7: the hook ----------------------------------------------------------------------------
@@ -545,6 +589,7 @@ def test_ac9_reminder_idempotent_and_rearmed(
     listing: uuid.UUID,
     application: uuid.UUID,
     base: dt.datetime,
+    outbox: Outbox,
     db_engine: Engine,
 ) -> None:
     tour_id = make_tour(db_engine, listing, application, seeker_id, base + HOUR)
@@ -556,6 +601,11 @@ def test_ac9_reminder_idempotent_and_rearmed(
     make_window(db_engine, listing, base + 36 * HOUR, base + 38 * HOUR, 30)
     _ok(_reschedule(seeker, tour_id, base + 36 * HOUR))
     assert tour_row(db_engine, tour_id).reminder_sent_at is None
+    # The claimed reminder still queued before the reschedule now tells the old "tomorrow":
+    # skipped; the reschedule's mail goes.
+    assert [i["change"] for i in _queue()] == ["reminder", "rescheduled"]
+    assert _send(db_engine, _fresh(outbox)) == _counts(sent=2, skipped=1)
+    assert {subject for _, subject, _ in outbox.messages} == {he.TOUR_RESCHEDULED_SUBJECT}
     assert _reminders(db_engine) == 0  # not inside the lead yet
     # ... and once the clock reaches the new time's lead (moved 14 hours on), it is claimed again.
     _execute(
@@ -589,6 +639,7 @@ def test_ac10_body_local_time_and_fields(
         (july, "יום שני, 12.07.2027, 18:20–18:50"),
     ):
         tour_id = make_tour(db_engine, listing, application, seeker_id, starts_at)
+        _claimed(db_engine, tour_id)
         _push(_item(tour_id, "reminder"))
         assert _send(db_engine, _fresh(outbox)) == _counts(sent=2)
         bodies = {to: body for to, _, body in outbox.messages}
