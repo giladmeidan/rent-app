@@ -453,7 +453,7 @@ describe('ChatListPage', () => {
     expect(previews).toEqual([
       `נקבע סיור: ${when}`,
       `הסיור של ${when} בוטל על ידי ${theirs.other_name}`,
-      `ביטלת את הסיור של ${when}`,
+      `הסיור של ${when} בוטל`,
     ]);
     reset(view);
   });

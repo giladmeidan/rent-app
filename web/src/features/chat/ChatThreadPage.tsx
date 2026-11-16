@@ -323,7 +323,7 @@ function Thread({
                     data-testid="tour-line"
                     className={`lg:scroll-mb-56 ${systemLine}`}
                   >
-                    {tourLineText(t, message.tour, message.sender_name, message.mine)}
+                    {tourLineText(t, message.tour, message.mine ? undefined : message.sender_name)}
                   </li>
                 );
               }

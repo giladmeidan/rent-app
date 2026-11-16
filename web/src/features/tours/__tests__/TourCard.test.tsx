@@ -50,6 +50,12 @@ function renderCard(
   const view = renderRoutes(`/chat/${t.id}`, chatRoutes);
   return { api, view };
 }
+const LIST = 'GET /me/conversations';
+/** The chat list is fetched once on mount; a tour change refetches it (`CONVERSATIONS_KEY`). */
+const listRefetched = (api: ReturnType<typeof renderCard>['api']) =>
+  waitFor(() => {
+    expect(api.calls(LIST).length).toBeGreaterThan(1);
+  });
 const slotsRoute = (t: ThreadOut) => `GET /applications/${t.id}/tour-slots`;
 const bookRoute = (t: ThreadOut) => `POST /applications/${t.id}/tour`;
 const rescheduleRoute = `POST /tours/${TOUR.id}/reschedule`;
@@ -89,12 +95,14 @@ describe('TourCard', () => {
     await noDialog();
     expect(api.calls(bookRoute(T))[0]?.body).toEqual({ starts_at: SLOT_A });
     // The thread is refetched: the card shows the tour, and the heading has focus.
-    expect(await screen.findByText(i18nWhen(c.booked))).toBeVisible();
+    expect(await screen.findByText(bookedLine())).toBeVisible();
     expect(screen.getByRole('button', { name: c.reschedule })).toBeVisible();
     expect(screen.queryByRole('button', { name: c.book })).toBeNull();
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 2, name: c.title })).toHaveFocus();
     });
+    await listRefetched(api);
+    expect(api.calls(`GET /conversations/${T.id}`)).toHaveLength(2);
   });
 
   it('ac2_slot_unavailable_shows_message_and_refetches_slots', async () => {
@@ -131,7 +139,7 @@ describe('TourCard', () => {
     fireEvent.click((await within(box).findAllByRole('radio'))[0] as HTMLElement);
     fireEvent.click(within(box).getByRole('button', { name: p.confirm }));
     await noDialog();
-    expect(await screen.findByText(i18nWhen(c.booked))).toBeVisible();
+    expect(await screen.findByText(bookedLine())).toBeVisible();
     expect(api.calls(`GET /conversations/${T.id}`)).toHaveLength(2);
   });
 
@@ -155,16 +163,14 @@ describe('TourCard', () => {
       [rescheduleRoute]: [json(moved)],
     });
     await card();
-    expect(screen.getByText(i18nWhen(c.booked))).toBeVisible();
+    expect(screen.getByText(bookedLine())).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: c.reschedule }));
     const box = await picker();
     fireEvent.click((await within(box).findAllByRole('radio'))[0] as HTMLElement);
     fireEvent.click(within(box).getByRole('button', { name: p.move }));
     await noDialog();
     expect(api.calls(rescheduleRoute)[0]?.body).toEqual({ starts_at: SLOT_B });
-    expect(
-      await screen.findByText(he.tours.card.booked.replace('{{when}}', formatTourWhen(SLOT_B))),
-    ).toBeVisible();
+    expect(await screen.findByText(bookedLine(SLOT_B))).toBeVisible();
   });
 
   it('ac2_seeker_cancels_with_confirm', async () => {
@@ -185,6 +191,58 @@ describe('TourCard', () => {
     await noDialog();
     expect(await screen.findByRole('button', { name: c.book })).toBeVisible();
     expect(api.calls(cancelRoute)).toHaveLength(1);
+    await listRefetched(api);
+  });
+
+  it('ac2_tour_not_cancellable_closes_and_refetches', async () => {
+    // Moving a tour that is no longer cancellable (cleanup cancelled it): the picker closes and
+    // the thread is refetched, so the card shows no tour.
+    const T = { ...thread(), tour: TOUR };
+    const { api } = renderCard(T, [json(T), json({ ...T, tour: null })], {
+      [slotsRoute(T)]: [json(slots([SLOT_B], { tour: TOUR }))],
+      [rescheduleRoute]: [json({ detail: 'tour_not_cancellable' }, 409)],
+    });
+    await card();
+    fireEvent.click(screen.getByRole('button', { name: c.reschedule }));
+    const box = await picker();
+    fireEvent.click((await within(box).findAllByRole('radio'))[0] as HTMLElement);
+    fireEvent.click(within(box).getByRole('button', { name: p.move }));
+    await noDialog();
+    expect(await screen.findByRole('button', { name: c.book })).toBeVisible();
+    expect(api.calls(`GET /conversations/${T.id}`)).toHaveLength(2);
+    await listRefetched(api);
+  });
+
+  it('ac2_cancel_409_flips_the_card_without_an_alert', async () => {
+    const T = { ...thread(), tour: TOUR };
+    const { api } = renderCard(T, [json(T), json({ ...T, tour: null })], {
+      [cancelRoute]: [json({ detail: 'tour_not_cancellable' }, 409)],
+    });
+    await card();
+    fireEvent.click(screen.getByRole('button', { name: c.cancel }));
+    const box = await screen.findByRole('dialog', { name: c.cancelConfirm });
+    fireEvent.click(within(box).getByRole('button', { name: c.cancel }));
+    await noDialog();
+    expect(await screen.findByRole('button', { name: c.book })).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.calls(`GET /conversations/${T.id}`)).toHaveLength(2);
+  });
+
+  it('ac2_cancel_failure_shows_the_error_text', async () => {
+    const T = { ...thread(), tour: TOUR };
+    renderCard(T, [json(T)], {
+      [cancelRoute]: [json({ detail: 'rate_limited' }, 429), json({ detail: 'boom' }, 500)],
+    });
+    await card();
+    for (const text of [he.tours.errors.rateLimited, he.tours.errors.generic]) {
+      fireEvent.click(screen.getByRole('button', { name: c.cancel }));
+      const box = await screen.findByRole('dialog', { name: c.cancelConfirm });
+      fireEvent.click(within(box).getByRole('button', { name: c.cancel }));
+      await noDialog();
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(text);
+      });
+    }
   });
 
   it('ac2_owner_sees_the_hint_link_or_the_cancel', async () => {
@@ -207,7 +265,7 @@ describe('TourCard', () => {
       },
       owner,
     );
-    expect(await screen.findByText(i18nWhen(c.booked))).toBeVisible();
+    expect(await screen.findByText(bookedLine())).toBeVisible();
     expect(screen.queryByRole('button', { name: c.reschedule })).toBeNull();
     expect(screen.queryByText(c.ownerHint)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: c.cancel }));
@@ -244,7 +302,8 @@ describe('TourCard', () => {
   });
 });
 
-/** A card text with `{{when}}` filled by the tour's time. */
-function i18nWhen(template: string): string {
-  return template.replace('{{when}}', formatTourWhen(START));
+/** The card's booked line (its time sits in a `<time>`, so match the paragraph's whole text). */
+function bookedLine(startsAt: string = START) {
+  const text = `נקבע סיור: ${formatTourWhen(startsAt)}`;
+  return (_: string, el: Element | null) => el?.tagName === 'P' && el.textContent === text;
 }

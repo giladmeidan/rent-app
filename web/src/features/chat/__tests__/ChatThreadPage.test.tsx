@@ -494,7 +494,7 @@ describe('ChatThreadPage', () => {
       `נקבע סיור: ${when}`,
       `הסיור הועבר ל־${when}`,
       `הסיור של ${when} בוטל על ידי ${NAME}`,
-      `ביטלת את הסיור של ${when}`,
+      `הסיור של ${when} בוטל`,
       `הסיור של ${when} בוטל`,
       `הסיור של ${when} בוטל על ידי ${he.account.deletedName}`,
     ]);

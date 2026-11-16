@@ -107,7 +107,7 @@ function ConversationRow({
                 className="min-w-0 flex-1 truncate text-body"
               >
                 {last.tour !== null
-                  ? tourLineText(t, last.tour, conversation.other_name, last.mine)
+                  ? tourLineText(t, last.tour, last.mine ? undefined : conversation.other_name)
                   : last.mine
                     ? t('chat.list.you', { body: last.body })
                     : last.body}

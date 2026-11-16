@@ -110,7 +110,10 @@ export function SlotPicker({
               label: formatTourTime(slot.starts_at),
             }))}
             value={list.some((slot) => slot.starts_at === selected) ? selected : null}
-            onChange={setSelected}
+            onChange={(value) => {
+              setSelected(value);
+              setFailure(null);
+            }}
           />
         ))}
       </div>

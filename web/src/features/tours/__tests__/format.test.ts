@@ -58,10 +58,8 @@ describe('tourLineText', () => {
   });
 
   it('says my own cancel without a name, and a deleted sender by the deleted name', () => {
-    expect(tourLineText(t, line('cancelled_by_seeker'), 'דנה', true)).toBe(
-      `ביטלת את הסיור של ${when}`,
-    );
-    expect(tourLineText(t, line('cancelled_by_system'), 'דנה', true)).toBe(`הסיור של ${when} בוטל`);
+    expect(tourLineText(t, line('cancelled_by_seeker'), undefined)).toBe(`הסיור של ${when} בוטל`);
+    expect(tourLineText(t, line('cancelled_by_system'), 'דנה')).toBe(`הסיור של ${when} בוטל`);
     expect(tourLineText(t, line('cancelled_by_lister'), null)).toBe(
       `הסיור של ${when} בוטל על ידי ${he.account.deletedName}`,
     );

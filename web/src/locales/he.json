@@ -1310,7 +1310,7 @@
     },
     "card": {
       "title": "סיור",
-      "booked": "נקבע סיור: {{when}}",
+      "booked": "נקבע סיור: <time><bdi>{{when}}</bdi></time>",
       "reschedule": "שינוי מועד",
       "cancel": "ביטול הסיור",
       "cancelConfirm": "לבטל את הסיור?",
@@ -1327,8 +1327,7 @@
       "booked": "נקבע סיור: {{when}}",
       "rescheduled": "הסיור הועבר ל־{{when}}",
       "cancelledBy": "הסיור של {{when}} בוטל על ידי {{name}}",
-      "cancelledBySystem": "הסיור של {{when}} בוטל",
-      "cancelledMine": "ביטלת את הסיור של {{when}}"
+      "cancelledBySystem": "הסיור של {{when}} בוטל"
     },
     "errors": {
       "slotUnavailable": "הזמן הזה כבר נתפס. אפשר לבחור זמן אחר",

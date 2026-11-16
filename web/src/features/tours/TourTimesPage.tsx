@@ -32,28 +32,24 @@ const SLOT_MINUTES = [15, 20, 30, 45] as const;
 type SlotMinutes = (typeof SLOT_MINUTES)[number];
 
 /** The window's slots, in order, each with its booking (if any). */
-function slotsOf(window: TourWindowOut) {
-  const end = new Date(window.ends_at).getTime();
-  const booked = new Map(window.booked.map((b) => [new Date(b.starts_at).getTime(), b]));
+function slotsOf(win: TourWindowOut) {
+  const end = new Date(win.ends_at).getTime();
+  const booked = new Map(win.booked.map((b) => [new Date(b.starts_at).getTime(), b]));
   const slots: { startsAt: string; booked: TourWindowOut['booked'][number] | undefined }[] = [];
-  for (
-    let at = new Date(window.starts_at).getTime();
-    at < end;
-    at += window.slot_minutes * 60_000
-  ) {
+  for (let at = new Date(win.starts_at).getTime(); at < end; at += win.slot_minutes * 60_000) {
     slots.push({ startsAt: new Date(at).toISOString(), booked: booked.get(at) });
   }
   return slots;
 }
 
 function WindowCard({
-  window,
+  win,
   focus,
   onFocused,
   onDelete,
   busy,
 }: {
-  window: TourWindowOut;
+  win: TourWindowOut;
   /** The window was just added: its heading takes focus. */
   focus: boolean;
   onFocused: () => void;
@@ -62,6 +58,7 @@ function WindowCard({
 }) {
   const { t } = useTranslation();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingId = useId();
   useEffect(() => {
     if (!focus) return;
     headingRef.current?.focus();
@@ -69,16 +66,16 @@ function WindowCard({
   }, [focus, onFocused]);
   return (
     <Card padding="md" className="flex flex-col gap-3">
-      <h3 ref={headingRef} tabIndex={-1} className="text-h3 focus:outline-none">
+      <h3 id={headingId} ref={headingRef} tabIndex={-1} className="text-h3 focus:outline-none">
         <bdi dir="ltr">
-          <time dateTime={window.starts_at}>{formatTourTime(window.starts_at)}</time>–
-          <time dateTime={window.ends_at}>{formatTourTime(window.ends_at)}</time>
+          <time dateTime={win.starts_at}>{formatTourTime(win.starts_at)}</time>–
+          <time dateTime={win.ends_at}>{formatTourTime(win.ends_at)}</time>
         </bdi>
         {' · '}
-        {t('tours.times.slotOption', { count: window.slot_minutes })}
+        {t('tours.times.slotOption', { count: win.slot_minutes })}
       </h3>
       <ul className="flex flex-col gap-2">
-        {slotsOf(window).map(({ startsAt, booked }) => (
+        {slotsOf(win).map(({ startsAt, booked }) => (
           <li key={startsAt} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body">
             <time dateTime={startsAt}>
               <bdi dir="ltr">{formatTourTime(startsAt)}</bdi>
@@ -87,12 +84,17 @@ function WindowCard({
               <span className="text-ink-muted">{t('tours.times.free')}</span>
             ) : (
               <>
-                <span dir="auto" className="font-semibold">
+                <span id={`${headingId}-${startsAt}`} dir="auto" className="font-semibold">
                   {t('tours.times.booked', {
                     name: booked.seeker_name ?? t('account.deletedName'),
                   })}
                 </span>
-                <Button variant="ghost" size="sm" to={`/chat/${booked.conversation_id}`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  to={`/chat/${booked.conversation_id}`}
+                  aria-describedby={`${headingId}-${startsAt}`}
+                >
                   {t('tours.times.toChat')}
                 </Button>
               </>
@@ -100,7 +102,14 @@ function WindowCard({
           </li>
         ))}
       </ul>
-      <Button variant="ghost" size="sm" className="self-start" busy={busy} onClick={onDelete}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="self-start"
+        busy={busy}
+        onClick={onDelete}
+        aria-describedby={headingId}
+      >
         {t('tours.times.delete')}
       </Button>
     </Card>
@@ -225,7 +234,7 @@ export function TourTimesPage() {
 
   const clearFocus = useCallback(() => setFocusId(null), []);
 
-  async function onDelete(window: TourWindowOut) {
+  async function onDelete(win: TourWindowOut) {
     const ok = await confirm({
       title: t('tours.times.deleteConfirm'),
       confirmLabel: t('tours.times.delete'),
@@ -233,7 +242,7 @@ export function TourTimesPage() {
     });
     if (!ok) return;
     setDeleteError(null);
-    remove.mutate(window.id, {
+    remove.mutate(win.id, {
       onError: (failure) =>
         setDeleteError(
           failure instanceof ApiError && failure.detail === 'window_has_tours'
@@ -297,7 +306,7 @@ export function TourTimesPage() {
               {list.map((w) => (
                 <WindowCard
                   key={w.id}
-                  window={w}
+                  win={w}
                   focus={w.id === focusId}
                   onFocused={clearFocus}
                   busy={remove.isPending && remove.variables === w.id}

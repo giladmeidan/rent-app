@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useConfirm } from '../../components/Dialog';
 import { useOnline } from '../../components/useOnline';
+import { hasStatus } from '../applications/api';
 import type { ThreadOut } from '../chat/api';
 import { tourErrorText } from './errors';
 import { formatTourWhen } from './format';
 import { SlotPicker } from './SlotPicker';
 import { useCancelTour } from './useTourActions';
+
+/** "נקבע סיור: {{when}}" with the time in a `<time>` and an LTR `<bdi>` (digits in an RTL line). */
+function BookedText({ startsAt }: { startsAt: string }) {
+  const { t } = useTranslation();
+  return (
+    <Trans
+      t={t}
+      i18nKey="tours.card.booked"
+      values={{ when: formatTourWhen(startsAt) }}
+      components={{ time: <time dateTime={startsAt} />, bdi: <bdi dir="ltr" /> }}
+    />
+  );
+}
 
 /**
  * The tour card of a chat thread: the seeker books, moves or cancels, the lister cancels or is
@@ -42,7 +56,13 @@ export function TourCard({ id, thread }: { id: string; thread: ThreadOut }) {
       tone: 'danger',
     });
     if (!ok) return;
-    cancel.mutate(tour.id, { onSuccess: () => setDone((n) => n + 1) });
+    cancel.mutate(tour.id, {
+      onSuccess: () => setDone((n) => n + 1),
+      // 409 `tour_not_cancellable`: the card is about to flip with the refetched thread; no alert.
+      onError: (error) => {
+        if (hasStatus(error, 409)) cancel.reset();
+      },
+    });
   }
 
   let content;
@@ -50,7 +70,7 @@ export function TourCard({ id, thread }: { id: string; thread: ThreadOut }) {
     content = (
       <>
         <p className="text-body">
-          {t('tours.card.booked', { when: formatTourWhen(tour.starts_at) })}
+          <BookedText startsAt={tour.starts_at} />
         </p>
         <div className="flex flex-wrap gap-2">
           {role === 'seeker' && (
