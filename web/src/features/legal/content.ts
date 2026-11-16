@@ -126,6 +126,7 @@ export function privacyDoc(t: TFunction, email: string): LegalDoc {
               t('legal.privacy.s1.i7', { email }),
               t('legal.privacy.s1.i8', { email }),
               t('legal.privacy.s1.i9', { email }),
+              t('legal.privacy.s1.i16', { email }), // spec 0018c: tours, after the chat
               t('legal.privacy.s1.i10', { email }),
               t('legal.privacy.s1.i11', { email }),
               t('legal.privacy.s1.i12', { email }),
@@ -190,6 +191,7 @@ export function privacyDoc(t: TFunction, email: string): LegalDoc {
               t('legal.privacy.s5.i10', { email }),
               t('legal.privacy.s5.i11', { email }),
               t('legal.privacy.s5.i12', { email }),
+              t('legal.privacy.s5.i13', { email }),
             ],
           },
         ],

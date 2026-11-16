@@ -9,7 +9,13 @@ import he from '../src/locales/he.json' with { type: 'json' };
 // web/); `make dev` bind-mounts it into the api container.
 const OUTBOX = '../.outbox';
 
-type OutboxMessage = { to: string; subject: string; body: string; sent_at: string };
+type OutboxMessage = {
+  to: string;
+  subject: string;
+  body: string;
+  sent_at: string;
+  attachments?: { filename: string; content_type: string; content: string }[];
+};
 
 /** The 6-digit code in the newest outbox email sent to `email`, or null while none has arrived. */
 export async function latestCode(email: string): Promise<string | null> {
@@ -18,6 +24,7 @@ export async function latestCode(email: string): Promise<string | null> {
     if (!name.endsWith('.json')) continue;
     const message = JSON.parse(await readFile(join(OUTBOX, name), 'utf8')) as OutboxMessage;
     if (message.to !== email) continue;
+    if (!/\b\d{6}\b/.test(message.body)) continue; // a tour email (spec 0018c), not a code
     if (newest === null || Date.parse(message.sent_at) > Date.parse(newest.sent_at)) {
       newest = message;
     }
