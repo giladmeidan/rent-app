@@ -161,4 +161,10 @@ From `graphify affected` on `main` (2026-11-16):
 - Product questions stay on 0018a (R3, R6, R7, R8, R12).
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0018e — tour times page, slot picker, tour lines in chat   PR #122 (CI pending at push; merges after #119)
+Shipped: a lister opens "זמני סיור" on a live card and adds tour times; a shortlisted seeker books, moves or cancels a slot from the chat; the lister can cancel too; every change is a centred line in the thread and the chat-list preview.
+Demo: 1. as a lister, my listings → "זמני סיור" → add a 2 h window. 2. as a shortlisted seeker, open the chat → "קביעת סיור" → pick a slot. 3. "שינוי מועד" / "ביטול הסיור" and watch the thread line.
+Tests: +25 unit/component (vitest), +0 integration, +0 e2e (spec Out)
+Findings: 0 blockers, 1 major fixed, 8 minors fixed, 1 follow-up logged (SlotPicker labels need a ReactNode ChoiceGroup label)
+Changed in PRODUCT.md: nothing (R2 copy: my own cancel reads impersonally, "הסיור של {{when}} בוטל")
+Next spec: 0018b (tours page) reuses `features/tours/` api/format/errors/useCancelTour
