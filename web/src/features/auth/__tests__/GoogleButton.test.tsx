@@ -229,6 +229,50 @@ describe('GoogleButton', () => {
     expect(screen.getByTestId('google-button')).toBeInTheDocument();
   });
 
+  it('ac12_panel_error_keeps_the_panel_open', async () => {
+    const gis = stubGis();
+    mockApi({
+      'GET /me': [unauthenticated],
+      'POST /auth/google': [
+        json({ detail: 'profile_required' }, 422),
+        json({ detail: 'rate_limited' }, 429, { 'Retry-After': '600' }),
+      ],
+    });
+    renderPage('/signup?role=seeker');
+    await waitFor(() => expect(gis.renderButton).toHaveBeenCalled());
+
+    gis.press(jwtWithName('דנה'));
+    fireEvent.click(await screen.findByRole('button', { name: he.auth.google.step.submit }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      i18n.t('auth.errors.tooManyIn', { when: i18n.t('common.inMinutes', { count: 10 }) }),
+    );
+    expect(
+      screen.getByRole('heading', { level: 2, name: he.auth.google.step.title }),
+    ).toBeVisible();
+    expect(screen.getByLabelText(he.auth.name.label)).toHaveValue('דנה');
+  });
+
+  it('ac12_cancel_disabled_while_the_panel_submits', async () => {
+    const gis = stubGis();
+    const reply = deferred();
+    mockApi({
+      'GET /me': [unauthenticated],
+      'POST /auth/google': [json({ detail: 'profile_required' }, 422), reply.promise],
+    });
+    renderPage('/signup?role=seeker');
+    await waitFor(() => expect(gis.renderButton).toHaveBeenCalled());
+
+    gis.press(jwtWithName('דנה'));
+    const cancel = await screen.findByRole('button', { name: he.auth.google.step.cancel });
+    expect(cancel).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: he.auth.google.step.submit }));
+    await waitFor(() => expect(cancel).toBeDisabled());
+
+    reply.resolve(json(noa, 201));
+    await waitFor(() => expect(currentPath()).toBe('/'));
+  });
+
   it.each([
     ['401', () => json({ detail: 'invalid_google_token' }, 401), he.auth.google.errors.invalid],
     ['409', () => json({ detail: 'google_account_conflict' }, 409), he.auth.google.errors.conflict],
@@ -268,6 +312,10 @@ describe('GoogleButton', () => {
     // Loading: the placeholder and the divider are shown.
     expect(screen.getByTestId('google-button')).toBeInTheDocument();
     expect(screen.getByText(he.auth.google.or)).toBeVisible();
+    // Typed before the script fails: the form is not remounted, so it stays.
+    fireEvent.change(await screen.findByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
 
     act(() => {
       script.dispatchEvent(new Event('error'));
@@ -275,7 +323,7 @@ describe('GoogleButton', () => {
     await waitFor(() => expect(screen.queryByTestId('google-button')).toBeNull());
     expect(screen.queryByText(he.auth.google.or)).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByLabelText(he.auth.email.label)).toBeVisible();
+    expect(screen.getByLabelText(he.auth.email.label)).toHaveValue('dana@example.com');
   });
 
   it('ac12_name_from_credential', () => {

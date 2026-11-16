@@ -149,6 +149,7 @@ test('ac5_auth_layout_desktop_and_mobile', async ({ page, baseURL }) => {
   expect(Math.abs(box.x - (clientWidth - (box.x + box.width)))).toBeLessThanOrEqual(2);
   const toSignup = await page.getByRole('link', { name: he.auth.login.toSignup }).boundingBox();
   expect(toSignup?.y ?? 0).toBeGreaterThanOrEqual(box.y + box.height);
+  await expect(page.getByRole('button', { name: GIS_STUB_BUTTON })).toBeVisible(); // CI's stub
   await expectNoAxeViolations(page, '/login step 1');
 
   // Sending the code reaches step 2.

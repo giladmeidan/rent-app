@@ -284,11 +284,12 @@ function GoogleSignIn({
         return online ? t('common.error') : t('common.offline');
     }
   }
-  const alert = error !== null && (
-    <p role="alert" className={errorText}>
-      {errorMessage(error)}
-    </p>
-  );
+  const alert = (className: string) =>
+    error !== null && (
+      <p role="alert" className={className}>
+        {errorMessage(error)}
+      </p>
+    );
 
   if (panelOpen) {
     const hintId = `${id}-submit-hint`;
@@ -309,7 +310,7 @@ function GoogleSignIn({
           nameError={nameError}
           nameRef={nameRef}
         />
-        {alert}
+        {alert(errorText)}
         <div className="flex flex-col gap-1.5">
           <ConsentLine />
           <Button
@@ -329,33 +330,44 @@ function GoogleSignIn({
             </p>
           )}
         </div>
-        <Button variant="ghost" size="sm" className="self-start" onClick={onCancel}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          onClick={onCancel}
+          disabled={mutation.isPending}
+        >
           {t('auth.google.step.cancel')}
         </Button>
       </form>
     );
   }
 
-  if (script === 'failed') return <>{children}</>;
+  // `children` keeps its position whether or not the area shows: a failed script must not remount
+  // the page's form (and lose what was typed).
   return (
     <>
-      <div className="flex flex-col items-center gap-2">
-        {/* The 44 px placeholder while the script loads, then Google's own (unstyled) button. */}
-        <div
-          ref={buttonRef}
-          data-testid="google-button"
-          className="flex min-h-11 w-full justify-center"
-        />
-        <p role="status" className="text-body-sm text-ink-muted empty:hidden">
-          {mutation.isPending ? t('auth.google.pending') : ''}
-        </p>
-        {alert}
-      </div>
-      <div className="flex items-center gap-3 text-body-sm text-ink-muted">
-        <span aria-hidden="true" className="h-px flex-1 bg-border" />
-        {t('auth.google.or')}
-        <span aria-hidden="true" className="h-px flex-1 bg-border" />
-      </div>
+      {script !== 'failed' && (
+        <>
+          <div className="flex flex-col items-center gap-2">
+            {/* The 44 px placeholder while the script loads, then Google's own (unstyled) button. */}
+            <div
+              ref={buttonRef}
+              data-testid="google-button"
+              className="flex min-h-11 w-full justify-center"
+            />
+            <p role="status" className="text-body-sm text-ink-muted empty:hidden">
+              {mutation.isPending ? t('auth.google.pending') : ''}
+            </p>
+            {alert(`${errorText} text-center`)}
+          </div>
+          <div className="flex items-center gap-3 text-body-sm text-ink-muted">
+            <span aria-hidden="true" className="h-px flex-1 bg-border" />
+            {t('auth.google.or')}
+            <span aria-hidden="true" className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
       {children}
     </>
   );

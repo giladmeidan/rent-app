@@ -39,6 +39,8 @@ test('ac5_public_pages_pass_axe', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('heading', { level: 1, name: he.auth.login.title })).toBeVisible();
   await settled(page);
+  // CI renders the stub Google button (spec 0016b NF2): check the page with it drawn.
+  await expect(page.getByRole('button', { name: GIS_STUB_BUTTON })).toBeVisible();
   await expectNoAxeViolations(page, '/login');
   // Password mode (spec 0016a AC16): the switch, the shown password and a 401's alert.
   await page.getByRole('tab', { name: he.auth.login.mode.password }).click();
@@ -54,6 +56,7 @@ test('ac5_public_pages_pass_axe', async ({ page }) => {
   await page.goto('/signup');
   await expect(page.getByRole('heading', { level: 1, name: he.auth.signup.title })).toBeVisible();
   await settled(page);
+  await expect(page.getByRole('button', { name: GIS_STUB_BUTTON })).toBeVisible();
   await expectNoAxeViolations(page, '/signup');
   // Spec 0016b NF2 (CI renders the stub Google button): the "one more step" panel of a new email.
   await page.addInitScript(
