@@ -1240,4 +1240,13 @@ describe('MyListingsPage', () => {
     expect(actionsRow(card)).toEqual([act0011a.renew]);
     view.unmount();
   });
+
+  it('ac14_tours_link', async () => {
+    mockApi({ 'GET /me/listings': [json([listing()])] });
+    render();
+    await screen.findByRole('heading', { level: 1, name: he.listings.mine.title });
+    expect(screen.getByRole('link', { name: he.tours.link })).toHaveAttribute('href', '/tours');
+    // Before the "new" action, in the header only.
+    expect(screen.getAllByRole('link', { name: he.tours.link })).toHaveLength(1);
+  });
 });

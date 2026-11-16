@@ -417,7 +417,14 @@ function MyListings({ type, panel }: { type: ListingType; panel: boolean }) {
         <PageHeader
           title={room ? t('market.mine.tabs.listings') : t('listings.mine.title')}
           subtitle={count}
-          actions={newButton}
+          actions={
+            <>
+              <Button variant="secondary" size="sm" to="/tours">
+                {t('tours.link')}
+              </Button>
+              {newButton}
+            </>
+          }
         />
       )}
       {/* Visually hidden while empty (out of the flow, so no gap), never unmounted. */}
