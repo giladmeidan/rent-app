@@ -27,20 +27,16 @@ iCal feed URL, no Google permission); `specs/TOURS-PLAN.md` "Shared contract".
 
 ## Scope
 **In (API):**
-- `api/app/services/ics.py` (**0018c's file**, extended; 0018c's `tour_calendar` output stays byte-identical and its
-  `test_ics.py` passes unchanged):
-  - Move 0018c's VEVENT line-building into one private `_vevent(...)` that `tour_calendar` and the feed both use
-    (fold, escape, drop control characters, UTC `Z` times: 0018c's rules, not re-implemented). `ORGANIZER` is
-    optional in `_vevent` (the feed sends none: no client should treat a subscribed event as an invitation).
-  - `tour_uid(tour_id: uuid.UUID) -> str`: the UID string 0018c's caller builds today (0018c's draft:
-    `f"tour-{tour_id}@homie"`; use whatever 0018c merged), and 0018c's caller in `services/tour_mail.py` switches to
-    it (one line). The **one** UID rule for a tour, so the email `.ics` and the feed describe the same event.
-  - `FeedEvent` (frozen dataclass: `uid, sequence, starts_at, ends_at, summary, location, description, url`) and
-    `feed_calendar(events: Iterable[FeedEvent], *, name: str, stamp: dt.datetime) -> str`: `BEGIN:VCALENDAR`,
-    `VERSION:2.0`, `PRODID:-//homie//tours//HE`, `CALSCALE:GREGORIAN`, `METHOD:PUBLISH`, `X-WR-CALNAME:{name}`,
-    `X-WR-TIMEZONE:Asia/Jerusalem`, `REFRESH-INTERVAL;VALUE=DURATION:PT1H`, `X-PUBLISHED-TTL:PT1H`, one `_vevent`
-    per event (`DTSTAMP` = `stamp`, `STATUS:CONFIRMED`, `TRANSP:OPAQUE`), `END:VCALENDAR`; CRLF, folded, ending in
-    CRLF. No events → a valid empty `VCALENDAR` (no `DTSTAMP` anywhere, so its bytes do not depend on the time).
+- `api/app/services/ics.py` (**0018c's file**; orchestrator 2026-11-16 after 0018c's build: 0018c ships the public
+  `escape_text`, `fold`, `fmt_utc`, `tour_uid`, `vevent(..., status, organizer)` and `vcalendar(events, *, name,
+  method, refresh)`; this spec **imports** them and changes none of them, so 0018c's `test_ics.py` /
+  `test_tour_mail.py` pass unchanged):
+  - The feed body is `ics.vcalendar([ics.vevent(..., status="CONFIRMED", organizer=None) for each tour], name=name,
+    method="PUBLISH", refresh=dt.timedelta(hours=1))`; `feed_calendar(...)` may be a thin wrapper over that call in
+    `ics.py` or `tour_feed.py`, nothing more. UID = `ics.tour_uid(tour.id)` (already used by `tour_mail.py`). No
+    `tour_calendar`, no private `_vevent`, no edit to `tour_mail.py`. That call already gives this spec's header order
+    (`X-WR-CALNAME`, `REFRESH-INTERVAL`), CRLF and folding; no events → a valid empty `VCALENDAR` with no `DTSTAMP`
+    (0018c's `test_ics` covers it), which is also the dead-token body.
 - `api/app/services/tour_feed.py` (new):
   - `TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{43}")` (`fullmatch`); `_hash(token) = auth._token_hash(token)`
     (0018a's `token_hash` is `text`, sha256 hex like the other token hashes).
@@ -82,7 +78,6 @@ iCal feed URL, no Google permission); `specs/TOURS-PLAN.md` "Shared contract".
     app's logs. The filter plus the two handlers cover every path into our logs.
 - `api/app/services/accounts.py::delete_account`: `delete(TourFeed).where(TourFeed.user_id == me)` in the step
   7.–11. tuple (TOURS-PLAN contract: a tombstone never fires the FK cascade).
-- `api/app/services/tour_mail.py` (0018c's): its UID line uses `ics.tour_uid` (above).
 - `api/tests/test_hardening.py`: `LIMITED` gains `("POST", "/me/tour-feed", "WRITE", None)` and
   `("DELETE", "/me/tour-feed", "WRITE", None)`; `assert len(limited) == …` goes up by 2 from whatever `main` has when
   this merges (19 on today's `main`, plus 0018a's); the second to merge updates the count (Risks R3).
@@ -228,7 +223,7 @@ API (`api/tests/test_tour_feed.py` unless named; tours inserted with SQL helpers
 - [ ] AC13 `ics.feed_calendar`: every line ≤ 75 octets, a fold never splits a UTF-8 character (a 60-letter Hebrew
   display name round-trips after unfolding), lines end in CRLF, a `;` `,` `\` or newline in a name or street cannot
   start a new property, `X-WR-CALNAME` and `REFRESH-INTERVAL` present, no events → a valid `VCALENDAR` with no
-  `VEVENT`; 0018c's `tour_calendar` tests pass unchanged —
+  `VEVENT`; 0018c's `test_ics.py` passes unchanged —
   `api/tests/test_ics.py::test_0018d_ac13_feed_calendar`
 
 Web (`web/src/features/tours/__tests__/CalendarFeedButton.test.tsx`):
@@ -273,9 +268,8 @@ be reached by Google.
   the two new rows for free.
 - `services/auth.py::_token_hash` (callers: sessions, `flatmates.create_invite`/`preview`/`join`,
   `auth.optional_user`, `routers/events.py::_user_id_for`): **used** here unchanged (text hex column, 0018a).
-- `services/ics.py` (0018c, not on `main` yet): `tour_calendar` and `tour_mail.py`'s caller; output byte-identical,
-  0018c's `test_ics.py` / `test_tour_mail.py` unchanged. The build session re-runs `graphify affected "tour_calendar"`
-  once 0018c is on `main`.
+- `services/ics.py` (0018c): imported only, not changed; the build session runs `graphify affected "vcalendar"` once
+  0018c is on `main` to confirm.
 - `web/src/features/tours/ToursPage.tsx` (0018b): one `actions` prop; 0018b's `ToursPage.test.tsx` mocks nothing for
   the button, so its tests need the `['tour-feed']` query idle until the dialog opens (fetched on open, above).
 - `web/src/features/legal/content.ts` (`privacyDoc` s3), `he.json` `legal.privacy.s3`: one item after `i6`;
@@ -338,3 +332,7 @@ be reached by Google.
 
 ## Digest (filled by orchestrator after verification)
 See `/digest`.
+
+## Orchestrator correction (2026-11-16, after 0018c review)
+Verifier findings 2–3 above are superseded: 0018c shipped `tour_uid` and public `vevent`/`vcalendar`, so this
+spec imports them (Scope) and edits neither `ics.py`'s existing functions nor `tour_mail.py`.
