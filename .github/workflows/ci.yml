@@ -6,9 +6,9 @@ name: ci
 # refuses a PR whose head does not contain main, so the PR's run already tested what lands on main.
 # Changes that touch only Markdown, specs/ or design/ run no CI.
 #
-# Runs on the self-hosted Mac runner (label `rent-app-mac`), which costs no Actions minutes. While the
-# Mac is away, `gh variable set CI_ON_GITHUB --body on` moves it to a GitHub-hosted runner (paid
-# minutes, ~16 min a run); `gh variable delete CI_ON_GITHUB` moves it back.
+# Runs on a GitHub-hosted runner while the repo variable CI_ON_GITHUB is `on` (set 2026-11-16; ~16 Actions
+# minutes a run while the repo is private). The self-hosted Mac runner
+# (label `rent-app-mac`) was deregistered the same day; never re-register one while the repo is public.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
@@ -26,7 +26,7 @@ concurrency:
 jobs:
   ci:
     # Another label being added does not start a run; a push to a labelled PR does.
-    # Fork PRs never run: the repo is public and the default runner is the self-hosted Mac.
+    # Fork PRs skip ci. Not a security boundary: a fork PR runs its own copy of this file.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&

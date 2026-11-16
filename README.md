@@ -86,7 +86,7 @@ api/            FastAPI app (app/), Alembic migrations (alembic/), scripts/, tes
 web/            Vite + React + TS app: src/{app,features,components,locales,api}, e2e/, scripts/
 infra/          docker-compose.yml, Dockerfile.api, Dockerfile.web
 specs/          PRODUCT.md, FOLLOWUPS.md, open specs; archive/ = done specs and finished plans
-.github/        CI: one job on the self-hosted Mac runner, only on PRs labelled `ready-to-merge` (CLAUDE.md rule 8): client, i18n-check,
+.github/        CI: one job on GitHub's ubuntu-latest (repo variable CI_ON_GITHUB=on), only on PRs labelled `ready-to-merge` (CLAUDE.md rule 8): client, i18n-check,
                 lint, pytest, vitest, build, build-check, e2e (compose + playwright); Markdown/specs/design-only changes run no CI
 ```
 

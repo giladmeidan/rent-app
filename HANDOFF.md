@@ -137,7 +137,7 @@ production, via `fly proxy` / https.
   with `[…]` placeholders), `/account-deleted`; footer on every page except `/` and `/chat`.
 - `infra/docker-compose.yml`: db, redis, api, worker, web on `127.0.0.1`; ports via `DB_PORT`/`REDIS_PORT`/
   `API_PORT`/`WEB_PORT`; `COMPOSE_PROJECT_NAME` isolates a worktree's stack. No production deploy yet (`0013a`).
-- CI: one `ci` job on GitHub `ubuntu-latest` (was the self-hosted Mac until 2026-11-16), only on PRs labelled `ready-to-merge`; docs-only PRs run nothing;
+- CI: one `ci` job on GitHub's `ubuntu-latest` since 2026-11-16 (`CI_ON_GITHUB=on`; the Mac runner is deregistered), only on PRs labelled `ready-to-merge`; docs-only PRs run nothing;
   a PR also labelled `skip-e2e` skips the smoke suite (label on before the run starts). e2e: `E2E_SHARDS ?= 8`.
 
 ## Important Decisions
