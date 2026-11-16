@@ -7,10 +7,10 @@ compatibility_date = "2026-11-01"
 pages_build_output_dir = ".dist"
 
 [vars]
-ALLOWED_ORIGIN = "https://join.example.com"
+ALLOWED_ORIGIN = "https://homie-waitlist.pages.dev"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "homie-waitlist"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "3707c4b0-28ff-4870-a0c8-23a6b2eb1211"
 migrations_dir = "migrations"
