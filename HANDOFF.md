@@ -4,7 +4,7 @@
 homie / הומי: a Hebrew-first, RTL rental marketplace for Gush Dan — apartments (owners ↔ seekers) and the
 roommate market "שוק השותפים". FastAPI + SQLAlchemy 2.0 + PostgreSQL/PostGIS + Redis + arq worker; React 18 +
 TypeScript + Vite + Tailwind + TanStack Query + i18next + react-router 7. Repo: https://github.com/giladmeidan/rent-app
-(private).
+(**public** since 2026-11-16).
 
 Process: read `CLAUDE.md` first (Speed rules 1–11, hard rules). The main session is the orchestrator; each spec is
 built by its own session in its own worktree via `/build NNNN`. Product decisions: `specs/PRODUCT.md`. Open minors
@@ -14,6 +14,27 @@ as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
 Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a`/`0015b`/`0013h` done.
+**Slice 18 (tour calendar for listers), 2026-11-16/17: 3 of 5 specs merged.**
+*Planned* (`specs/TOURS-PLAN.md`, decisions in PRODUCT.md "Tours" + "Retention" R11, all defaults accepted by Gilad): a
+lister opens time windows per listing; a shortlisted seeker books a slot instantly (no confirm step); either side
+cancels, the seeker reschedules; each change is a chat line + an email (`.ics`, day-before reminder); a `/tours` page;
+a private iCal feed for Google Calendar. Five verified specs, built in order `0018a` → `0018c` ∥ `0018e` → `0018b` → `0018d`.
+*Happened:*
+- `0018a` API + migration `0030_tours` (`tour_windows`, `tours`, `tour_feeds`, tour lines on `messages`): **merged**
+  PR #119. Its first CI run failed e2e only, on 30 s timeouts with the Mac at load ~20 (5 builds' stacks + CI); main
+  went red after #118 (waitlist test), fixed in #119 and by main itself; after #120 merged it needed a main merge,
+  then went green on GitHub.
+- `0018e` slot editor, slot picker, chat tour card: **merged** PR #122.
+- `0018c` emails + `.ics` + reminder job: **merged** PR #121 (green on `537a00e`). 5 review minors in FOLLOWUPS,
+  incl. an SMTP stall to fix before 0013a.
+- `0018b` tours page and `0018d` calendar feed: **not built**; Gilad builds them in another session. Both verified;
+  `0018b` is ready (deps merged); `0018d` depends on `0018b` and was corrected 2026-11-16 to import 0018c's `ics.py`
+  unchanged. Their pre-started build sessions were deleted.
+- Changes to the plan during the build: Gilad dropped the lister-confirm step (shortlist = approval); the tour bucket
+  was lowered to 10/h 20/day; a dead feed link returns an empty calendar; expiry cancels nothing; the feed token lives
+  in `tour_feeds` (not on `users`); `ics.py` is 0018c's.
+**CI (2026-11-16):** runs on GitHub `ubuntu-latest` (`CI_ON_GITHUB=on`); the repo is public, so Actions minutes are
+free; the self-hosted Mac runner was removed (other session, Gilad's call). `0017`/`0017b` waitlist (other chat) merged (#116, #120).
 **Slice 16 (login upgrade) done 2026-11-16:** `0016a` password login (PR #114, migration `0029_login_methods`,
 hashes in `user_passwords`, unreadable by the admin role) and `0016b` Google sign-in (PR #115, no migration). Emailed
 code unchanged. Decisions in PRODUCT.md "Login". Gilad's Google OAuth client id is in the main checkout's `.env`
@@ -31,17 +52,17 @@ code unchanged. Decisions in PRODUCT.md "Login". Gilad's Google OAuth client id 
   whose only failures were the 5 load-flaky e2e tests; #105 and #108 ran e2e green; #106 and #109 skipped it. No e2e
   has run on `main` with `0013f`'s sign-up/consent changes and `0013d`'s shard changes together: the next PR with
   e2e on is the first. Ask Gilad before using `skip-e2e` in a later slice.
-- Alembic head `0029`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
+- Alembic head `0030`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
 - `specs/0015b-shelter-preference.md` (`status: verified`) appeared on `main` from another chat (commit `d840e0e`);
   not built, not this orchestrator's queue unless Gilad says so.
 - Main checkout `../rent-app` is on `main` at `f30feeb`, 54 commits behind `origin/main`, still with Gilad's
   uncommitted `Makefile` / `.gitignore` edits and untracked seed/promo work. Its stack (`rent-app`, 6 containers incl.
   `admin`) runs the old code and has not run migrations `0025`/`0026` (Next Steps 3).
 
-Last updated: 2026-11-16 (after Slice 16; Current Status top lines and Next Steps 2 updated, the rest from 2026-11-15).
+Last updated: 2026-11-17 (after Slice 18's 0018a/c/e; Current Status, Current Work, Next Steps 0, CI lines and Session History updated).
 
 ## Current Work
-Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
+Nothing in flight from this orchestrator. Next: `0018b`, then `0018d` (Gilad, another session). `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
 5550/6500/8120/8121/5260) waits for Gilad's go on paid hosting (~$55/month). Building it costs nothing (configs,
 `make deploy-*`, `infra/DEPLOY.md`); deploying does.
 
@@ -59,6 +80,10 @@ Nothing in flight. `0013a-production-deploy` (`status: verified`, worktree `../r
   `Sec-Fetch-Site: same-origin`; deletion defaults). Sentry stays open (parked with paid items).
 
 ## Next Steps
+0. **Slice 18:** build `0018b` (branch from `main`; ports above 5574/6524/8159/5284), then `0018d` (from `main` once
+   0018b is merged, or from 0018b's branch while its PR is open). Archive `specs/TOURS-PLAN.md` after `0018d` merges.
+   Main checkout after the merges: `git pull`, `make migrate` (`0030`), re-apply `api/scripts/admin_role.py` grants,
+   `make client`. Production tour emails wait for the parked email provider (`0013a`).
 1. Parked until Gilad approves paid services: build/deploy `0013a`; buy the domain; Fly, Cloudflare and an
    email-provider account (free tier ≥ 300/day); Sentry or no alerts; a second API machine (+~$7/month).
    **homie must not go public before `0013b` is deployed with `TRUST_PROXY=fly`** (runbook §9).
@@ -105,14 +130,14 @@ production, via `fly proxy` / https.
   (`signup_blocked` 403 at OTP verify).
 - `api/admin/`: the SQLAdmin dashboard (0012b), its own image, compose profile `admin` and Postgres role
   `homie_admin` (column-level grants, `scripts/admin_role.py`); `app/` never imports `admin`.
-- Migrations `api/alembic/versions/0001`–`0026` (`0025_admin_logins`, `0026_account_deletion`). Photos on Cloudflare R2 behind unguessable keys (0010d/j).
+- Migrations `api/alembic/versions/0001`–`0030` (`0029_login_methods`, `0030_tours`). Tours: `services/tours.py` (change hook `record` in the transaction, `announce` after commit), `services/ics.py` + `services/tour_mail.py` (0018c), `web/src/features/tours/`. Photos on Cloudflare R2 behind unguessable keys (0010d/j).
 - `web/src/`: `app/` (routes, layout, side switch), `features/<domain>/`, `components/` (UI kit), `locales/he.json`,
   generated `api/schema.d.ts` (`make client`, git-ignored). `web/e2e/` Playwright (CI only), `web/e2e/screens/` the
   mocked screenshot check (`make screens`, local). `/terms`, `/privacy` (legal text in `he.json` under `legal.*`,
   with `[…]` placeholders), `/account-deleted`; footer on every page except `/` and `/chat`.
 - `infra/docker-compose.yml`: db, redis, api, worker, web on `127.0.0.1`; ports via `DB_PORT`/`REDIS_PORT`/
   `API_PORT`/`WEB_PORT`; `COMPOSE_PROJECT_NAME` isolates a worktree's stack. No production deploy yet (`0013a`).
-- CI: one `ci` job on the self-hosted Mac runner, only on PRs labelled `ready-to-merge`; docs-only PRs run nothing;
+- CI: one `ci` job on GitHub `ubuntu-latest` (was the self-hosted Mac until 2026-11-16), only on PRs labelled `ready-to-merge`; docs-only PRs run nothing;
   a PR also labelled `skip-e2e` skips the smoke suite (label on before the run starts). e2e: `E2E_SHARDS ?= 8`.
 
 ## Important Decisions
@@ -152,6 +177,9 @@ production, via `fly proxy` / https.
   must re-check the per-shard count. `0013f`'s `account.spec.ts:41-43` brings back the inline send-code pattern
   `0013d` removed (FOLLOWUPS).
 - No e2e has run with `0013f`'s sign-up/consent changes and `0013d`'s shard changes together on `main`.
+- A PR GitHub marks conflicting runs no `ci` at all (only GitGuardian shows): merge `origin/main` and push.
+- When several spec PRs stack (a web half contains its API half), each later merge leaves the others behind `main`:
+  merge them one by one, each merging `origin/main` and rerunning `ci` (free now).
 - Planner-shape asserts are brittle on the CI Mac (`test_nf1_owner_check_is_one_pass` failed 3 PRs until #106):
   assert loops/indexes, not parent node types.
 - `/areas` blocks on a *hung* Postgres via pooled connections; why `GET /areas` is slow on CI runners is unconfirmed.
@@ -167,12 +195,15 @@ Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; the shell def
 rotated, not the dev value), `TRUST_PROXY=fly`, `VITE_CONTACT_EMAIL` (web build), besides `.env.example`'s list.
 Commands: see `CLAUDE.md` → Commands and the `##` comments in the `Makefile`.
 
-A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5556,
-Redis 6430–6506, API/admin 8050–8133, web 5191–5266: start above those). The main checkout's stack runs on
+A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5574,
+Redis 6430–6524, API/admin 8050–8159, web 5191–5284: start above those). The main checkout's stack runs on
 5434/6380/8000 (set in its `.env`), web 5180, admin 8001. Web at http://localhost:$WEB_PORT (must be `localhost` for
 CORS). Local login code: newest `.outbox/*.json`.
 
 ## Session History
+- 2026-11-16/17: Slice 18 (tour calendar) planned with Gilad; 4 specs written by forks, one verifier round each (0018a
+  split into 0018a + 0018e), all verified. Merged #119 (`0018a`), #122 (`0018e`), #121 (`0018c`); specs archived.
+  `0018b`/`0018d` handed to Gilad. CI moved to GitHub runners and the repo went public mid-slice.
 - 2026-11-16: Slice 16 login upgrade specced, verified, built and merged: #114 (`0016a` password), #115 (`0016b`
   Google).
 - 2026-11-15: Slice 13 built and merged except `0013a` (parked: costs money): #104 (g), #105 (e), #107 (c), #106 (b),

@@ -161,7 +161,7 @@ From `graphify affected` on `main` (2026-11-16):
 - Product questions stay on 0018a (R3, R6, R7, R8, R12).
 
 ## Digest (filled by orchestrator after verification)
-Spec 0018e — tour times page, slot picker, tour lines in chat   PR #122 (CI pending at push; merges after #119)
+Spec 0018e — tour times page, slot picker, tour lines in chat   MERGED eead653 (PR #122, head d3fb0c1, green ci)
 Shipped: a lister opens "זמני סיור" on a live card and adds tour times; a shortlisted seeker books, moves or cancels a slot from the chat; the lister can cancel too; every change is a centred line in the thread and the chat-list preview.
 Demo: 1. as a lister, my listings → "זמני סיור" → add a 2 h window. 2. as a shortlisted seeker, open the chat → "קביעת סיור" → pick a slot. 3. "שינוי מועד" / "ביטול הסיור" and watch the thread line.
 Tests: +25 unit/component (vitest), +0 integration, +0 e2e (spec Out)

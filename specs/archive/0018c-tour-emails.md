@@ -393,5 +393,19 @@ Open, for the orchestrator (no coder guess needed; the spec states the default):
 Gilad questions (digest): D1–D4 defaults; R11's 12 months (PRODUCT.md "Retention" gains R11 after his yes); R5's
 rate (recommend `TOUR` 10/h, 20/day in 0018a).
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest
+Spec 0018c — Tour emails with .ics, day-before reminders and 12-month tour retention   MERGED 643b556 (PR #121, head 537a00e, ci green 14m1s)
+Shipped: each tour change is emailed off the request path to the person who didn't make it; system cancels go to both
+sides. Booking and reschedule emails carry an `.ics` with the same UID and a rising SEQUENCE; a cancel carries
+`METHOD:CANCEL`. Both sides get a reminder about 24 h before. Retention R11 deletes tours 12 months after their time,
+and the privacy policy says so. Production sending waits for 0013a's email provider.
+Demo (`make dev`, `EMAIL_BACKEND=file`): book a slot → within ~10 s `.outbox/` holds two emails with `invite.ics`;
+reschedule → same UID, higher SEQUENCE; pause the listing → both get a `METHOD:CANCEL` email.
+Tests: +15 API (10 test_tour_mail, 2 test_ics, 1 each email/retention/worker), 1 web test extended; e2e `latestCode`
+skips tour mail. pytest 979, vitest 838.
+Findings: 0 blockers, 0 majors, 10 minors (6 fixed: bare-address ORGANIZER, stale claimed reminder skipped, a failed
+retry push drops only that side, negative attempt = malformed, U+2028/2029 dropped from `.ics` text, AC3 asserts a
+strictly higher SEQUENCE; 5 logged in FOLLOWUPS, incl. outbox files holding tour personal data under
+`EMAIL_BACKEND=file` and an SMTP stall to fix before 0013a), 11 nits dropped.
+For 0018d: its spec was corrected (orchestrator, 2026-11-16) to import 0018c's public `ics` functions.
+Changed in PRODUCT.md: nothing.
