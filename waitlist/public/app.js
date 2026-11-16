@@ -134,8 +134,9 @@ function readForm(form) {
   if (elements.city.value !== '') body.city = elements.city.value;
   if (side === 'lister') {
     body.phone = elements.phone.value;
-    // Control characters (a pasted tab) become spaces here; the server still refuses raw ones.
-    body.neighbourhood = elements.neighbourhood.value.replace(/\p{Cc}/gu, ' ');
+    // Control and format characters (a pasted tab, a bidi mark) become spaces here; the server still
+    // refuses raw ones.
+    body.neighbourhood = elements.neighbourhood.value.replace(/[\p{Cc}\p{Cf}]/gu, ' ');
     optional('units');
     optional('available');
   }

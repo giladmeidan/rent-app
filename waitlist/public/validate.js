@@ -10,31 +10,35 @@ export const LISTER_ONLY = Object.freeze(['phone', 'neighbourhood', 'units', 'av
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^05\d{8}$/;
-const CONTROL_RE = /\p{Cc}/u;
+// Control and format characters (NUL, tabs, bidi overrides such as U+202E, zero-width marks).
+const INVISIBLE_RE = /[\p{Cc}\p{Cf}]/u;
 
-/** Trimmed and lower-cased, or null when it is not a valid address of at most 254 characters. */
+/**
+ * Trimmed and lower-cased, or null when it is not a valid address of at most 254 characters or holds a
+ * control or format character.
+ */
 export function normaliseEmail(value) {
   if (typeof value !== 'string') return null;
   const email = value.trim().toLowerCase();
-  return email.length <= 254 && EMAIL_RE.test(email) ? email : null;
+  return email.length <= 254 && EMAIL_RE.test(email) && !INVISIBLE_RE.test(email) ? email : null;
 }
 
 /**
  * An Israeli mobile number as `05` + 8 digits. Spaces, `-` and `()` are stripped and a leading `+972`
- * or `972` becomes `0`. Empty (or missing) → `null`; anything else that does not fit → `undefined`.
+ * or `972` (with or without the trunk `0` after it, as in `+972 (0)52-…`) becomes `0`. Empty (or missing) → `null`; anything else that does not fit → `undefined`.
  */
 export function normalisePhone(value) {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string') return undefined;
-  const digits = value.replace(/[\s\-()]/g, '').replace(/^\+?972/, '0');
+  const digits = value.replace(/[\s\-()]/g, '').replace(/^\+?9720?/, '0');
   if (digits === '') return null;
   return PHONE_RE.test(digits) ? digits : undefined;
 }
 
-/** Trimmed, at most 60 characters, no control characters. Empty (or missing) → `null`; invalid → `undefined`. */
+/** Trimmed, at most 60 characters, no control or format characters. Empty (or missing) → `null`; invalid → `undefined`. */
 export function normaliseNeighbourhood(value) {
   if (value === undefined || value === null) return null;
-  if (typeof value !== 'string' || CONTROL_RE.test(value)) return undefined;
+  if (typeof value !== 'string' || INVISIBLE_RE.test(value)) return undefined;
   const text = value.trim();
   if (text === '') return null;
   return [...text].length <= 60 ? text : undefined;

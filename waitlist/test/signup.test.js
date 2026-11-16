@@ -92,8 +92,15 @@ test('ac2_lister_signup_normalises_phone', async () => {
   assert.equal(first.response.status, 200);
   const second = await post(environment, { ...LISTER, email: 'second@example.com', phone: '' });
   assert.equal(second.response.status, 200);
+  const trunk = await post(environment, {
+    ...LISTER,
+    email: 'third@example.com',
+    phone: '+972 (0)52-123-4567',
+  });
+  assert.equal(trunk.response.status, 200);
 
-  const [withPhone, withoutPhone] = rows(environment);
+  const [withPhone, withoutPhone, withTrunkZero] = rows(environment);
+  assert.equal(withTrunkZero.phone, '0521234567');
   assert.equal(withPhone.phone, '0521234567');
   assert.equal(withPhone.units, '3+');
   assert.equal(withPhone.available, '1-3m');
@@ -104,6 +111,7 @@ test('ac2_lister_signup_normalises_phone', async () => {
   // The other spellings the rule accepts.
   assert.equal(validate.normalisePhone('972521234567'), '0521234567');
   assert.equal(validate.normalisePhone('(052) 123 4567'), '0521234567');
+  assert.equal(validate.normalisePhone('+9720521234567'), '0521234567');
   assert.equal(validate.normalisePhone('   '), null);
 });
 
@@ -136,6 +144,9 @@ test('ac4_invalid_fields_rejected', async (t) => {
   const cases = [
     ['a bad email', { ...SEEKER, email: 'not-an-email' }, ['email']],
     ['an email over 254 characters', { ...SEEKER, email: `${'a'.repeat(250)}@x.io` }, ['email']],
+    ['an email with a NUL', { ...SEEKER, email: 'no\u0000a@example.com' }, ['email']],
+    ['an email with a bidi override', { ...SEEKER, email: '\u202Emoc.elpmaxe@aon' }, ['email']],
+    ['an email with a zero-width space', { ...SEEKER, email: 'noa\u200B@example.com' }, ['email']],
     ['an unknown city', { ...SEEKER, city: 'jerusalem' }, ['city']],
     ['a missing kind', seekerWithoutKind, ['kind']],
     ['consent false', { ...SEEKER, consent: false }, ['consent']],
@@ -147,6 +158,8 @@ test('ac4_invalid_fields_rejected', async (t) => {
     ['a seeker carrying units', { ...SEEKER, units: '1' }, ['units']],
     ['a neighbourhood over 60', { ...LISTER, neighbourhood: 'א'.repeat(61) }, ['neighbourhood']],
     ['a neighbourhood with a control', { ...LISTER, neighbourhood: 'a\u0007b' }, ['neighbourhood']],
+    ['a neighbourhood with a bidi override', { ...LISTER, neighbourhood: 'א\u202Eב' }, ['neighbourhood']],
+    ['a neighbourhood with a zero-width joiner', { ...LISTER, neighbourhood: 'א\u200Dב' }, ['neighbourhood']],
     ['an unknown side', { ...SEEKER, side: 'broker' }, ['side']],
     ['a JSON array', [], []],
   ];
@@ -328,6 +341,22 @@ test('ac7_count_threshold_and_cache', async (t) => {
     const second = await getCount(environment);
     assert.deepEqual(await second.json(), { total: 60 });
     assert.equal(environment.DB.calls.length, 1);
+  });
+
+  await t.test('a pages.dev host answers null without D1 or the cache', async () => {
+    globalThis.caches = {
+      default: {
+        match: async () => assert.fail('the cache is not read on a host that is not allowed'),
+        put: async () => assert.fail('the cache is not written on a host that is not allowed'),
+      },
+    };
+    const environment = env();
+    await seed(environment, 60);
+    const request = new Request('https://homie-waitlist.pages.dev/api/count');
+    const response = await countRequest({ request, env: environment });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { total: null });
+    assert.deepEqual(environment.DB.calls, []);
   });
 
   await t.test('a POST to /api/count → 405 with Allow: GET', async () => {

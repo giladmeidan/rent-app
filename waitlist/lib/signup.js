@@ -36,16 +36,24 @@ export function methodNotAllowed(allow) {
 }
 
 /**
- * The request's own origin must be ALLOWED_ORIGIN or a localhost origin, and the `Origin` header must
- * equal it. This refuses cross-site posts, a missing `Origin`, and posts to `*.pages.dev`, which the
- * zone's rate-limit rule does not cover.
+ * The request's own origin is ALLOWED_ORIGIN or a localhost origin. Anything else, `*.pages.dev`
+ * included, is outside the zone's rate-limit rule (and, for the count, outside the edge cache).
+ */
+export function hostAllowed(request, env) {
+  const own = new URL(request.url).origin;
+  return (
+    (typeof env.ALLOWED_ORIGIN === 'string' && own === env.ALLOWED_ORIGIN) || LOCAL_ORIGIN.test(own)
+  );
+}
+
+/**
+ * The request's host is allowed (above) and the `Origin` header equals its origin. This refuses
+ * cross-site posts, a missing `Origin`, and posts to `*.pages.dev`.
  */
 export function originAllowed(request, env) {
-  const own = new URL(request.url).origin;
-  const hostAllowed =
-    (typeof env.ALLOWED_ORIGIN === 'string' && own === env.ALLOWED_ORIGIN) ||
-    LOCAL_ORIGIN.test(own);
-  return hostAllowed && request.headers.get('Origin') === own;
+  return (
+    hostAllowed(request, env) && request.headers.get('Origin') === new URL(request.url).origin
+  );
 }
 
 function isJson(request) {
@@ -126,9 +134,12 @@ export async function handleSignup(request, env) {
 /**
  * `GET /api/count`: `{total: n}` from COUNTER_MIN signups, else `{total: null}`. The response is kept in
  * `cache` (the edge's `caches.default`) for 60 s, keyed by the URL without its query, so D1 counts at most
- * once a minute per location and a query string cannot bypass it.
+ * once a minute per location and a query string cannot bypass it. On a host that is not allowed
+ * (`*.pages.dev`, where the Cache API does nothing and the rate-limit rule does not apply) it answers
+ * `{total: null}` without touching D1 or the cache, so nobody can spend D1's daily reads there.
  */
 export async function handleCount(request, env, cache, waitUntil) {
+  if (!hostAllowed(request, env)) return json(200, { total: null });
   const url = new URL(request.url);
   url.search = '';
   const key = new Request(url.toString(), { method: 'GET' });
