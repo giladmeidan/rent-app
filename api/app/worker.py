@@ -11,10 +11,12 @@ from app.config import get_settings
 from app.db import get_sessionmaker
 from app.redis_client import get_redis
 from app.services.cbs_rent import run_cbs_import
+from app.services.email import get_email_sender
 from app.services.geocoding import geocode_pending, get_geocoder
 from app.services.listing_views import flush_views
 from app.services.rent_reference import run_rent_import
 from app.services.retention import purge_expired
+from app.services.tour_mail import queue_reminders, send_pending
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +86,34 @@ async def purge_expired_job(ctx: dict[str, Any]) -> dict[str, int]:
     return counts
 
 
+def _send_tour_mail() -> dict[str, int]:
+    with get_sessionmaker()() as db:
+        return send_pending(db, get_redis(), get_email_sender())
+
+
+async def send_tour_mail_job(ctx: dict[str, Any]) -> dict[str, int]:
+    """Send the queued tour emails (spec 0018c), off the event loop. Logs the counts only, never
+    an address, a name or an id."""
+    counts = await asyncio.to_thread(_send_tour_mail)
+    if any(counts.values()):  # every 10 s: a line only when something happened
+        log.info("tour mail: %s", counts)
+    return counts
+
+
+def _queue_tour_reminders() -> int:
+    with get_sessionmaker()() as db:
+        return queue_reminders(db, get_redis())
+
+
+async def tour_reminders_job(ctx: dict[str, Any]) -> int:
+    """Queue the day-before tour reminders (spec 0018c), off the event loop. Logs the number
+    only."""
+    queued = await asyncio.to_thread(_queue_tour_reminders)
+    if queued:
+        log.info("tour reminders: %d", queued)
+    return queued
+
+
 async def on_startup(ctx: dict[str, Any]) -> None:
     """Show the `app` loggers' INFO lines (spec 0013g). arq's CLI configures only its own logger
     and leaves the root at WARNING, so `view flush` and `geocode sweep` would never be written.
@@ -109,5 +139,8 @@ class WorkerSettings:
         # At most six requests: arq's default timeout is enough.
         cron(import_cbs_rent_job, day=16, hour=3, minute=40, unique=True),
         cron(purge_expired_job, hour=3, minute=25, unique=True),
+        # Off the geocode sweep's seconds.
+        cron(send_tour_mail_job, second={5, 15, 25, 35, 45, 55}, unique=True),
+        cron(tour_reminders_job, minute={0, 15, 30, 45}, unique=True),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url.get_secret_value())

@@ -1,4 +1,5 @@
-"""Outbound email (spec 0001a): `FileEmailSender` in dev and e2e, `SmtpEmailSender` to deliver."""
+"""Outbound email (spec 0001a): `FileEmailSender` in dev and e2e, `SmtpEmailSender` to deliver.
+Attachments (spec 0018c): a tour email's `tour.ics`."""
 
 import datetime as dt
 import json
@@ -6,6 +7,8 @@ import logging
 import smtplib
 import ssl
 import uuid
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Protocol
@@ -21,23 +24,42 @@ class EmailUnavailable(Exception):  # noqa: N818  (name fixed by spec 0001a)
     """The message could not be handed to the mail system."""
 
 
+@dataclass(frozen=True)
+class Attachment:
+    filename: str
+    content_type: str  # e.g. "text/calendar; method=PUBLISH; charset=utf-8"
+    content: str
+
+
 class EmailSender(Protocol):
-    def send(self, to: str, subject: str, body: str) -> None: ...
+    def send(
+        self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+    ) -> None: ...
 
 
 class FileEmailSender:
-    """Writes each message as one JSON file `{to, subject, body, sent_at}` into `outbox_dir`."""
+    """Writes each message as one JSON file `{to, subject, body, sent_at}` into `outbox_dir`, plus
+    `attachments` only when there are any (an OTP file stays exactly the four keys e2e reads)."""
 
     def __init__(self, outbox_dir: Path) -> None:
         self.outbox_dir = outbox_dir
 
-    def send(self, to: str, subject: str, body: str) -> None:
+    def send(
+        self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
         now = dt.datetime.now(dt.UTC)
         try:
             self.outbox_dir.mkdir(parents=True, exist_ok=True)
             # The uuid suffix keeps two messages in the same microsecond apart.
             path = self.outbox_dir / f"{now:%Y%m%dT%H%M%S%f}-{uuid.uuid4().hex}.json"
-            message = {"to": to, "subject": subject, "body": body, "sent_at": now.isoformat()}
+            message: dict[str, object] = {
+                "to": to,
+                "subject": subject,
+                "body": body,
+                "sent_at": now.isoformat(),
+            }
+            if attachments:
+                message["attachments"] = [asdict(a) for a in attachments]
             path.write_text(json.dumps(message, ensure_ascii=False), encoding="utf-8")
         except OSError as exc:
             log.error("outbox write failed: %s", type(exc).__name__)
@@ -57,12 +79,26 @@ class SmtpEmailSender:
         self.password = target.password
         self.sender = sender
 
-    def send(self, to: str, subject: str, body: str) -> None:
+    def send(
+        self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
         message = EmailMessage()
         message["From"] = self.sender
         message["To"] = to
         message["Subject"] = subject
         message.set_content(body)
+        for a in attachments:
+            # "text/<subtype>; key=value; ...": the main type is always text.
+            mime, *pairs = (part.strip() for part in a.content_type.split(";"))
+            params = dict(pair.split("=", 1) for pair in pairs)
+            charset = params.pop("charset", "utf-8")
+            message.add_attachment(
+                a.content,
+                subtype=mime.split("/", 1)[1],
+                charset=charset,
+                filename=a.filename,
+                params=params,
+            )
         context = ssl.create_default_context()
         try:
             if self.implicit_tls:
