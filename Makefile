@@ -24,6 +24,10 @@ WRANGLER_VERSION := 4.156.1
 # The public contact address written into the waitlist page at deploy (`make deploy-waitlist
 # CONTACT_EMAIL=…`, or `.env`). build.mjs reads it from the environment; no recipe line expands it.
 export CONTACT_EMAIL
+# The Turnstile widget's public site key written into the waitlist page at deploy (spec 0017b; `make
+# deploy-waitlist TURNSTILE_SITE_KEY=…`, or `.env`). build.mjs reads it from the environment; no recipe line
+# expands it. The widget's secret key is a Pages secret (`make waitlist-secret`), never here.
+export TURNSTILE_SITE_KEY
 
 # Local defaults match infra/docker-compose.yml and .env.example.
 export DATABASE_URL      ?= postgresql+psycopg://rent:rent@localhost:$(or $(DB_PORT),5432)/rent
@@ -39,7 +43,7 @@ export EMAIL_BLOCK_KEY   ?= dev-only-email-block-key-0123456789abcdef
 export ADMIN_PORT        ?= 8001
 export ADMIN_DB_PASSWORD ?= dev-only-admin-db-password
 
-.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate waitlist-secret deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -148,10 +152,17 @@ test-waitlist: web/node_modules/.modules.yaml
 waitlist-migrate:
 	cd waitlist && pnpm dlx wrangler@$(WRANGLER_VERSION) d1 migrations apply homie-waitlist --remote
 
-## deploy-waitlist: build waitlist/.dist with the public contact address and the origin written in, then
-## deploy it to the Pages project homie-waitlist (spec 0017; waitlist/README.md has the one-time setup)
+## waitlist-secret: set the Pages secret TURNSTILE_SECRET (the Turnstile widget's secret key) on the project
+## homie-waitlist (spec 0017b). Wrangler prompts for the value, so it is never on a command line. A changed
+## secret reaches new deployments only: run it before `make deploy-waitlist`, or deploy again after
+waitlist-secret:
+	cd waitlist && pnpm dlx wrangler@$(WRANGLER_VERSION) pages secret put TURNSTILE_SECRET --project-name homie-waitlist
+
+## deploy-waitlist: build waitlist/.dist with the public contact address, the origin and the Turnstile site
+## key written in, then deploy it to the Pages project homie-waitlist (spec 0017, 0017b; waitlist/README.md
+## has the one-time setup)
 deploy-waitlist:
-	@test -n "$$CONTACT_EMAIL" || { echo "usage: make deploy-waitlist CONTACT_EMAIL=<public contact address>" >&2; exit 1; }
+	@test -n "$$CONTACT_EMAIL" && test -n "$$TURNSTILE_SITE_KEY" || { echo "usage: make deploy-waitlist CONTACT_EMAIL=<public contact address> TURNSTILE_SITE_KEY=<Turnstile site key>" >&2; exit 1; }
 	cd waitlist && node build.mjs && pnpm dlx wrangler@$(WRANGLER_VERSION) pages deploy --project-name homie-waitlist --branch main
 
 ## waitlist-stats: signups by side, city and type from the remote D1 (waitlist/stats.sql; never an
