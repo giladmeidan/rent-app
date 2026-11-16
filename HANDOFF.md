@@ -13,6 +13,7 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
+**Waitlist (2026-11-16):** `0017` (PR #116) and `0017b` Turnstile (PR #120) merged and archived; live on `https://homie-waitlist.pages.dev` (own Pages project + D1 `homie-waitlist`, deployed by hand with `make deploy-waitlist CONTACT_EMAIL=… TURNSTILE_SITE_KEY=…`, the secret via `make waitlist-secret`; README in `waitlist/`). `specs/0017c-waitlist-hardening.md` is `draft` and **not queued** (Gilad: no build yet; Q0 decides whether email confirmation is built).
 Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a`/`0015b`/`0013h` done.
 **Slice 18 (tour calendar for listers), 2026-11-16/17: 3 of 5 specs merged.**
 *Planned* (`specs/TOURS-PLAN.md`, decisions in PRODUCT.md "Tours" + "Retention" R11, all defaults accepted by Gilad): a
