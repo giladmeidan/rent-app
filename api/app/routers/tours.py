@@ -24,6 +24,8 @@ from app.schemas.error import ErrorOut
 from app.schemas.tours import (
     BookedSlotOut,
     SlotOut,
+    TourAgendaItemOut,
+    TourAgendaListingOut,
     TourOut,
     TourSlotsOut,
     TourStartIn,
@@ -88,6 +90,29 @@ def _window_out(w: tours.Window | TourWindow, booked: list[tours.BookedSlot]) ->
             for b in booked
         ],
     )
+
+
+@router.get("/tours", response_model=list[TourAgendaItemOut], responses={**_SESSION})
+def list_tours(user: UserDep, db: DbDep) -> list[TourAgendaItemOut]:
+    """Spec 0018b: the caller's upcoming booked tours, as lister and as seeker, by start."""
+    return [
+        TourAgendaItemOut(
+            id=row.id,
+            role=row.role,
+            starts_at=row.starts_at,
+            ends_at=row.ends_at,
+            conversation_id=row.conversation_id,
+            other_name=row.other_name,
+            listing=TourAgendaListingOut(
+                id=row.listing_id,
+                listing_type=row.listing_type,
+                rooms=row.rooms,
+                street=row.street,
+                city=row.city,
+            ),
+        )
+        for row in tours.list_agenda(db, user)
+    ]
 
 
 @router.get(
