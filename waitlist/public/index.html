@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>הומי | רשימת המתנה</title>
+    <meta name="description" content="הומי מחברת בין מי שמשכירים דירה או חדר לבין מי שמחפשים בית או שותפים. בלי מתווכים, עם התאמה אמיתית. נרשמים עכשיו ושומעים ראשונים על ההשקה.">
+    <link rel="canonical" href="https://join.example.com/">
+    <meta name="theme-color" content="#FFFFFF">
+    <link rel="icon" href="img/homie-favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="הומי">
+    <meta property="og:title" content="הומי: למצוא בית בגוש דן, בלי הבלגן">
+    <meta property="og:description" content="הומי מחברת בין מי שמשכירים דירה או חדר לבין מי שמחפשים בית או שותפים. בלי מתווכים, עם התאמה אמיתית. נרשמים עכשיו ושומעים ראשונים על ההשקה.">
+    <meta property="og:url" content="https://join.example.com/">
+    <meta property="og:image" content="https://join.example.com/img/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="he_IL">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="הומי: למצוא בית בגוש דן, בלי הבלגן">
+    <meta name="twitter:description" content="הומי מחברת בין מי שמשכירים דירה או חדר לבין מי שמחפשים בית או שותפים. בלי מתווכים, עם התאמה אמיתית. נרשמים עכשיו ושומעים ראשונים על ההשקה.">
+    <meta name="twitter:image" content="https://join.example.com/img/og.png">
+    <link rel="preload" href="fonts/rubik-hebrew-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/fredoka-hebrew-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="scroll-sentinel" aria-hidden="true"></div>
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <img class="site-header__logo" src="img/homie-lockup-he.svg" alt="הומי" width="110" height="40">
+        <a class="btn btn--ink btn--sm" href="#join">הצטרפות לרשימה</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="container grid hero__grid">
+          <div class="hero__text">
+            <p class="badge"><span class="badge__dot" aria-hidden="true"></span>בקרוב בגוש דן</p>
+            <h1 class="display" id="hero-title">למצוא בית בגוש דן, בלי הבלגן.</h1>
+            <p class="lead">הומי מחברת בין מי שמשכירים דירה או חדר לבין מי שמחפשים בית או שותפים. בלי מתווכים, עם התאמה אמיתית. נרשמים עכשיו ושומעים ראשונים על ההשקה.</p>
+            <div class="hero__actions">
+              <a class="btn btn--ink btn--lg" href="?side=seeker#join" data-side="seeker">מחפשים בית</a>
+              <a class="btn btn--outline btn--lg" href="?side=lister#join" data-side="lister">משכירים נכס</a>
+            </div>
+            <p class="counter" id="counter"></p>
+          </div>
+          <div class="hero__art">
+            <div class="hero__disc">
+              <img class="hero__turtle" src="img/homie-turtle-hello.svg" alt="" width="360" height="270" fetchpriority="high">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section reveal" id="sides">
+        <div class="container grid doors">
+          <article class="door" aria-labelledby="door-seeker-title">
+            <span class="door__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+            </span>
+            <h2 class="h2" id="door-seeker-title">למחפשים</h2>
+            <ul class="checklist">
+              <li><span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7 10 16l-5-5"/></svg></span>מודעות מבעלי הדירות עצמם, בלי מתווכים</li>
+              <li><span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7 10 16l-5-5"/></svg></span>ציון התאמה לכל דירה וחדר</li>
+              <li><span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7 10 16l-5-5"/></svg></span>מגישים מועמדות בהודעה קצרה, והצ'אט נפתח כשיש עניין</li>
+            </ul>
+            <a class="door__link" href="?side=seeker#join" data-side="seeker">להצטרפות ←</a>
+          </article>
+          <article class="door" aria-labelledby="door-lister-title">
+            <span class="door__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5"/><path d="M6 9v10.5h12V9"/><path d="M10 19.5V14h4v5.5"/></svg>
+            </span>
+            <h2 class="h2" id="door-lister-title">למשכירים</h2>
+            <ul class="checklist">
+              <li><span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7 10 16l-5-5"/></svg></span>מועמדים מאומתים באימייל</li>
+              <li><span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7 10 16l-5-5"/></svg></span>כל הפניות במקום אחד, ובוחרים למי לענות</li>
+              <li><span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7 10 16l-5-5"/></svg></span>הערכת שכר דירה לפי נתונים רשמיים</li>
+            </ul>
+            <a class="door__link" href="?side=lister#join" data-side="lister">להצטרפות ←</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--subtle reveal" id="video" aria-labelledby="video-title">
+        <div class="container">
+          <div class="section-head">
+            <h2 class="h1" id="video-title">ככה זה נראה</h2>
+            <p class="section-head__sub">43 שניות על הומי</p>
+          </div>
+          <div class="video-frame" id="video-frame">
+            <video id="promo" controls preload="none" playsinline poster="media/homie-promo-poster.webp" src="media/homie-promo.mp4" aria-label="סרטון ההיכרות של הומי"></video>
+            <button class="video-play" id="video-play" type="button">
+              <span class="video-play__disc" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.6-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>
+              </span>
+              <span class="video-play__label">צפייה בסרטון</span>
+            </button>
+            <p class="video-error" id="video-error" role="status"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section reveal" id="join" aria-labelledby="join-title">
+        <div class="container">
+          <div class="section-head">
+            <h2 class="h1" id="join-title">הצטרפות לרשימת ההמתנה</h2>
+          </div>
+          <div class="join">
+            <div class="tabs" role="tablist" aria-labelledby="join-title">
+              <button class="tabs__tab" type="button" role="tab" id="tab-seeker" aria-controls="panel-seeker" aria-selected="true" data-side="seeker">מחפשים</button>
+              <button class="tabs__tab" type="button" role="tab" id="tab-lister" aria-controls="panel-lister" aria-selected="false" tabindex="-1" data-side="lister">משכירים</button>
+            </div>
+
+            <div class="card join__card" role="tabpanel" id="panel-seeker" aria-labelledby="tab-seeker" data-side="seeker">
+              <form class="form" method="post" novalidate data-side="seeker">
+                <div class="field">
+                  <label class="label" for="seeker-email">אימייל</label>
+                  <input class="input" id="seeker-email" name="email" type="email" autocomplete="email" dir="ltr" required>
+                  <p class="field-error" id="seeker-email-error" hidden></p>
+                </div>
+                <fieldset class="field chips-field" role="radiogroup" id="seeker-kind" aria-required="true">
+                  <legend class="label">מה מחפשים?</legend>
+                  <div class="chips">
+                    <label class="chip"><input class="chip__input" type="radio" name="kind" value="apartment"><span class="chip__face">דירה</span></label>
+                    <label class="chip"><input class="chip__input" type="radio" name="kind" value="room"><span class="chip__face">חדר בדירת שותפים</span></label>
+                  </div>
+                  <p class="field-error" id="seeker-kind-error" hidden></p>
+                </fieldset>
+                <div class="field">
+                  <label class="label" for="seeker-city">באיזו עיר?</label>
+                  <div class="select">
+                    <select class="input select__control" id="seeker-city" name="city" required data-cities>
+                      <option value="" disabled selected>בחירת עיר</option>
+                    </select>
+                  </div>
+                  <p class="field-error" id="seeker-city-error" hidden></p>
+                </div>
+                <div class="field">
+                  <label class="consent" for="seeker-consent">
+                    <input class="consent__box" id="seeker-consent" name="consent" type="checkbox" required>
+                    <span>אפשר לשלוח לי עדכון במייל כשהומי עולה לאוויר</span>
+                  </label>
+                  <p class="field-error" id="seeker-consent-error" hidden></p>
+                </div>
+                <div class="hp" aria-hidden="true">
+                  <input name="website" type="text" tabindex="-1" autocomplete="off">
+                </div>
+                <div class="banner" role="alert"></div>
+                <button class="btn btn--ink btn--lg btn--block form__submit" type="submit">הרשמה לרשימה</button>
+                <p class="privacy">שומרים רק את מה שמילאתם כאן, כדי לעדכן על ההשקה ולדעת כמה מחכים בכל עיר. לא מעבירים לאף אחד. למחיקה מהרשימה: <a href="mailto:contact@example.com" dir="ltr">contact@example.com</a></p>
+              </form>
+              <div class="success" hidden>
+                <img class="success__turtle" src="img/homie-turtle-celebrate.svg" alt="" width="160" height="120" loading="lazy">
+                <h2 class="h2 success__title" tabindex="-1">נרשמתם!</h2>
+                <p class="success__line"></p>
+                <button class="text-button success__other" type="button" data-side="lister">גם משכירים? להרשמה גם שם</button>
+              </div>
+            </div>
+
+            <div class="card join__card" role="tabpanel" id="panel-lister" aria-labelledby="tab-lister" data-side="lister" hidden>
+              <form class="form" method="post" novalidate data-side="lister">
+                <div class="field">
+                  <label class="label" for="lister-email">אימייל</label>
+                  <input class="input" id="lister-email" name="email" type="email" autocomplete="email" dir="ltr" required>
+                  <p class="field-error" id="lister-email-error" hidden></p>
+                </div>
+                <div class="field">
+                  <label class="label" for="lister-phone">טלפון (לא חובה)</label>
+                  <input class="input" id="lister-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" dir="ltr" aria-describedby="lister-phone-hint">
+                  <p class="hint" id="lister-phone-hint">רק אם נוח שנחזור אליכם בוואטסאפ</p>
+                  <p class="field-error" id="lister-phone-error" hidden></p>
+                </div>
+                <fieldset class="field chips-field" role="radiogroup" id="lister-kind" aria-required="true">
+                  <legend class="label">מה מפרסמים?</legend>
+                  <div class="chips">
+                    <label class="chip"><input class="chip__input" type="radio" name="kind" value="apartment"><span class="chip__face">דירה</span></label>
+                    <label class="chip"><input class="chip__input" type="radio" name="kind" value="room"><span class="chip__face">חדר בדירת שותפים</span></label>
+                  </div>
+                  <p class="field-error" id="lister-kind-error" hidden></p>
+                </fieldset>
+                <div class="field">
+                  <label class="label" for="lister-city">באיזו עיר?</label>
+                  <div class="select">
+                    <select class="input select__control" id="lister-city" name="city" required data-cities>
+                      <option value="" disabled selected>בחירת עיר</option>
+                    </select>
+                  </div>
+                  <p class="field-error" id="lister-city-error" hidden></p>
+                </div>
+                <div class="field">
+                  <label class="label" for="lister-neighbourhood">שכונה (לא חובה)</label>
+                  <input class="input" id="lister-neighbourhood" name="neighbourhood" type="text" maxlength="60" autocomplete="off">
+                </div>
+                <fieldset class="field chips-field" role="radiogroup" id="lister-units" aria-required="true">
+                  <legend class="label">כמה נכסים?</legend>
+                  <div class="chips">
+                    <label class="chip"><input class="chip__input" type="radio" name="units" value="1"><span class="chip__face">1</span></label>
+                    <label class="chip"><input class="chip__input" type="radio" name="units" value="2"><span class="chip__face">2</span></label>
+                    <label class="chip"><input class="chip__input" type="radio" name="units" value="3+"><span class="chip__face">3 ומעלה</span></label>
+                  </div>
+                  <p class="field-error" id="lister-units-error" hidden></p>
+                </fieldset>
+                <fieldset class="field chips-field" role="radiogroup" id="lister-available" aria-required="true">
+                  <legend class="label">מתי הנכס מתפנה?</legend>
+                  <div class="chips">
+                    <label class="chip"><input class="chip__input" type="radio" name="available" value="now"><span class="chip__face">כבר עכשיו</span></label>
+                    <label class="chip"><input class="chip__input" type="radio" name="available" value="1-3m"><span class="chip__face">בעוד חודש עד שלושה</span></label>
+                    <label class="chip"><input class="chip__input" type="radio" name="available" value="later"><span class="chip__face">מאוחר יותר</span></label>
+                  </div>
+                  <p class="field-error" id="lister-available-error" hidden></p>
+                </fieldset>
+                <div class="field">
+                  <label class="consent" for="lister-consent">
+                    <input class="consent__box" id="lister-consent" name="consent" type="checkbox" required>
+                    <span>אפשר לשלוח לי עדכון במייל כשהומי עולה לאוויר</span>
+                  </label>
+                  <p class="field-error" id="lister-consent-error" hidden></p>
+                </div>
+                <div class="hp" aria-hidden="true">
+                  <input name="website" type="text" tabindex="-1" autocomplete="off">
+                </div>
+                <div class="banner" role="alert"></div>
+                <button class="btn btn--ink btn--lg btn--block form__submit" type="submit">הרשמה לרשימה</button>
+                <p class="privacy">שומרים רק את מה שמילאתם כאן, כדי לעדכן על ההשקה ולדעת כמה מחכים בכל עיר. לא מעבירים לאף אחד. למחיקה מהרשימה: <a href="mailto:contact@example.com" dir="ltr">contact@example.com</a></p>
+              </form>
+              <div class="success" hidden>
+                <img class="success__turtle" src="img/homie-turtle-celebrate.svg" alt="" width="160" height="120" loading="lazy">
+                <h2 class="h2 success__title" tabindex="-1">נרשמתם!</h2>
+                <p class="success__line"></p>
+                <button class="text-button success__other" type="button" data-side="seeker">גם מחפשים? להרשמה גם שם</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container site-footer__inner">
+        <img class="site-footer__wordmark" src="img/homie-wordmark-he.svg" alt="" width="61" height="24">
+        <p class="site-footer__copy">© הומי 2026</p>
+        <a class="site-footer__contact" href="mailto:contact@example.com" dir="ltr">contact@example.com</a>
+      </div>
+    </footer>
+  </body>
+</html>
