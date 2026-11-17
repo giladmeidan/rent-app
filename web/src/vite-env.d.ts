@@ -12,4 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_DSN?: string;
   readonly VITE_SENTRY_ENVIRONMENT?: string;
   readonly VITE_SENTRY_RELEASE?: string;
+  /** PostHog usage analytics (spec 0019b); unset or empty means PostHog is off. */
+  readonly VITE_POSTHOG_KEY?: string;
+  /** The ingestion host; unset or empty means https://eu.i.posthog.com. */
+  readonly VITE_POSTHOG_HOST?: string;
 }

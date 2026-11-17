@@ -116,6 +116,23 @@ describe('LegalPage', () => {
     expect(s3.i8).toContain('30 יום');
   });
 
+  it('ac13_privacy_names_posthog', async () => {
+    await visit('/privacy');
+    const { s1, s3, s5 } = he.legal.privacy;
+    // Spec 0019b: the PostHog item right after Sentry's, the reworded s1.i15, the retention line.
+    const section = screen.getByRole('heading', { level: 2, name: s3.title }).parentElement;
+    const items = [...(section?.querySelectorAll('li') ?? [])].map((li) => li.textContent);
+    expect(items.indexOf(s3.i9)).toBe(items.indexOf(s3.i8) + 1);
+    expect(s3.i9).toContain('PostHog');
+    expect(s3.i9).toContain('אין עוגיות');
+    const page = document.body.textContent ?? '';
+    expect(page).toContain(s1.i15);
+    expect(s1.i15).toContain('PostHog');
+    expect(s1.i15).not.toContain('צד שלישי');
+    expect(page).toContain(s5.i14);
+    expect(s5.i14).toContain('עד שנה');
+  });
+
   it('ac12_privacy_states_retention_periods', async () => {
     await visit('/privacy');
     const page = document.body.textContent ?? '';

@@ -9,7 +9,7 @@ USER node
 
 # Dependencies first so the layer is cached while application code changes. In compose the source
 # tree is bind-mounted over /app and node_modules stays this image's (an anonymous volume).
-COPY --chown=node:node web/package.json web/pnpm-lock.yaml ./
+COPY --chown=node:node web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/home/node/.local/share/pnpm/store,uid=1000,gid=1000 \
     pnpm install --frozen-lockfile
 

@@ -7,6 +7,7 @@ import { PageContainer } from '../components/PageContainer';
 import { SkipLink } from '../components/SkipLink';
 import { AuthMenu } from '../features/auth/AuthMenu';
 import { ChatStreamProvider } from '../features/chat/ChatStreamProvider';
+import { capture } from './analytics';
 import { RouteFocus } from './RouteFocus';
 import { setSide, sideOf } from './side';
 import { SideSwitch } from './SideSwitch';
@@ -27,6 +28,10 @@ export function Layout() {
   useEffect(() => {
     const side = sideOf(pathname);
     if (side) setSide(side);
+  }, [pathname]);
+  // One page view per navigation (spec 0019b): a re-render or a query-only change sends none.
+  useEffect(() => {
+    capture('$pageview', {});
   }, [pathname]);
 
   const footer = pathname !== '/' && pathname !== '/chat' && !pathname.startsWith('/chat/');

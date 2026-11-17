@@ -18,8 +18,12 @@ import {
 import { owner } from '../../listings/__tests__/fixtures';
 import { formatDate } from '../../listings/format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
+import { capture } from '../../../app/analytics';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
+
+// No `importOriginal`: analytics → routePattern → routes → this page would load the real module.
+vi.mock('../../../app/analytics', () => ({ capture: vi.fn() }));
 
 vi.mock(
   '../../../components/map/MapCanvas',
@@ -183,6 +187,25 @@ describe('SearchPage', () => {
     expect(readback).toHaveTextContent(
       '\u05d4\u05ea\u05d0\u05e8\u05d9\u05da \u05e9\u05e0\u05d1\u05d7\u05e8: 12 \u05d1\u05e0\u05d5\u05d1\u05de\u05d1\u05e8 2026',
     );
+  });
+
+  it('ac12_search_run_event', async () => {
+    mockApi({ [SEARCH]: [json(page([]))] });
+    vi.mocked(capture).mockClear();
+    render('/search?sort=newest');
+    await screen.findByText(he.search.empty);
+    openPanel();
+    fireEvent.change(priceTo(), { target: { value: '8000' } });
+    fireEvent.click(feature(he.search.feature.pets));
+    apply();
+    expect(currentPath()).toBe('/search?price_max=8000&pets=true&sort=newest');
+    // The type and the number of filters set (sort excluded), never their values.
+    expect(capture).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledWith('search_run', { type: 'apartment', filters: 2 });
+
+    // Clear sends nothing.
+    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    expect(capture).toHaveBeenCalledOnce();
   });
 
   it('ac3_apply_clear_back_and_validation', async () => {
