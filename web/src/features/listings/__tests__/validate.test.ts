@@ -21,7 +21,6 @@ const valid: ListingForm = {
   ...emptyForm,
   listing_type: 'apartment',
   area_id: '00000000-0000-0000-0000-00000000a1a1',
-  city: 'גבעתיים',
   street: 'כצנלסון',
   rooms: '3.5',
   floor: '3',
@@ -76,20 +75,20 @@ const rows: Row[] = [
   ['description 2000 emoji', { description: '🏠'.repeat(2000) }, 'description', undefined],
   ['description 2001 emoji', { description: '🏠'.repeat(2001) }, 'description', tooLong(2000)],
   ['description padded', { description: `  ${'א'.repeat(2000)}  ` }, 'description', undefined],
-  ['city " "', { city: ' ' }, 'city', required],
-  ['city " גבעתיים "', { city: ' גבעתיים ' }, 'city', undefined],
-  ['city 40', { city: 'א'.repeat(40) }, 'city', undefined],
-  ['city 41', { city: 'א'.repeat(41) }, 'city', tooLong(40)],
+  // The area is the city (spec 0021b): none chosen is required.
+  ['no area', { area_id: '' }, 'area_id', required],
+  ['street " "', { street: ' ' }, 'street', required],
+  ['street " כצנלסון "', { street: ' כצנלסון ' }, 'street', undefined],
   // The API's visible-characters rule: invisible characters are removed before counting (an RLM
   // alone is empty), a tab is a space, ZWJ stays and counts.
-  ['city RLM only', { city: '\u200f' }, 'city', required],
-  ['city RLM + LRE + NUL only', { city: '\u200f\u202a\u0000 ' }, 'city', required],
-  ['city 40 + RLM', { city: `${'א'.repeat(40)}\u200f` }, 'city', undefined],
+  ['street RLM only', { street: '\u200f' }, 'street', required],
+  ['street RLM + LRE + NUL only', { street: '\u200f\u202a\u0000 ' }, 'street', required],
+  ['street 80 + RLM', { street: `${'א'.repeat(80)}\u200f` }, 'street', undefined],
   [
-    'city 41 with an RLM inside',
-    { city: `${'א'.repeat(20)}\u200f${'א'.repeat(21)}` },
-    'city',
-    tooLong(40),
+    'street 81 with an RLM inside',
+    { street: `${'א'.repeat(40)}\u200f${'א'.repeat(41)}` },
+    'street',
+    tooLong(80),
   ],
   ['street tab only', { street: '\t' }, 'street', required],
   ['street 80 with a tab', { street: `${'א'.repeat(40)}\t${'א'.repeat(39)}` }, 'street', undefined],
@@ -143,7 +142,6 @@ describe('validate', () => {
     expect(
       toListingIn({
         ...valid,
-        city: ' \u200fגבעתיים\u202e ',
         street: 'כצנלסון\tהגדול\n',
         description: ' a\r\nb\u200f\u2028\tc\u200d\rd\u0000 ',
         vaad_ils: '150',
@@ -260,19 +258,18 @@ describe('validate', () => {
     }
   });
 
-  it('ac8_city_without_letter_or_digit_is_required', () => {
+  it('ac8_street_without_letter_or_digit_is_required', () => {
     const cases: [string, Partial<ListingForm>, FieldName, object | undefined][] = [
-      ['city "..."', { city: '...' }, 'city', required],
-      ['city "-"', { city: '-' }, 'city', required],
-      ['city emoji only', { city: '\u{1f642}' }, 'city', required],
-      ['city Hangul filler only', { city: '\u3164' }, 'city', required],
-      ['city braille blank + dots', { city: '\u2800...' }, 'city', required],
+      ['street "-"', { street: '-' }, 'street', required],
+      ['street emoji only', { street: '\u{1f642}' }, 'street', required],
+      ['street Hangul filler only', { street: '\u3164' }, 'street', required],
+      ['street braille blank + dots', { street: '\u2800...' }, 'street', required],
       ['street "..."', { street: '...' }, 'street', required],
       ['street private use only', { street: '\ue000\ue000' }, 'street', required],
-      ['city digits', { city: '12' }, 'city', undefined],
-      ['city with a hyphen', { city: '\u05e8\u05de\u05ea-\u05d2\u05df' }, 'city', undefined],
+      ['street digits', { street: '12' }, 'street', undefined],
+      ['street with a hyphen', { street: '\u05e8\u05de\u05ea-\u05d2\u05df' }, 'street', undefined],
       ['street "3"', { street: '3' }, 'street', undefined],
-      ['41 dots is required, not too long', { city: '.'.repeat(41) }, 'city', required],
+      ['81 dots is required, not too long', { street: '.'.repeat(81) }, 'street', required],
       // The description has no letter-or-digit rule.
       ['description "..."', { description: '...' }, 'description', undefined],
     ];
@@ -282,9 +279,7 @@ describe('validate', () => {
       expect(Object.keys(errors), name).toEqual(expected === undefined ? [] : [field]);
     }
     // The body the wizard sends drops the stripped characters.
-    expect(
-      toListingIn({ ...valid, city: '\u05d0\u3164\u05d1', street: '\u2800\u05d2' }),
-    ).toMatchObject({ street: '\u05d2' });
+    expect(toListingIn({ ...valid, street: '\u2800\u05d2' })).toMatchObject({ street: '\u05d2' });
   });
 
   it('ac11_form_from_listing_and_changed_fields', () => {
@@ -342,7 +337,7 @@ describe('validate', () => {
     // Cleaned before the compare: surrounding spaces are no change.
     expect(diff({ street: ` ${l.street} ` })).toEqual({});
     // The city is never sent (spec 0021a1): the server names the settlement.
-    expect(diff({ city: '\u05d7\u05d5\u05dc\u05d5\u05df' })).toEqual({});
+    expect(toListingIn(form)).not.toHaveProperty('city');
     const other = '00000000-0000-0000-0000-00000000b2b2';
     expect(diff({ area_id: other })).toEqual({ area_id: other });
     expect(diff({ price_ils: '7500', arnona_ils: '480' })).toEqual({

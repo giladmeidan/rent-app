@@ -114,9 +114,9 @@ test('ac14_two_sides', async ({ page }) => {
     page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '4')),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: he.common.back })).toHaveCount(0);
-  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
-  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
-  await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
+  await expect(page.getByLabel(f.city, { exact: true })).toBeEnabled();
+  // The city picker (spec 0021b): the full name picks the settlement.
+  await page.getByLabel(f.city, { exact: true }).fill(TEL_AVIV);
   await page.getByLabel(f.street, { exact: true }).fill(newRoomStreet);
   await page.getByLabel(f.rooms).selectOption('4');
   await page.getByLabel(f.floor, { exact: true }).fill('2');
@@ -182,9 +182,9 @@ test('ac18_role_free_market', async ({ page, browser }) => {
   await expect(
     page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '4')),
   ).toBeVisible();
-  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
-  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
-  await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
+  await expect(page.getByLabel(f.city, { exact: true })).toBeEnabled();
+  // The city picker (spec 0021b): the full name picks the settlement.
+  await page.getByLabel(f.city, { exact: true }).fill(TEL_AVIV);
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('4');
   await page.getByLabel(f.floor, { exact: true }).fill('2');

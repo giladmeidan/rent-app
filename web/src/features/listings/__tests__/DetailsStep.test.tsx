@@ -109,45 +109,74 @@ describe('DetailsStep', () => {
     expect(alertOf(floor)).toHaveLength(0);
   });
 
-  it('ac3_client_validation', async () => {
-    // Two areas: the placeholder is selected.
-    mockApi({ 'GET /areas': [json([gushDan, telAviv])] });
-    let view = renderWizard();
-    chooseApartmentAndContinue();
-    await areasLoaded();
-    expect(field(f.area)).toHaveValue('');
-    expect(within(field(f.area)).getAllByRole('option')[0]).toHaveTextContent(f.choose);
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // No areas: the empty state instead of the select, and "next" reports the area as required.
-    let api = mockApi({ 'GET /areas': [json([])] });
-    view = renderWizard();
-    chooseApartmentAndContinue();
-    const empty = await screen.findByText(he.areas.empty);
-    expect(screen.queryByRole('combobox', { name: f.area })).toBeNull();
-    fireEvent.click(nextButton());
-    // The message sits in the EmptyState card; the alert is in the same field.
-    expect(empty).toBeInTheDocument();
-    expect(within(screen.getByTestId('area-field')).getByRole('alert')).toHaveTextContent(
-      he.listings.errors.required,
-    );
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // One area: preselected. "next" with everything else empty.
-    api = mockApi({ 'GET /areas': [json([gushDan])] });
+  it('ac1_city_picker', async () => {
+    // Spec 0021b: settlements only; the chosen one is sent as `area_id`, its name asks the rent hint.
+    const beerSheva: AreaOut = { ...telAviv, id: 'b5', slug: 's-9000', name_he: 'באר שבע' };
+    const beerYaakov: AreaOut = { ...telAviv, id: 'b6', slug: 's-2530', name_he: 'באר יעקב' };
+    const oldCity: AreaOut = {
+      ...telAviv,
+      id: 'b7',
+      slug: 'n-9000-1',
+      name_he: 'באר העיר העתיקה',
+      kind: 'neighbourhood',
+      parent_id: beerSheva.id,
+    };
+    const api = mockApi({
+      'GET /areas': [json([gushDan, beerSheva, beerYaakov, oldCity])],
+      'GET /rent-estimate': [json({ estimate: null, reason: 'no_figures' })],
+      'POST /listings': [json(listing(), 201)],
+      'GET /me/listings': [json([])],
+    });
     renderWizard();
     chooseApartmentAndContinue();
     await areasLoaded();
-    expect(field(f.area)).toHaveValue(gushDan.id);
+    fillValidDetails();
+
+    change(f.city, 'באר');
+    const listId = field(f.city).getAttribute('list') ?? '';
+    const offered = [...(document.getElementById(listId)?.querySelectorAll('option') ?? [])].map(
+      (option) => option.value,
+    );
+    expect(offered).toEqual(expect.arrayContaining(['באר שבע', 'באר יעקב']));
+    expect(offered).not.toContain(oldCity.name_he);
+    expect(offered.some((name) => name.includes(oldCity.name_he))).toBe(false);
+
+    change(f.city, 'באר שבע');
+    expect(field(f.city)).toHaveValue('באר שבע');
+    change(f.rooms, '3');
+    await vi.waitFor(() => {
+      expect(api.calls('GET /rent-estimate')).not.toHaveLength(0);
+    });
+    const url = new URL(api.calls('GET /rent-estimate').at(-1)?.request.url ?? '');
+    expect(url.searchParams.get('city')).toBe('באר שבע');
+    expect(url.searchParams.get('rooms')).toBe('3');
+
+    fireEvent.click(nextButton()); // photos
+    fireEvent.click(nextButton()); // preferences
+    fireEvent.click(nextButton()); // preview
+    expect(progress()).toHaveAttribute('aria-valuenow', '5');
+    fireEvent.click(screen.getByRole('button', { name: he.listings.publish }));
+    await vi.waitFor(() => {
+      expect(api.calls('POST /listings')).toHaveLength(1);
+    });
+    const body = api.calls('POST /listings')[0]?.body as Record<string, unknown>;
+    expect(body.area_id).toBe(beerSheva.id);
+    expect(body).not.toHaveProperty('city');
+  });
+
+  it('ac3_client_validation', async () => {
+    // Nothing is preselected, even with one area (spec 0021b). "next" with everything empty.
+    const api = mockApi({ 'GET /areas': [json([gushDan])] });
+    renderWizard();
+    chooseApartmentAndContinue();
+    await areasLoaded();
+    expect(field(f.city)).toHaveValue('');
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
 
     fireEvent.click(nextButton());
     for (const label of [f.city, f.street, f.rooms, f.floor, f.size, f.price, f.availableFrom]) {
       expect(errorFor(field(label)), label).toHaveTextContent(he.listings.errors.required);
     }
-    expect(field(f.area)).not.toHaveAttribute('aria-invalid', 'true');
     expect(field(f.city)).toHaveFocus();
     expect(api.calls('POST /listings')).toHaveLength(0);
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
@@ -166,17 +195,15 @@ describe('DetailsStep', () => {
       i18n.t('listings.errors.range', { min: 500, max: 100000 }),
     );
 
-    // City too long (41 code points).
-    change(f.city, 'א'.repeat(41));
+    // A name that is not in the list stays required.
+    change(f.city, 'עיר שאינה ברשימה');
     fireEvent.click(nextButton());
-    expect(errorFor(field(f.city))).toHaveTextContent(
-      i18n.t('listings.errors.tooLong', { max: 40 }),
-    );
+    expect(errorFor(field(f.city))).toHaveTextContent(he.listings.errors.required);
     expect(field(f.city)).toHaveFocus();
 
     // After the first attempt: a fixed field's error goes at once (no layout jump on the next
     // click); a newly invalid field is reported on blur, not while typing.
-    change(f.city, 'גבעתיים');
+    change(f.city, gushDan.name_he);
     expect(field(f.city)).not.toHaveAttribute('aria-invalid', 'true');
     change(f.street, 'כצנלסון');
     expect(field(f.street)).not.toHaveAttribute('aria-invalid', 'true');
@@ -497,7 +524,7 @@ describe('rent estimate hint (0014c)', () => {
     const view = renderWizard();
     chooseTypeAndContinue(he.listings.type[type]);
     await areasLoaded();
-    change(f.city, 'תל אביב');
+    change(f.city, gushDan.name_he);
     change(f.street, 'תירוש');
     change(f.rooms, '4');
     return view;
@@ -512,7 +539,7 @@ describe('rent estimate hint (0014c)', () => {
     let view = renderWizard();
     chooseApartmentAndContinue();
     await areasLoaded();
-    change(f.city, 'תל אביב');
+    change(f.city, gushDan.name_he);
     change(f.street, 'תירוש');
     change(f.rooms, '4');
     await vi.waitFor(() => {
@@ -548,7 +575,7 @@ describe('rent estimate hint (0014c)', () => {
     view = renderWizard();
     chooseApartmentAndContinue();
     await areasLoaded();
-    change(f.city, 'תל אביב');
+    change(f.city, gushDan.name_he);
     change(f.street, 'הרצל');
     change(f.rooms, '3.5');
     await vi.waitFor(() => {
@@ -559,7 +586,7 @@ describe('rent estimate hint (0014c)', () => {
     );
     const url = new URL(api.calls('GET /rent-estimate')[0]?.request.url ?? '');
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      city: 'תל אביב',
+      city: gushDan.name_he,
       street: 'הרצל',
       rooms: '3.5',
     });
@@ -623,7 +650,7 @@ describe('rent estimate hint (0014c)', () => {
       const view = renderWizard();
       chooseApartmentAndContinue();
       await areasLoaded();
-      change(f.city, 'תל אביב');
+      change(f.city, gushDan.name_he);
       change(f.street, 'תירוש');
       change(f.rooms, '2');
       await vi.waitFor(() => {
@@ -667,7 +694,7 @@ describe('rent estimate hint (0014c)', () => {
         act(async () => {
           await vi.advanceTimersByTimeAsync(ms);
         });
-      change(f.city, 'תל אביב');
+      change(f.city, gushDan.name_he);
       change(f.rooms, '4');
       for (const typed of ['ת', 'תי', 'תיר', 'תירו', 'תירוש']) {
         change(f.street, typed);

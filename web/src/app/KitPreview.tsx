@@ -285,7 +285,7 @@ export default function KitPreview() {
                 <option value="full">{t('listings.furnished.full')}</option>
               </Select>
             </Field>
-            <Field label={t('listings.fields.area')} error={t('listings.errors.required')}>
+            <Field label={t('listings.fields.rooms')} error={t('listings.errors.required')}>
               <Select defaultValue="">
                 <option value="" disabled>
                   {t('listings.fields.choose')}

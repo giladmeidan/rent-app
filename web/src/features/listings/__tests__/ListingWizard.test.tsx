@@ -552,7 +552,7 @@ describe('ListingWizard', () => {
     expect(alert).toHaveTextContent(he.listings.errors.areaInactive);
     fireEvent.click(within(alert).getByRole('button', { name: he.listings.preview.backToDetails }));
     expect(progress()).toHaveAttribute('aria-valuenow', '2');
-    expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue('גבעתיים');
+    expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue(gushDan.name_he);
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -570,12 +570,12 @@ describe('ListingWizard', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // 422 naming a field: back on step 2, the error under city and focus on it (not the <h1>);
-    // a blur out of city keeps it.
+    // 422 naming a field: back on step 2, the error under the city picker (the area) and focus on
+    // it (not the <h1>); a blur out of it keeps it.
     mockApi({
       'GET /areas': [json([gushDan])],
       'POST /listings': [
-        json({ detail: [{ loc: ['body', 'city'], msg: 'bad', type: 'value_error' }] }, 422),
+        json({ detail: [{ loc: ['body', 'area_id'], msg: 'bad', type: 'value_error' }] }, 422),
       ],
     });
     view = await toPreview();
@@ -730,7 +730,7 @@ describe('ListingWizard', () => {
     at(3);
     back();
     at(2);
-    expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue('גבעתיים');
+    expect(screen.getByLabelText(he.listings.fields.city)).toHaveValue(gushDan.name_he);
     expect(screen.getByRole('switch', { name: he.listings.fields.pets })).toBeChecked();
     back();
     at(1);
@@ -884,7 +884,7 @@ describe('ListingWizard', () => {
     // waiting on the preferences.
     mockApi({
       'GET /areas': [json([gushDan])],
-      'POST /listings': [invalid('accepted_households', 'city')],
+      'POST /listings': [invalid('accepted_households', 'area_id')],
     });
     view = await toPreview();
     fireEvent.click(publishButton());
