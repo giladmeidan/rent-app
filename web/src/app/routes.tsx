@@ -36,70 +36,73 @@ import { Layout } from './Layout';
 // The dev-only kit gallery (spec 0009d): neither the route nor its chunk ships in a build.
 const KitPreview = import.meta.env.DEV ? lazy(() => import('./KitPreview')) : null;
 
-export function AppRoutes() {
-  return (
-    <Routes>
-      {KitPreview && (
-        <Route
-          path="dev/kit"
-          element={
-            <Suspense
-              fallback={
-                <PageContainer>
-                  <Skeleton />
-                </PageContainer>
-              }
-            >
-              <KitPreview />
-            </Suspense>
-          }
-        />
-      )}
-      <Route element={<Layout />}>
-        <Route index element={<HomeRoute />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route path="signup" element={<SignupPage />} />
-        {/* Public and static (spec 0013f): the legal text, and where a deleted person lands. */}
-        <Route path="terms" element={<LegalPage kind="terms" />} />
-        <Route path="privacy" element={<LegalPage kind="privacy" />} />
-        <Route path="account-deleted" element={<AccountDeletedPage />} />
-        {/* One search per side (spec 0010a); the keys keep the two pages' state apart. */}
-        <Route path="search" element={<SearchPage key="apartment" type="apartment" />} />
-        <Route path="market" element={<SearchPage key="room" type="room" />} />
-        {/* Public; the static `listings/new` below outranks `:id`. */}
-        <Route path="listings/:id" element={<ListingPage />} />
-        {/* Public (0008e A1): the page takes the token out of the hash before its own login check. */}
-        <Route path="flatmates/join" element={<JoinFlatPage />} />
-        {/* Apartments keep the roles (spec 0010b): the owner's apartments, the seeker's apartment
-            applications. Everything else is for any account. */}
-        <Route element={<RequireOwner />}>
-          <Route path="me/listings" element={<MyListingsPage />} />
-        </Route>
-        <Route element={<RequireSeeker />}>
-          <Route path="me/applications" element={<MyApplicationsPage />} />
-        </Route>
-        <Route element={<RequireUser />}>
-          {/* The wizard offers a non-owner the room flow only (`NewListingPage`). */}
-          <Route path="listings/new" element={<NewListingPage />} />
-          <Route path="me/listings/:id/edit" element={<EditListingPage />} />
-          <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
-          <Route path="me/listings/:id/people" element={<PeoplePage />} />
-          <Route path="me/listings/:id/flatmates" element={<FlatmatesPage />} />
-          <Route path="me/listings/:id/tours" element={<TourTimesPage />} />
-          <Route path="tours" element={<ToursPage />} />
-          <Route path="me/likes" element={<MyLikesPage />} />
-          <Route path="me/profile" element={<ProfilePage />} />
-          {/* One layout for both: on a desktop the list stays beside the thread (spec 0009s). */}
-          <Route path="chat" element={<ChatLayout />}>
-            <Route index element={<ChatListPage />} />
-            <Route path=":id" element={<ChatThreadPage />} />
-          </Route>
-          <Route path="me/flats" element={<MyFlatsPage />} />
-          <Route path="market/mine" element={<MarketMinePage />} />
-          <Route path="market/people" element={<MarketPeoplePage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+/** The app's route tree; `routePattern` (spec 0019a) matches paths against it too. */
+export const appRouteTree = (
+  <>
+    {KitPreview && (
+      <Route
+        path="dev/kit"
+        element={
+          <Suspense
+            fallback={
+              <PageContainer>
+                <Skeleton />
+              </PageContainer>
+            }
+          >
+            <KitPreview />
+          </Suspense>
+        }
+      />
+    )}
+    <Route element={<Layout />}>
+      <Route index element={<HomeRoute />} />
+      <Route path="login" element={<LoginPage />} />
+      <Route path="signup" element={<SignupPage />} />
+      {/* Public and static (spec 0013f): the legal text, and where a deleted person lands. */}
+      <Route path="terms" element={<LegalPage kind="terms" />} />
+      <Route path="privacy" element={<LegalPage kind="privacy" />} />
+      <Route path="account-deleted" element={<AccountDeletedPage />} />
+      {/* One search per side (spec 0010a); the keys keep the two pages' state apart. */}
+      <Route path="search" element={<SearchPage key="apartment" type="apartment" />} />
+      <Route path="market" element={<SearchPage key="room" type="room" />} />
+      {/* Public; the static `listings/new` below outranks `:id`. */}
+      <Route path="listings/:id" element={<ListingPage />} />
+      {/* Public (0008e A1): the page takes the token out of the hash before its own login check. */}
+      <Route path="flatmates/join" element={<JoinFlatPage />} />
+      {/* Apartments keep the roles (spec 0010b): the owner's apartments, the seeker's apartment
+          applications. Everything else is for any account. */}
+      <Route element={<RequireOwner />}>
+        <Route path="me/listings" element={<MyListingsPage />} />
       </Route>
-    </Routes>
-  );
+      <Route element={<RequireSeeker />}>
+        <Route path="me/applications" element={<MyApplicationsPage />} />
+      </Route>
+      <Route element={<RequireUser />}>
+        {/* The wizard offers a non-owner the room flow only (`NewListingPage`). */}
+        <Route path="listings/new" element={<NewListingPage />} />
+        <Route path="me/listings/:id/edit" element={<EditListingPage />} />
+        <Route path="me/listings/:id/applicants" element={<ApplicantsPage />} />
+        <Route path="me/listings/:id/people" element={<PeoplePage />} />
+        <Route path="me/listings/:id/flatmates" element={<FlatmatesPage />} />
+        <Route path="me/listings/:id/tours" element={<TourTimesPage />} />
+        <Route path="tours" element={<ToursPage />} />
+        <Route path="me/likes" element={<MyLikesPage />} />
+        <Route path="me/profile" element={<ProfilePage />} />
+        {/* One layout for both: on a desktop the list stays beside the thread (spec 0009s). */}
+        <Route path="chat" element={<ChatLayout />}>
+          <Route index element={<ChatListPage />} />
+          <Route path=":id" element={<ChatThreadPage />} />
+        </Route>
+        <Route path="me/flats" element={<MyFlatsPage />} />
+        <Route path="market/mine" element={<MarketMinePage />} />
+        <Route path="market/people" element={<MarketPeoplePage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  </>
+);
+
+export function AppRoutes() {
+  return <Routes>{appRouteTree}</Routes>;
 }

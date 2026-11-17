@@ -7,13 +7,18 @@ import '@fontsource-variable/rubik/wght.css';
 import '@fontsource-variable/fredoka/wght.css';
 
 import { App } from './App';
+import { AppErrorBoundary, initSentry } from './sentry';
 import './index.css';
+
+initSentry();
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('index.html: missing #root');
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </StrictMode>,
 );
