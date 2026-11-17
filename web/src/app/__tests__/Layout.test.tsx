@@ -1,9 +1,10 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useEffect } from 'react';
-import { Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../i18n';
@@ -185,19 +186,22 @@ describe('Layout', () => {
   it('ac11_one_pageview_per_navigation', async () => {
     mockApi({ 'GET /me': [unauthenticated] });
     vi.mocked(capture).mockClear();
-    const pages = (
-      <>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/a" element={<p>page a</p>} />
-            <Route path="/b" element={<p>page b</p>} />
-            <Route path="/c" element={<p>page c</p>} />
-          </Route>
-        </Routes>
-        <NavigateProbe />
-      </>
+    const client = testQueryClient();
+    const tree = (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/a']}>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="/a" element={<p>page a</p>} />
+              <Route path="/b" element={<p>page b</p>} />
+              <Route path="/c" element={<p>page c</p>} />
+            </Route>
+          </Routes>
+          <NavigateProbe />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
-    renderRoutes('/a', pages);
+    const view = render(tree);
     await screen.findByText('page a');
     for (const path of ['/b', '/c']) {
       await act(async () => {
@@ -212,11 +216,13 @@ describe('Layout', () => {
       ['$pageview', {}],
     ]);
 
-    // A query-only change (it re-renders Layout, which reads the location): none.
+    // A re-render on the same path, and a query-only change: none.
+    view.rerender(tree);
+    await screen.findByText('page c');
     await act(async () => {
       await router.navigate('/c?x=1');
     });
-    expect(currentPath()).toBe('/c?x=1');
+    await screen.findByText('page c');
     expect(pageviews()).toHaveLength(3);
   });
 

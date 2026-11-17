@@ -15,6 +15,7 @@ from typing import Literal
 
 import httpx
 from posthog import Posthog
+from sentry_sdk.integrations.logging import ignore_logger
 from sqlalchemy import func, select
 
 from app.config import get_settings
@@ -24,7 +25,9 @@ from app.models import User
 log = logging.getLogger(__name__)
 
 # The SDK logs an upload failure at ERROR, which 0019a's logging integration would turn into a
-# Sentry event; `_log_failure` writes our own WARNING instead.
+# Sentry event per batch; `_log_failure` writes our own WARNING instead. Its constructor sets the
+# logger back to WARNING, so `_get_client` silences it again after building one.
+ignore_logger("posthog")
 logging.getLogger("posthog").setLevel(logging.CRITICAL)
 
 Event = Literal[
@@ -75,6 +78,7 @@ def _get_client() -> Posthog | None:
                 max_retries=3,
                 timeout=5,
             )
+            logging.getLogger("posthog").setLevel(logging.CRITICAL)
         return _client
 
 

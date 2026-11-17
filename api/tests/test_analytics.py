@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 from posthog import Posthog
 from pydantic import SecretStr
+from sentry_sdk.integrations import logging as sentry_logging
 from sqlalchemy import Engine, text
 
 from app import analytics
@@ -177,13 +178,12 @@ def test_ac1_off_without_key(
     fake_google: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def no_client(*args: Any, **kwargs: Any) -> Posthog:
-        raise AssertionError("a PostHog client was built without POSTHOG_KEY")
-
-    monkeypatch.setattr(analytics, "Posthog", no_client)
+    built: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(analytics, "Posthog", lambda *args, **kwargs: built.append(args))
     _run_funnel(client, outbox, db_engine, gush_dan)
     analytics.track(None, "account_deleted")
 
+    assert built == []
     assert analytics._client is None
 
 
@@ -227,6 +227,21 @@ def test_unit_client_config_and_allowlist(
     analytics.shutdown()
     assert shut == [True] and analytics._client is None
     assert logging.getLogger("posthog").level == logging.CRITICAL
+
+
+def test_unit_real_client_keeps_posthog_logger_quiet(set_env: Callable[..., None]) -> None:
+    """The real SDK constructor sets the `posthog` logger back to WARNING: it is silenced again,
+    and Sentry's logging integration ignores it, so an upload failure is never a Sentry event.
+    No capture, so nothing is sent."""
+    set_env(POSTHOG_KEY="phc_test")
+    try:
+        client = analytics._get_client()
+        assert isinstance(client, Posthog)
+        assert logging.getLogger("posthog").level == logging.CRITICAL
+        assert "posthog" in sentry_logging._IGNORED_LOGGERS
+    finally:
+        analytics.shutdown()
+    assert analytics._client is None
 
 
 # --- AC2, AC3 ----------------------------------------------------------------------------------
@@ -406,8 +421,9 @@ def _tombstones(engine: Engine, count: int, age: str) -> set[str]:
 def test_ac7_forget_deleted_users(
     db_engine: Engine, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    recent = _tombstones(db_engine, 1001, "1 day")
+    recent = _tombstones(db_engine, 1000, "1 day") | _tombstones(db_engine, 1, "6 days 23 hours")
     _tombstones(db_engine, 2, "8 days")
+    _tombstones(db_engine, 1, "7 days 1 hour")
     make_owner(db_engine, "live@example.com")
 
     # Unset settings: no request.

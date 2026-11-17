@@ -1,3 +1,5 @@
+// Before posthog-js: it reads the toolbar's `__posthog` hash parameter when its module is evaluated.
+import './toolbarHash';
 import posthog from 'posthog-js';
 import type { CaptureResult, Properties } from 'posthog-js';
 
@@ -15,24 +17,17 @@ type UiEvents = {
 };
 export type UiEvent = keyof UiEvents;
 
-const URL_KEYS = new Set([
-  '$current_url',
-  '$pathname',
-  '$referrer',
-  '$initial_current_url',
-  '$initial_pathname',
-  '$initial_referrer',
-  '$session_entry_url',
-  '$session_entry_pathname',
-  '$session_entry_referrer',
-]);
+// Sent with no URL in them, but personal: `title` is `document.title` (a chat's other name, a listing's
+// title), `ph_keyword` a search engine's query from the referrer.
+const DROPPED = new Set(['title', 'ph_keyword']);
 const HTTP_URL = /^https?:\/\//i;
 
 let started = false;
 
-function scrubValue(key: string, value: unknown): unknown {
+function scrubValue(value: unknown): unknown {
   if (typeof value !== 'string') return value;
-  if (URL_KEYS.has(key) && value.startsWith('/')) return routePattern(value);
+  // Any path (`$pathname`, `$prev_pageview_pathname`, ...): its route pattern.
+  if (value.startsWith('/')) return routePattern(value);
   if (!HTTP_URL.test(value)) return value;
   try {
     const url = new URL(value);
@@ -40,24 +35,29 @@ function scrubValue(key: string, value: unknown): unknown {
       ? url.origin + routePattern(url.pathname)
       : url.origin;
   } catch {
-    return value.split(/[?#]/)[0];
+    return '';
   }
 }
 
-function scrubProperties(properties: Properties | undefined): void {
-  if (properties === undefined) return;
-  for (const key of Object.keys(properties)) {
-    properties[key] = scrubValue(key, properties[key]);
-  }
+function scrubProperties(properties: Properties | undefined): Properties | undefined {
+  if (properties === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(properties)
+      .filter(([key]) => !DROPPED.has(key))
+      .map(([key, value]) => [key, scrubValue(value)]),
+  );
 }
 
-/** `before_send`: every URL or path in `properties`, `$set` and `$set_once` scrubbed in place. */
+/** `before_send`: in `properties`, `$set` and `$set_once`, `DROPPED` removed and every URL or path
+ * scrubbed. */
 export function scrubEvent(event: CaptureResult | null): CaptureResult | null {
   if (event === null) return null;
-  scrubProperties(event.properties);
-  scrubProperties(event.$set);
-  scrubProperties(event.$set_once);
-  return event;
+  return {
+    ...event,
+    properties: scrubProperties(event.properties) ?? {},
+    $set: scrubProperties(event.$set),
+    $set_once: scrubProperties(event.$set_once),
+  };
 }
 
 export function initAnalytics(): void {
@@ -71,6 +71,8 @@ export function initAnalytics(): void {
     autocapture: false,
     capture_pageview: false,
     capture_pageleave: false,
+    // No utm_*, gclid, fbclid ... read from the query string.
+    save_campaign_params: false,
     disable_session_recording: true,
     disable_surveys: true,
     advanced_disable_flags: true,

@@ -9,6 +9,10 @@ import { GIS_SRC, nameFromCredential } from '../GoogleButton';
 import { LoginPage } from '../LoginPage';
 import { SignupPage } from '../SignupPage';
 import { currentPath, deferred, json, mockApi, networkError, noa, renderRoutes } from './harness';
+import { capture } from '../../../app/analytics';
+
+// No `importOriginal`: analytics → routePattern → routes → this page would load the real module.
+vi.mock('../../../app/analytics', () => ({ capture: vi.fn() }));
 
 const unauthenticated = json({ detail: 'unauthenticated' }, 401);
 const CLIENT_ID = 'test.apps.googleusercontent.com';
@@ -332,5 +336,26 @@ describe('GoogleButton', () => {
     expect(nameFromCredential('fake:g1:noa@example.com')).toBe('');
     expect(nameFromCredential('a.!!!.c')).toBe('');
     expect(nameFromCredential(`a.${btoa('{"sub":"1"}')}.c`)).toBe('');
+  });
+
+  it('signup_started_only_in_signup_context', async () => {
+    // Spec 0019b: Google's callback on /signup sends `signup_started`; on /login nothing.
+    vi.mocked(capture).mockClear();
+    let gis = stubGis();
+    mockApi({ 'GET /me': [unauthenticated], 'POST /auth/google': [json(noa)] });
+    const login = renderPage('/login');
+    await waitFor(() => expect(gis.renderButton).toHaveBeenCalled());
+    gis.press('fake:g1:noa@example.com');
+    await waitFor(() => expect(currentPath()).toBe('/'));
+    expect(capture).not.toHaveBeenCalled();
+    login.unmount();
+
+    gis = stubGis();
+    mockApi({ 'GET /me': [unauthenticated], 'POST /auth/google': [json(noa, 201)] });
+    renderPage('/signup');
+    await waitFor(() => expect(gis.renderButton).toHaveBeenCalled());
+    gis.press('fake:g1:noa@example.com');
+    expect(capture).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledWith('signup_started', { method: 'google' });
   });
 });

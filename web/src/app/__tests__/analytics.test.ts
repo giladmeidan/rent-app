@@ -47,6 +47,7 @@ describe('analytics', () => {
       autocapture: false,
       capture_pageview: false,
       capture_pageleave: false,
+      save_campaign_params: false,
       disable_session_recording: true,
       disable_surveys: true,
       advanced_disable_flags: true,
@@ -76,10 +77,15 @@ describe('analytics', () => {
           $session_entry_url: `${origin}/chat/c1#m`,
           $session_entry_pathname: '/me/listings/abc/edit',
           other_link: 'https://example.org/x/y?token=1',
+          broken_link: 'https://[bad/x?token=1',
+          $prev_pageview_pathname: '/chat/3f2c9a1e-0000-4000-8000-000000000001',
+          title: 'דנה לוי · homie',
+          ph_keyword: 'דירה ברמת גן',
+          $search_engine: 'google',
           type: 'apartment',
           filters: 3,
         },
-        $set: { $current_url: `${origin}/search?price_max=8000` },
+        $set: { $current_url: `${origin}/search?price_max=8000`, title: 'דנה לוי' },
         $set_once: {
           $initial_current_url: `${origin}/listings/abc?budget=5000#x`,
           $initial_pathname: '/flatmates/join#token',
@@ -94,6 +100,9 @@ describe('analytics', () => {
       $session_entry_url: `${origin}/chat/:id`,
       $session_entry_pathname: '/me/listings/:id/edit',
       other_link: 'https://example.org',
+      broken_link: '',
+      $prev_pageview_pathname: '/chat/:id',
+      $search_engine: 'google',
       type: 'apartment',
       filters: 3,
     });
@@ -106,5 +115,26 @@ describe('analytics', () => {
       }
     }
     expect(scrubEvent(null)).toBeNull();
+  });
+
+  it('ac10_toolbar_hash_dropped_before_posthog_loads', async () => {
+    const { dropToolbarHash } = await import('../toolbarHash');
+    const go = (url: string) => window.history.replaceState(null, '', url);
+    const here = () =>
+      `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    go('/listings/abc?x=1#__posthog=eyJ0b2tlbiI6InBoYyJ9&keep=1');
+    dropToolbarHash(); // off without a key
+    expect(here()).toBe('/listings/abc?x=1#__posthog=eyJ0b2tlbiI6InBoYyJ9&keep=1');
+
+    vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test');
+    dropToolbarHash();
+    expect(here()).toBe('/listings/abc?x=1#keep=1');
+    go('/#state=abc');
+    dropToolbarHash();
+    expect(here()).toBe('/');
+    go('/flatmates/join#invite-token');
+    dropToolbarHash();
+    expect(here()).toBe('/flatmates/join#invite-token');
   });
 });
