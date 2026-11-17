@@ -93,3 +93,28 @@ def test_ac11_fold_boundaries() -> None:
     assert ics.fold("a" * 76) == "a" * 75 + "\r\n a"
     # 74 ASCII octets + a 2-octet letter would be 76: the letter moves whole to the next line.
     assert ics.fold("a" * 74 + "א") == "a" * 74 + "\r\n א"
+
+
+def test_0018d_ac13_feed_calendar() -> None:
+    name = "ש" * 60  # 120 octets: must fold, never inside a letter
+    hostile = "רחוב; הרצל,\\ 1\nDTSTART:19700101T000000Z"
+    calendar = ics.feed_calendar(
+        [_event(description=f"סיור עם {name}", summary=hostile, location=hostile)],
+        name="סיורים בהומי",
+    )
+
+    assert calendar.endswith("\r\n") and "\n" not in calendar.replace("\r\n", "")
+    for line in calendar.split("\r\n")[:-1]:
+        assert len(line.encode()) <= 75
+        line.encode().decode("utf-8")
+    lines = _unfold(calendar)
+    assert f"DESCRIPTION:סיור עם {name}" in lines  # round-trips after unfolding
+    escaped = r"רחוב\; הרצל\,\\ 1\nDTSTART:19700101T000000Z"
+    assert f"SUMMARY:{escaped}" in lines and f"LOCATION:{escaped}" in lines
+    assert [line for line in lines if line.startswith("DTSTART")] == ["DTSTART:20261120T152000Z"]
+    assert "METHOD:PUBLISH" in lines and "X-WR-CALNAME:סיורים בהומי" in lines
+    assert "REFRESH-INTERVAL;VALUE=DURATION:PT1H" in lines
+
+    empty = _unfold(ics.feed_calendar([], name="סיורים בהומי"))
+    assert empty[0] == "BEGIN:VCALENDAR" and empty[-2:] == ["END:VCALENDAR", ""]
+    assert not any(line.startswith(("BEGIN:VEVENT", "DTSTAMP")) for line in empty)

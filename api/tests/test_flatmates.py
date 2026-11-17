@@ -526,6 +526,10 @@ def test_ac2_preview_and_join(
     routes = list(_api_routes(app.routes))
     assert len(routes) > 30  # the walk reaches every router (none is mounted with a prefix)
     for route in routes:
+        if route.path == "/tour-feed/{token}.ics":
+            # Spec 0018d's calendar feed: a calendar app can send no body, header or cookie, so
+            # its token must sit in the path (redacted from the logs, `services/tour_feed.py`).
+            continue
         assert "token" not in route.path.lower(), route.path
         assert "token" not in {param.name for param in route.dependant.path_params}, route.path
     token_routes = {

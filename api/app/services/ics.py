@@ -119,3 +119,9 @@ def vcalendar(
         lines += event
     lines.append("END:VCALENDAR")
     return CRLF.join(fold(line) for line in lines) + CRLF
+
+
+def feed_calendar(events: Iterable[list[str]], *, name: str) -> str:
+    """A subscribed calendar feed (spec 0018d): `PUBLISH`, named, re-read hourly by clients that
+    honour `REFRESH-INTERVAL`. No events → a valid empty calendar with no `DTSTAMP`."""
+    return vcalendar(events, name=name, method="PUBLISH", refresh=dt.timedelta(hours=1))

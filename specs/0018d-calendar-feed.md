@@ -1,7 +1,7 @@
 ---
 id: 0018d
 title: A lister turns on a private calendar link and subscribes to it from Google Calendar (or Apple / any calendar app); their booked tours show up there, and they can replace or turn off the link at any time
-status: verified
+status: in-review
 depends_on: [0018a, 0018b, 0018c]   # 0018a: the `tours` and `tour_feeds` tables (its migration; this spec adds none). 0018b: the `/tours` page whose `PageHeader` `actions` slot this spec fills (0018b depends on 0018e if 0018a's web half is split, so the web half here follows it). 0018c: creates `api/app/services/ics.py`, which this spec extends (TOURS-PLAN "Shared contract"). Branch from the last open dependency's branch while its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [code, security, qa]   # security: an unauthenticated endpoint keyed by a bearer token in the URL, PII (seeker's name, listing address) leaving homie for a third-party calendar, token hashing and revocation, log redaction. qa: 4 endpoints + one dialog with 6 states. No ux: one header button + dialog on 0018b's page, built from the flatmate-invite block's pattern (0009qb); no perf: one PK/unique lookup + one bounded query (≤ 500 rows)
 estimate: 1 coder run   # coder Opus/high (security: token handling, Speed rule 6); no migration; about 15 files, half tests
