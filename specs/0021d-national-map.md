@@ -1,7 +1,7 @@
 ---
 id: 0021d
 title: The search map covers all of Israel and opens where the seeker is looking (else Tel Aviv-Yafo)
-status: verified
+status: in-progress
 depends_on: [0021b]
 reviewers: [code, qa, ux, perf]
 estimate: 1 coder run
