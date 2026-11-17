@@ -153,5 +153,13 @@ edits in Scope; no new e2e (CI only; never run e2e locally).
 - AC1 order made testable (listing link and remove match never coexist); toggle-closes check added.
 - Risks resolved: dialog stays in the panel (top layer, page inert while open); 0011d has no visibility AC.
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest
+Spec 0020a — chat thread declutter   (in-review, web only)
+What a user can do after this: open a chat and see the listing as the header subtitle and the first messages on the first screen; to-listing, remove match and report are one tap away behind "פעולות".
+Decisions I need from you: none.
+KPIs this slice moves: none (cosmetic).
+Acceptance targets: AC1–AC4 by unit tests (web 868 pass), `make lint` and `make i18n-check` clean; e2e edited for the five sites, CI is the gate.
+Live check (390/320/1440 via the mocked `make screens` harness, no horizontal scroll at 320 or 390; the closed panel computes `display: none`, open computes `flex`; warning contrast about 5.5:1, AA). Not exercised live: booking a tour and focus on the tour heading (TourCard unit tests unchanged and green).
+Risks: report is one tap further away (Gilad approved the sketch).
+Reviewers: ux (Sonnet/medium) — 0 blockers, 0 majors, 2 minors (alert retry hidden behind closed panel: logged in FOLLOWUPS; warning contrast: checked, fine), 3 nits.
+Links: specs/0020a-chat-thread-declutter.md

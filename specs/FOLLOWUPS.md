@@ -329,3 +329,6 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (`onKeyDown`) · Home/End/PageUp/PageDown/ArrowUp/Down do nothing when the target day falls outside today…lastDay (e.g. Home on 19 Nov when Sunday 15 Nov is past, PageDown from 25 Nov); clamp the target to the range, then step in the key's direction · spec says "stays put if none in range"; review qa minor
 - [ ] 0018f · web/src/features/tours/__tests__/MonthCalendar.test.tsx · no cases for Home/End, PageUp, ArrowUp, LTR direction · qa minor
 - [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (day styles) · disabled days (bold, grey, no border) read almost as strongly as enabled ones, today is not marked; lighter weight for disabled + a today ring; `has`/`booked` dots differ by colour only (shape/ring for colour-blind users) · ux minor/nit
+
+## 0020a
+- [ ] 0020a · web/src/features/chat/ChatThreadPage.tsx (removeFailed alert) · with the panel closed, the failed-remove alert shows but its retry button is behind "פעולות"; open the panel when `removeFailed` becomes true (AC3 would change) · review ux minor, recovery works in one tap
