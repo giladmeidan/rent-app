@@ -151,7 +151,6 @@ describe('validate', () => {
     ).toEqual({
       listing_type: 'apartment',
       area_id: valid.area_id,
-      city: 'גבעתיים',
       street: 'כצנלסון הגדול',
       rooms: 3.5,
       floor: 3,
@@ -285,10 +284,7 @@ describe('validate', () => {
     // The body the wizard sends drops the stripped characters.
     expect(
       toListingIn({ ...valid, city: '\u05d0\u3164\u05d1', street: '\u2800\u05d2' }),
-    ).toMatchObject({
-      city: '\u05d0\u05d1',
-      street: '\u05d2',
-    });
+    ).toMatchObject({ street: '\u05d2' });
   });
 
   it('ac11_form_from_listing_and_changed_fields', () => {
@@ -344,7 +340,9 @@ describe('validate', () => {
     ).toEqual({ description: null });
     expect(diff({ rooms: '4' })).toEqual({ rooms: 4 });
     // Cleaned before the compare: surrounding spaces are no change.
-    expect(diff({ city: ' \u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd ' })).toEqual({});
+    expect(diff({ street: ` ${l.street} ` })).toEqual({});
+    // The city is never sent (spec 0021a1): the server names the settlement.
+    expect(diff({ city: '\u05d7\u05d5\u05dc\u05d5\u05df' })).toEqual({});
     const other = '00000000-0000-0000-0000-00000000b2b2';
     expect(diff({ area_id: other })).toEqual({ area_id: other });
     expect(diff({ price_ils: '7500', arnona_ils: '480' })).toEqual({

@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { postListing, signUpApi } from './helpers';
+import { postListing, signUpApi, telAvivId } from './helpers';
 import { test } from './fixtures';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -30,15 +30,11 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   await signUpApi(page, 'owner');
 
   // One listing, posted through the API with the owner's session.
-  const areas = await page.request.get(API + '/areas');
-  expect(areas.ok()).toBe(true);
-  const [area] = (await areas.json()) as { id: string }[];
-  expect(area).toBeDefined();
+  const areaId = await telAvivId(page);
   const created = await page.request.post(API + '/listings', {
     data: {
       listing_type: 'apartment',
-      area_id: area?.id,
-      city: 'גבעתיים',
+      area_id: areaId,
       street,
       rooms: 3.5,
       floor: 3,

@@ -5,7 +5,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, postListing, signUpOwner } from './helpers';
+import { API, postListing, signUpOwner, TEL_AVIV } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 /** A small committed JPEG (320x200). */
@@ -29,6 +29,7 @@ test('ac7_wizard_photo', async ({ page }) => {
 
   await page.goto('/listings/new?type=apartment');
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('3');

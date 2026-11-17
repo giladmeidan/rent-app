@@ -649,6 +649,7 @@ export function ListingWizard({ listing, initialType }: Props) {
             {step === 'preview' && (
               <PreviewStep
                 body={toListingIn(current)}
+                city={areas.data?.find((area) => area.id === current.area_id)?.name_he ?? ''}
                 coverUrl={photos[0]?.url ?? null}
                 today={today}
                 // A 404 while editing unmounts the wizard (the page shows "not found").

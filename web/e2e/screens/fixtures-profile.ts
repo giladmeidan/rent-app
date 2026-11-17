@@ -16,9 +16,30 @@ export const SEEKER: UserOut = {
 };
 
 export const AREAS: AreaOut[] = [
-  { id: '00000000-0000-0000-0000-00000000a1a1', slug: 'gush_dan', name_he: 'גוש דן' },
-  { id: '00000000-0000-0000-0000-00000000a2a2', slug: 'sharon', name_he: 'השרון' },
-  { id: '00000000-0000-0000-0000-00000000a3a3', slug: 'jerusalem', name_he: 'ירושלים והסביבה' },
+  {
+    id: '00000000-0000-0000-0000-00000000a1a1',
+    slug: 's-5000',
+    name_he: 'תל אביב-יפו',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [34.7894, 32.07645],
+  },
+  {
+    id: '00000000-0000-0000-0000-00000000a2a2',
+    slug: 's-6900',
+    name_he: 'כפר סבא',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [34.90724, 32.17521],
+  },
+  {
+    id: '00000000-0000-0000-0000-00000000a3a3',
+    slug: 's-3000',
+    name_he: 'ירושלים',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [35.20494, 31.77589],
+  },
 ];
 
 const year = new Date().getUTCFullYear();

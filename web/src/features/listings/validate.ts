@@ -411,7 +411,7 @@ export function toListingIn(form: ListingForm): ListingInBody {
     arnona_ils: optionalInt(form.arnona_ils),
     vaad_ils: optionalInt(form.vaad_ils),
     description: description === '' ? null : description,
-    city: cleanText(form.city),
+    // No `city`: the server names the chosen settlement (spec 0021a1).
     street: cleanText(form.street),
     area_id: form.area_id,
     // Canonical order, whatever order they were checked in.

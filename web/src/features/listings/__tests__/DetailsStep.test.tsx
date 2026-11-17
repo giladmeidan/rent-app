@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import { currentPath, json, mockApi, testQueryClient } from '../../auth/__tests__/harness';
+import type { AreaOut } from '../../../api/client';
 import { gushDan, listing } from './fixtures';
 import {
   areasLoaded,
@@ -25,7 +26,14 @@ afterEach(() => {
 });
 
 const f = he.listings.fields;
-const telAviv = { id: '00000000-0000-0000-0000-00000000a2a2', slug: 'tlv', name_he: 'תל אביב' };
+const telAviv: AreaOut = {
+  id: '00000000-0000-0000-0000-00000000a2a2',
+  slug: 's-6300',
+  name_he: 'גבעתיים',
+  kind: 'settlement',
+  parent_id: null,
+  centre: [34.80982, 32.07152],
+};
 
 describe('DetailsStep', () => {
   it('ac2_groups_keep_field_order', async () => {

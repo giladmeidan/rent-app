@@ -35,7 +35,14 @@ const MINE = 'GET /me/listings';
 const PEOPLE = `GET /listings/${ROOM.id}/people`;
 const likeRoute = (method: 'PUT' | 'DELETE', p: { id: string }) =>
   `${method} /listings/${ROOM.id}/people/${p.id}/like`;
-const GIVATAYIM = { id: '00000000-0000-0000-0000-00000000a2a2', slug: 'g', name_he: 'גבעתיים' };
+const GIVATAYIM = {
+  id: '00000000-0000-0000-0000-00000000a2a2',
+  slug: 's-6300',
+  name_he: 'גבעתיים',
+  kind: 'settlement' as const,
+  parent_id: null,
+  centre: [34.80982, 32.07152],
+};
 
 const routes = (
   <Routes>
@@ -114,7 +121,7 @@ describe('PeoplePage', () => {
 
     const one = within(cardOf('P1'));
     expect(one.getByText('אישה · גיל 27')).toBeVisible();
-    expect(one.getByText('אזורים: גוש דן וגבעתיים')).toBeVisible();
+    expect(one.getByText('אזורים: תל אביב-יפו וגבעתיים')).toBeVisible();
     expect(
       one.getByText(
         `${he.people.moveIn.replace('{{date}}', formatDate(inDays(30)))} ${he.applicants.flexible}`,

@@ -15,6 +15,8 @@ export type PublishError =
 
 type Props = {
   body: ListingInBody;
+  /** The chosen settlement's name: the `city` the server will store (spec 0021a1). */
+  city: string;
   today: string;
   /** The first photo's address (spec 0010e), shown on the card as "my listings" will. */
   coverUrl: string | null;
@@ -32,6 +34,7 @@ const alertText = 'text-body-sm font-medium text-danger';
  * heading and hint are the wizard's. */
 export function PreviewStep({
   body,
+  city,
   today,
   coverUrl,
   error,
@@ -43,7 +46,7 @@ export function PreviewStep({
   const me = useMe();
   return (
     <div className="flex flex-col gap-4">
-      <ListingCard listing={body} today={today} coverUrl={coverUrl} />
+      <ListingCard listing={{ ...body, city }} today={today} coverUrl={coverUrl} />
       {body.listing_type === 'room' && <RoomPreview body={body} />}
       <OwnerPreferences listing={body} />
       {error === 'capReached' && (

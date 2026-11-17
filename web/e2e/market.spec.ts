@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { postListing, signUp } from './helpers';
+import { postListing, signUp, TEL_AVIV } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 // Spec 0010a AC14: the two sides. One owner sign-up for the whole test (the OTP budget is per
@@ -115,6 +115,7 @@ test('ac14_two_sides', async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('button', { name: he.common.back })).toHaveCount(0);
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill(newRoomStreet);
   await page.getByLabel(f.rooms).selectOption('4');
@@ -182,6 +183,7 @@ test('ac18_role_free_market', async ({ page, browser }) => {
     page.getByText(he.listings.stepOf.replace('{{n}}', '1').replace('{{total}}', '4')),
   ).toBeVisible();
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('4');
