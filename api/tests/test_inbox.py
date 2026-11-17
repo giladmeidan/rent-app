@@ -25,6 +25,7 @@ from app.schemas.listing import ListingOut
 from tests.conftest import (
     NO_LOOKING,
     Outbox,
+    insert_neighbourhood,
     make_application,
     make_listing,
     make_owner,
@@ -1550,3 +1551,57 @@ def test_ac6_inbox_shelter_needed(
     )
     patched = _ok(response)
     assert (patched["match"], patched["profile"]) == (mamad["match"], mamad["profile"])
+
+
+# --- 0021a2: the owner's area criterion uses the neighbourhood as applied to -------------------
+
+
+def test_ac4_neighbourhood_snapshot(
+    client: TestClient,
+    outbox: Outbox,
+    owner: TestClient,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+) -> None:
+    hood_a = insert_neighbourhood(db_engine, gush_dan, 1, ["דיזנגוף"])
+    hood_b = insert_neighbourhood(db_engine, gush_dan, 2, ["בלפור"])
+    listing = _l0(db_engine, _user_id(owner), gush_dan, street="דיזנגוף", neighbourhood_id=hood_a)
+    seeker = signup(client, outbox, "s1@example.com", "seeker")
+    make_profile(db_engine, _user_id(seeker), hood_a)  # P0, preferring the neighbourhood only
+    s1 = _apply(seeker, listing)
+    snapshot = "SELECT neighbourhood_id_at_apply FROM applications WHERE id = :a"
+    assert _scalar(db_engine, snapshot, a=s1) == hood_a
+    full = _match(100, TOP3, None)
+    out = _match(59, ["budget", "move_in", "household"], "area")
+    assert _owner_match(owner, listing, s1) == full
+
+    # The street moves the listing to another neighbourhood: the seeker's view is live, the
+    # owner's is not.
+    _edit_listing(owner, listing, {"street": "בלפור 3"})
+    assert _scalar(db_engine, "SELECT neighbourhood_id FROM listings WHERE id = :l", l=listing) == (
+        hood_b
+    )
+    assert _ok(seeker.get(f"/listings/{listing}"))["match"] == out
+    assert _owner_match(owner, listing, s1) == full
+    assert _patched_match(owner, listing, s1, "shortlisted") == full
+
+    # A reopen snapshots the listing again.
+    withdrawn = seeker.post(f"/me/applications/{s1}/withdraw")
+    assert withdrawn.status_code == 200, withdrawn.text
+    assert _apply(seeker, listing) == s1
+    assert _scalar(db_engine, snapshot, a=s1) == hood_b
+    assert _owner_match(owner, listing, s1) == out
+
+    # An application from before 0021a2 (NULL snapshot) is scored on its city only.
+    _edit_listing(owner, listing, {"street": "דיזנגוף"})
+    for email, area, expected in (
+        ("s2@example.com", hood_a, out),
+        ("s3@example.com", gush_dan, full),
+    ):
+        old = make_application(
+            db_engine,
+            listing,
+            _profiled_seeker(db_engine, email, area),
+            neighbourhood_id_at_apply=None,
+        )
+        assert _owner_match(owner, listing, str(old)) == expected

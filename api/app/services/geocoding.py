@@ -22,10 +22,11 @@ import time
 import uuid
 from collections.abc import Callable
 from functools import lru_cache
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
-from sqlalchemy import case, cast, func, select, update
+from geoalchemy2 import Geography
+from sqlalchemy import ColumnElement, ScalarSelect, case, cast, func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -42,6 +43,8 @@ _JITTER_STEP = 0.0001
 _JITTER_STEPS = round(JITTER_DEG / _JITTER_STEP)
 
 SWEEP_BATCH = 20
+# A located listing with no neighbourhood takes the nearest active centre this close (spec 0021a2).
+NEIGHBOURHOOD_RADIUS_M = 1500
 SWEEP_BUDGET_S = 6.0
 MAX_ATTEMPTS = 5
 LOCK_TTL_S = 60
@@ -213,6 +216,26 @@ def _cached(raw: bytes | None) -> Point | None | object:
         return _MISS
 
 
+def _nearest_neighbourhood(
+    settlement_id: uuid.UUID, point: ColumnElement[Any]
+) -> ScalarSelect[uuid.UUID]:
+    """The active neighbourhood of `settlement_id` whose centre is nearest `point` (geography)
+    within `NEIGHBOURHOOD_RADIUS_M`; NULL when none is (spec 0021a2)."""
+    centre = cast(Area.centre, Geography)
+    return (
+        select(Area.id)
+        .where(
+            Area.kind == "neighbourhood",
+            Area.parent_id == settlement_id,
+            Area.is_active.is_(True),
+            func.ST_DWithin(centre, point, NEIGHBOURHOOD_RADIUS_M),
+        )
+        .order_by(func.ST_Distance(centre, point), Area.id)
+        .limit(1)
+        .scalar_subquery()
+    )
+
+
 def geocode_pending(
     db: Session,
     redis: RedisClient,
@@ -325,13 +348,14 @@ def geocode_pending(
                 counts["not_found"] += int(written is not None)
                 continue
             lng, lat = approximate_point(listing_id, point, secret)
+            stored = cast(func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326), Listing.location.type)
             written = db.execute(
                 guarded.values(
-                    location=cast(
-                        func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326),
-                        Listing.location.type,
-                    ),
+                    location=stored,
                     geocode_status="ok",
+                    neighbourhood_id=func.coalesce(
+                        Listing.neighbourhood_id, _nearest_neighbourhood(area_id, stored)
+                    ),
                 ).returning(Listing.id),
                 execution_options={"synchronize_session": False},
             ).scalar_one_or_none()

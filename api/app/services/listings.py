@@ -28,6 +28,10 @@ Price signals (spec 0014b): every price a listing has is a `listing_price_change
 the listing's own transaction (on create, and on a PATCH that changes `price_ils`). The closure
 answer (`set_closure`) is set only while the listing is not live and does not move `updated_at`;
 a resume (a paused listing PATCHed to `active`) or a renewal clears it.
+
+Neighbourhood (spec 0021a2): create, and every PATCH that sends `street` or `area_id`, sets
+`neighbourhood_id` from the street (`areas.neighbourhood_for_street`); the geocoding sweep fills it
+from the point when the street could not tell.
 """
 
 import datetime as dt
@@ -52,6 +56,7 @@ from app.models import (
 )
 from app.schemas.listing import ClosureIn, ListingIn, ListingPatch
 from app.services import tours
+from app.services.areas import neighbourhood_for_street
 
 LISTING_TTL_DAYS = 90
 # Policy (PRODUCT.md "Trust (MVP)"): a listing renews from this many days before `expires_at`.
@@ -141,6 +146,7 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
             .values(
                 **data.model_dump(),
                 city=city,
+                neighbourhood_id=neighbourhood_for_street(db, data.area_id, data.street),
                 owner_id=owner.id,
                 expires_at=func.now() + dt.timedelta(days=LISTING_TTL_DAYS),
             )
@@ -239,6 +245,8 @@ def update_listing(
         }
         if "area_id" in patch.model_fields_set:
             values["city"] = _check_area(db, data.area_id)
+        if patch.model_fields_set & {"street", "area_id"}:
+            values["neighbourhood_id"] = neighbourhood_for_street(db, data.area_id, data.street)
         if patch.status == "active" and listing.status == "paused":
             # The paused listing is not live, so the count is of the others only.
             # shortcut: resume locks listing then user, DELETE /me user then listing (spec 0013c);

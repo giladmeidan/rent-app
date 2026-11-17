@@ -142,6 +142,7 @@ def match_columns(
     *,
     price: QueryableAttribute[int] | ColumnElement[int] | None = None,
     area_id: QueryableAttribute[uuid.UUID] | ColumnElement[uuid.UUID] | None = None,
+    neighbourhood_id: QueryableAttribute[uuid.UUID | None] | ColumnElement[uuid.UUID] | None = None,
     listing_type: QueryableAttribute[str] | ColumnElement[str] | None = None,
 ) -> list[Label[Any]]:
     """The labelled match columns for a statement that selects `listing` joined to one `profile`
@@ -152,9 +153,19 @@ def match_columns(
     budget and area criteria (default: the listing's live columns), and `listing_type` replaces
     `listing.listing_type` as the type that decides whether lifestyle is scored (only on
     `'room'`). The owner's inbox passes the application's snapshot at apply time (spec 0006c,
-    security B1; spec 0007g); the seeker's views never do."""
+    security B1; spec 0007g); the seeker's views never do.
+
+    Area (spec 0021a2): a profile's `area_ids` hold cities and neighbourhoods; the listing is in
+    area when its city or its known neighbourhood is one of them, so a neighbourhood preference
+    never matches a listing with no `neighbourhood_id`. `area_id` and `neighbourhood_id` replace
+    the live columns as a pair (else `TypeError`): a snapshot city is never scored next to a live
+    neighbourhood. A NULL snapshot neighbourhood (an application from before 0021a2) scores on
+    the city only."""
+    if (area_id is None) != (neighbourhood_id is None):
+        raise TypeError("match_columns: pass area_id and neighbourhood_id together")
     listing_price = listing.price_ils if price is None else price
     listing_area = listing.area_id if area_id is None else area_id
+    listing_hood = listing.neighbourhood_id if neighbourhood_id is None else neighbourhood_id
     room_type = listing.listing_type if listing_type is None else listing_type
     today = func.current_date(type_=Date)
     gap = func.abs(
@@ -167,7 +178,10 @@ def match_columns(
         gap - _days_if(listing.entry_flexible) - _days_if(profile.move_in_flexible),
         type_=Integer,
     )
-    in_area = listing_area == any_(profile.area_ids)
+    in_area = or_(
+        listing_area == any_(profile.area_ids),
+        func.coalesce(listing_hood == any_(profile.area_ids), False),
+    )
     m: dict[Criterion, ColumnElement[Decimal]] = {
         "budget": _ones_when(listing_price <= profile.budget_max_ils),
         "move_in": func.greatest(

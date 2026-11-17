@@ -36,7 +36,15 @@ from app.services.geocoding import (
     get_geocoder,
     street_query,
 )
-from tests.conftest import Outbox, insert_settlement, make_listing, make_owner, set_location, signup
+from tests.conftest import (
+    Outbox,
+    insert_neighbourhood,
+    insert_settlement,
+    make_listing,
+    make_owner,
+    set_location,
+    signup,
+)
 
 KATZ = "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df"  # make_listing's default street
 GIV = "\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd"  # make_listing's default city
@@ -571,3 +579,41 @@ def test_ac8_approximate_point_street_query_and_fake_geocoder() -> None:
 def test_nf1_tests_cannot_reach_the_network() -> None:
     with pytest.raises(RuntimeError, match="network disabled in tests"):
         httpx.get("https://nominatim.openstreetmap.org/status")
+
+
+# --- 0021a2: a located listing with no neighbourhood takes the nearest centre ------------------
+
+FAR: Point = (34.72, 32.02)
+
+
+@pytest.mark.usefixtures("geo_clean")
+def test_ac2_neighbourhood_from_point(
+    gush_dan: uuid.UUID, db_engine: Engine, owner_id: uuid.UUID
+) -> None:
+    lng, lat = POINT
+    # 1 degree of latitude is ~111 km; the stored point is POINT moved by at most 0.002 per axis.
+    near = insert_neighbourhood(db_engine, gush_dan, 1, [], lng=lng, lat=lat + 0.005)  # <~0.8 km
+    mid = insert_neighbourhood(db_engine, gush_dan, 2, [], lng=lng, lat=lat + 0.010)  # >~0.9 km
+    # Nearer than both, but another settlement's, or inactive: never chosen.
+    givatayim = insert_settlement(db_engine, 6300, GIV)
+    insert_neighbourhood(db_engine, givatayim, 3, [], lng=lng, lat=lat)
+    insert_neighbourhood(db_engine, gush_dan, 4, [], lng=lng + 0.001, lat=lat, active=False)
+    insert_neighbourhood(db_engine, gush_dan, 5, [], lng=FAR[0], lat=FAR[1], active=False)
+    # The only active one near FAR, >~1.55 km from its stored point: beyond the radius.
+    insert_neighbourhood(db_engine, gush_dan, 6, [], lng=FAR[0], lat=FAR[1] + 0.016)
+    placed = make_listing(db_engine, owner_id, gush_dan, street=KATZ)
+    far = make_listing(db_engine, owner_id, gush_dan, street=WEIZ)
+    kept = make_listing(db_engine, owner_id, gush_dan, street=BIALIK, neighbourhood_id=mid)
+    stub = Stub(FakeClock(), answers={WEIZ: FAR})
+
+    assert _sweep(db_engine, stub) == _counts(located=3)
+
+    def hood(listing_id: uuid.UUID) -> Any:
+        with db_engine.connect() as conn:
+            return conn.execute(
+                text("SELECT neighbourhood_id FROM listings WHERE id = :id"), {"id": listing_id}
+            ).scalar_one()
+
+    assert hood(placed) == near
+    assert hood(far) is None
+    assert hood(kept) == mid

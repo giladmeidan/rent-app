@@ -21,10 +21,12 @@ from app.schemas.listing import ListingIn
 from app.schemas.profile import LIFESTYLE_KEYS
 from app.services import chat_events
 from app.services import listings as listings_service
+from app.services.areas import neighbourhood_for_street
 from tests import test_tours as tours_tests
 from tests.conftest import (
     TEL_AVIV_AREA,
     Outbox,
+    insert_neighbourhood,
     insert_settlement,
     make_listing,
     make_seeker,
@@ -1216,3 +1218,51 @@ def test_ac10_pause_cancels_tours(
     # Pausing again (already paused) cancels nothing more.
     assert owner.patch(f"/listings/{listing}", json={"status": "paused"}).status_code == 200
     assert len(tours_tests.tour_lines(owner, application)) == 1
+
+
+# --- 0021a2: a listing sits in its neighbourhood when the street tells -----------------------
+
+
+def test_ac1_neighbourhood_from_street(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    hood_a = insert_neighbourhood(db_engine, gush_dan, 1, ["דיזנגוף", "בן-יהודה", "רחוב הירקון"])
+    hood_b = insert_neighbourhood(db_engine, gush_dan, 2, ["בלפור", "בן יהודה"])
+    insert_neighbourhood(db_engine, gush_dan, 3, ["אלנבי"], active=False)
+    givatayim = insert_settlement(db_engine, 6300, "גבעתיים")
+    hood_g = insert_neighbourhood(db_engine, givatayim, 4, ["כצנלסון"])
+    with Session(db_engine) as db:
+
+        def hood(settlement: uuid.UUID, street: str) -> uuid.UUID | None:
+            return neighbourhood_for_street(db, settlement, street)
+
+        assert hood(gush_dan, "דיזנגוף") == hood_a
+        assert hood(gush_dan, "דיזנגוף 12") == hood_a  # the house number is dropped
+        assert hood(gush_dan, "רח' דיזנגוף 12א") == hood_a  # quotes, prefix, number
+        assert hood(gush_dan, "רחוב הירקון") == hood_a  # the catalogue's own spelling
+        assert hood(gush_dan, "בן יהודה 3") is None  # in two neighbourhoods: city level
+        assert hood(gush_dan, "אלנבי 40") is None  # inactive neighbourhood
+        assert hood(gush_dan, "שדרות רוטשילד") is None  # in none
+        assert hood(gush_dan, "כצנלסון") is None  # another settlement's neighbourhood
+        assert hood(givatayim, "כצנלסון 4") == hood_g
+
+    def hood_of(listing_id: str) -> Any:
+        return _row(db_engine, listing_id)["neighbourhood_id"]
+
+    created = _create(owner, gush_dan, street="דיזנגוף 12")
+    assert "neighbourhood_id" not in created  # server-side only
+    assert hood_of(created["id"]) == hood_a
+
+    def patched(body: dict[str, Any]) -> Any:
+        response = _patch(owner, created["id"], body)
+        assert response.status_code == 200, response.text
+        assert "neighbourhood_id" not in response.json()
+        return hood_of(created["id"])
+
+    assert patched({"street": "בלפור 7"}) == hood_b
+    assert patched({"price_ils": 7000}) == hood_b  # neither street nor area: kept
+    assert patched({"street": "בן יהודה"}) is None
+    assert patched({"street": "בלפור"}) == hood_b
+    assert patched({"area_id": str(givatayim)}) is None  # בלפור is not in Givatayim
+    assert patched({"street": "כצנלסון 4"}) == hood_g
+    assert patched({"area_id": str(gush_dan), "street": "אלנבי"}) is None

@@ -19,6 +19,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models import Area
+from app.services.geocoding import street_query
+from app.services.rent_estimate import _STREET_PREFIXES, normalise_place
 from app.services.rent_reference import RentFetcher, parse_rent_file
 
 log = logging.getLogger(__name__)
@@ -69,6 +71,32 @@ def list_active_areas(session: Session) -> Sequence[Any]:
         .order_by(Area.name_he)
     )
     return session.execute(stmt).all()
+
+
+def neighbourhood_for_street(
+    db: Session, settlement_id: uuid.UUID, street: str
+) -> uuid.UUID | None:
+    """The one active neighbourhood of `settlement_id` whose `streets` hold `street` (its house
+    number dropped, `street_query`; `normalise_place` on both sides, the `רחוב ` / `רח ` prefix
+    also tried), else None (unlisted, or in several: city level). Spec 0021a2; the rule of
+    `rent_estimate._neighbourhood`."""
+    form = normalise_place(street_query(street))
+    forms = {form}
+    for prefix in _STREET_PREFIXES:
+        if form.startswith(prefix):
+            forms.add(form.removeprefix(prefix))
+            break
+    rows = db.execute(
+        select(Area.id, Area.streets).where(
+            Area.kind == "neighbourhood",
+            Area.parent_id == settlement_id,
+            Area.is_active.is_(True),
+        )
+    ).all()
+    matches = [
+        area_id for area_id, streets in rows if forms & {normalise_place(s) for s in streets}
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _itm(x: float, y: float) -> ColumnElement[Any]:

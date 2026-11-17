@@ -160,8 +160,9 @@ def _upsert(
     application (the lister had liked, spec 0010l) is `shortlisted`, `source = 'like'`, its price
     snapshot the pair's frozen price, and its conversation is inserted here; any other is
     `submitted`, `source = 'apply'`, the live price. Both snapshot the listing's area (0006c,
-    security B1) and its type (0007b). Two to four statements; the caller holds the listing's
-    `FOR KEY SHARE` lock, so all run after any concurrent join committed."""
+    security B1) and neighbourhood (0021a2) and its type (0007b). Two to four statements; the
+    caller holds the listing's `FOR KEY SHARE` lock, so all run after any concurrent join
+    committed."""
     # Imported here: `services/people.py` imports this module. The listing's lock (the caller's),
     # then the (listing, seeker) key and the pair's (`consume_invite`), then the application row
     # (the like's order; see the module docstring).
@@ -181,6 +182,7 @@ def _upsert(
         "message": message,
         "price_ils_at_apply": listing.price_ils if invited_price is None else invited_price,
         "area_id_at_apply": listing.area_id,
+        "neighbourhood_id_at_apply": listing.neighbourhood_id,
         "listing_type_at_apply": listing.listing_type,
     }
     columns = Application.__table__.c
@@ -198,6 +200,7 @@ def _upsert(
             "message": stmt.excluded.message,
             "price_ils_at_apply": stmt.excluded.price_ils_at_apply,
             "area_id_at_apply": stmt.excluded.area_id_at_apply,
+            "neighbourhood_id_at_apply": stmt.excluded.neighbourhood_id_at_apply,
             "listing_type_at_apply": stmt.excluded.listing_type_at_apply,
             "created_at": func.now(),
             "updated_at": func.now(),
@@ -435,6 +438,7 @@ def _applicants(listing_id: uuid.UUID) -> tuple[Select[Any], Label[Any]]:
         SeekerProfile,
         price=Application.price_ils_at_apply,
         area_id=Application.area_id_at_apply,
+        neighbourhood_id=Application.neighbourhood_id_at_apply,
         listing_type=Application.listing_type_at_apply,
     )
     score = next(column for column in columns if column.name == "m_score")
