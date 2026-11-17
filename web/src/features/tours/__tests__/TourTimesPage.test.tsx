@@ -1,17 +1,22 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import { deferred, empty, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
 import { cardTitle } from '../../listings/cardTitle';
-import { addDays, todayInIsrael } from '../../listings/format';
 import { listing } from '../../listings/__tests__/fixtures';
 import type { TourWindowOut, TourWindowsOut } from '../api';
 import { TourTimesPage } from '../TourTimesPage';
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-11-17T10:00:00Z');
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -25,7 +30,12 @@ const createRoute = (l: { id: string }) => `POST /listings/${l.id}/tour-windows`
 const deleteRoute = (w: { id: string }) => `DELETE /tour-windows/${w.id}`;
 const t = he.tours.times;
 
-const TOMORROW = addDays(todayInIsrael(), 1);
+const TOMORROW = '2026-11-18';
+/** Picks a day of the shown month (the buttons end in their digits). */
+const dayButton = (n: number) =>
+  screen
+    .getAllByRole('button')
+    .find((b) => b.hasAttribute('aria-pressed') && b.textContent === String(n)) as HTMLElement;
 // 12:00Z is 14:00 or 15:00 in Israel: always the same Israeli day as the UTC one.
 const at = (time: string) => `${TOMORROW}T${time}:00Z`;
 let n = 0;
@@ -69,12 +79,11 @@ function renderPage(
 }
 
 /** The page with its form loaded. */
-const heading = () => screen.findByLabelText(t.date);
+const heading = () => screen.findByLabelText(t.start);
 const alertText = async (text: string) =>
   expect(await screen.findByRole('alert')).toHaveTextContent(text);
 
-function fill(date: string, start: string, end: string) {
-  fireEvent.change(screen.getByLabelText(t.date), { target: { value: date } });
+function fill(start: string, end: string) {
   fireEvent.change(screen.getByLabelText(t.start), { target: { value: start } });
   fireEvent.change(screen.getByLabelText(t.end), { target: { value: end } });
 }
@@ -133,7 +142,8 @@ describe('TourTimesPage', () => {
       [createRoute(APARTMENT)]: [json(created, 201)],
     });
     await heading();
-    fill(TOMORROW, '14:00', '15:00');
+    fireEvent.click(dayButton(18));
+    fill('14:00', '15:00');
     fireEvent.change(screen.getByLabelText(t.slot), { target: { value: '20' } });
     submit();
     await waitFor(() => {
@@ -150,7 +160,6 @@ describe('TourTimesPage', () => {
     await waitFor(() => {
       expect(card).toHaveFocus();
     });
-    expect(screen.getByLabelText(t.date)).toHaveValue('');
     expect(screen.getByRole('heading', { level: 2, name: he.tours.day.tomorrow })).toBeVisible();
   });
 
@@ -158,9 +167,13 @@ describe('TourTimesPage', () => {
     const { api } = renderPage();
     await heading();
     expect(screen.getByLabelText(t.slot)).toHaveValue('30');
-    expect(screen.getByLabelText(t.date)).toHaveAttribute('min', todayInIsrael());
-    expect(screen.getByLabelText(t.date)).toHaveAttribute('max', addDays(todayInIsrael(), 30));
-    fill(TOMORROW, '15:00', '15:00');
+    expect(dayButton(16)).toBeDisabled();
+    expect(dayButton(17)).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: he.tours.calendar.nextMonth }));
+    expect(dayButton(17)).toBeEnabled();
+    expect(dayButton(18)).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: he.tours.calendar.prevMonth }));
+    fill('15:00', '15:00');
     submit();
     await alertText(t.errors.range);
     expect(api.calls(createRoute(APARTMENT))).toHaveLength(0);
@@ -180,7 +193,7 @@ describe('TourTimesPage', () => {
         [createRoute(APARTMENT)]: [json({ detail }, status)],
       });
       await heading();
-      fill(TOMORROW, '14:00', '15:00');
+      fill('14:00', '15:00');
       submit();
       await alertText(text);
       view.unmount();
@@ -251,11 +264,42 @@ describe('TourTimesPage', () => {
     expect(api.calls(deleteRoute(w))).toHaveLength(2);
   });
 
+  it('ac4_calendar_selects_day_and_lists_its_windows', async () => {
+    const later = win({ starts_at: '2026-11-25T12:00:00Z', ends_at: '2026-11-25T13:00:00Z' });
+    renderPage(APARTMENT, [json(out([later, win()]))]);
+    // Opens on the first day with a window (tomorrow): one window, 25 Nov marked.
+    expect(
+      await screen.findByRole('heading', { level: 2, name: he.tours.day.tomorrow }),
+    ).toBeVisible();
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
+    expect(dayButton(18)).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(dayButton(25));
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 2 })).not.toHaveTextContent(he.tours.day.tomorrow);
+    fireEvent.click(dayButton(20));
+    expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
+    expect(screen.getByText(t.dayEmpty)).toBeVisible();
+  });
+
+  it('ac5_add_uses_selected_day', async () => {
+    const { api } = renderPage(APARTMENT, [json(out([])), json(out([win()]))], {
+      [createRoute(APARTMENT)]: [json(win(), 201)],
+    });
+    await heading();
+    fireEvent.click(dayButton(20));
+    fill('14:00', '15:00');
+    submit();
+    await waitFor(() => {
+      expect(api.calls(createRoute(APARTMENT))).toHaveLength(1);
+    });
+    expect(api.calls(createRoute(APARTMENT))[0]?.body).toMatchObject({ date: '2026-11-20' });
+  });
+
   it('ac1_listing_not_live_note_without_form_but_windows_stay', async () => {
     renderPage(APARTMENT, [json(out([win()], false))]);
     expect(await screen.findByText(t.notLive)).toBeVisible();
     expect(screen.queryByRole('button', { name: t.add })).toBeNull();
-    expect(screen.queryByLabelText(t.date)).toBeNull();
+    expect(screen.queryByLabelText(t.start)).toBeNull();
     expect(screen.getByRole('button', { name: t.delete })).toBeVisible();
   });
 });
