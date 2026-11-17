@@ -1,7 +1,7 @@
 # Project Handoff
 
 ## Project Overview
-homie / הומי: a Hebrew-first, RTL rental marketplace for Gush Dan — apartments (owners ↔ seekers) and the
+homie / הומי: a Hebrew-first, RTL rental marketplace for all of Israel (Gush Dan until Slice 21) — apartments (owners ↔ seekers) and the
 roommate market "שוק השותפים". FastAPI + SQLAlchemy 2.0 + PostgreSQL/PostGIS + Redis + arq worker; React 18 +
 TypeScript + Vite + Tailwind + TanStack Query + i18next + react-router 7. Repo: https://github.com/giladmeidan/rent-app
 (**public** since 2026-11-16).
@@ -13,6 +13,7 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
+**Slice 21 (national) done 2026-11-17:** all of Israel at once (decisions in PRODUCT.md "Launch area"). `0021a1` area catalogue (PR #132: 1,188 CBS settlements without Judea and Samaria + 701 big-city neighbourhoods, migration `0031`), `0021a2` listing neighbourhoods + two-level area match (PR #135, migration `0032`), `0021b` city picker + profile chips + copy (PR #133), `0021c` national rent data (PR #134), `0021d` Israel-wide map, default view Tel Aviv (PR #136); all archived with digests. Owed before launch (FOLLOWUPS): `make import-areas` after `make migrate` on the first production deploy (`api/data/settlements.csv` ships in the image), the first national rent import (4–6 h) then `make rent-backtest`, and a check that nadlan.gov.il answers from the production region (reportedly Israeli IPs only). The a11y `ac5_public_pages_pass_axe` e2e flaked on #132, #135 and #134: worth a real fix.
 **Waitlist (2026-11-16):** `0017` (PR #116) and `0017b` Turnstile (PR #120) merged and archived; live on `https://homie-waitlist.pages.dev` (own Pages project + D1 `homie-waitlist`, deployed by hand with `make deploy-waitlist CONTACT_EMAIL=… TURNSTILE_SITE_KEY=…`, the secret via `make waitlist-secret`; README in `waitlist/`). `specs/0017c-waitlist-hardening.md` is `draft` and **not queued** (Gilad: no build yet; Q0 decides whether email confirmation is built).
 Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a`/`0015b`/`0013h` done.
 **Slice 19 (observability) done 2026-11-17:** `0019a` Sentry (PR #128) and `0019b` PostHog (PR #130) merged and archived (plan in `specs/archive/OBSERVABILITY-PLAN.md`, decisions in PRODUCT.md "Observability"). Both are inert until production sets the keys; owed at `0013a` deploy: Sentry DSNs + source-map token, PostHog keys, and in the PostHog project turn on "Cookieless server hash mode" and "Discard client IP data"; check the first `posthog_forget_job` run gets a 202 (bulk-delete body untried). After merging, the main checkout needs `make dev` (new packages).

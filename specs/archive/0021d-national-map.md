@@ -1,7 +1,7 @@
 ---
 id: 0021d
 title: The search map covers all of Israel and opens where the seeker is looking (else Tel Aviv-Yafo)
-status: in-progress
+status: done
 depends_on: [0021b]
 reviewers: [code, qa, ux, perf]
 estimate: 1 coder run
@@ -104,4 +104,11 @@ Recommendations from the 0021b verifier taken by the orchestrator (mechanical): 
   `match/__tests__/logout.test.tsx` (transitive; untouched unless they assert initial bounds).
 - `LocateButton`: `SearchMap.tsx` L380; `LocateButton.test.tsx`.
 
-## Digest (filled by orchestrator after verification)
+## Digest (merged 2026-11-17, PR #136, merge 3852599)
+Spec 0021d — the search map covers Israel and opens where the seeker looks   PR #136, merged 3852599
+Shipped: map bounds are Israel (min zoom 6); "הצגת כל הארץ" fits the country; the locate button refuses positions outside Israel; with no URL position the map opens on the seeker's first preferred area (z13 settlement, z15 neighbourhood), else Tel Aviv-Yafo z13 (Gilad 2026-11-17); the place box searches the national catalogue (`places.ts` deleted).
+Demo: visitor opens /search?view=map → Tel Aviv; a seeker with Haifa first → Haifa; type "חיפה" or "פלורנטין" + Enter in the place box → the map flies there.
+Tests: +~10 unit/component, +1 e2e (a Haifa listing after a place jump).   CI: green on 5a45c3f, no flaky retries.
+Findings: 0 blockers, 1 major fixed (an e2e relied on the dropped auto-fit), 8 minors/nits fixed, 3 to FOLLOWUPS (gzip `/areas` in production, `retry: false` on the default-view queries, owners fetch /me/profile).
+Changed in PRODUCT.md: none. Accepted: a visitor sees the default view once `/me` answers, not before.
+Not verified: on a real phone. NF1: whole-country search p95 22–24 ms (seed + 2,000 listings).

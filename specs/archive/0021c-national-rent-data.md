@@ -1,7 +1,7 @@
 ---
 id: 0021c
 title: A lister anywhere in Israel sees the rent estimate at the price step, not only in Gush Dan
-status: in-review
+status: done
 depends_on: [0021a1]
 reviewers: [code, qa]   # qa: GET /rent-estimate answers for new cities (API behaviour). No security: parsing, fetcher hardening and config are unchanged (0014a); the only new input is the committed CSV
 estimate: 1 coder run   # coder Opus/high (data import; Speed rule 6)
@@ -198,4 +198,11 @@ Run on 2026-11-17 against `main`'s graph (`graphify affected`); the graph has no
   `test_ac13_worker_sweeps_every_10_seconds` picks its job by coroutine: untouched.
 - `_neighbourhood`, `figure_keys`, `window`, the response schema: not changed.
 
-## Digest (filled by orchestrator after verification)
+## Digest (merged 2026-11-17, PR #134, merge 5da35d1)
+Spec 0021c — rent estimate for every settlement in the catalogue   PR #134, merged 5da35d1
+Shipped: the rent import covers every active catalogue settlement (was 19 Gush Dan codes), counts 404s as `missing`, resumes by source version, waits 5 s between nadlan requests (robots.txt Crawl-delay) with an 8 h worker timeout; 1–2 room districts come from `settlements.csv`; `resolve_city` tries the catalogue name, then text, then 5 new aliases (ב״ש, י-ם, י״ם, כ״ס, ב״ב).
+Demo: `RENT_REFERENCE=nadlan make rent-import` (4–6 h first run) → new listing in באר שבע, 3 rooms → the price hint shows a range.
+Tests: API suite green locally.   CI: green on its main-merged head (a11y ac5 flaked once again).
+Findings: 0 blockers, 0 majors; 4 minors fixed; 3 nits left.
+Changed in PRODUCT.md: none.
+Not verified: a live national import and the backtest re-run (FOLLOWUPS); whether nadlan answers from the production region. NF1: p95 16.7 ms (catalogue name), 34.9 ms (alias); up to 360 ms right after a bulk insert until autovacuum analyses. Note: `normalise_place` / `CITY_ALIASES` stayed in `rent_estimate.py` (0021a1 did not move them).
