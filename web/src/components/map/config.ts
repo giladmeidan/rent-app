@@ -11,20 +11,25 @@ export type Bbox = [west: number, south: number, east: number, north: number];
  */
 export const MAP_STYLE_URL: string = import.meta.env.VITE_MAP_STYLE_URL || '/map/osm-raster.json';
 
-// shortcut: one launch area, read the area's box from the API when a second area is added.
-/** Gush Dan, the same box as `api/scripts/seed.py`'s `GUSH_DAN_WKT`. */
-export const GUSH_DAN_BOUNDS: Bbox = [34.74, 31.95, 34.95, 32.17];
+/** Israel (spec 0021d): the search map's whole-country box. */
+export const ISRAEL_BOUNDS: Bbox = [34.2, 29.45, 35.9, 33.35];
 
-/** Where a map centre read from the URL may lie: `GUSH_DAN_BOUNDS` widened by 0.5 deg on each side
+/** Where a map centre read from the URL may lie: `ISRAEL_BOUNDS` widened by 0.5 deg on each side
  * (spec 0009w), so a hand-edited link never flies the map to another country. */
-export const MAP_POSITION_BOUNDS: Bbox = [34.24, 31.45, 35.45, 32.67];
+export const MAP_POSITION_BOUNDS: Bbox = [33.7, 28.95, 36.4, 33.85];
+
+/** Where the search map opens without a URL position or a preferred area: Tel Aviv-Yafo. */
+export const DEFAULT_VIEW: { center: [lng: number, lat: number]; zoom: number } = {
+  center: [34.7818, 32.0853],
+  zoom: 13,
+};
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 
-/** Whether a point lies inside the launch area, `GUSH_DAN_BOUNDS` (spec 0009y). */
-export function inLaunchArea(lng: number, lat: number): boolean {
-  const [west, south, east, north] = GUSH_DAN_BOUNDS;
+/** Whether a point lies inside `ISRAEL_BOUNDS` (spec 0021d). */
+export function inIsrael(lng: number, lat: number): boolean {
+  const [west, south, east, north] = ISRAEL_BOUNDS;
   return lng >= west && lng <= east && lat >= south && lat <= north;
 }
 
@@ -61,8 +66,9 @@ export const APPROXIMATE_RADIUS_M = 300;
 /** At most this many pins (`0003c`'s `limit` cap). */
 export const MAP_RESULTS_LIMIT = 50;
 
-/** The search map cannot zoom out past central Israel. */
-export const MAP_MIN_ZOOM = 8;
+/** The search map cannot zoom out past the whole country (~3.9 deg tall, about z6.5 at phone
+ * height). */
+export const MAP_MIN_ZOOM = 6;
 
 /**
  * The raster source's `maxzoom`: above it tiles are only upscaled, and at z21-22 a phone-width

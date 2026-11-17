@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { clusterPins } from '../../components/map/cluster';
-import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM } from '../../components/map/config';
+import { ISRAEL_BOUNDS, MAP_MIN_ZOOM } from '../../components/map/config';
 import {
   MapCanvas,
   type Bubble,
@@ -96,7 +96,7 @@ export function SideMap({
       </div>
       <MapCanvas
         label={t('search.sideMap.label')}
-        bounds={GUSH_DAN_BOUNDS}
+        bounds={ISRAEL_BOUNDS}
         minZoom={MAP_MIN_ZOOM}
         keyboard={false}
         camera={camera}

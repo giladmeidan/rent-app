@@ -3,7 +3,14 @@ import { expect, type APIRequestContext, type Locator, type Page } from '@playwr
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { test } from './fixtures';
-import { intoTheDockedCard, latNorthBy, routeTiles, signUpOwner, telAvivId } from './helpers';
+import {
+  areaId,
+  intoTheDockedCard,
+  latNorthBy,
+  routeTiles,
+  signUpOwner,
+  TEL_AVIV,
+} from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
@@ -49,13 +56,15 @@ type Posted = { price: number; streets: string[]; ids: string[]; points: Map<str
  * 0009v Scope 9): filtered to it, only these listings are on the map, whatever else CI's shared
  * database holds. 0009v reserved 7001-7899 (7200 is every other test's price); each map test
  * draws from its own sub-range of it (`range`), so two tests in one CI run never share a price;
- * 0009x's side map test takes 7901-7999.
+ * 0009x's side map test takes 7901-7999, 0021d's Haifa test 8401-8499. They are posted in Tel
+ * Aviv-Yafo unless `area` names another settlement.
  */
 async function postAtOnePrice(
   page: Page,
   request: APIRequestContext,
   count: number,
   [low, high]: [number, number],
+  area = TEL_AVIV,
 ): Promise<Posted> {
   const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const streets = Array.from(
@@ -67,13 +76,13 @@ async function postAtOnePrice(
 
   // A fresh owner posts them through the API (as search.spec.ts).
   await signUpOwner(page);
-  const areaId = await telAvivId(page);
+  const postedIn = await areaId(page, area);
   const ids: string[] = [];
   for (const name of streets) {
     const created = await page.request.post(API + '/listings', {
       data: {
         listing_type: 'apartment',
-        area_id: areaId,
+        area_id: postedIn,
         street: name,
         rooms: 3.5,
         floor: 3,
@@ -443,6 +452,43 @@ test('ac7_listing_page_link', async ({ page, request }) => {
   await expect(pin).toHaveAttribute('aria-pressed', 'true');
 });
 
+// Spec 0021d: the map covers all of Israel. A visitor opens at Tel Aviv-Yafo; the place box jumps
+// to Haifa (zoom 13 at its centre), and the listing posted there is on the map. Its fake-geocoded
+// point lies within 0.05 deg of the centre (the middle half of the settlement's box), so two steps
+// out (zoom 11) hold it at any viewport.
+test('ac4_haifa_listing_found_after_a_place_jump', async ({ page, request }) => {
+  const HAIFA = 'חיפה';
+  const {
+    price,
+    streets: [street = ''],
+  } = await postAtOnePrice(page, request, 1, [8401, 8499], HAIFA);
+  await asVisitor(page);
+  const { region, pin } = mapOf(page, street);
+
+  await page.goto(`/search?view=map&price_min=${String(price)}&price_max=${String(price)}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  // Opened at Tel Aviv-Yafo, zoom 13: the Haifa listing is not in view.
+  await expect.poll(() => query(page).get('z')).toBe('13');
+  expect(Number(query(page).get('c')?.split(',')[0])).toBeLessThan(32.2);
+  await expect(pin).toHaveCount(0);
+
+  const box = page.getByRole('combobox', { name: he.search.map.placeLabel });
+  await box.fill(HAIFA);
+  await box.press('Enter');
+  await expect.poll(() => Number(query(page).get('c')?.split(',')[0])).toBeGreaterThan(32.7);
+  await expect.poll(() => query(page).get('z')).toBe('13');
+
+  const zoomOut = region.getByRole('button', { name: he.map.zoomOut });
+  for (const z of ['12', '11']) {
+    await zoomOut.click();
+    await expect.poll(() => query(page).get('z')).toBe(z);
+  }
+  await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });
+  await expect(pin).toBeVisible({ timeout: 15_000 });
+});
+
 test('map_survives_one_failed_tile', async ({ page }) => {
   await routeTiles(page, 1);
   await page.goto('/search?view=map');
@@ -460,8 +506,8 @@ test('map_max_zoom_never_422_on_390px', async ({ page }) => {
     if (r.url().includes('/listings?')) statuses.push(r.status());
   });
 
-  // Opened at a position, so 0009w's first-open fit never runs: a fit racing the clicks made a step
-  // wait for a search that never came (CI, f986008 and #67).
+  // Opened at a position (a fit racing the clicks once made a step wait for a search that never
+  // came: CI, f986008 and #67; the map no longer fits its first answer since 0021d).
   await page.goto('/search?view=map&c=32.08,34.8&z=13', { waitUntil: 'domcontentloaded' });
   const region = page.getByRole('region', { name: he.search.map.label });
   await expect(region).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 });

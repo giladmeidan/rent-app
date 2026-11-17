@@ -10,7 +10,8 @@ import { test } from '../fixtures';
 // Every API call is mocked, so the data is deterministic and nothing signs up. The four listings
 // copy the artboards (Search.dc.html / SearchDesktop.dc.html). Spec 0009v adds the map's tiers,
 // marks, seen chip, a bubble and the same-place list (into screens/0009v/); on the map the four
-// listings' points are spread north to south, so their pins stay apart at the first (fitted) view.
+// listings' points are spread north to south, so their pins stay apart at `MAP` (spec 0021d: the
+// map opens at Tel Aviv-Yafo and never fits its first answer, so the shots open at a position).
 // Spec 0009w docks the pin's card and the same-place list inside the map: states `map`,
 // `map-card-match` and `map-same-place` go to screens/0009w/. Spec 0009x adds the side map beside
 // the list at 1440 (states `side-map`, `side-map-highlight`, `side-map-unavailable`, into
@@ -213,6 +214,38 @@ const seekerProfile = {
 
 type Search = 'items' | 'empty' | 'never' | 'error';
 
+/** The full map at the four spread listings (what the first-answer fit showed before 0021d). */
+const MAP = '/search?view=map&c=32.05,34.805&z=11';
+
+/** The place box's catalogue (`GET /areas`): two cities and a neighbourhood. */
+const TEL_AVIV_ID = '00000000-0000-0000-0000-00000000a1a1';
+const AREAS = [
+  {
+    id: TEL_AVIV_ID,
+    slug: 's-5000',
+    name_he: 'תל אביב-יפו',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [34.7894, 32.07645],
+  },
+  {
+    id: '00000000-0000-0000-0000-00000000a2a2',
+    slug: 's-4000',
+    name_he: 'חיפה',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [34.9896, 32.794],
+  },
+  {
+    id: '00000000-0000-0000-0000-00000000a3a3',
+    slug: 'n-florentin',
+    name_he: 'פלורנטין',
+    kind: 'neighbourhood',
+    parent_id: TEL_AVIV_ID,
+    centre: [34.7686, 32.0578],
+  },
+];
+
 /** Routes the API: everything unknown is a 404, `GET /listings` answers as `search` says. */
 async function mockApi(
   page: Page,
@@ -232,6 +265,7 @@ async function mockApi(
       });
     }
     if (url.pathname === '/me/events') return route.abort();
+    if (url.pathname === '/areas') return json(route, AREAS);
     if (url.pathname === '/me') {
       return seeker ? json(route, seekerUser) : json(route, { detail: 'unauthenticated' }, 401);
     }
@@ -384,7 +418,7 @@ async function openCard(page: Page, name: RegExp) {
 test('map', async ({ page }, info) => {
   // A visitor's card, docked in the map (spec 0009w): no badge, the close button at its top end.
   await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await openCard(page, /כצנלסון/);
   await shot0009w(page, info.project.name, 'map');
 });
@@ -392,7 +426,7 @@ test('map', async ({ page }, info) => {
 test('map-card-match', async ({ page }, info) => {
   // A seeker's card: the match badge in the price row clears the close button.
   await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await openCard(page, /כצנלסון/);
   await page.locator('[data-map-card]').getByTestId('match-badge').waitFor();
   await shot0009w(page, info.project.name, 'map-card-match');
@@ -420,7 +454,7 @@ test('map-tiers', async ({ page }, info) => {
     );
   });
   await mockApi(page, { seeker: true, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await mapReady(page);
   await page.locator('[data-pin-id] svg[data-mark="applied"]').waitFor();
   await shot0009v(page, info.project.name, 'map-tiers');
@@ -429,7 +463,7 @@ test('map-tiers', async ({ page }, info) => {
 test('map-bubble', async ({ page }, info) => {
   // Two listings ~50 m apart fold into a bubble of 2 (it zooms in when pressed).
   await mockApi(page, { seeker: true, search: 'items', map: 'bubble' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await mapReady(page);
   await page.getByRole('button', { name: he.search.map.bubble_two }).waitFor();
   await shot0009v(page, info.project.name, 'map-bubble');
@@ -477,7 +511,7 @@ test('map-card-pan', async ({ page }, info) => {
 test('map-same-place', async ({ page }, info) => {
   // Two listings at one point: their bubble lists both cards in the map's panel (spec 0009w).
   await mockApi(page, { seeker: true, search: 'items', map: 'samePlace' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await mapReady(page);
   await mapSettled(page);
   await page.getByRole('button', { name: he.search.map.bubbleSamePlace_two }).click();
@@ -497,11 +531,11 @@ async function shot0009y(page: Page, project: string, state: string) {
 const statusLine = (page: Page) => page.locator('p[role="status"]');
 
 test('map-locate', async ({ page }, info) => {
-  // Inside the launch area (Tel Aviv): the map moves to the ~200 m grid point, the dot at the fix.
+  // Inside Israel (Tel Aviv): the map moves to the ~200 m grid point, the dot at the fix.
   await page.context().grantPermissions(['geolocation'], { origin: WEB_ORIGIN });
   await page.context().setGeolocation({ latitude: 32.08167, longitude: 34.78123 });
   await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await mapReady(page);
   await mapSettled(page);
   await page.getByRole('button', { name: he.search.map.locate }).click();
@@ -513,12 +547,12 @@ test('map-locate', async ({ page }, info) => {
 });
 
 test('map-locate-outside', async ({ page }, info) => {
-  // Outside the launch area (Haifa): the map stays, the status line says so. A page of its own:
-  // within `maximumAge` the browser would answer with the cached Tel Aviv fix.
+  // Outside Israel (Amman): the map stays, the status line says so. A page of its own: within
+  // `maximumAge` the browser would answer with the cached Tel Aviv fix.
   await page.context().grantPermissions(['geolocation'], { origin: WEB_ORIGIN });
-  await page.context().setGeolocation({ latitude: 32.79, longitude: 34.99 });
+  await page.context().setGeolocation({ latitude: 31.95, longitude: 35.93 });
   await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await mapReady(page);
   await mapSettled(page);
   await page.getByRole('button', { name: he.search.map.locate }).click();
@@ -528,15 +562,19 @@ test('map-locate-outside', async ({ page }, info) => {
 
 test('map-place', async ({ page }, info) => {
   await mockApi(page, { seeker: false, search: 'items', map: 'spread' });
-  await page.goto('/search?view=map');
+  await page.goto(MAP);
   await mapReady(page);
   await mapSettled(page);
   const box = page.getByLabel(he.search.map.placeLabel);
   // A partial name: no jump yet (the native list popup is browser chrome, not in the shot).
   await box.fill('פלור');
   await shot0009y(page, info.project.name, 'map-place-typing');
-  // The full name: the map goes to Florentin.
-  await box.fill(he.places.florentin);
+  // The full label: the map goes to Florentin.
+  await box.fill(
+    he.areas.neighbourhoodOf
+      .replace('{{neighbourhood}}', 'פלורנטין')
+      .replace('{{city}}', 'תל אביב-יפו'),
+  );
   await expect.poll(() => new URL(page.url()).searchParams.get('z')).toBe('15');
   await mapReady(page);
   await mapSettled(page);
@@ -549,7 +587,7 @@ test('map-place', async ({ page }, info) => {
 });
 
 test('map-empty-actions', async ({ page }, info) => {
-  // An empty box smaller than the launch area, with a filter: "show the whole area" and "clear".
+  // An empty box smaller than the country, with a filter: "show the whole country" and "clear".
   await mockApi(page, { seeker: false, search: 'empty' });
   await page.goto('/search?view=map&pets=true&c=32.08,34.8&z=15');
   await mapReady(page);

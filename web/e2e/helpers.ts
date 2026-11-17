@@ -44,16 +44,19 @@ export const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 /** The settlement the smoke suite posts in and prefers (spec 0021a1: the old `גוש דן` is gone). */
 export const TEL_AVIV = 'תל אביב-יפו';
 
-/** Tel Aviv-Yafo's area id from `GET /areas`. */
-export async function telAvivId(page: Page): Promise<string> {
+/** The id of the area named `name` from `GET /areas`. */
+export async function areaId(page: Page, name: string): Promise<string> {
   const areas = await page.request.get(API + '/areas');
   expect(areas.ok()).toBe(true);
   const area = ((await areas.json()) as { id: string; name_he: string }[]).find(
-    (a) => a.name_he === TEL_AVIV,
+    (a) => a.name_he === name,
   );
   expect(area).toBeDefined();
   return area?.id ?? '';
 }
+
+/** Tel Aviv-Yafo's area id from `GET /areas`. */
+export const telAvivId = (page: Page): Promise<string> => areaId(page, TEL_AVIV);
 
 /** Clicks "שליחת קוד", waits for that `POST /auth/otp/request` and asserts its 204, then asserts
  * the code field has focus and returns it. A refused request (429: the OTP budget per IP) fails

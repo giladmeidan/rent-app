@@ -19,7 +19,8 @@ const COORD = /^-?\d{1,3}(\.\d{1,6})?$/;
 const ZOOM = /^-?\d{1,3}(\.\d{1,2})?$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** `lat,lng` (latitude first, as people read coordinates) inside `MAP_POSITION_BOUNDS`. */
+/** `lat,lng` (latitude first, as people read coordinates) inside `MAP_POSITION_BOUNDS` (Israel
+ * plus 0.5 deg, spec 0021d); a centre outside it is dropped, never clamped. */
 function parseCenter(value: string | null): [lng: number, lat: number] | undefined {
   if (value === null) return undefined;
   const parts = value.split(',');
@@ -34,9 +35,9 @@ function parseCenter(value: string | null): [lng: number, lat: number] | undefin
 }
 
 /**
- * The map position a URL holds. `z` is clamped to the map's zoom range and used only with a valid
- * `c` (a centre without a zoom uses zoom 14); `pin` is any UUID, with no version check, in lower
- * case.
+ * The map position a URL holds. `z` is clamped to the map's zoom range (`MAP_MIN_ZOOM` 6 to
+ * `MAP_MAX_ZOOM`) and used only with a valid `c` (a centre without a zoom uses zoom 14); `pin` is
+ * any UUID, with no version check, in lower case.
  */
 export function parseMapPosition(params: URLSearchParams): MapPosition {
   const position: MapPosition = {};

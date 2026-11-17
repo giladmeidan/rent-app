@@ -32,6 +32,9 @@ type Props = {
   onPick: (area: AreaOut | null) => void;
   /** Backspace in the empty input. */
   onBackspace?: () => void;
+  /** Enter on a name that matches nothing: the caller says so instead of the field (the map's
+   * status line). */
+  onNotFound?: () => void;
   id?: string;
   /** The input's `name` (the profile focuses a field by name). */
   name?: string;
@@ -77,6 +80,7 @@ function AreaInput({
   value,
   onPick,
   onBackspace,
+  onNotFound,
   id,
   name,
   error,
@@ -130,8 +134,9 @@ function AreaInput({
     if (event.key !== 'Enter' || text.trim() === '') return;
     event.preventDefault();
     const match = find(text);
-    if (match === undefined) setNotFound(true);
-    else choose(match);
+    if (match !== undefined) choose(match);
+    else if (onNotFound !== undefined) onNotFound();
+    else setNotFound(true);
   };
 
   return (

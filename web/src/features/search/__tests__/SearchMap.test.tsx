@@ -12,7 +12,7 @@ import {
   moveTo,
   resetFakeMap,
 } from '../../../components/map/__tests__/fakeMapCanvas';
-import { GUSH_DAN_BOUNDS } from '../../../components/map/config';
+import { DEFAULT_VIEW, ISRAEL_BOUNDS } from '../../../components/map/config';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -23,11 +23,11 @@ import {
   renderRoutes,
 } from '../../auth/__tests__/harness';
 import { application } from '../../applications/__tests__/fixtures';
-import { owner } from '../../listings/__tests__/fixtures';
+import { gushDan, owner } from '../../listings/__tests__/fixtures';
 import { formatIls, formatRooms } from '../../listings/format';
-import { inDays, profile } from '../../profile/__tests__/fixtures';
+import { inDays, personalOnlyProfile, profile } from '../../profile/__tests__/fixtures';
+import type { AreaOut } from '../../../api/client';
 import type { ListingPublic } from '../api';
-import { PLACES } from '../places';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
 
@@ -77,6 +77,14 @@ const render = (path: string) =>
   );
 
 const settle = () => new Promise((r) => setTimeout(r, 20));
+/** Renders the map view and waits for the map to mount (a signed-in person's default view waits for
+ * `/me`, `/me/profile` and `/areas`). */
+async function openMap(path: string) {
+  resetFakeMap();
+  const view = render(path);
+  await vi.waitFor(() => lastProps());
+  return view;
+}
 const toggle = () => within(screen.getByRole('group', { name: he.search.view.label }));
 const mapRegion = () => screen.getByRole('region', { name: he.search.map.label });
 const liveRegion = () => document.querySelector('[aria-live="polite"]');
@@ -99,6 +107,23 @@ const params = () => new URLSearchParams(currentPath()?.split('?')[1] ?? '');
 /** The docked panel: the card or the same-place list, inside the map region. */
 const dockedCard = () => mapRegion().querySelector<HTMLElement>('[data-map-card]');
 const closeButton = () => screen.getByRole('button', { name: he.search.map.closeCard });
+const haifa: AreaOut = {
+  ...gushDan,
+  id: '00000000-0000-0000-0000-00000000a2a2',
+  slug: 's-4000',
+  name_he: 'חיפה',
+  centre: [34.9896, 32.794],
+};
+const florentin: AreaOut = {
+  ...gushDan,
+  id: '00000000-0000-0000-0000-00000000a3a3',
+  slug: 'n-florentin',
+  name_he: 'פלורנטין',
+  kind: 'neighbourhood',
+  parent_id: gushDan.id,
+  centre: [34.7686, 32.0578],
+};
+const AREAS = [gushDan, haifa, florentin];
 
 describe('SearchMap', () => {
   it('ac1_view_toggle_lives_in_the_url', async () => {
@@ -130,7 +155,7 @@ describe('SearchMap', () => {
 
     // Apply, clear and back keep the view.
     mockApi({ [SEARCH]: [json(page([publicListing()]))] });
-    view = render('/search?view=map&pets=true');
+    view = await openMap('/search?view=map&pets=true');
     expect(mapRegion()).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^מסננים/ }));
     const price = within(screen.getByRole('group', { name: he.search.price }));
@@ -157,7 +182,7 @@ describe('SearchMap', () => {
     const nowhere = publicListing({ lat: null, lng: null });
     const next = deferred();
     const api = mockApi({ [SEARCH]: [json(page([cheap, nowhere, other])), next.promise] });
-    render('/search?view=map&price_max=8000');
+    await openMap('/search?view=map&price_max=8000');
 
     // Nothing is sent before the map reports a box: not the list, not the map.
     expect(mapRegion()).toBeInTheDocument();
@@ -225,7 +250,7 @@ describe('SearchMap', () => {
     // Pending first answer: the region is busy; the count line is mounted and empty.
     const first = deferred();
     let api = mockApi({ [SEARCH]: [first.promise] });
-    let view = render('/search?view=map');
+    let view = await openMap('/search?view=map');
     expect(mapRegion()).toHaveAttribute('aria-busy', 'true');
     moveTo(BOX);
     await vi.waitFor(() => {
@@ -241,9 +266,13 @@ describe('SearchMap', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Failure: ErrorState above the map; retry asks for the same box.
-    api = mockApi({ [SEARCH]: [json({ detail: 'boom' }, 500), json(page([located()]))] });
-    view = render('/search?view=map');
+    // Failure: ErrorState above the map; retry asks for the same box. (`/areas` answers, so the
+    // place box shows no retry of its own.)
+    api = mockApi({
+      'GET /areas': [json([])],
+      [SEARCH]: [json({ detail: 'boom' }, 500), json(page([located()]))],
+    });
+    view = await openMap('/search?view=map');
     moveTo(BOX);
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
     await vi.waitFor(() => {
@@ -257,7 +286,7 @@ describe('SearchMap', () => {
 
     // Empty: the count line holds the map's empty state (spec 0009t).
     mockApi({ [SEARCH]: [json({ items: [], total: 0 })] });
-    view = render('/search?view=map');
+    view = await openMap('/search?view=map');
     moveTo(BOX);
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();
     expect(liveRegion()).toHaveTextContent(he.search.map.empty);
@@ -266,7 +295,7 @@ describe('SearchMap', () => {
 
     // Three of three: the plain count in the live line.
     mockApi({ [SEARCH]: [json(page([located(), located(), located()], 3))] });
-    view = render('/search?view=map');
+    view = await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveTextContent('3 מודעות');
@@ -276,7 +305,7 @@ describe('SearchMap', () => {
 
     // 50 of 120: "showing 50 of 120".
     mockApi({ [SEARCH]: [json(page(listings(50), 120))] });
-    view = render('/search?view=map');
+    view = await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveTextContent(
@@ -290,7 +319,7 @@ describe('SearchMap', () => {
 
     // The map cannot be shown: the message and a way to the list.
     mockApi({ [SEARCH]: [json(page([publicListing()]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     failMap();
     expect(screen.getByText(he.search.map.unavailable)).toBeVisible();
     expect(screen.queryByRole('region', { name: he.search.map.label })).toBeNull();
@@ -308,7 +337,7 @@ describe('SearchMap', () => {
     const b = located({ street: 'שתיים' });
     const c = located({ street: 'שלוש' });
     mockApi({ [SEARCH]: [json(page([a, b])), json(page([c]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     const pinA = await screen.findByRole('button', { name: pinLabel(a) });
     expect(screen.queryByRole('article')).toBeNull();
@@ -357,7 +386,7 @@ describe('SearchMap', () => {
       'GET /me/profile': [json(profile())],
       [SEARCH]: [json(page([scored, unscored], 2, 'match'))],
     });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(pins()).toHaveLength(2);
@@ -399,7 +428,7 @@ describe('SearchMap', () => {
   it('ac3_map_sends_type', async () => {
     const api = mockApi({ [SEARCH]: [json(page([located({ listing_type: 'room' })]))] });
     // The market's map asks for rooms (spec 0010a).
-    render('/market?view=map');
+    await openMap('/market?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(api.calls(SEARCH)).toHaveLength(1);
@@ -427,7 +456,7 @@ describe('SearchMap', () => {
     });
     const flat = located({ price_ils: 5000 });
     mockApi({ [SEARCH]: [json(page([room, flat]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(pins()).toHaveLength(2);
@@ -452,7 +481,7 @@ describe('SearchMap', () => {
       'GET /me/profile': [json(profile({ gender: 'woman', birth_year: year - 28 }))],
       [SEARCH]: [json(page([room]))],
     });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(pins()).toHaveLength(1);
@@ -477,7 +506,7 @@ describe('SearchMap', () => {
 
     // Empty: the one live count line, above the map, holds the empty text in the empty box.
     mockApi({ [SEARCH]: [json({ items: [], total: 0 })] });
-    let view = render('/search?view=map');
+    let view = await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveTextContent(he.search.map.empty);
@@ -494,7 +523,7 @@ describe('SearchMap', () => {
 
     // A count is not in the empty box.
     mockApi({ [SEARCH]: [json(page([located()]))] });
-    view = render('/search?view=map');
+    view = await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
@@ -505,8 +534,8 @@ describe('SearchMap', () => {
     vi.unstubAllGlobals();
 
     // Error: ErrorState comes before the map region.
-    mockApi({ [SEARCH]: [json({ detail: 'boom' }, 500)] });
-    view = render('/search?view=map');
+    mockApi({ 'GET /areas': [json([])], [SEARCH]: [json({ detail: 'boom' }, 500)] });
+    view = await openMap('/search?view=map');
     moveTo(BOX);
     const alert = await screen.findByRole('alert');
     expect(within(alert).getByText(he.common.error)).toBeVisible();
@@ -519,7 +548,7 @@ describe('SearchMap', () => {
     const first = deferred();
     const next = deferred();
     mockApi({ [SEARCH]: [first.promise, next.promise] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     const pill = await screen.findByTestId('map-updating');
     expect(pill).toHaveTextContent(he.search.map.updating);
@@ -545,7 +574,7 @@ describe('SearchMap', () => {
     // The map cannot be shown: "show the list" removes its own button, so focus moves to the
     // toggle's list button, now pressed.
     mockApi({ [SEARCH]: [json(page([publicListing()]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     failMap();
     const show = within(screen.getByTestId('map-unavailable')).getByRole('button', {
       name: he.search.view.list,
@@ -565,7 +594,7 @@ describe('SearchMap', () => {
     // In map view, an Apply that changes the URL focuses the map's count line, which keeps the
     // previous count until the new answer lands.
     mockApi({ [SEARCH]: [json(page([located()])), json(page([located(), located()]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
@@ -593,7 +622,7 @@ describe('SearchMap', () => {
     const b = located({ lat: 32.083, street: 'שתיים' });
     const c = located({ lat: 32.086, street: 'שלוש' });
     mockApi({ [SEARCH]: [json(page([a, b, c]))] });
-    let view = render('/search?view=map');
+    let view = await openMap('/search?view=map');
     moveTo(BOX, VIEW);
     await vi.waitFor(() => {
       expect(bubbles()).toHaveLength(1);
@@ -624,7 +653,7 @@ describe('SearchMap', () => {
     const away = located({ lat: 32.5, lng: 35.2, street: 'רחוק' });
     const next = deferred();
     mockApi({ [SEARCH]: [json(page([x, y, z, away])), next.promise] });
-    view = render('/search?view=map');
+    view = await openMap('/search?view=map');
     moveTo(BOX, VIEW);
     const samePlace = i18n.t('search.map.bubbleSamePlace', { count: 3 });
     const sameBubble = await screen.findByRole('button', { name: samePlace });
@@ -687,7 +716,7 @@ describe('SearchMap', () => {
 
     // The fake reporting no view (`moveTo(bbox)`): pins unclustered, no bubble.
     mockApi({ [SEARCH]: [json(page([x, y, z]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(pins()).toHaveLength(3);
@@ -717,7 +746,7 @@ describe('SearchMap', () => {
       'GET /me/applications': [applications],
       [SEARCH]: [json(page([room, flat, plain, declined]))],
     });
-    let view = render('/search?view=map');
+    let view = await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(mark(flat)).toBe('applied');
@@ -738,7 +767,7 @@ describe('SearchMap', () => {
         'GET /me/applications': [applications],
         [SEARCH]: [json(page([room, flat, plain]))],
       });
-      view = render('/search?view=map');
+      view = await openMap('/search?view=map');
       moveTo(BOX);
       await vi.waitFor(() => {
         expect(pins()).toHaveLength(3);
@@ -761,7 +790,7 @@ describe('SearchMap', () => {
       'GET /me/applications': [json({ detail: 'boom' }, 500)],
       [SEARCH]: [json(page([room, flat, plain]))],
     });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(pins()).toHaveLength(3);
@@ -785,7 +814,7 @@ describe('SearchMap', () => {
       ],
       [SEARCH]: [json(page([room, other]))],
     });
-    render('/market?view=map');
+    await openMap('/market?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(mark(other)).toBe('applied');
@@ -794,66 +823,73 @@ describe('SearchMap', () => {
     expect(api.calls('GET /me/applications')).toHaveLength(1);
   });
 
-  it('ac4_first_open_fits_once', async () => {
-    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 12 };
+  it('ac2_default_view', async () => {
     const a = located({ lat: 32.05, lng: 34.78 });
     const b = located({ lat: 32.1, lng: 34.82 });
-    const c = located({ lat: 32.07, lng: 34.8 });
-    const nowhere = publicListing({ lat: null, lng: null });
+    const mapView = () => ({ center: lastProps().center, zoom: lastProps().zoom });
 
-    // No position in the URL: the map opens on Gush Dan.
-    let api = mockApi({ [SEARCH]: [() => json(page([a, nowhere, b, c]))] });
-    let view = render('/search?view=map');
-    expect(lastProps().bounds).toEqual(GUSH_DAN_BOUNDS);
-    expect(lastProps().center).toBeUndefined();
-    // The `load` view writes `c`/`z` before the first answer; the fit still follows.
-    moveTo(BOX, VIEW);
-    expect(params().get('c')).toBe('32.08,34.8');
-    expect(params().get('z')).toBe('12');
-    await vi.waitFor(() => {
-      expect(cameras()).toHaveLength(1);
+    // A visitor: Tel Aviv-Yafo at once, and the first answer is never fitted.
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [SEARCH]: [() => json(page([a, b]))],
     });
-    // One camera: the located listings' extent, at most zoom 15.
-    expect(cameras()).toEqual([{ seq: 1, bounds: [34.78, 32.05, 34.82, 32.1], maxZoom: 15 }]);
-    expect(lastProps().camera).toEqual(cameras()[0]);
-    // The fit's move brings a second answer: never a second fit in this mount.
-    moveTo(OTHER_BOX, { center: [34.795, 32.065], zoom: 13 });
-    await vi.waitFor(() => {
-      expect(api.calls(SEARCH)).toHaveLength(2);
-    });
-    await settle();
-    expect(pins()).toHaveLength(3);
-    expect(cameras()).toHaveLength(1);
-    view.unmount();
-    vi.unstubAllGlobals();
-    resetFakeMap();
-
-    // A restored position: the map opens there, and no camera is sent.
-    api = mockApi({ [SEARCH]: [() => json(page([a, b, c]))] });
-    view = render('/search?view=map&c=32.0712,34.8123&z=13.5');
-    expect(lastProps().center).toEqual([34.8123, 32.0712]);
-    expect(lastProps().zoom).toBe(13.5);
+    let view = await openMap('/search?view=map');
+    expect(mapView()).toEqual(DEFAULT_VIEW);
     expect(lastProps().bounds).toBeUndefined();
-    moveTo(BOX, { center: [34.8123, 32.0712], zoom: 13.5 });
+    moveTo(BOX, { center: DEFAULT_VIEW.center, zoom: 13 });
     await vi.waitFor(() => {
-      expect(pins()).toHaveLength(3);
+      expect(pins()).toHaveLength(2);
     });
     await settle();
     expect(cameras()).toEqual([]);
-    expect(lastProps().camera).toBeUndefined();
     view.unmount();
     vi.unstubAllGlobals();
-    resetFakeMap();
 
-    // A first answer with no located listing: no camera (the Gush Dan view stays).
-    mockApi({ [SEARCH]: [json(page([nowhere]))] });
-    render('/search?view=map');
-    moveTo(BOX, VIEW);
+    // A seeker with areas [Haifa, Florentin]: the loading state until /areas answers, then Haifa.
+    const areas = deferred();
+    mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/profile': [json(profile({ area_ids: [haifa.id, florentin.id] }))],
+      'GET /areas': [areas.promise],
+      [SEARCH]: [() => json(page([a, b]))],
+    });
+    resetFakeMap();
+    view = render('/search?view=map');
+    await settle();
+    expect(() => lastProps()).toThrow();
+    expect(mapRegion()).toHaveAttribute('aria-busy', 'true');
+    areas.resolve(json(AREAS));
     await vi.waitFor(() => {
-      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+      expect(mapView()).toEqual({ center: haifa.centre, zoom: 13 });
+    });
+    moveTo(BOX, { center: [34.99, 32.79], zoom: 13 });
+    await vi.waitFor(() => {
+      expect(pins()).toHaveLength(2);
     });
     await settle();
     expect(cameras()).toEqual([]);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A seeker without a looking part, an empty list or a failed request: Tel Aviv-Yafo.
+    const cases: Record<string, Response[]>[] = [
+      { 'GET /me/profile': [json(personalOnlyProfile())] },
+      { 'GET /me/profile': [json(profile({ area_ids: [] }))] },
+      { 'GET /me/profile': [json({ detail: 'boom' }, 500)] },
+      { 'GET /me/profile': [json(profile())], 'GET /areas': [json({ detail: 'boom' }, 500)] },
+    ];
+    for (const routes of cases) {
+      mockApi({ 'GET /me': [json(noa)], [SEARCH]: [() => json(page([a]))], ...routes });
+      view = await openMap('/search?view=map');
+      expect(mapView()).toEqual(DEFAULT_VIEW);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+
+    // A position in the URL wins over the default view.
+    mockApi({ 'GET /me': [json(noa)], 'GET /me/profile': [json(profile())] });
+    await openMap('/search?view=map&c=32.0712,34.8123&z=13.5');
+    expect(mapView()).toEqual({ center: [34.8123, 32.0712], zoom: 13.5 });
   });
 
   it('ac5_card_in_the_map_close_and_escape', async () => {
@@ -862,7 +898,7 @@ describe('SearchMap', () => {
     const b = located({ lat: 32.1, street: 'שתיים' });
     // Replies are built per request: a Response body is read once.
     mockApi({ [SEARCH]: [() => json(page([a, b]))] });
-    let view = render('/search?view=map');
+    let view = await openMap('/search?view=map');
     moveTo(BOX, VIEW);
     await screen.findByRole('button', { name: pinLabel(a) });
 
@@ -937,7 +973,7 @@ describe('SearchMap', () => {
     const y = located({ street: 'בית' });
     const z = located({ street: 'גימל' });
     mockApi({ [SEARCH]: [() => json(page([x, y, z]))] });
-    view = render(`/search?view=map&pin=${y.id}`);
+    view = await openMap(`/search?view=map&pin=${y.id}`);
     moveTo(BOX, VIEW);
     await vi.waitFor(() => {
       expect(dockedCard()).not.toBeNull();
@@ -1002,7 +1038,7 @@ describe('SearchMap', () => {
     // still returns focus to the bubble that now holds the list's members.
     const later = deferred();
     mockApi({ [SEARCH]: [() => json(page([x, y, z])), later.promise] });
-    view = render('/search?view=map');
+    view = await openMap('/search?view=map');
     moveTo(BOX, VIEW);
     fireEvent.click(await screen.findByRole('button', { name: bubbleName }));
     expect(within(dockedCard() as HTMLElement).getAllByRole('article')).toHaveLength(3);
@@ -1028,7 +1064,7 @@ describe('SearchMap', () => {
     // which was in the card, goes to the map canvas.
     const next = deferred();
     mockApi({ [SEARCH]: [json(page([a, b])), next.promise] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX, VIEW);
     fireEvent.click(await screen.findByRole('button', { name: pinLabel(a) }));
     const linkA = within(dockedCard() as HTMLElement).getByRole('link');
@@ -1056,7 +1092,7 @@ describe('SearchMap', () => {
     const fresh = located();
     window.localStorage.setItem('rent-app:seen', JSON.stringify([opened.id]));
     mockApi({ [SEARCH]: [json(page([opened, fresh]))] });
-    render('/search?view=map');
+    await openMap('/search?view=map');
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(pins()).toHaveLength(2);
@@ -1067,91 +1103,45 @@ describe('SearchMap', () => {
 
   it('ac4_place_search', async () => {
     const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 12 };
-    const place = (id: string) => {
-      const found = PLACES.find((p) => p.id === id);
-      if (found === undefined) throw new Error(`no place ${id}`);
-      return found;
-    };
-    const florentin = place('florentin');
-    const ramatAviv = place('ramat-aviv');
-    const ramatAvivGimel = place('ramat-aviv-gimel');
     const placeStatus = () => document.querySelector('p[role="status"]');
-
-    // Opened without a position: 0009w's first-open fit waits for the first answer.
-    const first = deferred();
-    mockApi({ [SEARCH]: [first.promise, () => json(page([located()]))] });
-    render('/search?view=map');
+    mockApi({ 'GET /areas': [json(AREAS)], [SEARCH]: [() => json(page([located()]))] });
+    await openMap('/search?view=map');
     moveTo(BOX, VIEW);
-    const box = screen.getByLabelText(he.search.map.placeLabel);
-    expect(box).toHaveAttribute('type', 'search');
-    // The names are offered as the input's list.
-    const options = [
-      ...document.querySelectorAll(`#${CSS.escape(box.getAttribute('list') ?? '')} option`),
-    ];
-    expect(options.map((o) => o.getAttribute('value'))).toContain(he.places.florentin);
+    const box = await screen.findByRole('combobox', { name: he.search.map.placeLabel });
 
-    // A change to an exact name that starts no other name jumps without Enter.
-    fireEvent.change(box, { target: { value: he.places.florentin } });
-    expect(cameras()).toEqual([{ seq: 1, center: florentin.center, zoom: 15 }]);
-    // The jump cancelled the first-open fit: the first answer sends no fit camera.
-    first.resolve(json(page([located({ lat: 32.05, lng: 34.78 }), located()])));
-    await vi.waitFor(() => {
-      expect(pins()).toHaveLength(2);
+    // A neighbourhood goes to its centre at zoom 15, a city at zoom 13.
+    const florentinLabel = i18n.t('areas.neighbourhoodOf', {
+      neighbourhood: florentin.name_he,
+      city: gushDan.name_he,
     });
-    await settle();
-    expect(cameras()).toHaveLength(1);
+    fireEvent.change(box, { target: { value: florentinLabel } });
+    expect(cameras()).toEqual([{ seq: 1, center: florentin.centre, zoom: 15 }]);
+    // The chosen name stays in the box.
+    expect(box).toHaveValue(florentinLabel);
+    fireEvent.change(box, { target: { value: haifa.name_he } });
+    expect(cameras()[1]).toEqual({ seq: 2, center: haifa.centre, zoom: 13 });
 
-    // "רמת אביב" starts "רמת אביב ג׳": no jump until Enter.
-    fireEvent.change(box, { target: { value: he.places['ramat-aviv'] } });
-    expect(cameras()).toHaveLength(1);
-    fireEvent.keyDown(box, { key: 'Enter' });
-    expect(cameras()[1]).toEqual({ seq: 2, center: ramatAviv.center, zoom: 15 });
-    // The longer name is unambiguous: it jumps on the change.
-    fireEvent.change(box, { target: { value: he.places['ramat-aviv-gimel'] } });
-    expect(cameras()[2]).toEqual({ seq: 3, center: ramatAvivGimel.center, zoom: 15 });
-    // A city goes to its own zoom.
-    fireEvent.change(box, { target: { value: ` ${he.places['tel-aviv-yafo']}` } });
-    expect(cameras()[3]).toEqual({ seq: 4, center: place('tel-aviv-yafo').center, zoom: 13 });
-
-    // Enter on a name not in the list: the status line says so, and no camera is sent.
-    expect(placeStatus()).toHaveTextContent('');
+    // Enter on a name not in the catalogue: the status line says so, and no camera is sent.
     fireEvent.change(box, { target: { value: 'רחוב שאינו ברשימה' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     await vi.waitFor(() => {
       expect(placeStatus()).toHaveTextContent(he.search.map.placeNotFound);
     });
-    expect(cameras()).toHaveLength(4);
-    // Enter on an empty box does nothing.
-    fireEvent.change(box, { target: { value: '  ' } });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    expect(cameras()).toHaveLength(4);
+    expect(screen.queryByText(he.areas.notFound)).toBeNull();
+    expect(cameras()).toHaveLength(2);
     // The status line is not a second results region.
     expect(placeStatus()).not.toHaveAttribute('aria-live');
     expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
   });
 
-  it('test_place_search_ascii_geresh_matches', () => {
-    const place = (id: string) => {
-      const found = PLACES.find((p) => p.id === id);
-      if (found === undefined) throw new Error(`no place ${id}`);
-      return found;
-    };
-    const first = deferred();
-    mockApi({ [SEARCH]: [first.promise] });
-    render('/search?view=map');
-    moveTo(BOX, { center: [34.8, 32.08], zoom: 12 });
-    const box = screen.getByLabelText(he.search.map.placeLabel);
-    const ascii = (name: string) => name.replace(/\u05F3/g, "'").replace(/\u05F4/g, '"');
-    // Enter on an ASCII-typed name that is in the list.
-    fireEvent.change(box, { target: { value: ascii(he.places['ramat-aviv-gimel']) } });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    expect(cameras().at(-1)).toMatchObject({ center: place('ramat-aviv-gimel').center });
-    expect(document.querySelector('p[role="status"]')).toHaveTextContent('');
-    // An exact name that starts no other name jumps on the change, without Enter.
-    const before = cameras().length;
-    fireEvent.change(box, { target: { value: ascii(he.places.ajami) } });
-    expect(cameras()).toHaveLength(before + 1);
-    expect(cameras().at(-1)).toMatchObject({ center: place('ajami').center });
+  it('ac3_show_all_israel', async () => {
+    // An empty answer for a small box: the button reads "show the whole country" and fits Israel.
+    mockApi({ [SEARCH]: [() => json({ items: [], total: 0 })] });
+    await openMap('/search?view=map&c=32.08,34.8&z=15');
+    moveTo([34.79, 32.07, 34.81, 32.09], { center: [34.8, 32.08], zoom: 15 });
+    const button = await screen.findByRole('button', { name: 'הצגת כל הארץ' });
+    fireEvent.click(button);
+    expect(cameras()).toEqual([{ seq: 1, bounds: [34.2, 29.45, 35.9, 33.35] }]);
   });
 
   it('ac5_empty_view_actions', async () => {
@@ -1160,9 +1150,9 @@ describe('SearchMap', () => {
     const nothing = () => json({ items: [], total: 0 });
     const showAll = () => screen.queryByRole('button', { name: he.search.map.showAll });
 
-    // An empty box that does not hold the launch area: "show the whole area" fits it.
+    // An empty box that does not hold the whole country: "show the whole country" fits it.
     let api = mockApi({ [SEARCH]: [nothing, () => json(page([located()]))] });
-    let view = render('/search?view=map&c=32.08,34.8&z=14');
+    let view = await openMap('/search?view=map&c=32.08,34.8&z=14');
     moveTo(BOX, VIEW);
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();
     const button = showAll();
@@ -1175,7 +1165,7 @@ describe('SearchMap', () => {
     ).toBeNull();
     button?.focus();
     fireEvent.click(button as HTMLElement);
-    expect(cameras()).toEqual([{ seq: 1, bounds: GUSH_DAN_BOUNDS }]);
+    expect(cameras()).toEqual([{ seq: 1, bounds: ISRAEL_BOUNDS }]);
     // The wider box answers with results: the button is gone and focus is on the count line.
     moveTo(WIDE, { center: [34.85, 32.05], zoom: 10 });
     await vi.waitFor(() => {
@@ -1191,10 +1181,10 @@ describe('SearchMap', () => {
     vi.unstubAllGlobals();
     resetFakeMap();
 
-    // An empty box that already holds the launch area: no "show the whole area".
+    // An empty box that already holds the whole country: no "show the whole country".
     mockApi({ [SEARCH]: [nothing] });
-    view = render('/search?view=map&c=32.05,34.85&z=10');
-    moveTo(WIDE, { center: [34.85, 32.05], zoom: 10 });
+    view = await openMap('/search?view=map&c=31.4,35.05&z=6');
+    moveTo([34.0, 29.0, 36.0, 33.5], { center: [35.05, 31.4], zoom: 6 });
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();
     expect(showAll()).toBeNull();
     view.unmount();
@@ -1203,7 +1193,7 @@ describe('SearchMap', () => {
 
     // With a filter set, "clear" shows beside it and clears the filters; `c` and `z` stay.
     api = mockApi({ [SEARCH]: [nothing, () => json(page([located()]))] });
-    render('/search?view=map&pets=true&c=32.08,34.8&z=14');
+    await openMap('/search?view=map&pets=true&c=32.08,34.8&z=14');
     moveTo(BOX, VIEW);
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();
     expect(showAll()).not.toBeNull();
@@ -1224,9 +1214,10 @@ describe('SearchMap', () => {
     const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
     const WIDE: [number, number, number, number] = [34.7, 31.9, 35.0, 32.2];
     mockApi({
+      'GET /areas': [json([])],
       [SEARCH]: [() => json({ items: [], total: 0 }), json({ detail: 'boom' }, 500)],
     });
-    render('/search?view=map&c=32.08,34.8&z=14');
+    await openMap('/search?view=map&c=32.08,34.8&z=14');
     moveTo(BOX, VIEW);
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();
     const button = screen.getByRole('button', { name: he.search.map.showAll });
