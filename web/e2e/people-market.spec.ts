@@ -100,6 +100,7 @@ test('ac19_people_like_match_chat_remove', async ({ page, browser }) => {
 
   // A removes the match through the confirm: the closed note replaces the composer for A (and takes
   // focus), and shows for B too (the event stream).
+  await page.getByRole('button', { name: he.chat.thread.actions }).click();
   await page.getByRole('button', { name: he.chat.thread.removeMatch }).click();
   const dialog = page.getByRole('dialog', { name: he.chat.thread.removeMatchTitle });
   await dialog.getByRole('button', { name: he.chat.thread.removeMatchConfirm }).click();

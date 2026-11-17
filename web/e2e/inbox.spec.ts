@@ -109,7 +109,8 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   const seekerLog = seekerPage.getByRole('log', { name: he.chat.thread.log });
   await expect(seekerLog.getByText('Hello', { exact: true })).toBeVisible();
 
-  // The seeker reports the other side of the chat (0011d).
+  // The seeker reports the other side of the chat (0011d), from behind "actions".
+  await seekerPage.getByRole('button', { name: he.chat.thread.actions }).click();
   await seekerPage
     .getByRole('button', { name: withName(he.report.title.person, OWNER_NAME) })
     .click();
@@ -130,6 +131,7 @@ test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
   await expect(ownerLog.getByText('Hi', { exact: true })).toBeVisible({ timeout: 3_000 });
 
   // Back to the inbox for the decline.
+  await page.getByRole('button', { name: he.chat.thread.actions }).click();
   await page.getByRole('link', { name: he.chat.thread.toApplicants }).click();
   await expect(page).toHaveURL(`/me/listings/${id}/applicants`);
   await expect(applicant.getByRole('heading', { level: 2 })).toHaveText(SEEKER_NAME);
