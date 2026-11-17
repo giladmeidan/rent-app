@@ -6,7 +6,6 @@ import { usePageTitle } from '../../app/usePageTitle';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useConfirm } from '../../components/Dialog';
-import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Field } from '../../components/Field';
 import { Loading } from '../../components/Loading';
@@ -24,6 +23,7 @@ import { useMyListings } from '../listings/useMyListings';
 import type { TourWindowOut } from './api';
 import { tourErrorText } from './errors';
 import { formatTourDay, formatTourTime, tourDay } from './format';
+import { MonthCalendar } from './MonthCalendar';
 import { useCreateTourWindow, useDeleteTourWindow, useTourWindows } from './useTourWindows';
 
 const section = 'flex flex-col gap-5';
@@ -116,12 +116,18 @@ function WindowCard({
   );
 }
 
-function AddForm({ listingId, onAdded }: { listingId: string; onAdded: (id: string) => void }) {
+function AddForm({
+  listingId,
+  date,
+  onAdded,
+}: {
+  listingId: string;
+  date: string;
+  onAdded: (id: string) => void;
+}) {
   const { t } = useTranslation();
   const online = useOnline();
   const create = useCreateTourWindow(listingId);
-  const today = todayInIsrael();
-  const [date, setDate] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [slot, setSlot] = useState<SlotMinutes>(30);
@@ -129,7 +135,7 @@ function AddForm({ listingId, onAdded }: { listingId: string; onAdded: (id: stri
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (date === '' || start === '' || end === '') return;
+    if (start === '' || end === '') return;
     if (end <= start) {
       setError(t('tours.times.errors.range'));
       return;
@@ -139,7 +145,6 @@ function AddForm({ listingId, onAdded }: { listingId: string; onAdded: (id: stri
       { date, start, end, slot_minutes: slot },
       {
         onSuccess: (created) => {
-          setDate('');
           setStart('');
           setEnd('');
           onAdded(created.id);
@@ -159,16 +164,6 @@ function AddForm({ listingId, onAdded }: { listingId: string; onAdded: (id: stri
   return (
     <Card padding="md">
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <Field label={t('tours.times.date')}>
-          <TextInput
-            type="date"
-            required
-            min={today}
-            max={addDays(today, 30)}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('tours.times.start')}>
             <TextInput
@@ -223,6 +218,7 @@ export function TourTimesPage() {
   const remove = useDeleteTourWindow(id);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
   const titleId = useId();
   const notFound =
     (listings.data !== undefined && listing === undefined) || hasStatus(windows.error, 404);
@@ -231,6 +227,12 @@ export function TourTimesPage() {
     listing?.listing_type === 'room'
       ? { to: '/market/mine', label: t('market.mine.back') }
       : { to: '/me/listings', label: t('listings.edit.backToMine') };
+
+  const firstDay = windows.data?.windows
+    .map((w) => tourDay(w.starts_at))
+    .reduce<string | null>((a, d) => (a === null || d < a ? d : a), null);
+  // Opens on the first day with a window (else today); kept across refetches.
+  if (picked === null && windows.data !== undefined) setPicked(firstDay ?? todayInIsrael());
 
   const clearFocus = useCallback(() => setFocusId(null), []);
 
@@ -272,49 +274,63 @@ export function TourTimesPage() {
     );
   } else {
     const today = todayInIsrael();
-    const days = new Map<string, TourWindowOut[]>();
+    const day = picked ?? firstDay ?? today;
+    const byDay = new Map<string, TourWindowOut[]>();
     for (const w of windows.data.windows) {
-      const day = tourDay(w.starts_at);
-      days.set(day, [...(days.get(day) ?? []), w]);
+      const d = tourDay(w.starts_at);
+      byDay.set(d, [...(byDay.get(d) ?? []), w]);
     }
+    const list = byDay.get(day) ?? [];
+    const live = windows.data.listing_live;
     body = (
       <>
-        {windows.data.listing_live ? (
-          <AddForm listingId={listing.id} onAdded={setFocusId} />
-        ) : (
-          <Card variant="muted" padding="md">
-            <p className="text-body text-ink-muted">{t('tours.times.notLive')}</p>
-          </Card>
+        {windows.data.windows.length === 0 && (
+          <p className="text-body text-ink-muted">{t('tours.times.empty')}</p>
         )}
+        <MonthCalendar
+          label={t('tours.calendar.ownerLabel')}
+          today={today}
+          lastDay={addDays(today, 30)}
+          selected={day}
+          onSelect={setPicked}
+          isEnabled={() => true}
+          mark={(d) => {
+            const wins = byDay.get(d);
+            if (wins === undefined) return 'none';
+            return wins.some((w) => w.booked.length > 0) ? 'booked' : 'has';
+          }}
+        />
         {deleteError !== null && (
           <p role="alert" className={alert}>
             {deleteError}
           </p>
         )}
-        {windows.data.windows.length === 0 ? (
-          <EmptyState pose="sleep" message={t('tours.times.empty')} />
+        <section aria-labelledby={titleId} className="flex flex-col gap-3">
+          <h2 id={titleId} className="text-h3">
+            {formatTourDay(day, today)}
+          </h2>
+          {list.map((w) => (
+            <WindowCard
+              key={w.id}
+              win={w}
+              focus={w.id === focusId}
+              onFocused={clearFocus}
+              busy={remove.isPending && remove.variables === w.id}
+              onDelete={() => void onDelete(w)}
+            />
+          ))}
+          {list.length === 0 && (
+            <p className="text-body text-ink-muted">
+              {t(live ? 'tours.times.dayEmpty' : 'tours.times.dayNotLive')}
+            </p>
+          )}
+        </section>
+        {live ? (
+          <AddForm listingId={listing.id} date={day} onAdded={setFocusId} />
         ) : (
-          [...days].map(([day, list]) => (
-            <section
-              key={day}
-              aria-labelledby={`${titleId}-${day}`}
-              className="flex flex-col gap-3"
-            >
-              <h2 id={`${titleId}-${day}`} className="text-h3">
-                {formatTourDay(day, today)}
-              </h2>
-              {list.map((w) => (
-                <WindowCard
-                  key={w.id}
-                  win={w}
-                  focus={w.id === focusId}
-                  onFocused={clearFocus}
-                  busy={remove.isPending && remove.variables === w.id}
-                  onDelete={() => void onDelete(w)}
-                />
-              ))}
-            </section>
-          ))
+          <Card variant="muted" padding="md">
+            <p className="text-body text-ink-muted">{t('tours.times.notLive')}</p>
+          </Card>
         )}
       </>
     );

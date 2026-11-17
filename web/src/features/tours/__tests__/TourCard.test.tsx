@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../../locales/he.json';
 import { json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
@@ -10,7 +10,13 @@ import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { TourOut, TourSlotsOut } from '../api';
 import { formatTourWhen } from '../format';
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-11-17T10:00:00Z');
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -65,6 +71,10 @@ const noCard = async (t: ThreadOut) => {
   await screen.findByRole('heading', { level: 1, name: t.other_name ?? '' });
   expect(screen.queryByRole('heading', { name: c.title })).toBeNull();
 };
+const dayButtonIn = (box: HTMLElement, n: number) =>
+  within(box)
+    .getAllByRole('button')
+    .find((b) => b.hasAttribute('aria-pressed') && b.textContent === String(n)) as HTMLElement;
 const picker = () => screen.findByRole('dialog', { name: p.title });
 const noDialog = () =>
   waitFor(() => {
@@ -84,10 +94,14 @@ describe('TourCard', () => {
     expect(api.calls(slotsRoute(T))).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: c.book }));
     const box = await picker();
-    // One radio per slot, grouped by Israeli day (the second is the next day's 10:20).
-    const radios = await within(box).findAllByRole('radio');
-    expect(radios.map((r) => r.nextElementSibling?.textContent)).toEqual(['17:00', '10:20']);
-    expect(within(box).getAllByRole('group')).toHaveLength(2);
+    // The calendar opens on the first slot day (20 Nov): its one time, 17:00.
+    let radios = await within(box).findAllByRole('radio');
+    expect(radios.map((r) => r.nextElementSibling?.textContent)).toEqual(['17:00']);
+    fireEvent.click(dayButtonIn(box, 21));
+    radios = within(box).getAllByRole('radio');
+    expect(radios.map((r) => r.nextElementSibling?.textContent)).toEqual(['10:20']);
+    fireEvent.click(dayButtonIn(box, 20));
+    radios = within(box).getAllByRole('radio');
     const confirm = within(box).getByRole('button', { name: p.confirm });
     expect(confirm).toBeDisabled();
     fireEvent.click(radios[0] as HTMLElement);
@@ -121,9 +135,26 @@ describe('TourCard', () => {
     );
     // The dialog stays, the taken slot is gone and nothing is selected.
     await waitFor(() => {
-      expect(within(box).getAllByRole('radio')).toHaveLength(1);
+      expect(dayButtonIn(box, 21)).toHaveAttribute('aria-pressed', 'true');
     });
+    expect(within(box).getAllByRole('radio')).toHaveLength(1);
     expect(api.calls(slotsRoute(T))).toHaveLength(2);
+    expect(within(box).getByRole('button', { name: p.confirm })).toBeDisabled();
+  });
+
+  it('ac6_picker_calendar_shows_every_day_with_slots', async () => {
+    const T = thread();
+    renderCard(T, [json(T)], { [slotsRoute(T)]: [json(slots([SLOT_A, SLOT_B]))] });
+    await card();
+    fireEvent.click(screen.getByRole('button', { name: c.book }));
+    const box = await picker();
+    await within(box).findByRole('grid', { name: he.tours.calendar.seekerLabel });
+    expect(dayButtonIn(box, 20)).toBeEnabled();
+    expect(dayButtonIn(box, 21)).toBeEnabled();
+    expect(dayButtonIn(box, 19)).toBeDisabled();
+    expect(dayButtonIn(box, 20)).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(dayButtonIn(box, 21));
+    expect(within(box).getAllByRole('radio')).toHaveLength(1);
     expect(within(box).getByRole('button', { name: p.confirm })).toBeDisabled();
   });
 
@@ -152,6 +183,7 @@ describe('TourCard', () => {
     fireEvent.click(screen.getByRole('button', { name: c.book }));
     const box = await picker();
     expect(await within(box).findByText(p.empty)).toBeVisible();
+    expect(within(box).queryByRole('grid')).toBeNull();
     expect(within(box).getByRole('button', { name: p.confirm })).toBeDisabled();
   });
 

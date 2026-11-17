@@ -10,10 +10,11 @@ import { Loading } from '../../components/Loading';
 import { Skeleton } from '../../components/Skeleton';
 import { useOnline } from '../../components/useOnline';
 import { ApiError } from '../listings/api';
-import { todayInIsrael } from '../listings/format';
+import { addDays, todayInIsrael } from '../listings/format';
 import type { SlotOut } from './api';
 import { tourErrorText } from './errors';
 import { formatTourDay, formatTourTime, tourDay } from './format';
+import { MonthCalendar } from './MonthCalendar';
 import { useBookTour, useRescheduleTour } from './useTourActions';
 import { useTourSlots } from './useTourSlots';
 
@@ -28,7 +29,7 @@ function byDay(slots: SlotOut[]): [string, SlotOut[]][] {
 }
 
 /**
- * The seeker's slot picker: a dialog with one radio group per day. `tourId` set = reschedule that
+ * The seeker's slot picker: a dialog with a month calendar of the days with free slots and one radio group for the chosen day. `tourId` set = reschedule that
  * tour, else book. `conversationId` is the chat's (= the application's) id. `onDone` runs after a
  * success (the card moves focus); a 409 that makes the tour stale closes it.
  */
@@ -51,11 +52,13 @@ export function SlotPicker({
   const book = useBookTour(conversationId);
   const move = useRescheduleTour(conversationId);
   const [selected, setSelected] = useState<string | null>(null);
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
   const action = tourId === null ? book : move;
 
   function close() {
     setSelected(null);
+    setPickedDay(null);
     setFailure(null);
     onClose();
   }
@@ -97,25 +100,43 @@ export function SlotPicker({
   } else if (slots.data.slots.length === 0) {
     body = <EmptyState message={t('tours.picker.empty')} />;
   } else {
+    const days = new Map(byDay(slots.data.slots));
+    const [firstDay = today] = days.keys();
+    // A day a refetch dropped moves to the first one after it, else the first.
+    const day =
+      pickedDay !== null && days.has(pickedDay)
+        ? pickedDay
+        : ([...days.keys()].find((d) => pickedDay !== null && d > pickedDay) ?? firstDay);
+    const list = days.get(day) ?? [];
     body = (
       <div className="flex flex-col gap-4">
-        {byDay(slots.data.slots).map(([day, list]) => (
-          <ChoiceGroup
-            key={day}
-            legend={formatTourDay(day, today)}
-            name="tour-slot"
-            wrap
-            options={list.map((slot) => ({
-              value: slot.starts_at,
-              label: formatTourTime(slot.starts_at),
-            }))}
-            value={list.some((slot) => slot.starts_at === selected) ? selected : null}
-            onChange={(value) => {
-              setSelected(value);
-              setFailure(null);
-            }}
-          />
-        ))}
+        <MonthCalendar
+          label={t('tours.calendar.seekerLabel')}
+          today={today}
+          lastDay={addDays(today, 30)}
+          selected={day}
+          onSelect={(d) => {
+            setPickedDay(d);
+            setSelected(null);
+            setFailure(null);
+          }}
+          isEnabled={(d) => days.has(d)}
+          mark={(d) => (days.has(d) ? 'has' : 'none')}
+        />
+        <ChoiceGroup
+          legend={formatTourDay(day, today)}
+          name="tour-slot"
+          wrap
+          options={list.map((slot) => ({
+            value: slot.starts_at,
+            label: formatTourTime(slot.starts_at),
+          }))}
+          value={list.some((slot) => slot.starts_at === selected) ? selected : null}
+          onChange={(value) => {
+            setSelected(value);
+            setFailure(null);
+          }}
+        />
       </div>
     );
   }

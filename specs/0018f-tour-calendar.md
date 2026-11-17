@@ -1,7 +1,7 @@
 ---
 id: 0018f
 title: The lister's tour times and the seeker's slot picker show a month calendar instead of day-by-day lists
-status: verified
+status: in-review
 depends_on: []   # 0018a–e are merged; web only, over the existing API
 reviewers: [qa, ux]   # ux: two screens change shape, a new keyboard grid; qa: the add/delete/book/move flows keep working. No new endpoint, no security. No perf
 estimate: 1 coder run   # coder Sonnet/medium: UI over a finished API, no migration
