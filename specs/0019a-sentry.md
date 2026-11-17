@@ -109,8 +109,8 @@ site, uptime monitoring (so a Postgres/Redis outage emails no one, accepted), Sl
 alert to the account owner is the alert), PostHog (`0019b`).
 
 **New dependencies (exact pins):** `sentry-sdk[fastapi]==2.75.0` (api; the arq integration ships inside it, arq
-0.28 ≥ its 0.23 minimum), `@sentry/react@11.13.0` (web; peer react 17–19 and react-router 6–8, we have 18.3.1 /
-7.18.5), `@sentry/vite-plugin@11.13.0` (web dev; needs Node ≥ 20.19 or ≥ 22.12).
+0.28 ≥ its 0.23 minimum), `@sentry/react@11.12.0` (web; peer react 17–19 and react-router 6–8, we have 18.3.1 /
+7.18.5), `@sentry/vite-plugin@11.12.0` (web dev; needs Node ≥ 20.19 or ≥ 22.12).
 
 ## Data
 No tables, no migration.
@@ -199,9 +199,8 @@ CI).
 - Before tracing is ever turned on (`SENTRY_TRACES_SAMPLE_RATE` > 0): the scrubber redacts emails and feed tokens in
   spans but keeps span `data`, where an httpx span holds the Nominatim query (street and city); review span
   scrubbing then.
-- `@sentry/react` / `@sentry/vite-plugin` 11.13.0 were published 2026-11-16 16:28 UTC; pnpm 12's default
-  `minimumReleaseAge` (1 day) refuses them until 2026-11-17 16:28 UTC. Not worked around in the repo (no
-  `minimumReleaseAgeExclude`, as 0000b chose); CI's `pnpm install --frozen-lockfile` passes once the day is over.
+- Web Sentry packages pinned to 11.12.0, not 11.13.0 (build, 2026-11-17): 11.13.0 was published 2026-11-16 and pnpm 12's
+  default `minimumReleaseAge` (1 day) refused it; no `minimumReleaseAgeExclude`, as 0000b chose. Bump both together later.
 
 ## Verifier findings (2026-11-17, applied in place)
 1. Worker init moved from `on_startup` to module level: arq's integration wraps jobs in `create_worker`, which runs
@@ -220,7 +219,7 @@ CI).
 9. AC10 path is `web/scripts/__tests__/build-check.test.ts`; web test file is `.tsx` (it renders JSX).
 10. Versions pinned; option names confirmed: sentry-sdk 2.75.0 (`include_local_variables`, `max_request_body_size`,
     `send_default_pii`, `before_send_transaction`, `transaction_style`, `failed_request_status_codes`,
-    `ArqIntegration`), `@sentry/react` 11.13.0 (`ErrorBoundary`, `beforeBreadcrumb`), `@sentry/vite-plugin` 11.13.0
+    `ArqIntegration`), `@sentry/react` 11.13.0 (`ErrorBoundary`, `beforeBreadcrumb`), `@sentry/vite-plugin` 11.13.0 (built on 11.12.0, see Risks)
     (`sourcemaps.filesToDeleteAfterUpload`; Sentry's current docs import the same plugin from
     `@sentry/bundler-plugins/vite`, which `@sentry/vite-plugin` wraps). `telemetry: false` added.
 11. `qa` added to reviewers (UI fallback + API behaviour, checklist rule 8).
