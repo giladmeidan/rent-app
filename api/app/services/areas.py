@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Area
 from app.services.geocoding import street_query
-from app.services.rent_estimate import _STREET_PREFIXES, normalise_place
+from app.services.rent_estimate import normalise_place, street_forms
 from app.services.rent_reference import RentFetcher, parse_rent_file
 
 log = logging.getLogger(__name__)
@@ -78,14 +78,11 @@ def neighbourhood_for_street(
 ) -> uuid.UUID | None:
     """The one active neighbourhood of `settlement_id` whose `streets` hold `street` (its house
     number dropped, `street_query`; `normalise_place` on both sides, the `רחוב ` / `רח ` prefix
-    also tried), else None (unlisted, or in several: city level). Spec 0021a2; the rule of
-    `rent_estimate._neighbourhood`."""
-    form = normalise_place(street_query(street))
-    forms = {form}
-    for prefix in _STREET_PREFIXES:
-        if form.startswith(prefix):
-            forms.add(form.removeprefix(prefix))
-            break
+    also tried, `rent_estimate.street_forms`), else None: unlisted, in several (city level), or no
+    street name left. Spec 0021a2; the rule of `rent_estimate._neighbourhood`."""
+    forms = street_forms(street_query(street))
+    if "" in forms:  # an all-number street: never match an empty catalogue name
+        return None
     rows = db.execute(
         select(Area.id, Area.streets).where(
             Area.kind == "neighbourhood",

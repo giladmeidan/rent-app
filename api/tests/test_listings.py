@@ -1231,6 +1231,8 @@ def test_ac1_neighbourhood_from_street(
     insert_neighbourhood(db_engine, gush_dan, 3, ["אלנבי"], active=False)
     givatayim = insert_settlement(db_engine, 6300, "גבעתיים")
     hood_g = insert_neighbourhood(db_engine, givatayim, 4, ["כצנלסון"])
+    insert_neighbourhood(db_engine, gush_dan, 5, [""])  # a blank catalogue name
+    bnei_brak = insert_settlement(db_engine, 6100, "בני ברק")  # no neighbourhoods
     with Session(db_engine) as db:
 
         def hood(settlement: uuid.UUID, street: str) -> uuid.UUID | None:
@@ -1245,6 +1247,8 @@ def test_ac1_neighbourhood_from_street(
         assert hood(gush_dan, "שדרות רוטשילד") is None  # in none
         assert hood(gush_dan, "כצנלסון") is None  # another settlement's neighbourhood
         assert hood(givatayim, "כצנלסון 4") == hood_g
+        assert hood(gush_dan, "12") is None  # no street name left: never the blank one
+        assert hood(bnei_brak, "דיזנגוף") is None
 
     def hood_of(listing_id: str) -> Any:
         return _row(db_engine, listing_id)["neighbourhood_id"]

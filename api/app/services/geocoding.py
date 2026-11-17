@@ -43,8 +43,6 @@ _JITTER_STEP = 0.0001
 _JITTER_STEPS = round(JITTER_DEG / _JITTER_STEP)
 
 SWEEP_BATCH = 20
-# A located listing with no neighbourhood takes the nearest active centre this close (spec 0021a2).
-NEIGHBOURHOOD_RADIUS_M = 1500
 SWEEP_BUDGET_S = 6.0
 MAX_ATTEMPTS = 5
 LOCK_TTL_S = 60
@@ -214,6 +212,10 @@ def _cached(raw: bytes | None) -> Point | None | object:
         return (float(lng), float(lat))
     except (ValueError, TypeError):
         return _MISS
+
+
+# A located listing with no neighbourhood takes the nearest active centre this close (spec 0021a2).
+NEIGHBOURHOOD_RADIUS_M = 1500
 
 
 def _nearest_neighbourhood(

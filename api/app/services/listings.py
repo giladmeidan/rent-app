@@ -29,7 +29,7 @@ the listing's own transaction (on create, and on a PATCH that changes `price_ils
 answer (`set_closure`) is set only while the listing is not live and does not move `updated_at`;
 a resume (a paused listing PATCHed to `active`) or a renewal clears it.
 
-Neighbourhood (spec 0021a2): create, and every PATCH that sends `street` or `area_id`, sets
+Neighbourhood (spec 0021a2): create, and every PATCH that changes the address, sets
 `neighbourhood_id` from the street (`areas.neighbourhood_for_street`); the geocoding sweep fills it
 from the point when the street could not tell.
 """
@@ -140,13 +140,15 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
     or `ListingCapReachedError` (nothing written). Commits."""
     try:
         city = _check_area(db, data.area_id)
+        # Before the cap's owner lock: it only reads `areas`.
+        neighbourhood_id = neighbourhood_for_street(db, data.area_id, data.street)
         _enforce_cap(db, owner.id)
         listing = db.scalars(
             insert(Listing)
             .values(
                 **data.model_dump(),
                 city=city,
-                neighbourhood_id=neighbourhood_for_street(db, data.area_id, data.street),
+                neighbourhood_id=neighbourhood_id,
                 owner_id=owner.id,
                 expires_at=func.now() + dt.timedelta(days=LISTING_TTL_DAYS),
             )
@@ -245,8 +247,6 @@ def update_listing(
         }
         if "area_id" in patch.model_fields_set:
             values["city"] = _check_area(db, data.area_id)
-        if patch.model_fields_set & {"street", "area_id"}:
-            values["neighbourhood_id"] = neighbourhood_for_street(db, data.area_id, data.street)
         if patch.status == "active" and listing.status == "paused":
             # The paused listing is not live, so the count is of the others only.
             # shortcut: resume locks listing then user, DELETE /me user then listing (spec 0013c);
@@ -262,8 +262,10 @@ def update_listing(
         if any(
             name in values and values[name] != getattr(listing, name) for name in _ADDRESS_FIELDS
         ):
-            # A new address: the worker geocodes it again (spec 0003c); the old point is dropped.
+            # A new address: the worker geocodes it again (spec 0003c); the old point is dropped,
+            # and the neighbourhood is derived again (0021a2; the sweep refills it from the point).
             values.update(location=None, geocode_status="pending", geocode_attempts=0)
+            values["neighbourhood_id"] = neighbourhood_for_street(db, data.area_id, data.street)
         updated = db.scalars(
             update(Listing)
             .where(Listing.id == listing_id, Listing.owner_id == owner.id)

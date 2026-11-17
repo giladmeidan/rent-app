@@ -588,7 +588,11 @@ FAR: Point = (34.72, 32.02)
 
 @pytest.mark.usefixtures("geo_clean")
 def test_ac2_neighbourhood_from_point(
-    gush_dan: uuid.UUID, db_engine: Engine, owner_id: uuid.UUID
+    client: TestClient,
+    outbox: Outbox,
+    gush_dan: uuid.UUID,
+    db_engine: Engine,
+    owner_id: uuid.UUID,
 ) -> None:
     lng, lat = POINT
     # 1 degree of latitude is ~111 km; the stored point is POINT moved by at most 0.002 per axis.
@@ -617,3 +621,18 @@ def test_ac2_neighbourhood_from_point(
     assert hood(placed) == near
     assert hood(far) is None
     assert hood(kept) == mid
+
+    # Only a changed address derives the neighbourhood again: re-sending the street keeps the one
+    # the sweep found; a new street (in no neighbourhood) clears it, and the next sweep refills it.
+    owner = signup(client, outbox, "o2@example.com", "owner")
+    edited = make_listing(
+        db_engine, uuid.UUID(owner.get("/me").json()["id"]), gush_dan, street=KATZ
+    )
+    assert _sweep(db_engine, stub) == _counts(located=1, cached=1)
+    assert hood(edited) == near
+    assert owner.patch(f"/listings/{edited}", json={"street": KATZ}).status_code == 200
+    assert hood(edited) == near
+    assert owner.patch(f"/listings/{edited}", json={"street": HERZL}).status_code == 200
+    assert hood(edited) is None
+    assert _sweep(db_engine, stub) == _counts(located=1)
+    assert hood(edited) == near
