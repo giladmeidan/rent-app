@@ -88,6 +88,7 @@ export function MonthCalendar({
   const [seen, setSeen] = useState(selected);
   if (seen !== selected) {
     setSeen(selected);
+    setFocusDay(null); // the tab stop follows a new selection
     if (selected !== null && months.includes(selected.slice(0, 7))) setMonth(selected.slice(0, 7));
   }
 

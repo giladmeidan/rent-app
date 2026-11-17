@@ -324,3 +324,9 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0018d · web/src/features/tours/__tests__/CalendarFeedButton.test.tsx ac16 · the double-click test cannot prove the same-tick `inFlight` guard (`fireEvent` flushes React between clicks, so the button is already disabled); dispatch both clicks inside one `act()` and assert one POST · review qa minor
 - [ ] 0018d · web/src/features/tours/__tests__/CalendarFeedButton.test.tsx · mutation-error branches untested: 429 without `Retry-After` (`tours.feed.rateLimited`), create/disable 500 (`common.error`), rotate failure · review qa minor
 - [ ] 0018d · api/tests/test_tour_feed.py · no test for two concurrent `POST /me/tour-feed` leaving exactly one live token (ac4 covers sequential rotate) · review qa minor
+
+## 0018f
+- [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (`onKeyDown`) · Home/End/PageUp/PageDown/ArrowUp/Down do nothing when the target day falls outside today…lastDay (e.g. Home on 19 Nov when Sunday 15 Nov is past, PageDown from 25 Nov); clamp the target to the range, then step in the key's direction · spec says "stays put if none in range"; review qa minor
+- [ ] 0018f · web/src/features/tours/__tests__/MonthCalendar.test.tsx · no cases for Home/End, PageUp, ArrowUp, LTR direction · qa minor
+- [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (caption) · at 320 px in the dialog the month title and the prev/next labels wrap to two lines; shorter visible labels ("הקודם"/"הבא") with the full `aria-label` · ux minor
+- [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (day styles) · disabled days (bold, grey, no border) read almost as strongly as enabled ones, today is not marked; lighter weight for disabled + a today ring; `has`/`booked` dots differ by colour only (shape/ring for colour-blind users) · ux minor/nit
