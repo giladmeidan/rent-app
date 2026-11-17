@@ -1,7 +1,7 @@
 ---
 id: 0020a
 title: A chat thread opens with a short header and its messages, not a stack of captions, buttons and cards
-status: in-review
+status: done
 depends_on: []   # web only, over the existing API
 reviewers: [ux]   # cosmetic: the same controls and states, moved and restyled (Speed rule 4); coder Sonnet/medium
 estimate: 1 coder run (small)
@@ -154,6 +154,7 @@ edits in Scope; no new e2e (CI only; never run e2e locally).
 - Risks resolved: dialog stays in the panel (top layer, page inert while open); 0011d has no visibility AC.
 
 ## Digest
+Merged 2026-11-17, PR #127 (`cf78cd8`), ci green on head `507b24a`.
 Spec 0020a — chat thread declutter   (in-review, web only)
 What a user can do after this: open a chat and see the listing as the header subtitle and the first messages on the first screen; to-listing, remove match and report are one tap away behind "פעולות".
 Decisions I need from you: none.
