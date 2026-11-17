@@ -195,7 +195,7 @@ CI).
 - Found in the build (coder, 2026-11-17), no decision needed: `@sentry/react` 11 has no `sendDefaultPii` (removed;
   its replacement `dataCollection` defaults to collecting user info, cookies, headers, bodies and query params), so
   `initSentry` sets `dataCollection` with all of those off instead; `beforeSend` scrubs either way. sentry-sdk 2.75.0
-  still takes `send_default_pii=False` but warns it is deprecated in favour of `data_collection`.
+  deprecates `send_default_pii`, so `init_sentry` passes `data_collection` with everything off instead (review).
 - Before tracing is ever turned on (`SENTRY_TRACES_SAMPLE_RATE` > 0): the scrubber redacts emails and feed tokens in
   spans but keeps span `data`, where an httpx span holds the Nominatim query (street and city); review span
   scrubbing then.
