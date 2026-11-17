@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session, get_sessionmaker, make_engine
 from app.main import create_app
+from app.services import areas
 from app.services.areas import CSV_PATH, import_areas
 from app.services.rent_reference import RentSourceError
 from scripts.build_settlements import settlement_row
@@ -22,6 +23,7 @@ from scripts.seed import FixtureFetcher
 from tests.conftest import insert_settlement
 from tests.test_rent_reference import (
     RAMAT_HAHAYAL,
+    REVIVIM,
     TEL_AVIV,
     FakeRentFetcher,
     _files,
@@ -112,7 +114,10 @@ def test_ac1_catalogue(client: TestClient, db: Session, db_engine: Engine) -> No
     assert _metres(tuple(hoods["n-65210029"]["centre"]), REVIVIM_CENTRE) < 1
 
 
-def test_ac2_import_idempotent_and_soft(db: Session, db_engine: Engine, tmp_path: Path) -> None:
+def test_ac2_import_idempotent_and_soft(
+    db: Session, db_engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(areas, "MIN_SETTLEMENTS", 1)  # two-row CSVs below
     csv_path = _write_csv(tmp_path / "s.csv", [(5000, "תל אביב-יפו"), (565, "אזור")])
     files = _files()
     first = import_areas(db, FakeRentFetcher(files), csv_path)
@@ -135,6 +140,20 @@ def test_ac2_import_idempotent_and_soft(db: Session, db_engine: Engine, tmp_path
     assert _active(db_engine, "neighbourhood", 65210036) is False
     assert len(_snapshot(db_engine)) == len(before)
 
+    # Revivim's own file fails under a passing Tel Aviv file: it stays active, counted failed.
+    failed_before = counts["files_failed"]
+    revivim = files.pop(REVIVIM)
+    counts = import_areas(db, FakeRentFetcher(files), csv_path)
+    assert counts["files_failed"] == failed_before + 1 and counts["deactivated"] == 0
+    assert _active(db_engine, "neighbourhood", 65210029) is True
+    files[REVIVIM] = revivim
+
+    # Tel Aviv's file passes but lists no neighbourhood: a failed file, nothing deactivated.
+    empty = {**tel_aviv, "otherNeighborhoods": [], "neighborhoodsPrices": []}
+    counts = import_areas(db, FakeRentFetcher({**files, TEL_AVIV: empty}), csv_path)
+    assert counts["files_failed"] == failed_before + 1 and counts["deactivated"] == 0
+    assert _active(db_engine, "neighbourhood", 65210029) is True
+
     # Tel Aviv's file fails: none of its neighbourhoods is deactivated.
     files[TEL_AVIV] = RentSourceError("status 503")
     counts = import_areas(db, FakeRentFetcher(files), csv_path)
@@ -154,6 +173,16 @@ def test_ac2_import_idempotent_and_soft(db: Session, db_engine: Engine, tmp_path
     assert _active(db_engine, "settlement", 565) is False
     assert _active(db_engine, "neighbourhood", 65210029) is False
     assert len(_snapshot(db_engine)) == len(before)
+
+
+def test_short_csv_is_refused(db: Session, db_engine: Engine, tmp_path: Path) -> None:
+    insert_settlement(db_engine, 5000, "תל אביב-יפו")
+    short = _write_csv(tmp_path / "s.csv", [(5000, "תל אביב-יפו")])
+
+    with pytest.raises(ValueError, match="1 rows"):
+        import_areas(db, FakeRentFetcher(_files()), short)
+
+    assert _active(db_engine, "settlement", 5000) is True
 
 
 def test_ac3_settlement_row() -> None:

@@ -1,6 +1,6 @@
 """Seed the areas: every settlement of `api/data/settlements.csv` and the neighbourhoods the rent
 fixtures list (`import_areas` with `FixtureFetcher`, spec 0021a1; no network). Idempotent; safe to
-run on every `make dev`.
+run on every `make dev`; a no-op once any neighbourhood is stored.
 
 Usage: `python api/scripts/seed.py` (reads DATABASE_URL from the environment).
 """
@@ -11,10 +11,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import Engine  # noqa: E402
+from sqlalchemy import Engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.db import make_engine  # noqa: E402
+from app.models import Area  # noqa: E402
 from app.services.areas import import_areas  # noqa: E402
 from app.services.rent_reference import RentSourceError  # noqa: E402
 
@@ -34,8 +35,12 @@ class FixtureFetcher:
 
 
 def seed_areas(engine: Engine) -> dict[str, int]:
-    """Import the areas through the fixture fetcher; returns `import_areas`' counts."""
+    """Import the areas through the fixture fetcher; returns `import_areas`' counts, or
+    `{"skipped": 1}` when any neighbourhood is already stored: the fixtures list only a few, and
+    a fixture run would deactivate the rest of a real `make import-areas` for good."""
     with Session(engine) as db:
+        if db.scalar(select(Area.id).where(Area.kind == "neighbourhood").limit(1)) is not None:
+            return {"skipped": 1}
         return import_areas(db, FixtureFetcher())
 
 

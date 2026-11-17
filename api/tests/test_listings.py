@@ -241,12 +241,14 @@ _TOO_FAR = (dt.date.today() + dt.timedelta(days=3 * 365)).isoformat()
         {"size_sqm": 3},
         {"floor": 3, "total_floors": 2},
         {"street": _long(81)},
+        {"street": " "},
         {"description": _long(2001)},
         {"available_from": _TOO_FAR},
         {"listing_type": "villa"},
         {"furnished": "yes"},
         {"parking_spots": 6},
         {"description": "דירה \u202eמוארת"},
+        {"street": "כצנ\nלסון"},
         {"elevator": None},  # removed from the body below
     ],
     ids=[
@@ -258,12 +260,14 @@ _TOO_FAR = (dt.date.today() + dt.timedelta(days=3 * 365)).isoformat()
         "size-3",
         "total-floors-below-floor",
         "street-81",
+        "street-blank",
         "description-2001",
         "available-from-3-years",
         "type-villa",
         "furnished-yes",
         "parking-6",
         "description-bidi-override",
+        "street-newline",
         "missing-elevator",
     ],
 )
@@ -292,11 +296,13 @@ _INVISIBLE = "contains control or invisible characters"
             "\u05d3\u05d9\u05e8\u05d4 \u3164 \u05de\u05d5\u05d0\u05e8\u05ea",
             f"description {_INVISIBLE}",
         ),
+        ("street", "...", "street must contain a letter or digit"),
         ("street", "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df\ue000", f"street {_INVISIBLE}"),
         ("description", "a" + "\u0301" * 5, "description has too many combining marks in a row"),
     ],
     ids=[
         "description-hangul-filler",
+        "street-punctuation-only",
         "street-private-use",
         "description-zalgo",
     ],
@@ -318,6 +324,22 @@ def test_ac6_text_rules_are_value_error_at_field(
     assert detail[0]["msg"] == f"Value error, {msg}"
     assert "input" not in detail[0]
     assert _count(db_engine) == 0
+
+
+def test_ac6_patch_rejects_blank_letter_street(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    listing = _create(owner, gush_dan)
+    row_before = _row(db_engine, listing["id"])
+
+    response = _patch(owner, listing["id"], {"street": "\u3164"})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail[0]["type"] == "value_error"
+    assert detail[0]["loc"] == ["body", "street"]
+    assert detail[0]["msg"] == f"Value error, street {_INVISIBLE}"
+    assert _row(db_engine, listing["id"]) == row_before
 
 
 def test_ac4_area_must_be_settlement(

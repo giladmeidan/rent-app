@@ -341,3 +341,4 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 
 ## 0021a1
 - [ ] 0021a1 · 0013a deploy runbook · run `make import-areas` right after `make migrate` on the first production deploy (the areas catalogue is data, not a migration) · from the 0021a verification
+- [ ] 0021a1 · 0013a `api/scripts/release.sh` and the API image · the release must not rely on `scripts/seed.py` for areas: run `import_areas` with the real fetcher (`make import-areas`) as a manual post-deploy step, and ship `api/data/settlements.csv` in the API image (seed reads it; it skips once any neighbourhood is stored) · from the 0021a1 review (major 1)

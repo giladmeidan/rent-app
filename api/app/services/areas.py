@@ -49,6 +49,8 @@ CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "settlements.csv"
 # their city in practice.
 SETTLEMENT_BOX_DEG = 0.1
 NEIGHBOURHOOD_BOX_DEG = 0.01
+# A CSV shorter than this is truncated or empty: importing it would deactivate most settlements.
+MIN_SETTLEMENTS = 1000
 
 
 def list_active_areas(session: Session) -> Sequence[Any]:
@@ -131,16 +133,21 @@ def read_settlements(csv_path: Path) -> list[dict[str, Any]]:
 
 
 def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -> dict[str, int]:
-    """Upsert the settlements, then each big city's neighbourhoods; one transaction, committed.
-    Logs the counts only, never a URL."""
+    """Upsert the settlements, then each big city's neighbourhoods, committing after the
+    settlements and after each city (no run-long row locks). Raises `ValueError` before any write
+    when the CSV has fewer than `MIN_SETTLEMENTS` rows. Logs the counts only, never a URL."""
+    rows = read_settlements(csv_path)
+    if len(rows) < MIN_SETTLEMENTS:
+        raise ValueError(f"settlements CSV has {len(rows)} rows, expected {MIN_SETTLEMENTS}+")
     counts = dict.fromkeys(
         ("settlements", "neighbourhoods", "deactivated", "files_failed", "kept_inactive"), 0
     )
-    settlements = _upsert(db, read_settlements(csv_path), SETTLEMENT_BOX_DEG)
+    settlements = _upsert(db, rows, SETTLEMENT_BOX_DEG)
     counts["settlements"] = len(settlements)
     counts["deactivated"] += _deactivate(
         db, Area.kind == "settlement", Area.source_code.not_in(list(settlements))
     )
+    db.commit()
     stored = list(settlements.values())
     for code in BIG_CITY_CODES:
         if code not in settlements:
@@ -153,7 +160,10 @@ def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -
         except Exception:  # a failed file is counted and skipped; it deactivates nothing
             counts["files_failed"] += 1
             continue
-        rows = []
+        if not city.neighbourhood_ids:  # a big city listing none is a bad file, not a removal
+            counts["files_failed"] += 1
+            continue
+        hood_rows = []
         for hood_id in city.neighbourhood_ids:
             try:
                 hood = parse_rent_file(
@@ -165,7 +175,7 @@ def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -
             except Exception:
                 counts["files_failed"] += 1
                 continue
-            rows.append(
+            hood_rows.append(
                 {
                     "kind": "neighbourhood",
                     "source_code": hood_id,
@@ -176,7 +186,7 @@ def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -
                     "streets": hood.streets,
                 }
             )
-        hoods = _upsert(db, rows, NEIGHBOURHOOD_BOX_DEG)
+        hoods = _upsert(db, hood_rows, NEIGHBOURHOOD_BOX_DEG)
         counts["neighbourhoods"] += len(hoods)
         stored += hoods.values()
         counts["deactivated"] += _deactivate(
@@ -185,7 +195,7 @@ def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -
             Area.parent_id == parent_id,
             Area.source_code.not_in(city.neighbourhood_ids),
         )
+        db.commit()
     counts["kept_inactive"] = sum(1 for _id, active in stored if not active)
-    db.commit()
     log.info("area import: %s", counts)
     return counts
