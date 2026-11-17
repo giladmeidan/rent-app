@@ -14,7 +14,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event
 
-from tests.conftest import Outbox, make_listing, make_seeker, signup
+from app.services import photos
+from tests.conftest import Outbox, make_listing, make_photo, make_seeker, signup
 from tests.test_tours import _execute, _ok, _user_id, db_now, make_tour, shortlisted
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
@@ -111,6 +112,10 @@ def test_ac1_lister_sees_tours_across_listings(
     now: dt.datetime,
     db_engine: Engine,
 ) -> None:
+    # The apartment's cover is its position-0 photo; the room has none.
+    make_photo(db_engine, apartment, position=1)
+    key = "k" * 43  # the check constraint wants a 43-char url-safe key
+    cover_id = make_photo(db_engine, apartment, position=0, key=key)
     flat_tour, flat_chat = _tour(db_engine, owner_id, apartment, seeker_id, now + 3 * HOUR)
     room_tour, room_chat = _tour(db_engine, owner_id, room, yael_id, now + 2 * HOUR)
     rows = _ok(owner.get("/tours"))
@@ -124,6 +129,7 @@ def test_ac1_lister_sees_tours_across_listings(
         "rooms": 2.5,
         "street": "הרצל",
         "city": "תל אביב",
+        "cover": None,
     }
     assert rows[1]["listing"] == {
         "id": str(apartment),
@@ -131,6 +137,7 @@ def test_ac1_lister_sees_tours_across_listings(
         "rooms": 3.5,
         "street": "כצנלסון",
         "city": "גבעתיים",
+        "cover": photos.photo_out(cover_id, key).model_dump(mode="json"),
     }
     starts = [dt.datetime.fromisoformat(r["starts_at"]) for r in rows]
     assert starts == [now + 2 * HOUR, now + 3 * HOUR]

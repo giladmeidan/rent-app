@@ -47,7 +47,16 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
-from app.models import Application, Conversation, Listing, Message, Tour, TourWindow, User
+from app.models import (
+    Application,
+    Conversation,
+    Listing,
+    ListingPhoto,
+    Message,
+    Tour,
+    TourWindow,
+    User,
+)
 from app.redis_client import RedisClient
 from app.schemas.tours import TourChangeKind as TourChangeKind  # the services' name too
 from app.schemas.tours import TourWindowIn
@@ -703,10 +712,12 @@ def agenda_statement(me: User) -> CompoundSelect[Any]:
     (`role = 'seeker'`, `other_name` the owner), `starts_at` then `id`, at most
     `TOURS_AGENDA_LIMIT`. No listing-visibility filter: a booked tour on an expired listing stays
     booked (specs/TOURS-PLAN.md), as in 0018c's reminders and 0018d's feed. The other party must
-    not be suspended or deleted."""
+    not be suspended or deleted. `cover_id` / `cover_key`: the listing's position-0 photo, NULL
+    without photos (as `search._with_cover`)."""
 
     def branch(role: str, mine: ColumnElement[bool], other_id: Any) -> Any:
         other = aliased(User)  # the other party: the seeker for the lister, the owner otherwise
+        cover = aliased(ListingPhoto)
         return (
             select(
                 Tour.id,
@@ -720,10 +731,13 @@ def agenda_statement(me: User) -> CompoundSelect[Any]:
                 Listing.rooms,
                 Listing.street,
                 Listing.city,
+                cover.id.label("cover_id"),
+                cover.key.label("cover_key"),
             )
             .select_from(Tour)
             .join(Listing, Listing.id == Tour.listing_id)
             .join(other, other.id == other_id)
+            .outerjoin(cover, and_(cover.listing_id == Listing.id, cover.position == 0))
             .where(
                 Tour.status == "booked",
                 Tour.ends_at > func.now(),

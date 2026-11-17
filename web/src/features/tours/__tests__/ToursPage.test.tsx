@@ -38,6 +38,7 @@ function item(hours: number, overrides: Partial<TourAgendaItemOut> = {}): TourAg
       rooms: 3,
       street: `הרצל ${String(n)}`,
       city: 'גבעתיים',
+      cover: null,
     },
     ...overrides,
   };
@@ -96,6 +97,24 @@ describe('ToursPage', () => {
     expect(days(sections[1] as (typeof sections)[number])).toEqual(['היום']);
     expect(within(rowOf(midnight)).getByText('00:30–01:00')).toBeVisible();
     expect(within(rowOf(late)).getByText('23:00–23:30')).toBeVisible();
+  });
+
+  it('shows_the_listing_cover_photo', async () => {
+    const base = item(1);
+    const withCover = {
+      ...base,
+      listing: {
+        ...base.listing,
+        cover: { id: 'p1', small_url: '/media/s.jpg', large_url: '/media/l.jpg' },
+      },
+    };
+    const without = item(2);
+    renderPage([json([withCover, without])]);
+    await screen.findByRole('heading', { level: 2, name: t.sections.lister });
+    const img = rowOf(withCover).querySelector('img');
+    expect(img?.getAttribute('src')).toBe('/media/s.jpg');
+    expect(img?.getAttribute('alt')).toBe('');
+    expect(rowOf(without).querySelector('img')).toBeNull();
   });
 
   it('ac10_lister_only_has_no_seeker_heading', async () => {

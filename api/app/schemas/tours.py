@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
+from app.schemas.photo import PhotoOut
+
 TourChangeKind = Literal[
     "booked", "rescheduled", "cancelled_by_seeker", "cancelled_by_lister", "cancelled_by_system"
 ]
@@ -81,13 +83,15 @@ class TourStartIn(BaseModel):
 
 
 class TourAgendaListingOut(BaseModel):
-    """The facts the web's `cardTitle` needs (spec 0018b)."""
+    """The facts the web's `cardTitle` needs (spec 0018b), and the cover photo (null without
+    photos)."""
 
     id: uuid.UUID
     listing_type: Literal["apartment", "room"]
     rooms: float
     street: str
     city: str
+    cover: PhotoOut | None
 
 
 class TourAgendaItemOut(BaseModel):

@@ -33,7 +33,7 @@ from app.schemas.tours import (
     TourWindowOut,
     TourWindowsOut,
 )
-from app.services import tours
+from app.services import photos, tours
 
 router = APIRouter(tags=["tours"])
 
@@ -109,6 +109,7 @@ def list_tours(user: UserDep, db: DbDep) -> list[TourAgendaItemOut]:
                 rooms=row.rooms,
                 street=row.street,
                 city=row.city,
+                cover=photos.cover_out(row.cover_id, row.cover_key),
             ),
         )
         for row in tours.list_agenda(db, user)

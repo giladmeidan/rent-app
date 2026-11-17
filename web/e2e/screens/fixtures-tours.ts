@@ -39,6 +39,7 @@ const tour = (
     rooms: 3.5,
     street: 'כצנלסון',
     city: 'גבעתיים',
+    cover: null,
   },
   ...overrides,
 });
@@ -54,6 +55,7 @@ export const LISTER_ROWS: TourAgendaItemOut[] = [
       rooms: 2.5,
       street: 'הרצל',
       city: 'תל אביב',
+      cover: null,
     },
   }),
   tour(3, addDays(today, 4), { other_name: 'תמר' }),
