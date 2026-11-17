@@ -78,3 +78,26 @@ class TourStartIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     starts_at: AwareDatetime
+
+
+class TourAgendaListingOut(BaseModel):
+    """The facts the web's `cardTitle` needs (spec 0018b)."""
+
+    id: uuid.UUID
+    listing_type: Literal["apartment", "room"]
+    rooms: float
+    street: str
+    city: str
+
+
+class TourAgendaItemOut(BaseModel):
+    """One upcoming booked tour of the caller, as the listing's owner (`lister`) or as the seeker
+    (spec 0018b). `other_name` is the other party's display name."""
+
+    id: uuid.UUID
+    role: Literal["lister", "seeker"]
+    starts_at: dt.datetime
+    ends_at: dt.datetime
+    conversation_id: uuid.UUID  # = the application's id
+    other_name: str
+    listing: TourAgendaListingOut

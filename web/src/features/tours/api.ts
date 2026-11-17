@@ -8,6 +8,7 @@ export type TourWindowsOut = components['schemas']['TourWindowsOut'];
 export type TourSlotsOut = components['schemas']['TourSlotsOut'];
 export type SlotOut = components['schemas']['SlotOut'];
 export type TourOut = components['schemas']['TourOut'];
+export type TourAgendaItemOut = components['schemas']['TourAgendaItemOut'];
 /** A tour line of a chat message (`MessageOut.tour`, `LastMessageOut.tour`). */
 export type TourLineOut = components['schemas']['TourLineOut'];
 
@@ -96,5 +97,12 @@ export async function cancelTour(tourId: string): Promise<TourOut> {
   if (data === undefined) {
     throw new ApiError('POST', '/tours/{id}/cancel', response.status, error, response.headers);
   }
+  return data;
+}
+
+/** The caller's upcoming booked tours, as lister and as seeker, earliest first (spec 0018b). */
+export async function fetchAgenda(): Promise<TourAgendaItemOut[]> {
+  const { data, error, response } = await api.GET('/tours');
+  if (data === undefined) throw new ApiError('GET', '/tours', response.status, error);
   return data;
 }

@@ -37,6 +37,18 @@ describe('tour formats', () => {
   });
 });
 
+describe('tour agenda formats', () => {
+  it('ac9_agenda_day_and_time', () => {
+    expect(tourDay('2026-11-17T22:30:00Z')).toBe('2026-11-18');
+    expect(formatTourTime('2026-11-17T22:30:00Z')).toBe('00:30');
+    // The last second before Israeli midnight (UTC+2) is still the 17th.
+    expect(tourDay('2026-11-17T21:59:59Z')).toBe('2026-11-17');
+    expect(formatTourDay('2026-11-17', '2026-11-17')).toBe('היום');
+    expect(formatTourDay('2026-11-18', '2026-11-17')).toBe('מחר');
+    expect(formatTourDay('2026-11-20', '2026-11-17')).toBe('יום שישי, 20.11.26');
+  });
+});
+
 describe('tourLineText', () => {
   const line = (change: TourLineOut['change']): TourLineOut => ({
     change,

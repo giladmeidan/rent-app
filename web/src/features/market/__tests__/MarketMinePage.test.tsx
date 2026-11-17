@@ -146,4 +146,20 @@ describe('MarketMinePage', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('ac14_tours_link', async () => {
+    renderMine('/market/mine', owner, {
+      'GET /me/listings': [json([])],
+      'GET /me/applications': [json([])],
+    });
+    await main().findByRole('heading', { level: 1, name: he.market.mine.title });
+    // In the page header once, never inside a panel: both panels, same single link.
+    expect(main().getAllByRole('link', { name: he.tours.link })).toHaveLength(1);
+    expect(main().getByRole('link', { name: he.tours.link })).toHaveAttribute('href', '/tours');
+    fireEvent.click(tab(he.market.mine.tabs.applications));
+    expect(await main().findByText(he.market.mine.applicationsEmpty)).toBeVisible();
+    expect(main().getAllByRole('link', { name: he.tours.link })).toHaveLength(1);
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).queryByRole('link', { name: he.tours.link })).toBeNull();
+  });
 });

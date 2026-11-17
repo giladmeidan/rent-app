@@ -307,6 +307,11 @@ function MyApplications({ type, panel }: { type: ListingType; panel: boolean }) 
       {!panel && (
         <PageHeader
           title={room ? t('market.mine.tabs.applications') : t('applications.mine.title')}
+          actions={
+            <Button variant="secondary" size="sm" to="/tours">
+              {t('tours.link')}
+            </Button>
+          }
         />
       )}
       {/* The rooms' invites (spec 0010m), above the applications; apartments have none, so they

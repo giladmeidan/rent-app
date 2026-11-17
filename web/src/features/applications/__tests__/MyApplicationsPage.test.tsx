@@ -782,4 +782,10 @@ describe('MyApplicationsPage', () => {
       await screen.findByRole('heading', { name: he.applications.invites.title }),
     ).toBeVisible();
   });
+
+  it('ac14_tours_link', async () => {
+    renderPage([json([application()])]);
+    await screen.findByRole('heading', { level: 1, name: he.applications.mine.title });
+    expect(screen.getByRole('link', { name: he.tours.link })).toHaveAttribute('href', '/tours');
+  });
 });

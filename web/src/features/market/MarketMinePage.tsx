@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
 import { usePageTitle } from '../../app/usePageTitle';
+import { Button } from '../../components/Button';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { TabPanel, Tabs } from '../../components/Tabs';
@@ -35,7 +36,14 @@ export function MarketMinePage() {
 
   return (
     <PageContainer as="section" width="wide" className="flex flex-col gap-4">
-      <PageHeader title={t('market.mine.title')} />
+      <PageHeader
+        title={t('market.mine.title')}
+        actions={
+          <Button variant="secondary" size="sm" to="/tours">
+            {t('tours.link')}
+          </Button>
+        }
+      />
       <Tabs
         variant="pill"
         label={t('market.mine.tabs.label')}

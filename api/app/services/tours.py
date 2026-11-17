@@ -29,9 +29,23 @@ from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sqlalchemy import ColumnElement, Row, and_, delete, exists, func, insert, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    CompoundSelect,
+    Row,
+    and_,
+    delete,
+    exists,
+    func,
+    insert,
+    literal,
+    or_,
+    select,
+    union_all,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.models import Application, Conversation, Listing, Message, Tour, TourWindow, User
 from app.redis_client import RedisClient
@@ -45,6 +59,7 @@ WINDOW_MAX_HOURS = 12
 HORIZON_DAYS = 30
 LEAD_MINUTES = 60
 MAX_UPCOMING_WINDOWS = 30
+TOURS_AGENDA_LIMIT = 200  # spec 0018b: 3 live listings per lister make this unreachable
 ISRAEL = zoneinfo.ZoneInfo("Asia/Jerusalem")
 
 CancelledBy = Literal["seeker", "lister", "system"]
@@ -680,3 +695,48 @@ def announce(r: RedisClient, changes: Sequence[TourChange]) -> None:
     for c in changes:
         chat_events.publish(r, [c.owner_id, c.seeker_id], c.application_id, "message")
     tour_mail.enqueue(r, changes)
+
+
+def agenda_statement(me: User) -> CompoundSelect[Any]:
+    """Spec 0018b: `me`'s upcoming booked tours (`ends_at` in the future, so one in progress still
+    shows), as the listing's owner (`role = 'lister'`, `other_name` the seeker) and as the seeker
+    (`role = 'seeker'`, `other_name` the owner), `starts_at` then `id`, at most
+    `TOURS_AGENDA_LIMIT`. No listing-visibility filter: a booked tour on an expired listing stays
+    booked (specs/TOURS-PLAN.md), as in 0018c's reminders and 0018d's feed. The other party must
+    not be suspended or deleted."""
+
+    def branch(role: str, mine: ColumnElement[bool], other_id: Any) -> Any:
+        other = aliased(User)  # the other party: the seeker for the lister, the owner otherwise
+        return (
+            select(
+                Tour.id,
+                literal(role).label("role"),
+                Tour.starts_at,
+                Tour.ends_at,
+                Tour.application_id.label("conversation_id"),
+                other.display_name.label("other_name"),
+                Listing.id.label("listing_id"),
+                Listing.listing_type,
+                Listing.rooms,
+                Listing.street,
+                Listing.city,
+            )
+            .select_from(Tour)
+            .join(Listing, Listing.id == Tour.listing_id)
+            .join(other, other.id == other_id)
+            .where(
+                Tour.status == "booked",
+                Tour.ends_at > func.now(),
+                mine,
+                visibility.not_suspended(other_id),
+            )
+        )
+
+    lister = branch("lister", Listing.owner_id == me.id, Tour.seeker_id)
+    as_seeker = branch("seeker", Tour.seeker_id == me.id, Listing.owner_id)
+    return union_all(lister, as_seeker).order_by("starts_at", "id").limit(TOURS_AGENDA_LIMIT)
+
+
+def list_agenda(db: Session, me: User) -> Sequence[Row[Any]]:
+    """Spec 0018b: `me`'s agenda, one SELECT (`agenda_statement`)."""
+    return db.execute(agenda_statement(me)).all()

@@ -1,7 +1,7 @@
 ---
 id: 0018b
 title: "A lister sees every upcoming tour of their listings on one page, by day, and can cancel one there; a seeker sees the tours they booked on the same page"
-status: verified
+status: in-review
 depends_on: [0018a, 0018e]   # 0018a owns the migration (`tours`), the `Tour` model, `services/tours.py`, `schemas/tours.py`, `routers/tours.py`, POST /tours/{id}/cancel and the web `features/tours/` files (`api.ts::cancelTour`, `useTourActions.ts::useCancelTour`, `format.ts`, `errors.ts::tourErrorText`). 0018a's web half is split into 0018e-tour-slots-web: the web files above are 0018e's, and the web half of this spec builds on them. Branch from the dependency's branch while its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [code, ux, qa]   # code: the one read statement and its visibility rule; ux: a new page and three header links; qa: a new endpoint, a cancel flow, time-zone grouping. No security: read-only, scoped to the caller's own rows, reuses 0018a's cancel (reviewed there). No perf: ≤200 rows over 0018a's indexes
 estimate: 1 coder run   # coder Sonnet/high (read-only endpoint, no migration); about 14 files, half tests
