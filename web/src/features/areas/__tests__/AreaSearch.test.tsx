@@ -30,6 +30,8 @@ const neighbourhood = (id: string, name_he: string, city: AreaOut): AreaOut => (
 });
 const kfarSaba = settlement('ks', 'כפר סבא');
 const beerSheva = settlement('bs', 'באר שבע');
+// A full name that is also the start of another label (the real catalogue has ~95 such pairs).
+const azor = settlement('az', 'אזור');
 const AREAS = [
   gushDan,
   kfarSaba,
@@ -39,15 +41,17 @@ const AREAS = [
   neighbourhood('n1', 'מרכז העיר', kfarSaba),
   neighbourhood('n2', 'מרכז העיר', beerSheva),
   neighbourhood('n3', 'פלורנטין', gushDan),
+  azor,
+  settlement('azt', 'אזור תעשייה הר-טוב'),
 ];
 const byId = new Map(AREAS.map((area) => [area.id, area]));
 
-function renderSearch(kinds: AreaOut['kind'][] = ['settlement', 'neighbourhood']) {
+function renderSearch(kinds: AreaOut['kind'][] = ['settlement', 'neighbourhood'], value?: string) {
   mockApi({ 'GET /areas': [json(AREAS)] });
   const onPick = vi.fn();
   render(
     <QueryClientProvider client={testQueryClient()}>
-      <AreaSearch label="אזור" kinds={kinds} onPick={onPick} />
+      <AreaSearch label="אזור" kinds={kinds} value={value} onPick={onPick} />
     </QueryClientProvider>,
   );
   return onPick;
@@ -96,6 +100,36 @@ describe('AreaSearch', () => {
     expect(onPick).toHaveBeenCalledWith(AREAS[6]);
   });
 
+  it('ac4_full_name_that_prefixes_another_picks_on_blur_enter_or_list', async () => {
+    const onPick = renderSearch();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('אזור')).not.toBeDisabled();
+    });
+    const input = screen.getByLabelText('אזור');
+    // Typed: waits (another label starts with it), then leaving the field picks it.
+    fireEvent.change(input, { target: { value: 'אזור' } });
+    expect(onPick).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onPick).toHaveBeenCalledWith(azor);
+    expect(input).toHaveValue('');
+    // Chosen from the datalist: picks at once.
+    onPick.mockClear();
+    fireEvent.input(input, { target: { value: 'אזור' }, inputType: 'insertReplacementText' });
+    expect(onPick).toHaveBeenCalledWith(azor);
+  });
+
+  it('ac4_wizard_enter_picks_a_full_name_that_prefixes_another', async () => {
+    const onPick = renderSearch(['settlement'], '');
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('אזור')).not.toBeDisabled();
+    });
+    const input = screen.getByLabelText('אזור');
+    fireEvent.change(input, { target: { value: 'אזור' } });
+    expect(onPick).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith(azor);
+  });
+
   it('settlements only', async () => {
     renderSearch(['settlement']);
     await vi.waitFor(() => {
@@ -109,6 +143,8 @@ describe('AreaSearch', () => {
       'באר שבע',
       'באר יעקב',
       'מג׳דל שמס',
+      'אזור',
+      'אזור תעשייה הר-טוב',
     ]);
   });
 

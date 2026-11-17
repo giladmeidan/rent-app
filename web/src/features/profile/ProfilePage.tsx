@@ -281,9 +281,14 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
                   <button
                     type="button"
                     aria-label={t('profile.areas.remove', { name })}
-                    onClick={() => removeArea(area.id)}
+                    onClick={() => {
+                      removeArea(area.id);
+                      // The focused button unmounts: keep focus in the picker.
+                      focus('area_ids');
+                    }}
+                    // 24 px look, 44 px hit area.
                     className={cx(
-                      'inline-flex size-6 shrink-0 items-center justify-center rounded-full',
+                      "relative inline-flex size-6 shrink-0 items-center justify-center rounded-full after:absolute after:-inset-2.5 after:content-['']",
                       focusRing,
                     )}
                   >

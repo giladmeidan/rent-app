@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePageTitle } from '../../app/usePageTitle';
@@ -92,7 +92,7 @@ function PeopleSections({
   const { t } = useTranslation();
   const people = useMyPeopleLikes();
   const areas = useQuery(areasQuery);
-  const areaName = areaLabels(t, areas.data);
+  const areaName = useMemo(() => areaLabels(t, areas.data), [t, areas.data]);
 
   if (people.data === undefined) {
     if (people.isPending) {

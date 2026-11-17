@@ -436,7 +436,7 @@ export function ListingWizard({ listing, initialType }: Props) {
         goTo(step === 'details' ? 'photos' : 'preview');
         return;
       }
-      // The area has no input after a load error: focus the next field that has one.
+      // Focus the first invalid field that is on the page.
       const start = FIELD_ORDER.indexOf(first);
       for (const name of FIELD_ORDER.slice(start)) {
         const element = found[name] && document.getElementById(fieldId(name));

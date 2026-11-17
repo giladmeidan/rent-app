@@ -365,6 +365,7 @@ describe('ProfilePage', () => {
     removeChip(gushDan.name_he);
     expect(screen.queryByText(he.profile.errors.areasMax)).toBeNull();
     expect(chipNames()).toHaveLength(19);
+    expect(areaInput()).toHaveFocus();
   });
 
   it('ac3_prefills_and_drops_inactive_area', async () => {

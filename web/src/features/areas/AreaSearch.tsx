@@ -40,9 +40,9 @@ type Props = {
 
 /**
  * One area picker (spec 0021b): a text input with a native list of every offered area; the browser
- * filters it. It picks as soon as the value names an area that no other label starts with (a pick
- * from the list, or a full unambiguous name), else on Enter; Enter on a name that matches nothing
- * says so under the field (Firefox for Android shows no list, so typing the name + Enter must work).
+ * filters it. It picks a choice from the list or a full name no other label starts with at once,
+ * and any full name on Enter or on leaving the field ("אזור" vs "אזור תעשייה הר-טוב"); Enter on a
+ * name that matches nothing says so under the field (Firefox for Android shows no list, so typing the name + Enter must work).
  */
 export function AreaSearch(props: Props) {
   const { t } = useTranslation();
@@ -51,7 +51,8 @@ export function AreaSearch(props: Props) {
   if (areas.isError) {
     // No control to wire: the label, the state, and the field's alert.
     return (
-      <div className="flex flex-col gap-1.5">
+      // `id` + `tabIndex`: a form's focus-the-first-error still lands here.
+      <div id={props.id} tabIndex={-1} className="flex flex-col gap-1.5">
         <p className="text-label">{props.label}</p>
         <ErrorState onRetry={() => areas.refetch()} />
         {props.error !== undefined && (
@@ -146,13 +147,19 @@ function AreaInput({
           setText(next);
           setNotFound(false);
           const match = find(next);
-          if (match !== undefined && !isPrefix(match.key)) choose(match);
+          // A datalist choice arrives as `insertReplacementText` (Chrome, Safari).
+          const listed = (event.nativeEvent as InputEvent).inputType === 'insertReplacementText';
+          if (match !== undefined && (listed || !isPrefix(match.key))) choose(match);
           else if (value !== undefined && value !== '') {
             setShown('');
             onPick(null);
           }
         }}
         onKeyDown={onKeyDown}
+        onBlur={() => {
+          const match = find(text);
+          if (match !== undefined && match.area.id !== value) choose(match);
+        }}
       />
       <datalist id={listId}>
         {options.map((option) => (
