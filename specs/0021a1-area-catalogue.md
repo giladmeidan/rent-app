@@ -1,7 +1,7 @@
 ---
 id: 0021a1
 title: Every settlement in Israel and the neighbourhoods of the 18 big cities are areas; a listing is posted in a settlement and the server names its city
-status: verified
+status: in-progress
 depends_on: []
 reviewers: [code, qa]   # qa: GET /areas, POST/PATCH /listings, PUT /profile change; no matching change here (0021a2)
 estimate: 1 coder run   # coder Opus/high (migration with data steps and a lossy downgrade, Speed rule 6)
