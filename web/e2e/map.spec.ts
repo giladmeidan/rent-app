@@ -201,7 +201,12 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     price,
     streets: [street = '', other = ''],
     ids: [id],
+    points,
   } = await postAtOnePrice(page, request, 2, [7001, 7299]);
+  // The map opens between the two points at zoom 13 (spec 0021d: no fit to the first answer, and
+  // the default view need not hold them); the list keeps `c` / `z` for the toggle.
+  const [a, b] = [...points.values()] as [Point, Point];
+  const centre = `${((a.lat + b.lat) / 2).toFixed(6)},${((a.lng + b.lng) / 2).toFixed(6)}`;
 
   // Tiles answered locally, MapLibre's workers included; every request URL is recorded.
   await routeTiles(page);
@@ -209,7 +214,7 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
   page.context().on('request', (r) => urls.push(r.url()));
 
   // A visitor on the list below 1280 px (no side map, spec 0009x): the library is never downloaded.
-  const search = `/search?price_min=${String(price)}&price_max=${String(price)}`;
+  const search = `/search?price_min=${String(price)}&price_max=${String(price)}&c=${centre}&z=13`;
   await page.context().clearCookies();
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.goto(search);
@@ -260,9 +265,10 @@ test('ac8_visitor_finds_a_listing_on_the_map', async ({ page, request }) => {
     // Reduced motion for this step only (FOLLOWUPS 0014c): MapLibre then skips the eased zoom, so a
     // click never lands mid-animation and each "הקטנה" is a whole level; the bubble's zoom-in jumps.
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    // Zoomed out to the minimum, the two points lie within ~40 px: one bubble of 2.
+    // Zoomed out to the minimum (13 to 6: seven presses), the two points lie within ~40 px: one
+    // bubble of 2.
     const zoomOut = region.getByRole('button', { name: he.map.zoomOut });
-    for (let i = 0; i < 20 && (await zoomOut.isEnabled()); i += 1) await zoomOut.click();
+    for (let i = 0; i < 8 && (await zoomOut.isEnabled()); i += 1) await zoomOut.click();
     await expect(zoomOut).toBeDisabled();
     const bubble = region.getByRole('button', { name: he.search.map.bubble_two, exact: true });
     await expect(bubble).toBeVisible({ timeout: 15_000 });
@@ -455,7 +461,7 @@ test('ac7_listing_page_link', async ({ page, request }) => {
 // Spec 0021d: the map covers all of Israel. A visitor opens at Tel Aviv-Yafo; the place box jumps
 // to Haifa (zoom 13 at its centre), and the listing posted there is on the map. Its fake-geocoded
 // point lies within 0.05 deg of the centre (the middle half of the settlement's box), so two steps
-// out (zoom 11) hold it at any viewport.
+// out (zoom 11) hold it at any viewport; a third (zoom 10) gives the pin check margin.
 test('ac4_haifa_listing_found_after_a_place_jump', async ({ page, request }) => {
   const HAIFA = 'חיפה';
   const {
@@ -481,7 +487,7 @@ test('ac4_haifa_listing_found_after_a_place_jump', async ({ page, request }) => 
   await expect.poll(() => query(page).get('z')).toBe('13');
 
   const zoomOut = region.getByRole('button', { name: he.map.zoomOut });
-  for (const z of ['12', '11']) {
+  for (const z of ['12', '11', '10']) {
     await zoomOut.click();
     await expect.poll(() => query(page).get('z')).toBe(z);
   }

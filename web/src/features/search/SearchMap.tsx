@@ -30,7 +30,6 @@ import {
   type Bubble,
   type MapCamera,
   type MapView,
-  type Pin,
 } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
 import { areasQuery } from '../areas/api';
@@ -52,12 +51,9 @@ import { useMapSearch } from './useMapSearch';
 
 const NO_ITEMS: ListingPublic[] = [];
 
-/** The side map's fit never zooms past this, so a single pin does not land at street level. */
-export const FIT_MAX_ZOOM = 15;
-
 /**
  * Where the map opens without a URL position (spec 0021d), `undefined` while it is not known: a
- * visitor at `DEFAULT_VIEW`; a signed-in person, once `/me/profile` and `/areas` have answered, at
+ * visitor at `DEFAULT_VIEW`; a signed-in person, once `/me/profile` and `/areas` (asked together) have answered, at
  * the first preferred area (`areaView`), else (no looking part, no area, a failed request) at
  * `DEFAULT_VIEW`.
  */
@@ -66,7 +62,8 @@ function useDefaultView(): MapView | undefined {
   const signedIn = me.data != null;
   const profile = useProfile(signedIn);
   const firstId = hasLooking(profile.data) ? profile.data.area_ids[0] : undefined;
-  const areas = useQuery({ ...areasQuery, enabled: firstId !== undefined });
+  // Asked with `/me/profile`, not after it: the first area's centre is in the catalogue.
+  const areas = useQuery({ ...areasQuery, enabled: signedIn });
   if (me.isPending) return undefined;
   if (!signedIn) return DEFAULT_VIEW;
   if (profile.isPending) return undefined;
@@ -89,21 +86,6 @@ type StatusKey = LocateMessage | 'placeNotFound';
 /** Whether `outer` holds all of `inner`. */
 const contains = (outer: Bbox, inner: Bbox) =>
   outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
-
-/** The `[west, south, east, north]` extent of the pins. */
-export function extentOf(pins: readonly Pin[]): Bbox {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  for (const { lng, lat } of pins) {
-    west = Math.min(west, lng);
-    south = Math.min(south, lat);
-    east = Math.max(east, lng);
-    north = Math.max(north, lat);
-  }
-  return [west, south, east, north];
-}
 
 // The map keeps today's height at every width (no token fits a viewport-relative height).
 const mapClassName = 'h-[60vh] min-h-[360px] rounded-lg border border-border';

@@ -41,6 +41,7 @@ describe('PlaceSearch', () => {
       </QueryClientProvider>,
     );
     const box = await screen.findByRole('combobox', { name: he.search.map.placeLabel });
+    expect(box).toHaveAttribute('enterkeyhint', 'search');
 
     // A city: its centre at zoom 13.
     fireEvent.change(box, { target: { value: 'חיפה' } });
@@ -60,5 +61,18 @@ describe('PlaceSearch', () => {
     expect(onNotFound).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(he.areas.notFound)).toBeNull();
     expect(onJump).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders_nothing_when_areas_fail', async () => {
+    const api = mockApi({ 'GET /areas': [json({ detail: 'boom' }, 500)] });
+    const { container } = render(
+      <QueryClientProvider client={testQueryClient()}>
+        <PlaceSearch onJump={vi.fn()} onNotFound={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    await vi.waitFor(() => {
+      expect(api.calls('GET /areas')).toHaveLength(1);
+      expect(container).toBeEmptyDOMElement();
+    });
   });
 });

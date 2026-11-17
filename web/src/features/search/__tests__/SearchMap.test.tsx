@@ -266,12 +266,8 @@ describe('SearchMap', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Failure: ErrorState above the map; retry asks for the same box. (`/areas` answers, so the
-    // place box shows no retry of its own.)
-    api = mockApi({
-      'GET /areas': [json([])],
-      [SEARCH]: [json({ detail: 'boom' }, 500), json(page([located()]))],
-    });
+    // Failure: ErrorState above the map; retry asks for the same box.
+    api = mockApi({ [SEARCH]: [json({ detail: 'boom' }, 500), json(page([located()]))] });
     view = await openMap('/search?view=map');
     moveTo(BOX);
     fireEvent.click(await screen.findByRole('button', { name: he.common.retry }));
@@ -534,7 +530,7 @@ describe('SearchMap', () => {
     vi.unstubAllGlobals();
 
     // Error: ErrorState comes before the map region.
-    mockApi({ 'GET /areas': [json([])], [SEARCH]: [json({ detail: 'boom' }, 500)] });
+    mockApi({ [SEARCH]: [json({ detail: 'boom' }, 500)] });
     view = await openMap('/search?view=map');
     moveTo(BOX);
     const alert = await screen.findByRole('alert');
@@ -871,10 +867,15 @@ describe('SearchMap', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // A seeker without a looking part, an empty list or a failed request: Tel Aviv-Yafo.
+    // A seeker without a looking part, an empty list, a first area missing from the catalogue or a
+    // failed request: Tel Aviv-Yafo.
     const cases: Record<string, Response[]>[] = [
       { 'GET /me/profile': [json(personalOnlyProfile())] },
       { 'GET /me/profile': [json(profile({ area_ids: [] }))] },
+      {
+        'GET /me/profile': [json(profile({ area_ids: ['00000000-0000-0000-0000-0000000dead0'] }))],
+        'GET /areas': [json(AREAS)],
+      },
       { 'GET /me/profile': [json({ detail: 'boom' }, 500)] },
       { 'GET /me/profile': [json(profile())], 'GET /areas': [json({ detail: 'boom' }, 500)] },
     ];
@@ -1213,10 +1214,7 @@ describe('SearchMap', () => {
   it('test_show_all_error_keeps_focus', async () => {
     const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
     const WIDE: [number, number, number, number] = [34.7, 31.9, 35.0, 32.2];
-    mockApi({
-      'GET /areas': [json([])],
-      [SEARCH]: [() => json({ items: [], total: 0 }), json({ detail: 'boom' }, 500)],
-    });
+    mockApi({ [SEARCH]: [() => json({ items: [], total: 0 }), json({ detail: 'boom' }, 500)] });
     await openMap('/search?view=map&c=32.08,34.8&z=14');
     moveTo(BOX, VIEW);
     expect(await screen.findByText(he.search.map.empty)).toBeVisible();

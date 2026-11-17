@@ -1,9 +1,11 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AreaOut } from '../../api/client';
 import type { MapView } from '../../components/map/MapCanvas';
 import { AreaSearch } from '../areas/AreaSearch';
+import { areasQuery } from '../areas/api';
 
 const KINDS = ['settlement', 'neighbourhood'] as const;
 
@@ -25,10 +27,13 @@ type Props = {
 /**
  * The place box over the full map (spec 0021d): `AreaSearch` over every settlement and
  * neighbourhood in the catalogue; a pick jumps to `areaView`. The chosen name stays in the box.
+ * Nothing when `/areas` fails: the map works without it, and one retry (the map's) is enough.
  */
 export function PlaceSearch({ onJump, onNotFound, className }: Props) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
+  const areas = useQuery(areasQuery);
+  if (areas.isError) return null;
   return (
     <div className={className}>
       <AreaSearch
@@ -40,6 +45,7 @@ export function PlaceSearch({ onJump, onNotFound, className }: Props) {
           if (area !== null) onJump(areaView(area));
         }}
         onNotFound={onNotFound}
+        enterKeyHint="search"
       />
     </div>
   );
