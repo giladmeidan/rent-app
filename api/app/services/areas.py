@@ -8,6 +8,7 @@ inactive; a failed fetch deactivates nothing. An upsert never touches `is_active
 row (the admin's switch)."""
 
 import csv
+import functools
 import logging
 import uuid
 from collections.abc import Sequence
@@ -19,6 +20,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models import Area
+from app.services.geocoding import street_query
+from app.services.rent_estimate import normalise_place, street_forms
 from app.services.rent_reference import RentFetcher, parse_rent_file
 
 log = logging.getLogger(__name__)
@@ -71,6 +74,29 @@ def list_active_areas(session: Session) -> Sequence[Any]:
     return session.execute(stmt).all()
 
 
+def neighbourhood_for_street(
+    db: Session, settlement_id: uuid.UUID, street: str
+) -> uuid.UUID | None:
+    """The one active neighbourhood of `settlement_id` whose `streets` hold `street` (its house
+    number dropped, `street_query`; `normalise_place` on both sides, the `רחוב ` / `רח ` prefix
+    also tried, `rent_estimate.street_forms`), else None: unlisted, in several (city level), or no
+    street name left. Spec 0021a2; the rule of `rent_estimate._neighbourhood`."""
+    forms = street_forms(street_query(street))
+    if "" in forms:  # an all-number street: never match an empty catalogue name
+        return None
+    rows = db.execute(
+        select(Area.id, Area.streets).where(
+            Area.kind == "neighbourhood",
+            Area.parent_id == settlement_id,
+            Area.is_active.is_(True),
+        )
+    ).all()
+    matches = [
+        area_id for area_id, streets in rows if forms & {normalise_place(s) for s in streets}
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def _itm(x: float, y: float) -> ColumnElement[Any]:
     return func.ST_Transform(func.ST_SetSRID(func.ST_MakePoint(x, y), 2039), 4326)
 
@@ -116,20 +142,35 @@ def _deactivate(db: Session, *where: ColumnElement[bool]) -> int:
     return int(getattr(result, "rowcount", 0))
 
 
-def read_settlements(csv_path: Path) -> list[dict[str, Any]]:
-    """The CSV's rows as upsert rows (the first line is a `#` comment)."""
+def _csv_rows(csv_path: Path) -> list[dict[str, str]]:
+    """The CSV's rows by column name (the first line is a `#` comment)."""
     with csv_path.open(encoding="utf-8", newline="") as file:
-        lines = (line for line in file if not line.startswith("#"))
-        return [
-            {
-                "kind": "settlement",
-                "source_code": int(row["code"]),
-                "name_he": row["name_he"],
-                "x": int(row["itm_x"]),
-                "y": int(row["itm_y"]),
-            }
-            for row in csv.DictReader(lines)
-        ]
+        return list(csv.DictReader(line for line in file if not line.startswith("#")))
+
+
+def read_settlements(csv_path: Path) -> list[dict[str, Any]]:
+    """The CSV's rows as upsert rows."""
+    return [
+        {
+            "kind": "settlement",
+            "source_code": int(row["code"]),
+            "name_he": row["name_he"],
+            "x": int(row["itm_x"]),
+            "y": int(row["itm_y"]),
+        }
+        for row in _csv_rows(csv_path)
+    ]
+
+
+@functools.cache
+def settlement_districts() -> dict[int, int]:
+    """Settlement code → CBS district (1-7) from the committed CSV (spec 0021c); a row whose
+    district is empty or outside 1-7 is left out."""
+    return {
+        int(row["code"]): int(row["district"])
+        for row in _csv_rows(CSV_PATH)
+        if row["district"] in {"1", "2", "3", "4", "5", "6", "7"}
+    }
 
 
 def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -> dict[str, int]:

@@ -1,8 +1,10 @@
 """The rent estimate baseline (spec 0014c): resolution, baseline, confidence, the order of reasons
-and the backtest; small flats (spec 0014d): the CBS ratio, its fallbacks and its backtest. Every
+and the backtest; small flats (spec 0014d): the CBS ratio, its fallbacks and its backtest; the
+national districts, aliases and catalogue names (spec 0021c). Every
 test runs with the constants patched to the specs' defaults, so the backtest runs can change the
 module values without breaking these."""
 
+import csv
 import datetime as dt
 import math
 import uuid
@@ -17,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_sessionmaker
 from app.services import rent_estimate
+from app.services.areas import CSV_PATH, settlement_districts
 from app.services.rent_estimate import (
     CbsFigure,
     Figure,
@@ -25,7 +28,6 @@ from app.services.rent_estimate import (
     estimate_rent,
     resolve_city,
 )
-from app.services.rent_reference import RENT_SETTLEMENT_CODES
 from scripts import rent_backtest
 from tests.conftest import (
     CITY_BASE,
@@ -33,7 +35,10 @@ from tests.conftest import (
     HOOD_A_BASE,
     QUARTERS,
     TEL_AVIV,
+    _rent_area,
+    _rent_price,
     insert_cbs,
+    insert_settlement,
 )
 
 
@@ -290,8 +295,43 @@ def test_ac6_small_flat_fallbacks(
     assert (out.estimate.low_ils, out.estimate.high_ils) == _small_range(baseline, half)
 
 
-def test_ac6_settlement_district_covers_launch_box() -> None:
-    assert set(rent_estimate.SETTLEMENT_DISTRICT) == set(RENT_SETTLEMENT_CODES)
+# The deleted `SETTLEMENT_DISTRICT` (spec 0014d), inlined: the CSV must agree with it.
+OLD_SETTLEMENT_DISTRICT = {
+    **dict.fromkeys((5000, 8600, 6300, 6100, 6600, 6200, 6400, 2650, 2620, 2400, 565), 5),
+    **dict.fromkeys((7900, 8300, 681, 9400, 229, 587, 9700, 466), 4),
+}
+
+
+def _settlement_figures(engine: Engine, code: int, name: str) -> None:
+    """A settlement row with 3-room figures in every quarter (`CITY_BASE[3]` + 100 a quarter)."""
+    with engine.begin() as conn:
+        area_id = _rent_area(conn, "settlement", code, code, name, [])
+        for i, period in enumerate(QUARTERS):
+            _rent_price(conn, area_id, 3, period, CITY_BASE[3] + 100 * i)
+
+
+def test_ac3_district_outside_gush_dan(rent_clean: Engine, cbs_clean: Engine, db: Session) -> None:
+    _settlement_figures(rent_clean, 9100, "נהרייה")  # North District (2), not a CBS city
+    insert_cbs(cbs_clean, "district", 2, Decimal("0.9"), QUARTERS[-4:])
+    insert_cbs(cbs_clean, "district", 5, Decimal("0.7"), QUARTERS[-4:])  # not Nahariya's
+
+    out = estimate_rent(db, city="נהרייה", street="הרצל", rooms=Decimal(2))
+
+    assert out.estimate is not None
+    assert (out.estimate.small_flat_ratio, out.estimate.level) == ("district", "city")
+    baseline = Fraction(_last4_mean(CITY_BASE[3])) * Fraction("0.9")
+    half = math.hypot(0.15, 0.03)
+    assert (out.estimate.low_ils, out.estimate.high_ils) == _small_range(baseline, half)
+
+    with CSV_PATH.open(encoding="utf-8") as file:
+        rows = list(csv.DictReader(line for line in file if not line.startswith("#")))
+    assert settlement_districts() == {
+        int(row["code"]): int(row["district"]) for row in rows if row["district"]
+    }
+    assert len(settlement_districts()) > 1000
+    assert {code: settlement_districts()[code] for code in OLD_SETTLEMENT_DISTRICT} == (
+        OLD_SETTLEMENT_DISTRICT
+    )
 
 
 def test_ac8_small_flat_too_wide(
@@ -340,10 +380,10 @@ def test_ac9_ratio_backtest(
     assert city_row.p80 == float(Fraction(8, 88))
     assert district_row.p80 == float(Fraction(8, 88))
 
-    # Too few prior periods for the window: no sample, no row; a city outside the launch box and
-    # a district alone are never targets.
+    # Too few prior periods for the window: no sample, no row; a city with no district in the
+    # settlement list (spec 0021c) and a district alone are never targets.
     assert backtest_ratio(steady[:4], windows=(2,), targets=1) == []
-    assert backtest_ratio(_ratio_figures("city", 3000, ["0.8"] * 4), windows=(1,)) == []
+    assert backtest_ratio(_ratio_figures("city", 99999, ["0.8"] * 4), windows=(1,)) == []
 
     # p80 is nearest rank: errors 1..5 % → sorted[ceil(4) - 1] = 4 %, median 3 %.
     spread: list[CbsFigure] = []
@@ -366,3 +406,61 @@ def test_ac9_ratio_backtest(
     assert lines[-1] == (
         "suggestion: RATIO_WINDOW_QUARTERS = 1; RATIO_HALF_WIDTH = {'city': 0.0, 'district': 0.07}"
     )
+
+
+@pytest.mark.parametrize(
+    ("city", "code"),
+    [
+        ("ב״ש", 9000),
+        ("י-ם", 3000),
+        ("י״ם", 3000),
+        ("כ״ס", 6900),
+        ("ב״ב", 6100),
+        ("מודיעין-מכבים-רעות", 1200),  # the catalogue's name, exactly
+        ("מודיעין מכבים רעות", 1200),  # the catalogue's name, normalised
+    ],
+)
+def test_ac4_aliases(
+    db_engine: Engine, rent_clean: Engine, db: Session, city: str, code: int
+) -> None:
+    with rent_clean.begin() as conn:
+        for row_code, name in (
+            (9000, "באר שבע"),
+            (3000, "ירושלים"),
+            (6900, "כפר סבא"),
+            (6100, "בני ברק"),
+            (1200, "מודיעין"),  # spelt differently from the catalogue
+            (1201, "מודיעין עילית"),  # the inactive twin has figures too: still never matched
+        ):
+            _rent_area(conn, "settlement", row_code, row_code, name, [])
+    insert_settlement(db_engine, 1200, "מודיעין-מכבים-רעות")
+    insert_settlement(db_engine, 1201, "מודיעין מכבים רעות", active=False)
+
+    row = resolve_city(db, city)
+
+    assert row is not None and row.settlement_code == code
+
+
+def test_ac4_catalogue_name_without_figures_is_unknown(
+    db_engine: Engine, rent_clean: Engine, db: Session
+) -> None:
+    # Scope 7.3: an exact catalogue hit with no rent_areas row is unknown_city, no fall-through.
+    with rent_clean.begin() as conn:
+        _rent_area(conn, "settlement", 9000, 9000, "באר שבע", [])
+    insert_settlement(db_engine, 9100, "נהריה")
+    assert resolve_city(db, "נהריה") is None
+
+
+def test_ac5_ratio_backtest_national() -> None:
+    # Haifa (3) and Be'er Sheva (6) are CBS cities outside the old launch box.
+    figures = _ratio_figures("city", 4000, ["0.8"] * 3)
+    figures += _ratio_figures("city", 9000, ["0.9"] * 3)
+    figures += _ratio_figures("district", 3, ["0.88"] * 3)
+    figures += _ratio_figures("district", 6, ["0.9"] * 3)
+    rows = backtest_ratio(figures, windows=(1,), targets=2)
+    assert [(r.level, r.n) for r in rows] == [("city", 4), ("district", 4)]
+    city, district = rows
+    assert city.median == city.p80 == 0.0
+    # Haifa's two targets err 0.08 / 0.8 = 0.1 each from district 3, Be'er Sheva's 0 from 6.
+    assert district.median == pytest.approx(0.05)
+    assert district.p80 == pytest.approx(0.1)

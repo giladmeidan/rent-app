@@ -1,7 +1,7 @@
 ---
 id: 0021a1
 title: Every settlement in Israel and the neighbourhoods of the 18 big cities are areas; a listing is posted in a settlement and the server names its city
-status: in-progress
+status: done
 depends_on: []
 reviewers: [code, qa]   # qa: GET /areas, POST/PATCH /listings, PUT /profile change; no matching change here (0021a2)
 estimate: 1 coder run   # coder Opus/high (migration with data steps and a lossy downgrade, Speed rule 6)
@@ -209,4 +209,11 @@ admin-inactive row), listing create/edit, profile kinds, migration up/down with 
   `PeoplePage.tsx`, `MarketPeoplePage.tsx`, `MyLikesPage.tsx`): read `id` / `name_he` only, unchanged here;
   their typed fixtures are in Scope.
 
-## Digest (filled by orchestrator after verification)
+## Digest (merged 2026-11-17, PR #132, merge 598f4e8)
+Spec 0021a1 — national area catalogue   PR #132, merged 598f4e8
+Shipped: every CBS settlement except Judea and Samaria (1,188, from the committed `api/data/settlements.csv`) plus the 18 big cities' nadlan neighbourhoods (701) are areas; `GET /areas` returns kind, parent and centre with a one-day cache; a listing sits in a settlement and the server sets its `city`; migration `0031_national_areas` moves dev data off `gush-dan`.
+Demo: `make dev` → `make import-areas` (real fetch, manual) → `GET /areas` lists 1,889 areas; post a listing choosing a settlement id.
+Tests: API 1032, web 884, waitlist 12 green locally; e2e in CI.   CI: green on f4566fa (one e2e fix: `test.slow()` on photos ac5 until 0021b's picker; a11y ac5 flaked once).
+Findings: 0 blockers, 1 major fixed (a dev `make seed` turned off neighbourhoods a real import stored), 5 minors fixed, 2 waived (centre as a tuple, orphan neighbourhood deactivation).
+Changed in PRODUCT.md: "Launch area" (national, no Judea and Samaria, strict neighbourhood match).
+Not verified: `make import-areas` against live nadlan from the production region (FOLLOWUPS: 0013a release ships the CSV, import is a manual post-deploy step). NF1: p95 52 ms, body 336 KB (~75 KB gzipped).

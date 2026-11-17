@@ -155,8 +155,11 @@ class WorkerSettings:
     cron_jobs = [
         cron(geocode_listings, second={0, 10, 20, 30, 40, 50}, unique=True),
         cron(flush_listing_views, second={30}, unique=True),
-        # About 350 requests, 3-4 minutes: past arq's 300 s default timeout.
-        cron(import_rent_reference_job, day=5, hour=3, minute=10, unique=True, timeout=1800),
+        # Spec 0021c: a first national run is ~1,300 settlement requests plus the big and mid-size
+        # cities' neighbourhoods, 2,500-4,000 requests x ~5.3 s (Crawl-delay 5) = 4-6 h; a month
+        # with an unchanged source version costs 1 request plus the missing settlements' 404s. An
+        # interrupted run resumes at the next run.
+        cron(import_rent_reference_job, day=5, hour=3, minute=10, unique=True, timeout=28800),
         # At most six requests: arq's default timeout is enough.
         cron(import_cbs_rent_job, day=16, hour=3, minute=40, unique=True),
         cron(purge_expired_job, hour=3, minute=25, unique=True),

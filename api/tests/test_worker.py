@@ -74,7 +74,7 @@ def test_ac12_rent_import_cron_registered() -> None:
     )
     assert (job.day, job.hour, job.minute) == (5, 3, 10)
     assert job.unique is True
-    assert job.timeout_s == 1800
+    assert job.timeout_s == 28800  # spec 0021c: the national run, 4-6 h
 
 
 @pytest.mark.asyncio

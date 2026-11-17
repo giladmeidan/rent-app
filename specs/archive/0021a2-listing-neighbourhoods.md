@@ -1,7 +1,7 @@
 ---
 id: 0021a2
 title: A listing in a big city is placed in its neighbourhood, and a seeker who prefers a neighbourhood or its city is matched at the right level
-status: verified
+status: done
 depends_on: [0021a1]   # areas.kind / parent_id / centre / streets, the neighbourhood rows, migration 0031
 reviewers: [code, qa, perf, security]   # perf: the area criterion in search / people / inbox; security: the inbox snapshot (0006c, B1) must cover the neighbourhood
 estimate: 1 coder run   # coder Opus/high (migration + the B1 snapshot)
@@ -21,7 +21,7 @@ and the match's area criterion understands both levels.
   `rent_estimate._neighbourhood` (`normalise_place` on both sides, the `רחוב ` / `רח ` prefix also tried) over
   the **active** neighbourhoods whose `parent_id` is the settlement, reading `areas.streets`; exactly one match →
   its id, else None. `normalise_place` is imported from `rent_estimate` (not moved). The listing service sets
-  `listings.neighbourhood_id` with it on create and on every PATCH that sends `street` or `area_id`.
+  `listings.neighbourhood_id` with it on create and on every PATCH that changes the address.
   (Without `street_query`, "הרצל 12" would never match "הרצל": listings keep the house number.)
 - **Point → neighbourhood.** In `geocoding.geocode_pending`, the guarded UPDATE that stores a located point also
   sets `neighbourhood_id = COALESCE(neighbourhood_id, <nearest active neighbourhood of the listing's area whose
@@ -41,7 +41,8 @@ and the match's area criterion understands both levels.
   `on_conflict_do_update` set (the one place applications are written); `_applicants` passes
   `area_id=Application.area_id_at_apply, neighbourhood_id=Application.neighbourhood_id_at_apply`.
 - `search.py` and `people.py` call `match_columns` without overrides: unchanged code, live columns.
-- `seed_demo.py`: a few demo listings on streets that resolve to a Tel Aviv neighbourhood of the fixture data.
+- ~~`seed_demo.py`: a few demo listings on streets that resolve to a Tel Aviv neighbourhood of the fixture data.~~
+  Dropped at build (2026-11-17): `seed_demo.py` is not in the repo (an untracked file of the main checkout).
 
 **Out**
 - Showing the neighbourhood on a listing or card. Neighbourhood polygons.
@@ -111,4 +112,11 @@ sweep with a fake geocoder, match levels, inbox snapshot, apply/reopen.
   (`resolve_city`, `estimate_rent`, `test_rent_estimate.py`) untouched.
 - `market_people.browse_statement`: named untouched above (ordering only).
 
-## Digest (filled by orchestrator after verification)
+## Digest (merged 2026-11-17, PR #135, merge 5d0413d)
+Spec 0021a2 — listings placed in big-city neighbourhoods; area match at both levels   PR #135, merged 5d0413d
+Shipped: migration `0032_listing_neighbourhoods` (`listings.neighbourhood_id`, `applications.neighbourhood_id_at_apply`); a listing's neighbourhood comes from its street (one match), else the geocoding sweep's nearest neighbourhood within 1,500 m; a seeker matches a city at city level and a neighbourhood strictly (Gilad 2026-11-17); the owner's inbox scores on the apply-time snapshot, now with the neighbourhood.
+Demo: `make dev` → post a Tel Aviv listing on a Florentin street → a seeker preferring Florentin scores the area criterion, one preferring Neve Tzedek does not.
+Tests: API 1036, web 884 green locally.   CI: green on 4a28e82 (a11y ac5 flaked once again, in FOLLOWUPS).
+Findings: 0 blockers, 1 major fixed (a PATCH re-sending an unchanged street wiped a point-derived neighbourhood), 5 minors fixed, 2 to FOLLOWUPS (a neighbourhood deactivated by a re-import stays on its listings; a11y flake recurrence).
+Changed in PRODUCT.md: none (strict neighbourhood match already recorded).
+Not verified: neighbourhood placement against real nadlan street lists at scale (fixture data only). NF1: search, people and inbox plans unchanged; sweep lookup 0.3 ms.

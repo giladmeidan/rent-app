@@ -1,5 +1,6 @@
-"""The official rent figures import (spec 0014a): parser rules, upserts, soft failures, the
-polite `NadlanFetcher` and the `off` switch. No test reaches nadlan.gov.il: the import reads the
+"""The official rent figures import (specs 0014a, 0021c): parser rules, upserts, soft failures,
+the national settlement list, missing files, resume, the polite `NadlanFetcher` and the `off`
+switch. No test reaches nadlan.gov.il: the import reads the
 trimmed fixtures through `FakeRentFetcher`, the fetcher talks to an `httpx.MockTransport`."""
 
 import copy
@@ -21,12 +22,13 @@ from app.db import get_sessionmaker
 from app.services import rent_reference
 from app.services.rent_reference import (
     MAX_BODY_BYTES,
-    RENT_SETTLEMENT_CODES,
     NadlanFetcher,
+    RentFileMissing,
     RentSourceError,
     get_rent_fetcher,
     import_rent_reference,
 )
+from tests.conftest import insert_settlement
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rent_reference"
 TEL_AVIV = "settlement/rent/5000.json"
@@ -45,7 +47,7 @@ class FakeRentFetcher:
 
     def fetch(self, path: str) -> object:
         self.requests.append(path)
-        value = self.files.get(path, RentSourceError("status 404"))
+        value = self.files.get(path, RentFileMissing("status 404"))
         if isinstance(value, RentSourceError):
             raise value
         return copy.deepcopy(value)
@@ -90,7 +92,7 @@ def db(rent_clean: Engine) -> Iterator[Session]:
 
 @pytest.fixture
 def two_settlements(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rent_reference, "RENT_SETTLEMENT_CODES", (5000, 565))
+    monkeypatch.setattr(rent_reference, "settlement_codes", lambda _db: [5000, 565])
 
 
 def _prices(engine: Engine, kind: str, source_id: int) -> dict[tuple[int, dt.date], int]:
@@ -126,6 +128,8 @@ def test_ac2_settlement_file_stored(db: Session, rent_clean: Engine) -> None:
     assert counts == {
         "files_ok": 4,
         "files_failed": 0,
+        "missing": 0,
+        "skipped": 0,
         "areas": 4,
         "prices_new": counts["prices_new"],
         "prices_changed": 0,
@@ -209,16 +213,19 @@ def test_ac5_import_is_idempotent(
     caplog.clear()
     caplog.set_level(logging.INFO, logger="app.services.rent_reference")
 
-    second = import_rent_reference(db, FakeRentFetcher(_files()))
+    fetcher = FakeRentFetcher(_files())
+    second = import_rent_reference(db, fetcher)
 
-    assert second == {**first, "prices_new": 0, "prices_changed": 0}
+    # Spec 0021c: the same source version again is one request (the version) and no write.
+    assert fetcher.requests == [TEL_AVIV]
+    assert second == {**dict.fromkeys(first, 0), "skipped": 2}
     assert first["prices_new"] > 0
     assert snapshot() == before
     # NF1: one INFO line with the counts and the version; no path, URL or file content.
     (line,) = [r for r in caplog.records if r.name == "app.services.rent_reference"]
     assert line.levelno == logging.INFO
     message = line.getMessage()
-    for key in ("files_ok", "files_failed", "areas", "prices_new", "prices_changed", "20-08-2026"):
+    for key in (*first, "20-08-2026"):
         assert key in message
     for leaked in ("rent/", "http", "nadlan", "תל אביב", "רביבים"):
         assert leaked not in caplog.text
@@ -230,6 +237,7 @@ def test_ac6_revised_updates_missing_stays(db: Session, rent_clean: Engine) -> N
     stored = _prices(rent_clean, "settlement", 5000)
 
     files = _files()
+    files[TEL_AVIV]["version"] = "20-11-2026"  # else the same version is skipped (spec 0021c)
     three_rooms = next(e for e in files[TEL_AVIV]["trends"]["rooms"] if e["numRooms"] == 3)
     revised, missing = three_rooms["graphData"][:2]
     assert (revised["month"], missing["month"]) == (6, 3)
@@ -334,7 +342,7 @@ def test_ac8_bad_point_skipped(
     change: dict[str, object],
     missing: set[tuple[int, dt.date]],
 ) -> None:
-    monkeypatch.setattr(rent_reference, "RENT_SETTLEMENT_CODES", (565,))
+    monkeypatch.setattr(rent_reference, "settlement_codes", lambda _db: [565])
     files = _files()
     expected = _expected(files[AZOR], "settlementPrice")
     assert missing <= expected.keys()
@@ -367,19 +375,22 @@ def test_ac9_failed_settlement_is_soft(
     assert _area(rent_clean, "settlement", 5000) is None
     assert _area(rent_clean, "settlement", 565) is not None
 
-    # NF1: a full run requests each settlement and each listed neighbourhood once, in order.
-    monkeypatch.setattr(rent_reference, "RENT_SETTLEMENT_CODES", RENT_SETTLEMENT_CODES)
+    # NF1: a full run requests each settlement and each listed neighbourhood once, in order; a
+    # settlement with no file is `missing`, not failed (spec 0021c).
+    with rent_clean.begin() as conn:
+        conn.execute(text("TRUNCATE rent_prices, rent_areas"))
+    codes = [565, 681, 5000, 6300, 9100]
+    monkeypatch.setattr(rent_reference, "settlement_codes", lambda _db: codes)
     fetcher = FakeRentFetcher(_files())
     counts = import_rent_reference(db, fetcher)
     assert fetcher.requests == [
         path
-        for code in RENT_SETTLEMENT_CODES
+        for code in codes
         for path in (
             [f"settlement/rent/{code}.json"] + ([REVIVIM, RAMAT_HAHAYAL] if code == 5000 else [])
         )
     ]
-    assert len(RENT_SETTLEMENT_CODES) == 19
-    assert (counts["files_ok"], counts["files_failed"]) == (4, 17)
+    assert (counts["files_ok"], counts["files_failed"], counts["missing"]) == (4, 0, 3)
 
 
 @pytest.mark.asyncio
@@ -426,8 +437,10 @@ async def test_ac10_off_makes_no_request(
         lambda: settings.model_copy(update={"rent_reference": "nadlan"}),
     )
     monkeypatch.setattr(rent_reference, "get_rent_fetcher", lambda: nadlan)
+    monkeypatch.setattr(rent_reference, "settlement_codes", lambda _db: [565, 5000, 9100])
     counts = rent_reference.run_rent_import()
-    assert counts["files_failed"] == len(requests) == 19
+    assert counts["missing"] == len(requests) == 3
+    assert counts["files_failed"] == 0
     assert nadlan.client.is_closed
 
 
@@ -449,6 +462,8 @@ def test_ac11_fetcher_is_polite(monkeypatch: pytest.MonkeyPatch) -> None:
             return httpx.Response(200, content=b"\x1f\x8b", headers={"Content-Encoding": "gzip"})
         if name == "fail.json":
             return httpx.Response(500)
+        if name == "gone.json":
+            return httpx.Response(404)
         if name == "not-json.json":
             return httpx.Response(200, content=b"<html>")
         raise httpx.ConnectTimeout("timed out", request=request)
@@ -465,7 +480,7 @@ def test_ac11_fetcher_is_polite(monkeypatch: pytest.MonkeyPatch) -> None:
     assert fetcher.fetch("settlement/rent/cookie.json") == {"a": 1}
     assert sleeps == []
     assert fetcher.fetch("settlement/rent/bom.json") == {"name": "אזור"}
-    assert sleeps == [0.25]
+    assert sleeps == [5.0]  # NADLAN_INTERVAL_S: robots.txt's Crawl-delay (spec 0021c)
     first, second = seen
     assert str(first.url) == "https://data.nadlan.gov.il/api/pages/settlement/rent/cookie.json"
     for request in (first, second):
@@ -483,8 +498,139 @@ def test_ac11_fetcher_is_polite(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         with pytest.raises(RentSourceError) as excinfo:
             fetcher.fetch(path)
+        assert type(excinfo.value) is RentSourceError  # only a 404 is RentFileMissing
         assert "nadlan" not in str(excinfo.value)
         assert "html" not in str(excinfo.value)
+    with pytest.raises(RentFileMissing):
+        fetcher.fetch("gone.json")
     assert not any(request.url.host == "elsewhere.test" for request in seen)
-    assert len(seen) == 8
-    assert sleeps == [0.25] * 7
+    assert len(seen) == 9
+    assert sleeps == [5.0] * 8
+
+
+# Spec 0021c: the national import.
+HAIFA = "settlement/rent/4000.json"
+HAIFA_HOOD = "neighborhood/rent/40000001.json"
+BEER_SHEVA = "settlement/rent/9000.json"
+BEER_SHEVA_HOOD = "neighborhood/rent/90000001.json"
+
+
+def _city(code: int, name: str, hood_id: int, hood_name: str) -> dict[str, Any]:
+    """A settlement file and its one neighbourhood, copied from the Tel Aviv fixtures."""
+    city = _load("settlement_5000.json")
+    city.update(
+        settlementID=code,
+        settlementName=name,
+        otherNeighborhoods=[{"title": hood_name, "id": hood_id}],
+        neighborhoodsPrices=[],
+    )
+    hood = _load("neighborhood_65210029.json")
+    hood.update(neighborhoodId=hood_id, neighborhoodName=hood_name, settlementID=code)
+    return {
+        f"settlement/rent/{code}.json": city,
+        f"neighborhood/rent/{hood_id}.json": hood,
+    }
+
+
+def _national_files() -> dict[str, Any]:
+    return {
+        **_files(),
+        **_city(4000, "חיפה", 40000001, "הדר"),
+        **_city(9000, "באר שבע", 90000001, "רמות"),
+    }
+
+
+def test_ac1_national_import(db_engine: Engine, db: Session, rent_clean: Engine) -> None:
+    haifa = insert_settlement(db_engine, 4000, "חיפה")
+    insert_settlement(db_engine, 9000, "באר שבע")
+    insert_settlement(db_engine, 9100, "נהרייה")  # no file
+    insert_settlement(db_engine, 7400, "נתניה", active=False)
+    with db_engine.begin() as conn:  # a neighbourhood whose code is also a settlement's
+        conn.execute(
+            text(
+                "INSERT INTO areas (slug, name_he, kind, source_code, parent_id, centre, geom)"
+                " SELECT 'n-6300', 'שכונה', 'neighbourhood', 6300, :parent, p,"
+                " ST_Multi(ST_Expand(p, 0.01))"
+                " FROM (SELECT ST_SetSRID(ST_MakePoint(34.98, 32.8), 4326) AS p) c"
+            ),
+            {"parent": haifa},
+        )
+    files = _national_files()
+    files["settlement/rent/7400.json"] = files[HAIFA]  # would be requested if not skipped
+    fetcher = FakeRentFetcher(files)
+
+    counts = import_rent_reference(db, fetcher)
+
+    assert fetcher.requests == [
+        HAIFA,
+        HAIFA_HOOD,
+        BEER_SHEVA,
+        BEER_SHEVA_HOOD,
+        "settlement/rent/9100.json",
+    ]
+    assert (counts["files_ok"], counts["files_failed"], counts["missing"]) == (4, 0, 1)
+    for kind, source_id, settlement_code, name in (
+        ("settlement", 4000, 4000, "חיפה"),
+        ("neighbourhood", 40000001, 4000, "הדר"),
+        ("settlement", 9000, 9000, "באר שבע"),
+        ("neighbourhood", 90000001, 9000, "רמות"),
+    ):
+        area = _area(rent_clean, kind, source_id)
+        assert (area.settlement_code, area.name_he) == (settlement_code, name)
+        assert _prices(rent_clean, kind, source_id) != {}
+
+
+class Interrupted(BaseException):
+    """A worker kill: not an `Exception`, so the import's soft handling does not swallow it."""
+
+
+class InterruptingFetcher(FakeRentFetcher):
+    """Raises `Interrupted` at request `limit + 1`; checks on each neighbourhood request that its
+    settlement row is not stored yet."""
+
+    def __init__(self, files: dict[str, Any], engine: Engine, limit: int | None = None) -> None:
+        super().__init__(files)
+        self.engine = engine
+        self.limit = limit
+
+    def fetch(self, path: str) -> object:
+        if len(self.requests) == self.limit:
+            raise Interrupted
+        if path.startswith("neighborhood/"):
+            code = self.files[path]["settlementID"]  # type: ignore[index]
+            assert _area(self.engine, "settlement", code) is None
+        return super().fetch(path)
+
+
+def test_ac2_resume(db: Session, rent_clean: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rent_reference, "settlement_codes", lambda _db: [565, 4000, 5000, 9000])
+    files = _national_files()
+
+    # Run 1 is killed at Tel Aviv's second neighbourhood: Azor and Haifa are finished.
+    first = InterruptingFetcher(files, rent_clean, limit=5)
+    with pytest.raises(Interrupted):
+        import_rent_reference(db, first)
+    db.rollback()
+    assert first.requests == [AZOR, HAIFA, HAIFA_HOOD, TEL_AVIV, REVIVIM]
+    assert _area(rent_clean, "neighbourhood", 65210029) is not None
+    assert _area(rent_clean, "settlement", 5000) is None  # unfinished: no settlement row
+
+    # Run 2: Azor gives the version; Haifa is not requested; Tel Aviv is fetched whole.
+    second = InterruptingFetcher(files, rent_clean)
+    counts = import_rent_reference(db, second)
+    assert second.requests == [
+        AZOR,
+        TEL_AVIV,
+        REVIVIM,
+        RAMAT_HAHAYAL,
+        BEER_SHEVA,
+        BEER_SHEVA_HOOD,
+    ]
+    assert (counts["skipped"], counts["files_ok"], counts["files_failed"]) == (2, 5, 0)
+    assert _area(rent_clean, "settlement", 5000).source_version == "20-08-2026"
+
+    # Run 3: everything is at this version.
+    third = FakeRentFetcher(files)
+    counts = import_rent_reference(db, third)
+    assert third.requests == [AZOR]
+    assert (counts["skipped"], counts["files_ok"]) == (4, 0)

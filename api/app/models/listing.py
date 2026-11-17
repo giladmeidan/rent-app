@@ -167,6 +167,7 @@ class Listing(Base):
         UniqueConstraint("flatmate_invite_hash", name="uq_listings_flatmate_invite_hash"),
         Index("ix_listings_owner_id", "owner_id"),
         Index("ix_listings_area_id", "area_id"),
+        Index("ix_listings_neighbourhood_id", "neighbourhood_id"),
         # Explicit GiST index on the planar cast (`location::geometry`), the expression the map-box
         # filter compares (services/search.py), hence `spatial_index=False` on the column.
         Index("ix_listings_location", text("(location::geometry)"), postgresql_using="gist"),
@@ -183,6 +184,12 @@ class Listing(Base):
     # Must be an `is_active` area at create/update time (checked in services/listings.py).
     area_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("areas.id", ondelete="RESTRICT"), nullable=False
+    )
+    # The active neighbourhood the server placed the listing in (spec 0021a2: from the street, else
+    # from the geocoded point), NULL when it cannot tell. Server-side only, never in a response.
+    neighbourhood_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("areas.id", ondelete="SET NULL", name="fk_listings_neighbourhood_id"),
     )
     listing_type: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))

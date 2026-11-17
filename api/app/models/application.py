@@ -77,6 +77,14 @@ class Application(Base):
         ForeignKey("areas.id", ondelete="RESTRICT", name="fk_applications_area_id_at_apply"),
         nullable=False,
     )
+    # The listing's neighbourhood when the seeker applied (spec 0021a2, as `area_id_at_apply`);
+    # NULL on an application from before 0021a2, which the owner's inbox scores on the city only.
+    neighbourhood_id_at_apply: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "areas.id", ondelete="RESTRICT", name="fk_applications_neighbourhood_id_at_apply"
+        ),
+    )
     # The listing type the seeker applied to (spec 0007b), set again when a withdrawn application
     # is reopened. 0007c keys the inbox's room fields on it, and 0007g the owner's lifestyle
     # criterion. No server default: a write path that forgets it fails. Never in a response schema.
