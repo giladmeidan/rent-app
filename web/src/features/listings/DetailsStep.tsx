@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AreaOut } from '../../api/client';
@@ -7,13 +7,12 @@ import { Card } from '../../components/Card';
 import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { cx } from '../../components/cx';
 import { DateReadback, withReadback } from '../../components/DateReadback';
-import { EmptyState } from '../../components/EmptyState';
-import { ErrorState } from '../../components/ErrorState';
 import { Field, useField } from '../../components/Field';
 import { Select } from '../../components/Select';
 import { Switch } from '../../components/Switch';
 import { Textarea } from '../../components/Textarea';
 import { TextInput } from '../../components/TextInput';
+import { AreaSearch } from '../areas/AreaSearch';
 import type { Shelter } from './api';
 import { CONDITIONS, SHELTERS } from './constants';
 import { addDays, formatIls, formatRooms } from './format';
@@ -36,12 +35,15 @@ const alertText = 'text-body-sm font-medium text-danger';
 // 1 … 10 rooms in half steps (the API allows up to 20; the select offers the common range).
 const ROOM_OPTIONS = Array.from({ length: 19 }, (_, i) => 1 + i / 2);
 const PARKING_OPTIONS = [0, 1, 2, 3, 4, 5];
+// A listing sits in a settlement (spec 0021a1), never a neighbourhood.
+const SETTLEMENTS = ['settlement'] as const;
 
 type Props = {
   form: ListingForm;
   onChange: (patch: Partial<ListingForm>) => void;
   errors: FieldErrors;
-  /** `GET /areas`, shared with the wizard (which derives the selected area from it). */
+  /** `GET /areas`, shared with the wizard (which derives the selected area from it); the rent
+   * hint asks by the chosen settlement's name. */
   areas: UseQueryResult<AreaOut[]>;
   /** Israel's calendar day, `YYYY-MM-DD`. */
   today: string;
@@ -129,7 +131,8 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
     pricePointer.current = false;
   }, [priceFocused]);
 
-  const estimate = useRentEstimate(form);
+  const cityName = areas.data?.find((area) => area.id === form.area_id)?.name_he ?? '';
+  const estimate = useRentEstimate(form, cityName);
   const estimateHint = (() => {
     if (estimate === undefined) return undefined;
     const [low, high] = estimate.figure_rooms;
@@ -155,47 +158,6 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
     const { key, ...params } = error;
     return t(key, params);
   };
-
-  let areaControl: ReactNode;
-  if (areas.isPending) {
-    areaControl = (
-      <Field id={fieldId('area_id')} label={t('listings.fields.area')} error={message('area_id')}>
-        <Select disabled>
-          <option>{t('common.loading')}</option>
-        </Select>
-      </Field>
-    );
-  } else if (areas.isError || areas.data.length === 0) {
-    // No control to wire: a label, the state, and today's alert.
-    areaControl = (
-      <>
-        <p className="text-label">{t('listings.fields.area')}</p>
-        {areas.isError ? (
-          <ErrorState onRetry={() => areas.refetch()} />
-        ) : (
-          <EmptyState message={t('areas.empty')} />
-        )}
-        {errors.area_id !== undefined && (
-          <p id={errorId('area_id')} role="alert" className={alertText}>
-            {message('area_id')}
-          </p>
-        )}
-      </>
-    );
-  } else {
-    areaControl = (
-      <Field id={fieldId('area_id')} label={t('listings.fields.area')} error={message('area_id')}>
-        <Select value={form.area_id} onChange={(e) => onChange({ area_id: e.target.value })}>
-          {areas.data.length > 1 && <option value="">{t('listings.fields.choose')}</option>}
-          {areas.data.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name_he}
-            </option>
-          ))}
-        </Select>
-      </Field>
-    );
-  }
 
   const moneyField = (name: 'arnona_ils' | 'vaad_ils', fieldLabel: string) => (
     <Field
@@ -228,17 +190,15 @@ export function DetailsStep({ form, onChange, errors, areas, today, fieldId }: P
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4">
         <h3 className={groupHeading}>{t('listings.section.address')}</h3>
-        <div data-testid="area-field" className="flex flex-col gap-1.5">
-          {areaControl}
-        </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field id={fieldId('city')} label={t('listings.fields.city')} error={message('city')}>
-            <TextInput
-              type="text"
-              value={form.city}
-              onChange={(e) => onChange({ city: e.target.value })}
-            />
-          </Field>
+          <AreaSearch
+            id={fieldId('area_id')}
+            label={t('listings.fields.city')}
+            kinds={SETTLEMENTS}
+            value={form.area_id}
+            onPick={(area) => onChange({ area_id: area?.id ?? '' })}
+            error={message('area_id')}
+          />
           <Field
             id={fieldId('street')}
             label={t('listings.fields.street')}

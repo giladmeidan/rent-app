@@ -7,7 +7,7 @@ import type { UserOut } from '../../api/client';
 import { Button } from '../../components/Button';
 import { useConfirm } from '../../components/Dialog';
 import { PageHeader } from '../../components/PageHeader';
-import { fetchAreas } from '../areas/api';
+import { areasQuery } from '../areas/api';
 import { ME_KEY } from '../auth/useMe';
 import {
   ApiError,
@@ -187,7 +187,7 @@ export function ListingWizard({ listing, initialType }: Props) {
   // details. Before, a room's empty flatmates count would greet the owner as an error.
   const [preferencesAttempted, setPreferencesAttempted] = useState(false);
 
-  const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
+  const areas = useQuery(areasQuery);
   const create = useCreateListing();
   // Called in both modes (rules of hooks); only mutated when editing.
   const edit = usePatchListing(base?.id ?? '');
@@ -196,13 +196,11 @@ export function ListingWizard({ listing, initialType }: Props) {
   const busy = active.isPending || syncing !== null;
   const today = todayInIsrael();
 
-  // One active area is preselected; a selection that is no longer offered is dropped.
-  const withArea = (values: ListingForm): ListingForm => {
-    let areaId = '';
-    if (areas.data?.length === 1) areaId = areas.data[0]?.id ?? '';
-    else if (areas.data?.some((area) => area.id === values.area_id)) areaId = values.area_id;
-    return { ...values, area_id: areaId };
-  };
+  // A settlement that is no longer offered is dropped (the picker shows it empty and required).
+  const withArea = (values: ListingForm): ListingForm => ({
+    ...values,
+    area_id: areas.data?.some((area) => area.id === values.area_id) === true ? values.area_id : '',
+  });
   const current = withArea(form);
 
   // From `form`, not `current`: `withArea` gives `area_id: ''` while the areas load, which would
@@ -438,7 +436,7 @@ export function ListingWizard({ listing, initialType }: Props) {
         goTo(step === 'details' ? 'photos' : 'preview');
         return;
       }
-      // The area may have no input (no areas, or a load error): focus the next field that has one.
+      // The area has no input after a load error: focus the next field that has one.
       const start = FIELD_ORDER.indexOf(first);
       for (const name of FIELD_ORDER.slice(start)) {
         const element = found[name] && document.getElementById(fieldId(name));
@@ -658,7 +656,7 @@ export function ListingWizard({ listing, initialType }: Props) {
                 onRetry={publish}
                 onBackToDetails={() => {
                   // The chosen area was deactivated: offer the current list.
-                  void queryClient.invalidateQueries({ queryKey: ['areas'] });
+                  void queryClient.invalidateQueries({ queryKey: areasQuery.queryKey });
                   goTo('details');
                 }}
               />

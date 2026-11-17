@@ -251,8 +251,28 @@ describe('EditListingPage', () => {
     });
     expect(screen.queryByRole('button', { name: he.common.retry })).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(field(f.city)).toHaveValue(a.city);
+    expect(field(f.city)).toHaveValue(gushDan.name_he);
     expect(cached.getQueryData<ListingOut[]>(MY_LISTINGS_KEY)).toHaveLength(1);
+  });
+
+  it('ac2_shows_city', async () => {
+    // Spec 0021b: the listing's settlement shows in the picker.
+    let a = stored();
+    const opened = await openEdit(a);
+    expect(field(f.city)).toHaveValue(gushDan.name_he);
+    expect(field(f.city)).not.toHaveAttribute('aria-invalid', 'true');
+    opened.view.unmount();
+    vi.unstubAllGlobals();
+
+    // A settlement no longer in GET /areas: the picker is empty and required.
+    a = stored({ area_id: '00000000-0000-0000-0000-00000000dead' });
+    const { api } = await openEdit(a);
+    expect(field(f.city)).toHaveValue('');
+    fireEvent.click(nextButton());
+    expect(errorFor(field(f.city))).toHaveTextContent(he.listings.errors.required);
+    expect(field(f.city)).toHaveFocus();
+    expect(progress()).toHaveAttribute('aria-valuenow', '1');
+    expect(api.calls(`PATCH /listings/${a.id}`)).toHaveLength(0);
   });
 
   it('ac3_prefilled_from_listing', async () => {
@@ -261,8 +281,7 @@ describe('EditListingPage', () => {
 
     expect(stepItem(he.listings.steps.details)).toHaveAttribute('aria-current', 'step');
     expect(progress()).toHaveAttribute('aria-valuenow', '1');
-    expect(field(f.area)).toHaveValue(gushDan.id);
-    expect(field(f.city)).toHaveValue(a.city);
+    expect(field(f.city)).toHaveValue(gushDan.name_he);
     expect(field(f.street)).toHaveValue(a.street);
     expect(field(f.rooms)).toHaveValue('3.5');
     expect(field(f.floor)).toHaveValue(3);
@@ -370,10 +389,11 @@ describe('EditListingPage', () => {
   it('ac6_save_errors', async () => {
     const msg = 'city has too many combining marks in a row';
 
-    // 422 naming city: back on step 2, the error on city, focus there, the English msg nowhere.
+    // 422 naming the area: back on step 2, the error on the city picker, focus there, the English
+    // msg nowhere.
     let a = stored();
     let opened = await changePriceAndSave(a, [
-      json({ detail: [{ loc: ['body', 'city'], type: 'value_error', msg }] }, 422),
+      json({ detail: [{ loc: ['body', 'area_id'], type: 'value_error', msg }] }, 422),
     ]);
     await vi.waitFor(() => {
       expect(progress()).toHaveAttribute('aria-valuenow', '1');
@@ -389,7 +409,8 @@ describe('EditListingPage', () => {
     expect(errorFor(field(f.city))).toHaveTextContent(he.listings.errors.invalid);
     change(f.street, `${a.street} 2`);
     expect(errorFor(field(f.city))).toHaveTextContent(he.listings.errors.invalid);
-    change(f.city, 'גבעתיים');
+    change(f.city, '');
+    change(f.city, gushDan.name_he);
     expect(field(f.city)).not.toHaveAttribute('aria-invalid', 'true');
     expect(screen.queryByText(he.listings.errors.invalid)).toBeNull();
     opened.view.unmount();
@@ -651,7 +672,7 @@ describe('EditListingPage', () => {
     renderEdit(a.id);
     // The loading state has the page's <h1> too: wait for the wizard's form.
     await vi.waitFor(() => {
-      expect(field(f.area)).toBeDisabled();
+      expect(field(f.city)).toBeDisabled();
     });
     expect(screen.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
     expect(beforeUnloadPrevented()).toBe(false);
