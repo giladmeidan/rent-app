@@ -7,6 +7,7 @@ from typing import Any
 from arq import cron
 from arq.connections import RedisSettings
 
+from app import analytics
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.observability import init_sentry
@@ -115,6 +116,15 @@ async def tour_reminders_job(ctx: dict[str, Any]) -> int:
     return queued
 
 
+async def posthog_forget_job(ctx: dict[str, Any]) -> int:
+    """Delete the accounts deleted in the last 7 days from PostHog (spec 0019b), off the event
+    loop. A failed request fails the job (Sentry's arq integration reports it). Logs the number
+    only."""
+    sent = await asyncio.to_thread(analytics.forget_deleted_users)
+    log.info("posthog forget: %d", sent)
+    return sent
+
+
 async def on_startup(ctx: dict[str, Any]) -> None:
     """Show the `app` loggers' INFO lines (spec 0013g). arq's CLI configures only its own logger
     and leaves the root at WARNING, so `view flush` and `geocode sweep` would never be written.
@@ -129,6 +139,10 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
+async def on_shutdown(ctx: dict[str, Any]) -> None:
+    analytics.shutdown()  # flush the queued PostHog events (spec 0019b)
+
+
 # At import, not in `on_startup`: Sentry's arq integration wraps the jobs inside `create_worker`,
 # which arq calls before `on_startup` (spec 0019a).
 init_sentry(get_settings(), worker=True)
@@ -136,6 +150,7 @@ init_sentry(get_settings(), worker=True)
 
 class WorkerSettings:
     on_startup = on_startup
+    on_shutdown = on_shutdown
     functions = [ping]
     cron_jobs = [
         cron(geocode_listings, second={0, 10, 20, 30, 40, 50}, unique=True),
@@ -145,6 +160,7 @@ class WorkerSettings:
         # At most six requests: arq's default timeout is enough.
         cron(import_cbs_rent_job, day=16, hour=3, minute=40, unique=True),
         cron(purge_expired_job, hour=3, minute=25, unique=True),
+        cron(posthog_forget_job, hour=3, minute=55, unique=True),
         # Off the geocode sweep's seconds.
         cron(send_tour_mail_job, second={5, 15, 25, 35, 45, 55}, unique=True),
         cron(tour_reminders_job, minute={0, 15, 30, 45}, unique=True),

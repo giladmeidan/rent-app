@@ -59,6 +59,12 @@ services:
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      # PostHog usage analytics (spec 0019b): off (empty key) unless `.env` sets one.
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://eu.i.posthog.com}
+      POSTHOG_API_HOST: ${POSTHOG_API_HOST:-https://eu.posthog.com}
+      POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+      POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
       # As in the image: two glibc malloc arenas, so photo decodes do not pin memory per thread.
       MALLOC_ARENA_MAX: "2"
     ports:
@@ -106,6 +112,12 @@ services:
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      # PostHog usage analytics (spec 0019b): off (empty key) unless `.env` sets one.
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://eu.i.posthog.com}
+      POSTHOG_API_HOST: ${POSTHOG_API_HOST:-https://eu.posthog.com}
+      POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+      POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
     volumes:
       - ../api:/app
       - ../.outbox:/outbox

@@ -673,6 +673,11 @@ _ROLE_READS_ALLOWED = {
     ),
     # `user_out` echoes the caller's own role in `UserOut` (0010j): a response field, not a gate.
     ("routers/auth.py", "role=user.role,"),
+    # `signed_up`'s analytics property (spec 0019b): a count, not a gate.
+    (
+        "routers/auth.py",
+        'analytics.track(user.id, "signed_up", {"role": user.role, "method": method})',
+    ),
 }
 
 

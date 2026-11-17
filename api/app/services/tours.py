@@ -47,6 +47,7 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
+from app import analytics
 from app.models import Application, Conversation, Listing, Message, Tour, TourWindow, User
 from app.redis_client import RedisClient
 from app.schemas.tours import TourChangeKind as TourChangeKind  # the services' name too
@@ -429,7 +430,13 @@ def book(
     `ListingNotLiveError`, `TourExistsError` or `SlotUnavailableError`. Commits."""
     try:
         listing = db.execute(
-            select(Listing.id, Listing.owner_id, _live().label("live"), func.now().label("now"))
+            select(
+                Listing.id,
+                Listing.owner_id,
+                Listing.listing_type,
+                _live().label("live"),
+                func.now().label("now"),
+            )
             .where(
                 Listing.id
                 == select(Application.listing_id)
@@ -488,6 +495,7 @@ def book(
     except Exception:
         db.rollback()
         raise
+    analytics.track(seeker.id, "tour_booked", {"listing_type": listing.listing_type})
     return tour, change
 
 

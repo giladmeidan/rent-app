@@ -40,6 +40,7 @@ from pydantic import ValidationError
 from sqlalchemy import and_, func, insert, select, update
 from sqlalchemy.orm import Session
 
+from app import analytics
 from app.models import (
     Application,
     Area,
@@ -145,6 +146,11 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
     except Exception:
         db.rollback()
         raise
+    analytics.track(
+        owner.id,
+        "listing_published",
+        {"listing_type": data.listing_type, "area_id": str(data.area_id)},
+    )
     return listing
 
 

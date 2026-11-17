@@ -10,13 +10,13 @@ limits) and PUT /me/password (a session younger than `DELETE_REAUTH_S`). Spec 00
 /auth/google (public, its own per-network limits) signs in or up with a Google ID token."""
 
 import datetime as dt
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app import limits
+from app import analytics, limits
 from app.auth import COOKIE_NAME, current_user
 from app.client_ip import client_network
 from app.config import get_settings
@@ -72,11 +72,23 @@ def _rate_limited(exc: RateLimitedError) -> HTTPException:
     )
 
 
-def _signed_in(db: Session, user: User, status_code: int) -> JSONResponse:
-    """`UserOut` with a new session cookie (code, password and Google login)."""
+def _signed_in(
+    db: Session,
+    user: User,
+    *,
+    method: Literal["code", "password", "google"],
+    created: bool,
+) -> JSONResponse:
+    """`UserOut` with a new session cookie (code, password and Google login): 201 for a new
+    account, else 200. Sends exactly one of `signed_up` / `logged_in` (spec 0019b), after
+    `create_session`'s commit."""
     token = auth_service.create_session(db, user)
+    if created:
+        analytics.track(user.id, "signed_up", {"role": user.role, "method": method})
+    else:
+        analytics.track(user.id, "logged_in", {"method": method})
     response = JSONResponse(
-        status_code=status_code, content=user_out(db, user).model_dump(mode="json")
+        status_code=201 if created else 200, content=user_out(db, user).model_dump(mode="json")
     )
     response.set_cookie(
         COOKIE_NAME,
@@ -138,7 +150,7 @@ def verify_otp(body: OtpVerifyIn, db: DbDep, r: RedisDep) -> JSONResponse:
         raise HTTPException(status_code=403, detail="account_suspended") from None
     except auth_service.SignupBlockedError:
         raise HTTPException(status_code=403, detail="signup_blocked") from None
-    return _signed_in(db, user, 201 if created else 200)
+    return _signed_in(db, user, method="code", created=created)
 
 
 @router.post(
@@ -164,7 +176,7 @@ def password_login(body: PasswordLoginIn, request: Request, db: DbDep, r: RedisD
         raise HTTPException(status_code=401, detail="invalid_credentials") from None
     except auth_service.AccountSuspendedError:
         raise HTTPException(status_code=403, detail="account_suspended") from None
-    return _signed_in(db, user, 200)
+    return _signed_in(db, user, method="password", created=False)
 
 
 @router.post(
@@ -208,7 +220,7 @@ def google_login(body: GoogleLoginIn, request: Request, db: DbDep, r: RedisDep) 
         raise HTTPException(status_code=403, detail="signup_blocked") from None
     except auth_service.GoogleAccountConflictError:
         raise HTTPException(status_code=409, detail="google_account_conflict") from None
-    return _signed_in(db, user, 201 if created else 200)
+    return _signed_in(db, user, method="google", created=created)
 
 
 @router.get(

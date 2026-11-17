@@ -83,6 +83,7 @@ from sqlalchemy import Label, Row, Select, case, exists, func, literal, select, 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app import analytics
 from app.matching.score import match_columns
 from app.models import Application, Conversation, Listing, SeekerProfile, Tour, User
 from app.redis_client import RedisClient
@@ -317,6 +318,13 @@ def apply(
     except Exception:
         db.rollback()
         raise
+    analytics.track(seeker.id, "application_sent", {"listing_type": listing.listing_type})
+    if application.status == "shortlisted":  # it answered the lister's room like (0010l)
+        analytics.track(
+            seeker.id,
+            "application_shortlisted",
+            {"listing_type": listing.listing_type, "source": application.source},
+        )
     return application, listing
 
 
@@ -572,4 +580,11 @@ def set_applicant_status(
     except Exception:
         db.rollback()
         raise
+    if status == "shortlisted":
+        # The application's type is the listing's (fixed at create, 0010a); already RETURNed.
+        analytics.track(
+            application.seeker_id,
+            "application_shortlisted",
+            {"listing_type": application.listing_type_at_apply, "source": application.source},
+        )
     return row, True, changes
