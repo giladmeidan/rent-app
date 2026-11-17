@@ -63,17 +63,26 @@ describe('sentry', () => {
         headers: { Referer: 'https://homie.test/search?budget=5000', 'User-Agent': 'UA' },
       },
       user: { id: 'u1', email: EMAIL, ip_address: '1.2.3.4' },
+      extra: { note: EMAIL },
       exception: { values: [{ type: 'Error', value: `cannot load ${EMAIL}` }] },
-      breadcrumbs: [{ category: 'ui.click', message: `input[value="${EMAIL}"]` }],
+      breadcrumbs: [{ category: 'fetch', message: `failed for ${EMAIL}` }],
     } as ErrorEvent);
     expect(event.request).toEqual({ url: '/listings/:id' });
     expect(event.user).toBeUndefined();
+    expect(event.extra).toBeUndefined();
     expect(event.message).toBe('failed for [email]');
     expect(event.exception?.values?.[0]?.value).toBe('cannot load [email]');
-    expect(event.breadcrumbs?.[0]?.message).toBe('input[value="[email]"]');
+    expect(event.breadcrumbs?.[0]?.message).toBe('failed for [email]');
     expect(JSON.stringify(event)).not.toContain(EMAIL);
 
     expect(beforeBreadcrumb({ category: 'console', message: EMAIL })).toBeNull();
+    expect(
+      beforeBreadcrumb({
+        category: 'ui.click',
+        message: 'body > main > button[aria-label="דיווח על דנה לוי"]',
+      }),
+    ).toBeNull();
+    expect(beforeBreadcrumb({ category: 'ui.input', message: 'input[name="email"]' })).toBeNull();
     const crumb = (b: Breadcrumb) => beforeBreadcrumb(b)?.data;
     expect(
       crumb({
