@@ -97,20 +97,9 @@ describe('LandingPage', () => {
       expect(text).toContain(fact);
     }
 
-    // Why it matches: a list named by its caption, three lines.
-    const whyTitle = i18n.t('landing.example.why.title', { score: EXAMPLE_SCORE });
-    expect(whyTitle).toBe('לדוגמה: למה 91%');
-    const why = card.getByRole('list', { name: whyTitle });
-    const lines = within(why).getAllByRole('listitem');
-    expect(lines.map((li) => li.textContent)).toEqual([
-      he.landing.example.why.fits1,
-      he.landing.example.why.fits2,
-      he.landing.example.why.partial,
-    ]);
-    // Two fit (success check), one differs (muted dash).
-    expect(lines[0]?.firstElementChild).toHaveClass('text-success');
-    expect(lines[1]?.firstElementChild).toHaveClass('text-success');
-    expect(lines[2]?.firstElementChild).toHaveClass('text-ink-muted');
+    // The dummy photo fills the card's photo box; no "why" list any more.
+    expect(figure.querySelector('img')).not.toBeNull();
+    expect(card.queryByRole('list')).toBeNull();
 
     // Not a link, and no heading in the page outline.
     expect(card.queryByRole('link')).toBeNull();
