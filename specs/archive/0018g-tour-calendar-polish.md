@@ -1,7 +1,7 @@
 ---
 id: 0018g
 title: The tour calendar's month bar uses arrow buttons on one row, and the seeker's slot picker opens in a wider, taller dialog
-status: verified
+status: done
 depends_on: []   # 0018f is merged (PR #125)
 reviewers: [ux]   # cosmetic: behaviour unchanged (Speed rule 4); coder Sonnet/medium
 estimate: 1 coder run (small)
@@ -117,4 +117,7 @@ run e2e locally).
 None for Gilad: he asked for exactly this (arrows instead of text, wider and taller picker).
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Merged 2026-11-17, PR #126 (`263ed3b`), ci green on head `76e4630`. The month bar is one row on both tour screens
+(icon-only chevrons named "החודש הקודם/הבא", title in `text-h3`); `Dialog size="wide"` (`max-w-dialog-wide`,
+min-height `min(36rem,100dvh-3rem)`) is used only by the seeker's slot picker. Closes FOLLOWUPS 0018f nav wrap.
+ux review at 320/390/1280 px: 0 blockers, 0 majors, 0 minors. Open: picker day cells ~34 px wide at 320 px (as 0018f).
