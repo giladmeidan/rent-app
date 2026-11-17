@@ -1,7 +1,7 @@
 ---
 id: 0018f
 title: The lister's tour times and the seeker's slot picker show a month calendar instead of day-by-day lists
-status: in-review
+status: done
 depends_on: []   # 0018a–e are merged; web only, over the existing API
 reviewers: [qa, ux]   # ux: two screens change shape, a new keyboard grid; qa: the add/delete/book/move flows keep working. No new endpoint, no security. No perf
 estimate: 1 coder run   # coder Sonnet/medium: UI over a finished API, no migration
@@ -176,4 +176,8 @@ e2e, 0018e).
   before the build.
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Merged 2026-11-17, PR #125 (`bd55ab7`), ci green on the head. A shared `MonthCalendar` (Sunday-first RTL grid,
+roving keyboard, marks) replaces the day cards on `/me/listings/:id/tours` and the seeker's SlotPicker list.
+Review (qa + ux, one round): 0 blockers, 0 majors; fixed the stale tab stop after a click; minors in FOLLOWUPS
+(Home/End/Page range clamp, more keyboard tests, nav wrap at 320 px, colour-only dots). ux checked 320/390/1280 px.
+Deviation: prev/next are text buttons.
