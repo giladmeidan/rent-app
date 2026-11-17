@@ -104,6 +104,8 @@ test('ac7_wizard_photo', async ({ page }) => {
 // its search card; the owner's own photo is set on the profile page and shown there. One sign-up
 // (the owner is also the profile-photo user); the visitor is a second context with no session.
 test('ac5_gallery_and_profile_photo', async ({ page, browser }) => {
+  // axe on /me/profile scans the whole area catalogue (~1,900 checkboxes) until 0021b's picker.
+  test.slow();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   await signUpOwner(page);
   const id = await postListing(page, street);
