@@ -908,6 +908,7 @@
     },
     "thread": {
       "back": "לכל השיחות",
+      "actions": "פעולות",
       "notFound": "השיחה לא נמצאה",
       "toListing": "לעמוד הדירה",
       "toApplicants": "למועמדויות",

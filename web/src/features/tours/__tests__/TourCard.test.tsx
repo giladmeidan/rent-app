@@ -149,6 +149,7 @@ describe('TourCard', () => {
     fireEvent.click(screen.getByRole('button', { name: c.book }));
     const box = await picker();
     await within(box).findByRole('grid', { name: he.tours.calendar.seekerLabel });
+    expect(box).toHaveClass('max-w-dialog-wide');
     expect(dayButtonIn(box, 20)).toBeEnabled();
     expect(dayButtonIn(box, 21)).toBeEnabled();
     expect(dayButtonIn(box, 19)).toBeDisabled();

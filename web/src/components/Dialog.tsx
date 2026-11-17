@@ -24,6 +24,13 @@ export type DialogProps = {
   actions?: ReactNode;
   /** Focused after opening; otherwise the browser focuses the first focusable element. */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /** `wide` is wider and tall, for a calendar. */
+  size?: 'default' | 'wide';
+};
+
+const SIZE = {
+  default: 'max-w-dialog',
+  wide: 'max-w-dialog-wide min-h-[min(36rem,calc(100dvh-3rem))]',
 };
 
 /**
@@ -39,6 +46,7 @@ export function Dialog({
   children,
   actions,
   initialFocusRef,
+  size = 'default',
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -106,7 +114,7 @@ export function Dialog({
       onCancel={handleCancel}
       onPointerDown={handlePointerDown}
       onClick={handleClick}
-      className="w-full max-w-dialog p-0 rounded-lg border border-border bg-surface text-ink backdrop:bg-ink/40"
+      className={`w-full ${SIZE[size]} p-0 rounded-lg border border-border bg-surface text-ink backdrop:bg-ink/40`}
     >
       <div className="flex flex-col gap-4 p-6">
         <h2 id={titleId} className="text-h3">

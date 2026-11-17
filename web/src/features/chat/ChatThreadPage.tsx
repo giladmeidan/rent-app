@@ -11,6 +11,7 @@ import { Mascot } from '../../components/Mascot';
 import { BackLink, PageHeader } from '../../components/PageHeader';
 import { usePageTitle } from '../../app/usePageTitle';
 import { clearDraft, readDraft } from '../../app/drafts';
+import { DisclosureButton } from '../applicants/DisclosureButton';
 import { hasStatus } from '../applications/api';
 import { useMe } from '../auth/useMe';
 import { ErrorState } from '../../components/ErrorState';
@@ -47,8 +48,8 @@ function WarningMark() {
   return (
     <svg
       aria-hidden="true"
-      width="18"
-      height="18"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -146,6 +147,8 @@ function Thread({
   // that held it is gone.
   const removing = useRef(false);
   const [removeFailed, setRemoveFailed] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsId = useId();
   const [confirm, confirmDialog] = useConfirm();
   const removeMatch = useRemoveMatch();
   // A closed chat shows the text its composer held (spec 0009g), read on every render: the draft
@@ -239,14 +242,28 @@ function Thread({
             {otherName}
           </span>
         }
+        subtitle={
+          thread.listing
+            ? `${cardTitle(t, thread.listing)} · ${formatIls(thread.listing.price_ils)} ${t('listings.units.ils')}`
+            : t('chat.thread.direct')
+        }
+        actions={
+          <DisclosureButton
+            open={actionsOpen}
+            controls={actionsId}
+            onToggle={() => setActionsOpen((o) => !o)}
+          >
+            {t('chat.thread.actions')}
+          </DisclosureButton>
+        }
       />
       {group && <MemberLine members={thread.members} />}
-      {thread.listing ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-muted">
-          <span>
-            {cardTitle(t, thread.listing)} · {formatIls(thread.listing.price_ils)}{' '}
-            {t('listings.units.ils')}
-          </span>
+      <div
+        id={actionsId}
+        hidden={!actionsOpen}
+        className={actionsOpen ? 'flex flex-wrap items-center gap-2' : undefined}
+      >
+        {thread.listing && (
           <Button
             variant="ghost"
             size="sm"
@@ -258,41 +275,30 @@ function Thread({
           >
             {owner ? t('chat.thread.toApplicants') : t('chat.thread.toListing')}
           </Button>
-          {reportButton}
-        </div>
-      ) : (
-        // A direct chat (spec 0010g): no listing, one caption line. While it can send, the line
-        // also carries "remove the match" (spec 0010i).
-        <div className="flex flex-col items-start gap-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="text-caption text-ink-muted">{t('chat.thread.direct')}</p>
-            {thread.can_send && (
-              <Button
-                variant="ghost"
-                size="sm"
-                busy={removeMatch.isPending}
-                onClick={() => void onRemoveMatch()}
-              >
-                {t('chat.thread.removeMatch')}
-              </Button>
-            )}
-            {reportButton}
-          </div>
-          {removeFailed && (
-            <p role="alert" className="text-body-sm font-semibold text-danger">
-              {t('chat.thread.removeMatchFailed')}
-            </p>
-          )}
-        </div>
+        )}
+        {/* A direct chat (spec 0010i): while it can send, "remove the match". */}
+        {!thread.listing && thread.can_send && (
+          <Button
+            variant="ghost"
+            size="sm"
+            busy={removeMatch.isPending}
+            onClick={() => void onRemoveMatch()}
+          >
+            {t('chat.thread.removeMatch')}
+          </Button>
+        )}
+        {reportButton}
+      </div>
+      {removeFailed && (
+        <p role="alert" className="text-body-sm font-semibold text-danger">
+          {t('chat.thread.removeMatchFailed')}
+        </p>
       )}
-      <p
-        role="note"
-        className="flex items-start gap-2 rounded-lg border border-border bg-surface-subtle px-4 py-3 text-body leading-relaxed text-ink"
-      >
+      <TourCard id={id} thread={thread} />
+      <p role="note" className={`${systemLine} flex items-start gap-1.5 text-start`}>
         <WarningMark />
         <span>{t('chat.thread.warning')}</span>
       </p>
-      <TourCard id={id} thread={thread} />
       {thread.visible_from !== null && (
         <p className={systemLine}>
           {t('chat.joinedNote', { date: formatDay(thread.visible_from) })}

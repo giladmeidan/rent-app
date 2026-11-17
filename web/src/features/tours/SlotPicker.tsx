@@ -143,6 +143,7 @@ export function SlotPicker({
 
   return (
     <Dialog
+      size="wide"
       open={open}
       onClose={close}
       title={t('tours.picker.title')}

@@ -43,6 +43,25 @@ function monthsBetween(first: string, last: string): string[] {
   return months;
 }
 
+function Chevron({ className }: { className: string }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 /**
  * A month grid (WAI-ARIA date grid, weeks from Sunday) of the days `today`…`lastDay`. Days are
  * `YYYY-MM-DD`. `isEnabled` narrows the range; `mark` puts a dot on a day. Arrow keys move focus
@@ -154,16 +173,17 @@ export function MonthCalendar({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-nowrap items-center justify-between gap-2">
         <Button
           variant="ghost"
           size="sm"
           disabled={at <= 0}
           onClick={() => setMonth(months[at - 1] ?? month)}
-        >
-          {t('tours.calendar.prevMonth')}
-        </Button>
-        <p className="text-label" aria-live="polite">
+          aria-label={t('tours.calendar.prevMonth')}
+          icon={<Chevron className="ltr:rotate-180" />}
+          className="shrink-0"
+        />
+        <p className="min-w-0 text-center text-h3" aria-live="polite">
           {titleFormat.format(utc(first))}
         </p>
         <Button
@@ -171,9 +191,10 @@ export function MonthCalendar({
           size="sm"
           disabled={at >= months.length - 1}
           onClick={() => setMonth(months[at + 1] ?? month)}
-        >
-          {t('tours.calendar.nextMonth')}
-        </Button>
+          aria-label={t('tours.calendar.nextMonth')}
+          icon={<Chevron className="rtl:rotate-180" />}
+          className="shrink-0"
+        />
       </div>
       <table role="grid" aria-label={label} className="w-full table-fixed">
         <thead>
