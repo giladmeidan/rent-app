@@ -1,7 +1,7 @@
 ---
 id: 0021a2
 title: A listing in a big city is placed in its neighbourhood, and a seeker who prefers a neighbourhood or its city is matched at the right level
-status: in-progress
+status: done
 depends_on: [0021a1]   # areas.kind / parent_id / centre / streets, the neighbourhood rows, migration 0031
 reviewers: [code, qa, perf, security]   # perf: the area criterion in search / people / inbox; security: the inbox snapshot (0006c, B1) must cover the neighbourhood
 estimate: 1 coder run   # coder Opus/high (migration + the B1 snapshot)
@@ -112,4 +112,11 @@ sweep with a fake geocoder, match levels, inbox snapshot, apply/reopen.
   (`resolve_city`, `estimate_rent`, `test_rent_estimate.py`) untouched.
 - `market_people.browse_statement`: named untouched above (ordering only).
 
-## Digest (filled by orchestrator after verification)
+## Digest (merged 2026-11-17, PR #135, merge 5d0413d)
+Spec 0021a2 — listings placed in big-city neighbourhoods; area match at both levels   PR #135, merged 5d0413d
+Shipped: migration `0032_listing_neighbourhoods` (`listings.neighbourhood_id`, `applications.neighbourhood_id_at_apply`); a listing's neighbourhood comes from its street (one match), else the geocoding sweep's nearest neighbourhood within 1,500 m; a seeker matches a city at city level and a neighbourhood strictly (Gilad 2026-11-17); the owner's inbox scores on the apply-time snapshot, now with the neighbourhood.
+Demo: `make dev` → post a Tel Aviv listing on a Florentin street → a seeker preferring Florentin scores the area criterion, one preferring Neve Tzedek does not.
+Tests: API 1036, web 884 green locally.   CI: green on 4a28e82 (a11y ac5 flaked once again, in FOLLOWUPS).
+Findings: 0 blockers, 1 major fixed (a PATCH re-sending an unchanged street wiped a point-derived neighbourhood), 5 minors fixed, 2 to FOLLOWUPS (a neighbourhood deactivated by a re-import stays on its listings; a11y flake recurrence).
+Changed in PRODUCT.md: none (strict neighbourhood match already recorded).
+Not verified: neighbourhood placement against real nadlan street lists at scale (fixture data only). NF1: search, people and inbox plans unchanged; sweep lookup 0.3 ms.
