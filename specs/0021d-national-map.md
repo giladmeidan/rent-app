@@ -22,7 +22,7 @@ preferred area, else Tel Aviv-Yafo.
 - **`features/search/mapPosition.ts`:** `parseCenter` keeps dropping (not clamping) a URL centre outside
   `MAP_POSITION_BOUNDS`; update its doc comment and the zoom clamp to the new `MAP_MIN_ZOOM`.
 - **Default view** (`SearchMap.tsx`, apartment and market maps), when the URL has no position:
-  - a visitor: `DEFAULT_VIEW` at once;
+  - a visitor: `DEFAULT_VIEW` as soon as `/me` answers (no wait for `/areas`; `/me` is usually cached by the header);
   - signed in: the map's existing loading state until the profile (`useProfile`) and `areasQuery` (from `0021b`)
     have answered; then it mounts at the **first** `area_ids` entry's centre (zoom 13 for a settlement, 15 for a
     neighbourhood), or at `DEFAULT_VIEW` if either request failed, there is no looking part, or the list is empty.
@@ -41,8 +41,8 @@ preferred area, else Tel Aviv-Yafo.
 - **Tests following the change:** `config.test.ts`, `mapPosition.test.ts` (L13 old literal), `cluster.test.ts`
   L123, `SearchMap.test.tsx` (L30, L807, L1071, L1135, L1178), `SideMap.test.tsx`, `LocateButton.test.tsx`.
 - **e2e / screens (CI only, never run locally):** `search.spec.ts`, `map.spec.ts` (area fixtures),
-  `screens/search.screens.ts` L516–556 (Haifa is now inside; `he.places.*` deleted; show-all). `promo/promo.capture.ts`
-  L532/L575 (not in CI): update, or log in FOLLOWUPS.
+  `screens/search.screens.ts` L516–556 (Haifa is now inside; `he.places.*` deleted; show-all). (`promo/promo.capture.ts` does not exist on this
+  branch: nothing to update.)
 
 **Out**
 - Self-hosted tiles, a paid geocoder (PRODUCT.md "Launch area"). Area search filter.
