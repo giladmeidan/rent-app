@@ -1,7 +1,7 @@
 ---
 id: 0019a
 title: Gilad gets an email when the API, the worker or a browser hits an unhandled error, with no personal data sent
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa]
 estimate: 1 coder run   # coder Opus/high (data leaving the app; plan)
@@ -192,6 +192,16 @@ CI).
 - Exception text from our own code is kept (emails redacted); only SQLAlchemy / psycopg / pydantic messages are
   blanked. A phone or name in some other exception message would still go out; none is known today.
 - `0019b` builds on this branch and reuses `routePattern`; keep it an exported function in its own file.
+- Found in the build (coder, 2026-11-17), no decision needed: `@sentry/react` 11 has no `sendDefaultPii` (removed;
+  its replacement `dataCollection` defaults to collecting user info, cookies, headers, bodies and query params), so
+  `initSentry` sets `dataCollection` with all of those off instead; `beforeSend` scrubs either way. sentry-sdk 2.75.0
+  still takes `send_default_pii=False` but warns it is deprecated in favour of `data_collection`.
+- Before tracing is ever turned on (`SENTRY_TRACES_SAMPLE_RATE` > 0): the scrubber redacts emails and feed tokens in
+  spans but keeps span `data`, where an httpx span holds the Nominatim query (street and city); review span
+  scrubbing then.
+- `@sentry/react` / `@sentry/vite-plugin` 11.13.0 were published 2026-11-16 16:28 UTC; pnpm 12's default
+  `minimumReleaseAge` (1 day) refuses them until 2026-11-17 16:28 UTC. Not worked around in the repo (no
+  `minimumReleaseAgeExclude`, as 0000b chose); CI's `pnpm install --frozen-lockfile` passes once the day is over.
 
 ## Verifier findings (2026-11-17, applied in place)
 1. Worker init moved from `on_startup` to module level: arq's integration wraps jobs in `create_worker`, which runs
