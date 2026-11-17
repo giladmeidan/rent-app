@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Area, CbsRentPrice, RentArea, RentPrice
 from app.schemas.rent_estimate import RentEstimateOut, RentEstimateRange, RentEstimateReason
-from app.services.areas import settlement_districts
+from app.services import areas  # module import: areas imports this module too (cycle)
 
 Level = Literal["neighbourhood", "city"]
 RatioLevel = Literal["city", "district"]
@@ -206,7 +206,7 @@ def _small_flat_ratio(db: Session, settlement_code: int) -> tuple[RatioLevel, Fr
     """Step 5b: the mean CBS ratio over the CBS window, the city's when it has enough periods,
     else its district's; None when neither has. One query."""
     geos: list[tuple[RatioLevel, int]] = [("city", settlement_code)]
-    district = settlement_districts().get(settlement_code)
+    district = areas.settlement_districts().get(settlement_code)
     if district is not None:
         geos.append(("district", district))
     newest = select(func.max(CbsRentPrice.period)).scalar_subquery()
@@ -377,7 +377,7 @@ def backtest_ratio(
     by_geo = ratios(
         ((f.geo_kind, f.geo_code), f.room_group, f.period, f.price_ils) for f in figures
     )
-    districts = settlement_districts()
+    districts = areas.settlement_districts()
     cities = [geo for geo in by_geo if geo[0] == "city" and geo[1] in districts]
     rows: list[BacktestRow] = []
     for size in windows:
