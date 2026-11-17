@@ -1,7 +1,7 @@
 ---
 id: 0021c
 title: A lister anywhere in Israel sees the rent estimate at the price step, not only in Gush Dan
-status: in-progress
+status: in-review
 depends_on: [0021a1]
 reviewers: [code, qa]   # qa: GET /rent-estimate answers for new cities (API behaviour). No security: parsing, fetcher hardening and config are unchanged (0014a); the only new input is the committed CSV
 estimate: 1 coder run   # coder Opus/high (data import; Speed rule 6)
