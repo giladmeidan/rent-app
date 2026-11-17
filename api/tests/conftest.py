@@ -405,6 +405,38 @@ def insert_settlement(
     return area_id
 
 
+def insert_neighbourhood(
+    engine: Engine,
+    parent_id: uuid.UUID,
+    code: int,
+    streets: list[str],
+    *,
+    lng: float = 34.78,
+    lat: float = 32.08,
+    active: bool = True,
+) -> uuid.UUID:
+    """One neighbourhood row of `parent_id` (spec 0021a1), its centre at `(lng, lat)`, by id."""
+    with engine.begin() as conn:
+        area_id: uuid.UUID = conn.execute(
+            text(
+                "WITH c AS (SELECT ST_SetSRID(ST_MakePoint(:lng, :lat), 4326) AS p)"
+                " INSERT INTO areas"
+                " (slug, name_he, kind, parent_id, source_code, centre, geom, streets, is_active)"
+                " SELECT 'n-' || :code, 'שכונה ' || :code, 'neighbourhood', :parent, :code, p,"
+                " ST_Multi(ST_Expand(p, 0.01)), :streets, :active FROM c RETURNING id"
+            ),
+            {
+                "lng": lng,
+                "lat": lat,
+                "code": code,
+                "parent": parent_id,
+                "streets": streets,
+                "active": active,
+            },
+        ).scalar_one()
+    return area_id
+
+
 @pytest.fixture
 def gush_dan(db_engine: Engine) -> uuid.UUID:
     """The Tel Aviv-Yafo settlement (spec 0021a1; the name is from the old `gush-dan` launch area),
@@ -566,8 +598,9 @@ def make_application(
     engine: Engine, listing_id: uuid.UUID, seeker_id: uuid.UUID, **overrides: Any
 ) -> uuid.UUID:
     """Insert an application directly and return its id. Defaults: `message='Hello'`,
-    `status='submitted'`, and the listing's current `price_ils` / `area_id` / `listing_type` as
-    `price_ils_at_apply` / `area_id_at_apply` (0006c) / `listing_type_at_apply` (0007b), which is
+    `status='submitted'`, and the listing's current `price_ils` / `area_id` / `neighbourhood_id` /
+    `listing_type` as `price_ils_at_apply` / `area_id_at_apply` (0006c) /
+    `neighbourhood_id_at_apply` (0021a2) / `listing_type_at_apply` (0007b), which is
     what applying snapshots; `overrides` may set any column (including `created_at` and a
     snapshot). Bypasses the service, its room gate and its rate limit."""
     unknown = set(overrides) - _APPLICATION_COLUMNS
@@ -585,6 +618,7 @@ def make_application(
         for column, source in (
             ("price_ils_at_apply", "price_ils"),
             ("area_id_at_apply", "area_id"),
+            ("neighbourhood_id_at_apply", "neighbourhood_id"),
             ("listing_type_at_apply", "listing_type"),
         )
         if column not in values
