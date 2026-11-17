@@ -13,7 +13,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { flattenPages } from '../search/useSearch';
 import { DifferIcon } from '../match/icons';
-import { fetchAreas } from '../areas/api';
+import { areasQuery } from '../areas/api';
+import { areaLabels } from '../areas/areaLabel';
 import { hasStatus } from '../applications/api';
 import { cardTitle } from '../listings/cardTitle';
 import { useMyListings } from '../listings/useMyListings';
@@ -38,7 +39,7 @@ export function PeoplePage() {
   const listing = listings.data?.find((l) => l.id === id);
   const isRoom = listing?.listing_type === 'room';
   const people = usePeople(id, isRoom);
-  const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
+  const areas = useQuery(areasQuery);
   // The two outcomes after which the card leaves the refetched list: page state, so the message
   // survives the refetch that drops the card.
   const [alert, setAlert] = useState<PageAlert | null>(null);
@@ -54,10 +55,7 @@ export function PeoplePage() {
   const back = { to: '/market/mine', label: t('market.mine.back') };
   const items = useMemo(() => (people.data ? flattenPages(people.data) : []), [people.data]);
 
-  const areaName = useMemo(
-    () => new Map((areas.data ?? []).map((a) => [a.id, a.name_he])),
-    [areas.data],
-  );
+  const areaName = useMemo(() => areaLabels(t, areas.data), [t, areas.data]);
   // The tab is named after the state's <h1> (a `Notice`, or the page title).
   const peopleGone = people.data === undefined && people.isError;
   usePageTitle(

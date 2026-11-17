@@ -10,7 +10,8 @@ import { Loading } from '../../components/Loading';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
-import { fetchAreas } from '../areas/api';
+import { areasQuery } from '../areas/api';
+import { areaLabels } from '../areas/areaLabel';
 import { hasStatus } from '../applications/api';
 import { ApiError } from '../listings/api';
 import { MutualBanner } from '../likes/MutualBanner';
@@ -36,7 +37,7 @@ export function MarketPeoplePage() {
   const { t } = useTranslation();
   usePageTitle(t('market.people.title'));
   const people = useMarketPeople();
-  const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
+  const areas = useQuery(areasQuery);
   const viewer = useProfile().data;
   const [mutual, setMutual] = useState<{ conversationId: string } | null>(null);
   // The card a 404 took out of the list: page state, so it outlives the card. A count, so the
@@ -50,10 +51,7 @@ export function MarketPeoplePage() {
   }, [gone]);
 
   const items = useMemo(() => (people.data ? flattenCards(people.data) : []), [people.data]);
-  const areaName = useMemo(
-    () => new Map((areas.data ?? []).map((a) => [a.id, a.name_he])),
-    [areas.data],
-  );
+  const areaName = useMemo(() => areaLabels(t, areas.data), [t, areas.data]);
 
   // "Load more" keeps focus on the first new card: the button may leave with the last page.
   const listRef = useRef<HTMLUListElement>(null);

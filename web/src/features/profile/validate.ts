@@ -39,7 +39,8 @@ export type ProfileForm = {
   /** `YYYY-MM-DD`, as `<input type="date">` gives it. */
   move_in_date: string;
   move_in_flexible: boolean;
-  /** Every checked id, including one `GET /areas` no longer lists (never shown, counted or sent). */
+  /** Every chosen id in the order picked, including one `GET /areas` no longer lists (never shown,
+   * counted or sent). */
   area_ids: ReadonlySet<string>;
   household: Household | null;
   has_pets: boolean;
@@ -147,6 +148,7 @@ export type FieldError =
   | { key: 'listings.errors.range'; min: number; max: number }
   | { key: 'profile.errors.moveIn' }
   | { key: 'profile.errors.areas' }
+  | { key: 'profile.errors.areasMax' }
   | { key: 'profile.errors.areaInactive' }
   | { key: 'profile.errors.aboutMeTooLong' }
   | { key: 'profile.errors.onePart' }
@@ -159,9 +161,21 @@ const required = { key: 'listings.errors.required' } as const;
 const DIGITS = /^\d+$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** The checked ids that `GET /areas` lists, in its order: what is shown, counted and sent. */
+/** At most this many preferred areas (spec 0021b). */
+export const AREAS_MAX = 20;
+
+/** The chosen ids that `GET /areas` lists, in the order picked (the first is the map's start, 0021d):
+ * what is shown, counted and sent. */
 export function visibleAreaIds(form: ProfileForm, areas: readonly { id: string }[]): string[] {
-  return areas.filter((a) => form.area_ids.has(a.id)).map((a) => a.id);
+  const listed = new Set(areas.map((a) => a.id));
+  return [...form.area_ids].filter((id) => listed.has(id));
+}
+
+function areaIds(form: ProfileForm, areas: readonly { id: string }[]): FieldError | undefined {
+  const count = visibleAreaIds(form, areas).length;
+  if (count === 0) return { key: 'profile.errors.areas' };
+  if (count > AREAS_MAX) return { key: 'profile.errors.areasMax' };
+  return undefined;
 }
 
 function budget(value: string): FieldError | undefined {
@@ -224,10 +238,7 @@ export function validate(
   const found: Record<FieldName, FieldError | undefined> = {
     budget_max_ils: looking ? budget(form.budget_max_ils) : undefined,
     move_in_date: looking ? moveIn(form.move_in_date, today) : undefined,
-    area_ids:
-      looking && visibleAreaIds(form, areas).length === 0
-        ? { key: 'profile.errors.areas' }
-        : undefined,
+    area_ids: looking ? areaIds(form, areas) : undefined,
     household: looking && form.household === null ? required : undefined,
     contract_months: looking && form.contract_months === null ? required : undefined,
     parking_needed: undefined,

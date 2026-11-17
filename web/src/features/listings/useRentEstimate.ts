@@ -26,8 +26,12 @@ function useDebouncedValue<T>(value: T, ms: number): T {
  * address or rooms missing, a `reason` answer, an error, or while the facts are still changing or
  * loading. Never blocks the wizard and never changes the form.
  */
-export function useRentEstimate(form: ListingForm): RentEstimateRange | undefined {
-  const live = [form.city.trim(), form.street.trim(), form.rooms.trim()] as const;
+export function useRentEstimate(
+  form: ListingForm,
+  /** The chosen settlement's name (spec 0021b), `''` while none is chosen. */
+  cityName: string,
+): RentEstimateRange | undefined {
+  const live = [cityName.trim(), form.street.trim(), form.rooms.trim()] as const;
   const city = useDebouncedValue(live[0], DEBOUNCE_MS);
   const street = useDebouncedValue(live[1], DEBOUNCE_MS);
   const rooms = useDebouncedValue(live[2], DEBOUNCE_MS);

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -8,7 +8,7 @@ import { usePageTitle } from '../../app/usePageTitle';
 import { Button } from '../../components/Button';
 import { retryAfterText } from '../../components/retryAfter';
 import { Card } from '../../components/Card';
-import { ChoiceGroup, choiceSegment, type ChoiceOption } from '../../components/ChoiceGroup';
+import { ChoiceGroup, type ChoiceOption } from '../../components/ChoiceGroup';
 import { cx } from '../../components/cx';
 import { DateReadback, withReadback } from '../../components/DateReadback';
 import { EmptyState } from '../../components/EmptyState';
@@ -19,11 +19,14 @@ import { Loading } from '../../components/Loading';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
+import { Tag } from '../../components/Tag';
 import { Switch } from '../../components/Switch';
 import { TextInput } from '../../components/TextInput';
 import { Textarea } from '../../components/Textarea';
 import { hasStatus } from '../applications/api';
-import { fetchAreas } from '../areas/api';
+import { areasQuery } from '../areas/api';
+import { areaLabel } from '../areas/areaLabel';
+import { AreaSearch } from '../areas/AreaSearch';
 import { safeNext } from '../auth/next';
 import { LifestyleFields } from '../lifestyle/LifestyleFields';
 import { ApiError } from '../listings/api';
@@ -44,6 +47,7 @@ import { useProfile } from './useProfile';
 import { useSaveProfile } from './useSaveProfile';
 import {
   ABOUT_ME_MAX,
+  AREAS_MAX,
   BUDGET,
   emptyProfileForm,
   firstInvalid,
@@ -52,6 +56,7 @@ import {
   serverFieldErrors,
   toProfileIn,
   validate,
+  visibleAreaIds,
   type FieldError,
   type FieldErrors,
   type FieldName,
@@ -60,6 +65,23 @@ import {
 
 const sectionHeading = 'font-display text-h2';
 const mutedNote = 'text-body-sm text-ink-muted';
+// Preferred areas are cities and neighbourhoods (spec 0021b).
+const PREFERRED_KINDS = ['settlement', 'neighbourhood'] as const;
+const REMOVE = (
+  <svg
+    aria-hidden="true"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
 const switchCard = 'flex flex-col divide-y divide-border';
 const navLink = cx(
   'flex min-h-11 items-center rounded-md px-3 text-body font-medium text-ink-muted hover:bg-surface-subtle hover:text-ink',
@@ -123,7 +145,6 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
 
   const today = todayInIsrael();
   const fieldId = (name: FieldName) => `${id}-${name}`;
-  const errorId = (name: FieldName) => `${fieldId(name)}-error`;
 
   /** Focuses a field's (first) input: by `name`, so a radio group or the areas work too. */
   function focus(name: FieldName) {
@@ -201,16 +222,6 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     const { key, ...params } = error;
     return t(key, params);
   }
-  // The areas fieldset's own error line; the text-like fields get theirs from `Field`.
-  const errorText = (name: FieldName): ReactNode => {
-    const error = errors[name];
-    if (error === undefined) return null;
-    return (
-      <p id={errorId(name)} role="alert" className="text-body-sm text-danger">
-        {message(error)}
-      </p>
-    );
-  };
   const groupError = (name: FieldName) => {
     const error = errors[name];
     return error === undefined ? undefined : message(error);
@@ -249,59 +260,63 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
     { value: 'mamad', label: t('profile.shelter.mamad') },
   ];
 
-  const areaError = errors.area_ids;
+  const areasById = new Map(areas.map((area) => [area.id, area]));
+  const chosenAreas = visibleAreaIds(form, areas).flatMap((areaId) => areasById.get(areaId) ?? []);
+  const setAreas = (ids: string[]) => change({ area_ids: new Set(ids) }, 'area_ids');
+  const removeArea = (areaId: string) =>
+    setAreas([...form.area_ids].filter((other) => other !== areaId));
   const areasControl =
     areas.length === 0 ? (
       <EmptyState message={t('areas.empty')} />
     ) : (
-      <fieldset className="flex flex-col">
+      <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-label text-ink">{t('profile.fields.areas')}</legend>
-        <div className="flex flex-wrap gap-2">
-          {areas.map((area) => {
-            const checkboxId = `${fieldId('area_ids')}-${area.id}`;
-            const checked = form.area_ids.has(area.id);
-            return (
-              <div key={area.id} className="flex">
-                <input
-                  id={checkboxId}
-                  type="checkbox"
-                  name="area_ids"
-                  value={area.id}
-                  checked={checked}
-                  onChange={(e) => {
-                    const next = new Set(form.area_ids);
-                    if (e.target.checked) next.add(area.id);
-                    else next.delete(area.id);
-                    change({ area_ids: next }, 'area_ids');
-                  }}
-                  aria-invalid={areaError !== undefined ? true : undefined}
-                  aria-describedby={areaError !== undefined ? errorId('area_ids') : undefined}
-                  className="peer sr-only"
-                />
-                <label htmlFor={checkboxId} className={cx(choiceSegment, 'gap-1.5')}>
-                  {checked && (
-                    <svg
-                      aria-hidden="true"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="shrink-0"
-                    >
-                      <path d="M5 12l5 5 9-10" />
-                    </svg>
-                  )}
-                  {area.name_he}
-                </label>
-              </div>
-            );
-          })}
-        </div>
-        {areaError !== undefined && <div className="mt-1.5">{errorText('area_ids')}</div>}
+        {chosenAreas.length > 0 && (
+          <ul className="flex flex-wrap gap-2">
+            {chosenAreas.map((area) => {
+              const name = areaLabel(t, area, areasById);
+              return (
+                <Tag key={area.id} as="li" tone="accent">
+                  {name}
+                  <button
+                    type="button"
+                    aria-label={t('profile.areas.remove', { name })}
+                    onClick={() => {
+                      removeArea(area.id);
+                      // The focused button unmounts: keep focus in the picker.
+                      focus('area_ids');
+                    }}
+                    // 24 px look, 44 px hit area.
+                    className={cx(
+                      "relative inline-flex size-6 shrink-0 items-center justify-center rounded-full after:absolute after:-inset-2.5 after:content-['']",
+                      focusRing,
+                    )}
+                  >
+                    {REMOVE}
+                  </button>
+                </Tag>
+              );
+            })}
+          </ul>
+        )}
+        <AreaSearch
+          label={t('profile.fields.areasSearch')}
+          kinds={PREFERRED_KINDS}
+          name="area_ids"
+          error={groupError('area_ids')}
+          onPick={(area) => {
+            if (area === null || form.area_ids.has(area.id)) return;
+            if (chosenAreas.length >= AREAS_MAX) {
+              setErrors((shown) => ({ ...shown, area_ids: { key: 'profile.errors.areasMax' } }));
+              return;
+            }
+            setAreas([...form.area_ids, area.id]);
+          }}
+          onBackspace={() => {
+            const last = chosenAreas.at(-1);
+            if (last !== undefined) removeArea(last.id);
+          }}
+        />
       </fieldset>
     );
 
@@ -703,8 +718,7 @@ export function ProfilePage() {
   const { t } = useTranslation();
   usePageTitle(t('profile.title'));
   const profile = useProfile();
-  // The key `AreasList` and `ListingWizard` use.
-  const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
+  const areas = useQuery(areasQuery);
 
   const profileFailed = profile.isError && profile.data === undefined;
   const areasFailed = areas.isError && areas.data === undefined;

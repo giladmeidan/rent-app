@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addDays } from '../../listings/format';
 import { gushDan } from '../../listings/__tests__/fixtures';
 import {
+  AREAS_MAX,
   birthYearRange,
   emptyProfileForm,
   firstInvalid,
@@ -17,6 +18,7 @@ import { personalOnlyProfile, profile } from './fixtures';
 
 const TODAY = '2026-11-11';
 const areas = [gushDan, { ...gushDan, id: 'other', slug: 's-6900', name_he: 'כפר סבא' }];
+const many = Array.from({ length: 21 }, (_, i) => ({ ...gushDan, id: `many-${String(i)}` }));
 const valid: ProfileForm = {
   ...formFromProfile(profile({ move_in_date: addDays(TODAY, 30) })),
 };
@@ -45,10 +47,20 @@ describe('validate', () => {
       [{ area_ids: new Set(['gone']) }, 'area_ids', { key: 'profile.errors.areas' }],
       [{ household: null }, 'household', required],
       [{ contract_months: null }, 'contract_months', required],
+      // At most 20 (spec 0021b).
+      [
+        { area_ids: new Set(many.map((a) => a.id)) },
+        'area_ids',
+        { key: 'profile.errors.areasMax' },
+      ],
     ];
     for (const [patch, field, error] of rows) {
-      expect(validate({ ...valid, ...patch }, areas, TODAY)).toEqual({ [field]: error });
+      expect(validate({ ...valid, ...patch }, [...areas, ...many], TODAY)).toEqual({
+        [field]: error,
+      });
     }
+    const twenty = new Set(many.slice(0, AREAS_MAX).map((a) => a.id));
+    expect(validate({ ...valid, area_ids: twenty }, many, TODAY)).toEqual({});
 
     // The bounds themselves pass: 500, 100000, today and today + 364.
     for (const patch of [
@@ -71,9 +83,9 @@ describe('validate', () => {
     ]);
     expect(firstInvalid(empty)).toBe('budget_max_ils');
 
-    // The body keeps GET /areas order and drops an id it does not list.
+    // The body keeps the order picked (spec 0021b) and drops an id GET /areas does not list.
     const body = toProfileIn({ ...valid, area_ids: new Set(['gone', 'other', gushDan.id]) }, areas);
-    expect(body.area_ids).toEqual([gushDan.id, 'other']);
+    expect(body.area_ids).toEqual(['other', gushDan.id]);
     expect(body.budget_max_ils).toBe(7500);
 
     // A 422 list: `["body", field, …]` items mark their field; anything else marks nothing.
