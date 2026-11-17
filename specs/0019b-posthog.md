@@ -261,4 +261,10 @@ vitest with `posthog-js` mocked (`vi.mock`). E2E: none (inert in CI; no local e2
     SearchPage's `apply`.
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0019b — PostHog analytics, cookieless, deleted accounts forgotten   PR open (merge sha on merge)
+Shipped: with keys set, PostHog (EU) gets route-pattern page views and 3 UI events from the browser (no cookie or storage), 7 funnel events from the API keyed by user UUID, and a 03:55 job deletes accounts removed in the last 7 days. With no keys, nothing is sent.
+Demo: set `VITE_POSTHOG_KEY`/`POSTHOG_KEY` → `make dev` → sign up, publish, apply → events appear in PostHog with `/listings/:id`-style URLs only.
+Tests: +10 api, +11 web, +0 e2e (inert in CI).   CI: see PR.
+Findings: 2 blockers fixed (a page `title` carrying a chat partner's name; `$prev_pageview_pathname` carrying raw ids), 3 majors fixed (the SDK constructor reset the `posthog` logger so upload errors would reach Sentry; utm/gclid/`ph_keyword` from the query string; a vacuous AC1 test), 6 minors fixed (one is the device-data clause added to `s3.i9`), 0 waived, 0 follow-ups.
+Changed in PRODUCT.md: the Retention row gains PostHog (1 year, EU, deleted with the account).
+Not verified: the bulk-delete JSON body against a real PostHog project; the runbook says to check the first production run's 202. To set in PostHog: Cookieless server hash mode on, Discard client IP data on.
