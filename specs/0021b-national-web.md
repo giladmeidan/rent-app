@@ -1,7 +1,7 @@
 ---
 id: 0021b
 title: Anyone in Israel picks their city when posting and chooses cities or neighbourhoods as preferred areas
-status: verified
+status: in-progress
 depends_on: [0021a1]
 reviewers: [code, qa, ux]
 estimate: 1 coder run
