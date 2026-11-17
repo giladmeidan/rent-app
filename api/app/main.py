@@ -34,10 +34,12 @@ from app.routers import (
     rent_estimate,
     reports,
     search,
+    tour_feed,
     tours,
 )
 from app.schemas.error import ErrorOut
 from app.services.accounts import AccountDeletedError
+from app.services.tour_feed import RedactFeedToken, redact_path
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +109,7 @@ async def _database_unavailable(request: Request, exc: Exception) -> JSONRespons
     log.error(
         "database unavailable on %s %s: %s (sqlstate %s)",
         request.method,
-        request.url.path,
+        redact_path(request.url.path),  # a feed token sits in its path (spec 0018d)
         type(orig).__name__,
         getattr(orig, "sqlstate", None),
     )
@@ -118,7 +120,10 @@ async def _database_unavailable(request: Request, exc: Exception) -> JSONRespons
 async def _redis_unavailable(request: Request, exc: Exception) -> JSONResponse:
     """Redis unreachable or timing out (OTP and rate-limit store): a JSON 503, not a 500."""
     log.error(
-        "redis unavailable on %s %s: %s", request.method, request.url.path, type(exc).__name__
+        "redis unavailable on %s %s: %s",
+        request.method,
+        redact_path(request.url.path),
+        type(exc).__name__,
     )
     body = ErrorOut(detail="redis unavailable")
     return JSONResponse(status_code=503, content=body.model_dump())
@@ -164,6 +169,10 @@ async def _request_invalid(request: Request, exc: Exception) -> JSONResponse:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # The calendar feed's token sits in its path (spec 0018d); once per process, not per app.
+    access_log = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, RedactFeedToken) for f in access_log.filters):
+        access_log.addFilter(RedactFeedToken())
     app = FastAPI(title="Rent App API", version="0.0.1")
     # Added before CORS: the last added is outermost, so the 413 carries the CORS headers.
     app.add_middleware(BodySizeLimit)
@@ -200,6 +209,7 @@ def create_app() -> FastAPI:
     app.include_router(rent_estimate.router)
     app.include_router(reports.router)
     app.include_router(tours.router)
+    app.include_router(tour_feed.router)
     if settings.photo_backend == "file":
         # Dev, CI and e2e: the api serves the file photo store itself (spec 0010d). Created first:
         # `StaticFiles` refuses a missing directory. With `r2` nothing is mounted.

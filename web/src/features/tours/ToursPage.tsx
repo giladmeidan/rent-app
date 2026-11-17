@@ -21,6 +21,7 @@ import { hasStatus } from '../applications/api';
 import { cardTitle } from '../listings/cardTitle';
 import { todayInIsrael } from '../listings/format';
 import type { TourAgendaItemOut } from './api';
+import { CalendarFeedButton } from './CalendarFeedButton';
 import { tourErrorText } from './errors';
 import { formatTourDay, formatTourTime, tourDay } from './format';
 import { AGENDA_KEY, useAgenda } from './useAgenda';
@@ -232,7 +233,7 @@ export function ToursPage() {
 
   return (
     <PageContainer as="section" className="flex flex-col gap-4">
-      <PageHeader title={t('tours.title')} />
+      <PageHeader title={t('tours.title')} actions={<CalendarFeedButton />} />
       {/* Always mounted, `sr-only` while empty: its text is announced when it lands. */}
       <p
         role="status"

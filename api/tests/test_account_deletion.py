@@ -27,8 +27,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.i18n import he
 from app.models import Base, User
-from app.services import accounts, chat_events, passwords, tours
+from app.services import accounts, chat_events, ics, passwords, tours
 from app.services import auth as auth_service
 from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore
@@ -1092,3 +1093,23 @@ def test_ac12_deletion_cancels_tours(
     assert (row.status, row.cancelled_by) == ("cancelled", "system")
     assert published.calls == [({other_lister, other_seeker}, theirs, "message")]
     assert _scalar(db_engine, "SELECT count(*) FROM tour_feeds") == 0
+
+
+def test_0018d_ac9_deletion_removes_tour_feed(
+    client: TestClient, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
+    lister = make_owner(db_engine, U_EMAIL)
+    seeker = make_seeker(db_engine, "t@example.com")
+    listing = make_listing(db_engine, lister, gush_dan)
+    application = tours_tests.shortlisted(db_engine, listing, seeker, lister)
+    now = tours_tests.db_now(db_engine)
+    tours_tests.make_tour(db_engine, listing, application, seeker, now - dt.timedelta(hours=3))
+    u = _session(client, db_engine, lister)
+    token = _ok(u.post("/me/tour-feed"), 201)["token"]
+    assert "BEGIN:VEVENT" in client.get(f"/tour-feed/{token}.ics").text
+
+    assert _delete(u).status_code == 204
+    assert _count(db_engine, "tour_feeds WHERE user_id = :u", u=lister) == 0
+    response = client.get(f"/tour-feed/{token}.ics")
+    assert response.status_code == 200
+    assert response.text == ics.feed_calendar([], name=he.TOUR_FEED_NAME)

@@ -93,6 +93,9 @@ LIMITED: list[tuple[str, str, str, Any]] = [
     ("POST", "/tours/{tour_id}/reschedule", "TOUR", _tour_start),
     ("POST", "/tours/{tour_id}/cancel", "WRITE", None),
     ("POST", "/tours/{tour_id}/cancel", "TOUR", None),
+    # 0018d
+    ("POST", "/me/tour-feed", "WRITE", None),
+    ("DELETE", "/me/tour-feed", "WRITE", None),
 ]
 # Write routes with their own limit, proved by their own specs.
 OWN = {
@@ -161,7 +164,7 @@ def test_ac1_every_write_route_has_a_limit() -> None:
         for method in (route.methods or set()) & WRITES
     }
     limited = {(method, path) for method, path, _, _ in LIMITED if method in WRITES}
-    assert len(limited) == 24
+    assert len(limited) == 26
     assert not (limited & OWN) and not (limited & EXEMPT) and not (OWN & EXEMPT)
     assert routes == limited | OWN | EXEMPT
 

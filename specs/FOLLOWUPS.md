@@ -319,3 +319,8 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0018b · web/src/components/EmptyState.tsx · takes only `message`, so `tours.empty.body` sits in the `action` slot and title and body are both muted; add an optional `description` prop if a second page needs title + body · kit change beyond this spec; review round 1 ux/code minor
 - [ ] 0018b · web/src/locales/he.json `tours.cancel.body` · "{{name}} יראו את הביטול בצ'אט." puts a plural verb after one name; impersonal option "הביטול יופיע בצ'אט עם {{name}}." · wording is the spec's; review round 1 ux nit
 - [ ] 0018b · web/src/features/tours/__tests__/ToursPage.test.tsx · no cases yet for a 429/offline cancel alert or a refetch error that keeps the data · qa minor, error paths covered by 500 and 404/409
+
+## 0018d
+- [ ] 0018d · web/src/features/tours/__tests__/CalendarFeedButton.test.tsx ac16 · the double-click test cannot prove the same-tick `inFlight` guard (`fireEvent` flushes React between clicks, so the button is already disabled); dispatch both clicks inside one `act()` and assert one POST · review qa minor
+- [ ] 0018d · web/src/features/tours/__tests__/CalendarFeedButton.test.tsx · mutation-error branches untested: 429 without `Retry-After` (`tours.feed.rateLimited`), create/disable 500 (`common.error`), rotate failure · review qa minor
+- [ ] 0018d · api/tests/test_tour_feed.py · no test for two concurrent `POST /me/tour-feed` leaving exactly one live token (ac4 covers sequential rotate) · review qa minor

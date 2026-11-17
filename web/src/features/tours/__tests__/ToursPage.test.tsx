@@ -124,7 +124,8 @@ describe('ToursPage', () => {
     renderPage([json([])]);
     expect(await screen.findByText(t.empty.title)).toBeVisible();
     expect(screen.getByText(t.empty.body)).toBeVisible();
-    expect(screen.queryByRole('button')).toBeNull();
+    // No action in the empty state; the header's calendar-feed button (spec 0018d) is the only one.
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([he.tours.feed.title]);
   });
 
   it('ac12_cancel_flow', async () => {

@@ -162,6 +162,7 @@ export function privacyDoc(t: TFunction, email: string): LegalDoc {
               t('legal.privacy.s3.i2', { email }),
               t('legal.privacy.s3.i3', { email }),
               t('legal.privacy.s3.i6', { email }), // spec 0016b: Google, after the other third parties
+              t('legal.privacy.s3.i7', { email }), // spec 0018d: the calendar feed, after Google
               t('legal.privacy.s3.i4', { email }),
               t('legal.privacy.s3.i5', { email }),
             ],
