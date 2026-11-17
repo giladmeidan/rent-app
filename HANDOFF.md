@@ -15,8 +15,8 @@ as `general-purpose` agents told to read their definition file first.
 ## Current Status
 **Waitlist (2026-11-16):** `0017` (PR #116) and `0017b` Turnstile (PR #120) merged and archived; live on `https://homie-waitlist.pages.dev` (own Pages project + D1 `homie-waitlist`, deployed by hand with `make deploy-waitlist CONTACT_EMAIL=… TURNSTILE_SITE_KEY=…`, the secret via `make waitlist-secret`; README in `waitlist/`). `specs/0017c-waitlist-hardening.md` is `draft` and **not queued** (Gilad: no build yet; Q0 decides whether email confirmation is built).
 Overall: MVP feature work done through Slice 12; Slice 14 (rent estimate) done through `0014d`; `0015a`/`0015b`/`0013h` done.
-**Slice 18 (tour calendar for listers), 2026-11-16/17: 3 of 5 specs merged.**
-*Planned* (`specs/TOURS-PLAN.md`, decisions in PRODUCT.md "Tours" + "Retention" R11, all defaults accepted by Gilad): a
+**Slice 18 (tour calendar for listers) done 2026-11-17: all 5 specs merged and archived (plan in `specs/archive/TOURS-PLAN.md`).**
+*Planned* (`specs/archive/TOURS-PLAN.md`, decisions in PRODUCT.md "Tours" + "Retention" R11, all defaults accepted by Gilad): a
 lister opens time windows per listing; a shortlisted seeker books a slot instantly (no confirm step); either side
 cancels, the seeker reschedules; each change is a chat line + an email (`.ics`, day-before reminder); a `/tours` page;
 a private iCal feed for Google Calendar. Five verified specs, built in order `0018a` → `0018c` ∥ `0018e` → `0018b` → `0018d`.
@@ -28,9 +28,14 @@ a private iCal feed for Google Calendar. Five verified specs, built in order `00
 - `0018e` slot editor, slot picker, chat tour card: **merged** PR #122.
 - `0018c` emails + `.ics` + reminder job: **merged** PR #121 (green on `537a00e`). 5 review minors in FOLLOWUPS,
   incl. an SMTP stall to fix before 0013a.
-- `0018b` tours page and `0018d` calendar feed: **not built**; Gilad builds them in another session. Both verified;
-  `0018b` is ready (deps merged); `0018d` depends on `0018b` and was corrected 2026-11-16 to import 0018c's `ics.py`
-  unchanged. Their pre-started build sessions were deleted.
+- `0018b` `/tours` agenda page (`GET /tours`, one `UNION ALL`, cap 200): **merged** PR #123 (`a4f16a8`). 0 blockers,
+  3 qa majors fixed; minors in FOLLOWUPS.
+- `0018d` private iCal feed (`/me/tour-feed` create/rotate/revoke, public `GET /tour-feed/{token}.ics`, sha256 of the
+  token in `tour_feeds`, dead token = empty calendar, token redacted from logs): **merged** PR #124 (`f5ae3ce`). 0 blockers,
+  0 majors; 3 qa minors in FOLLOWUPS. Owed after `0013a` deploys: press "הוספה ליומן Google" and check a tour shows
+  up (spec R7; Google cannot reach a local stack). #124 was built on #123's branch and merged right after it with
+  `gh pr merge --match-head-commit` on its own green run (`main` then differed only by #123's merge commit; the merged
+  tree equals the tested head).
 - Changes to the plan during the build: Gilad dropped the lister-confirm step (shortlist = approval); the tour bucket
   was lowered to 10/h 20/day; a dead feed link returns an empty calendar; expiry cancels nothing; the feed token lives
   in `tour_feeds` (not on `users`); `ics.py` is 0018c's.
@@ -56,14 +61,14 @@ code unchanged. Decisions in PRODUCT.md "Login". Gilad's Google OAuth client id 
 - Alembic head `0030`. No open PRs of ours. Only `../rent-app-0013a` (untouched, behind main) is left of our worktrees.
 - `specs/0015b-shelter-preference.md` (`status: verified`) appeared on `main` from another chat (commit `d840e0e`);
   not built, not this orchestrator's queue unless Gilad says so.
-- Main checkout `../rent-app` is on `main` at `f30feeb`, 54 commits behind `origin/main`, still with Gilad's
+- Main checkout `../rent-app` is on `main` at `83d76f6`, ~70 commits behind `origin/main`, still with Gilad's
   uncommitted `Makefile` / `.gitignore` edits and untracked seed/promo work. Its stack (`rent-app`, 6 containers incl.
   `admin`) runs the old code and has not run migrations `0025`/`0026` (Next Steps 3).
 
-Last updated: 2026-11-17 (after Slice 18's 0018a/c/e; Current Status, Current Work, Next Steps 0, CI lines and Session History updated).
+Last updated: 2026-11-17 (after Slice 18's last merges #123/#124; Slice 18 lines, Current Work, Next Steps 0, ports and Session History updated).
 
 ## Current Work
-Nothing in flight from this orchestrator. Next: `0018b`, then `0018d` (Gilad, another session). `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
+Nothing in flight. No open PRs of ours; Slice 18 worktrees removed. `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
 5550/6500/8120/8121/5260) waits for Gilad's go on paid hosting (~$55/month). Building it costs nothing (configs,
 `make deploy-*`, `infra/DEPLOY.md`); deploying does.
 
@@ -81,9 +86,7 @@ Nothing in flight from this orchestrator. Next: `0018b`, then `0018d` (Gilad, an
   `Sec-Fetch-Site: same-origin`; deletion defaults). Sentry stays open (parked with paid items).
 
 ## Next Steps
-0. **Slice 18:** build `0018b` (branch from `main`; ports above 5574/6524/8159/5284), then `0018d` (from `main` once
-   0018b is merged, or from 0018b's branch while its PR is open). Archive `specs/TOURS-PLAN.md` after `0018d` merges.
-   Main checkout after the merges: `git pull`, `make migrate` (`0030`), re-apply `api/scripts/admin_role.py` grants,
+0. **After Slice 18:** main checkout: `git pull`, `make migrate` (`0030`), re-apply `api/scripts/admin_role.py` grants,
    `make client`. Production tour emails wait for the parked email provider (`0013a`).
 1. Parked until Gilad approves paid services: build/deploy `0013a`; buy the domain; Fly, Cloudflare and an
    email-provider account (free tier ≥ 300/day); Sentry or no alerts; a second API machine (+~$7/month).
@@ -99,7 +102,7 @@ Nothing in flight from this orchestrator. Next: `0018b`, then `0018d` (Gilad, an
 3. Main checkout (Gilad's uncommitted edits stay; never `git stash` there): `git pull`, `make migrate` (`0025`
    admin_logins, `0026` account deletion), re-apply the admin role grants (`api/scripts/admin_role.py`, as after
    every migration that adds a table the admin reads), restart the stack, `make client`; then
-   `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label . --backend=claude-cli` (owed for Slices 12 and 13).
+   `GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify label . --backend=claude-cli` (owed for Slices 12, 13 and 18).
 4. FOLLOWUPS from Slice 13 (all minors): 0013f's `account.spec.ts:41-43` brings back the inline send-code pattern
    0013d removed; applications ac9 "טוען…" timeout; 0013b's duplicate `Fly-Client-IP`, silent view budget, Redis-hang
    threadpool burst; 0013e re-login leaves the old admin row live ≤ 8 h; option D above.
@@ -196,15 +199,18 @@ Prereqs: Docker Desktop, `uv`, Python 3.12, Node 22 (`nvm use 22`; the shell def
 rotated, not the dev value), `TRUST_PROXY=fly`, `VITE_CONTACT_EMAIL` (web build), besides `.env.example`'s list.
 Commands: see `CLAUDE.md` → Commands and the `##` comments in the `Makefile`.
 
-A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5574,
-Redis 6430–6524, API/admin 8050–8159, web 5191–5284: start above those). The main checkout's stack runs on
+A worktree gets its own `.env` with `COMPOSE_PROJECT_NAME=rent-app-NNNN` and unique ports (used so far: DB 5480–5585,
+Redis 6430–6535, API/admin 8050–8166, web 5191–5295: start above those). The main checkout's stack runs on
 5434/6380/8000 (set in its `.env`), web 5180, admin 8001. Web at http://localhost:$WEB_PORT (must be `localhost` for
 CORS). Local login code: newest `.outbox/*.json`.
 
 ## Session History
 - 2026-11-16/17: Slice 18 (tour calendar) planned with Gilad; 4 specs written by forks, one verifier round each (0018a
   split into 0018a + 0018e), all verified. Merged #119 (`0018a`), #122 (`0018e`), #121 (`0018c`); specs archived.
-  `0018b`/`0018d` handed to Gilad. CI moved to GitHub runners and the repo went public mid-slice.
+  CI moved to GitHub runners and the repo went public mid-slice.
+- 2026-11-17: Slice 18 finished by an orchestrator Gilad left running overnight: `0018b` (#123) and `0018d` (#124)
+  built in their own sessions (0018d on 0018b's open branch) and merged; specs + plan archived. Merges waited
+  hours after CI went green because the orchestrator ignored its own watcher's notification.
 - 2026-11-16: Slice 16 login upgrade specced, verified, built and merged: #114 (`0016a` password), #115 (`0016b`
   Google).
 - 2026-11-15: Slice 13 built and merged except `0013a` (parked: costs money): #104 (g), #105 (e), #107 (c), #106 (b),

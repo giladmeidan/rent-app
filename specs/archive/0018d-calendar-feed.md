@@ -1,7 +1,7 @@
 ---
 id: 0018d
 title: A lister turns on a private calendar link and subscribes to it from Google Calendar (or Apple / any calendar app); their booked tours show up there, and they can replace or turn off the link at any time
-status: in-review
+status: done
 depends_on: [0018a, 0018b, 0018c]   # 0018a: the `tours` and `tour_feeds` tables (its migration; this spec adds none). 0018b: the `/tours` page whose `PageHeader` `actions` slot this spec fills (0018b depends on 0018e if 0018a's web half is split, so the web half here follows it). 0018c: creates `api/app/services/ics.py`, which this spec extends (TOURS-PLAN "Shared contract"). Branch from the last open dependency's branch while its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [code, security, qa]   # security: an unauthenticated endpoint keyed by a bearer token in the URL, PII (seeker's name, listing address) leaving homie for a third-party calendar, token hashing and revocation, log redaction. qa: 4 endpoints + one dialog with 6 states. No ux: one header button + dialog on 0018b's page, built from the flatmate-invite block's pattern (0009qb); no perf: one PK/unique lookup + one bounded query (≤ 500 rows)
 estimate: 1 coder run   # coder Opus/high (security: token handling, Speed rule 6); no migration; about 15 files, half tests
@@ -332,8 +332,22 @@ be reached by Google.
 8. AC6 dropped "no `.ics` suffix": that path does not reach the route (framework 404), and it reveals nothing.
 9. AC18 named (`LegalPage.test.tsx::ac18_privacy_names_calendar_feed`); `i7` after `i6` keeps 0016b's order test.
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest
+Spec 0018d — Private calendar feed   MERGED f5ae3ce (PR #124, head 6e9f533, ci green)
+Shipped: on `/tours`, "קישור ליומן" opens a dialog where a lister creates a private iCal link to their booked tours,
+adds it to Google Calendar in one click (`cid` link) or any app (`webcal://`), replaces it (the old one dies) or turns
+it off. The token is shown once; only its sha256 is stored (`tour_feeds`, 0018a's migration). `GET/POST/DELETE
+/me/tour-feed` (writes WRITE-limited); public `GET /tour-feed/{token}.ics` is read-limited, reads no cookie, 404s a
+malformed token without SQL, and answers every dead well-formed token with an empty calendar byte-identical to a live
+empty feed. Feed: booked tours from 30 days back, at most 500, street + city, time, seeker's display name, a `/tours`
+link. The token is redacted from the access log and both 503 handlers. Privacy item `legal.privacy.s3.i7` added.
+Demo: deployed stack only (Google cannot reach localhost): press "הוספה ליומן Google" and check a booked tour appears
+(spec R7, the one manual check owed after 0013a).
+Tests: pytest +16 (AC1–AC13, `LIMITED` 24 → 26), vitest +5 (AC14–AC18), no e2e.
+Findings: 0 blockers, 0 majors, 6 minors (2 fixed: stale dialog error, narrowed token-path skip in test_flatmates;
+3 logged in FOLLOWUPS: double-click guard proof, untested 429/500/rotate-failure branches, concurrent rotate; 1 spec
+Blast-radius edit), 10 nits dropped. Security: nothing to fix (live probe: no token in logs, dead = empty feed).
+Changed in PRODUCT.md: nothing.
 
 ## Orchestrator correction (2026-11-16, after 0018c review)
 Verifier findings 2–3 above are superseded: 0018c shipped `tour_uid` and public `vevent`/`vcalendar`, so this

@@ -1,6 +1,6 @@
 # Slice 18 — Tour calendar for listers (plan)
 
-Status: decided 2026-11-16 (Gilad). Decisions are in `PRODUCT.md` "Tours"; this file is the slice breakdown and
+Status: done 2026-11-17 (all five specs merged: #119, #122, #121, #123, #124). Decided 2026-11-16 (Gilad). Decisions are in `PRODUCT.md` "Tours"; this file is the slice breakdown and
 moves to `specs/archive/` when the slice is done.
 
 ## The flow

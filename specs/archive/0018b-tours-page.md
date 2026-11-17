@@ -1,7 +1,7 @@
 ---
 id: 0018b
 title: "A lister sees every upcoming tour of their listings on one page, by day, and can cancel one there; a seeker sees the tours they booked on the same page"
-status: in-review
+status: done
 depends_on: [0018a, 0018e]   # 0018a owns the migration (`tours`), the `Tour` model, `services/tours.py`, `schemas/tours.py`, `routers/tours.py`, POST /tours/{id}/cancel and the web `features/tours/` files (`api.ts::cancelTour`, `useTourActions.ts::useCancelTour`, `format.ts`, `errors.ts::tourErrorText`). 0018a's web half is split into 0018e-tour-slots-web: the web files above are 0018e's, and the web half of this spec builds on them. Branch from the dependency's branch while its PR is open; merge origin/main after it lands (Speed rule 3)
 reviewers: [code, ux, qa]   # code: the one read statement and its visibility rule; ux: a new page and three header links; qa: a new endpoint, a cancel flow, time-zone grouping. No security: read-only, scoped to the caller's own rows, reuses 0018a's cancel (reviewed there). No perf: ≤200 rows over 0018a's indexes
 estimate: 1 coder run   # coder Sonnet/high (read-only endpoint, no migration); about 14 files, half tests
@@ -267,5 +267,16 @@ For Gilad (the spec builds on the defaults as written; the coder guesses nothing
   deleted already cancel via 0018a), so the agenda matches the feed and the reminders; AC5 shrinks to suspended/
   deleted people.
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest
+Spec 0018b — Tours page   MERGED a4f16a8 (PR #123, head 5eec724, ci green)
+Shipped: `/tours` ("הסיורים שלי") shows a signed-in person's upcoming booked tours by day in Israel time: tours at
+their listings ("מגיעים לראות") and tours they booked ("סיורים שקבעתי"), each with a chat link and cancel. `GET /tours`
+is one `UNION ALL` statement (lister + seeker branch), capped at 200, no listing-visibility filter (G2 option b), the
+other party must not be suspended or deleted. Links to it from the my-listings, my-applications and market-mine headers.
+Demo (`make dev`): book a slot from a shortlisted seeker's chat → both sides see it on `/tours`; cancel there → it
+disappears and the chat gets the cancel line.
+Tests: API + web for every AC, screens states; no new e2e. pytest 989, vitest 852 locally.
+Findings: 0 blockers, 3 qa majors fixed (tie order, day grouping, time-dependent screens fixtures); cheap minors fixed
+(agenda invalidated by chat actions, focus after cancel, aria-describedby, unused join, AC8 strictness); the rest in
+FOLLOWUPS.
+Changed in PRODUCT.md: nothing.
