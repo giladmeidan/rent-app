@@ -1,7 +1,7 @@
 ---
 id: 0019a
 title: Gilad gets an email when the API, the worker or a browser hits an unhandled error, with no personal data sent
-status: in-review
+status: done
 depends_on: []
 reviewers: [code, security, qa]
 estimate: 1 coder run   # coder Opus/high (data leaving the app; plan)
@@ -224,5 +224,15 @@ CI).
     `@sentry/bundler-plugins/vite`, which `@sentry/vite-plugin` wraps). `telemetry: false` added.
 11. `qa` added to reviewers (UI fallback + API behaviour, checklist rule 8).
 
-## Digest (filled by orchestrator after verification)
-See `/digest`.
+## Digest (merged 2026-11-17, PR #128, merge a1069e5)
+Shipped: unhandled errors in the API, the arq worker and the browser go to Sentry (EU, free tier), scrubbed; inert
+until the DSN keys are set. With a DSN: a broken route gives one event whose request is method + route template only;
+a failing cron job gives one event named after the job.
+Tests: +7 api (`test_observability.py`), +3 (`test_config.py`), +5 web (sentry, build-check, pwa, legal); e2e unchanged.
+CI green on head 8243012.
+Findings: 2 blockers fixed (names in browser click logs; names and phones in FastAPI's ResponseValidationError text),
+2 majors fixed (service-worker source maps on a token build; worker start-up untested); 5 minors fixed, 3 in FOLLOWUPS.
+Changed in PRODUCT.md: Retention row says Sentry reports are kept 30 days, in the EU.
+Deviations: `@sentry/react` / `@sentry/vite-plugin` 11.12.0 (pnpm release-age rule); `data_collection` (all off)
+replaces the deprecated `send_default_pii`.
+Not checked: no event sent to a real Sentry project, source-map upload not tried, error fallback not seen in a browser.

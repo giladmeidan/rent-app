@@ -1,7 +1,7 @@
 ---
 id: 0019b
 title: Gilad sees homie's funnel and retention in PostHog (cookieless, no personal data), and a deleted account leaves no trace there
-status: in-review
+status: done
 depends_on: [0019a]   # reuses its `routePattern.ts`; branches from 0019a's PR branch once it is open
 reviewers: [code, security, qa]
 estimate: 1 coder run   # coder Opus/high (data leaving the app, deletion; Speed rule 6)
@@ -260,8 +260,8 @@ vitest with `posthog-js` mocked (`vi.mock`). E2E: none (inert in CI; no local e2
 10. `signup_started` lives in `OtpForm`/`GoogleButton` (SignupPage has no submit of its own); `search_run` in
     SearchPage's `apply`.
 
-## Digest (filled by orchestrator after verification)
-Spec 0019b — PostHog analytics, cookieless, deleted accounts forgotten   PR open (merge sha on merge)
+## Digest (merged 2026-11-17, PR #130, merge 8198d37)
+Spec 0019b — PostHog analytics, cookieless, deleted accounts forgotten   PR #130, merged 8198d37
 Shipped: with keys set, PostHog (EU) gets route-pattern page views and 3 UI events from the browser (no cookie or storage), 7 funnel events from the API keyed by user UUID, and a 03:55 job deletes accounts removed in the last 7 days. With no keys, nothing is sent.
 Demo: set `VITE_POSTHOG_KEY`/`POSTHOG_KEY` → `make dev` → sign up, publish, apply → events appear in PostHog with `/listings/:id`-style URLs only.
 Tests: +10 api, +11 web, +0 e2e (inert in CI).   CI: see PR.

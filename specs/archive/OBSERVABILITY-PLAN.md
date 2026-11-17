@@ -1,6 +1,6 @@
 # Slice 19 — Error tracking (Sentry) and product analytics (PostHog) (plan)
 
-Status: decided 2026-11-17 (Gilad accepted every recommendation: 1a, 2a, 3a, 4a, 5 off). Decisions are in `PRODUCT.md` "Observability"; this file is the slice breakdown and
+Status: done 2026-11-17 (0019a PR #128, 0019b PR #130). Decided 2026-11-17 (Gilad accepted every recommendation: 1a, 2a, 3a, 4a, 5 off). Decisions are in `PRODUCT.md` "Observability"; this file is the slice breakdown and
 moves to `specs/archive/` when the slice is done.
 
 ## Why
