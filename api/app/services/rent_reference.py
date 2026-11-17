@@ -1,5 +1,5 @@
-"""Official rent figures (spec 0014a): nadlan.gov.il's public rent files for the Gush Dan
-settlements and their neighbourhoods, stored in `rent_areas` / `rent_prices`.
+"""Official rent figures (specs 0014a, 0021c): nadlan.gov.il's public rent files for every active
+settlement of the area catalogue and their neighbourhoods, stored in `rent_areas` / `rent_prices`.
 
 The worker runs `run_rent_import` once a month (`make rent-import` once by hand). Each file is
 untrusted input: a file that breaks a rule is skipped whole, a bad price point alone. Rows are
@@ -24,38 +24,14 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_sessionmaker
-from app.models import RentArea, RentPrice
+from app.models import Area, RentArea, RentPrice
 from app.schemas._text import visible_characters_only
 
 log = logging.getLogger(__name__)
 
-# The 19 Gush Dan settlements inside the launch box (each file names its settlement, 2026-11-14):
-# Tel Aviv-Yafo, Ramat Gan, Givatayim, Bnei Brak, Holon, Bat Yam, Petah Tikva, Herzliya,
-# Ramat HaSharon, Rishon LeZion, Kiryat Ono, Or Yehuda, Givat Shmuel, Azor, Yehud-Monosson,
-# Ganei Tikva, Savyon, Hod HaSharon, Beit Dagan.
-RENT_SETTLEMENT_CODES: tuple[int, ...] = (
-    5000,
-    8600,
-    6300,
-    6100,
-    6600,
-    6200,
-    7900,
-    6400,
-    2650,
-    8300,
-    2620,
-    2400,
-    681,
-    565,
-    9400,
-    229,
-    587,
-    9700,
-    466,
-)
 MAX_BODY_BYTES = 2 * 1024 * 1024
-REQUEST_INTERVAL_S = 0.25
+REQUEST_INTERVAL_S = 0.25  # the CBS fetches (cbs_rent.py)
+NADLAN_INTERVAL_S = 5.0  # nadlan.gov.il's robots.txt asks for Crawl-delay: 5 (spec 0021c)
 USER_AGENT = "homie-rent-reference"
 MAX_STREETS = 2000
 MAX_NEIGHBOURHOODS = 500  # Tel Aviv, the largest, lists 72
@@ -70,6 +46,10 @@ class RentSourceError(Exception):
     not UTF-8 JSON. The message never holds the body or the URL."""
 
 
+class RentFileMissing(RentSourceError):  # noqa: N818 (the name spec 0021c gives it)
+    """A 404: most small settlements publish no file."""
+
+
 class RentFileError(ValueError):
     """A file that breaks an import rule; the message is a fixed rule text, never the file."""
 
@@ -81,7 +61,7 @@ class RentFetcher(Protocol):
 
 
 class NadlanFetcher:
-    """One request at a time, `REQUEST_INTERVAL_S` apart, no cookies kept, redirects refused (the
+    """One request at a time, `NADLAN_INTERVAL_S` apart, no cookies kept, redirects refused (the
     client is built with `follow_redirects=False`), bodies capped at `MAX_BODY_BYTES` while
     streaming."""
 
@@ -94,13 +74,15 @@ class NadlanFetcher:
 
     def fetch(self, path: str) -> object:
         if not self._first:
-            self._sleep(REQUEST_INTERVAL_S)
+            self._sleep(NADLAN_INTERVAL_S)
         self._first = False
         self.client.cookies.clear()
         body = bytearray()
         # `from None` throughout: an httpx error's message and context may hold the URL.
         try:
             with self.client.stream("GET", path) as response:
+                if response.status_code == 404:
+                    raise RentFileMissing("status 404")
                 if response.status_code != 200:
                     raise RentSourceError(f"status {response.status_code}")
                 # httpx inflates a whole compressed chunk before the cap below could see it.
@@ -303,49 +285,106 @@ def _store(
     return new, len(rows) - new
 
 
-def _import_file(
-    db: Session,
-    fetcher: RentFetcher,
-    counts: dict[str, int],
-    kind: Kind,
-    source_id: int,
-    settlement_code: int,
+def _fetch(
+    fetcher: RentFetcher, counts: dict[str, int], kind: Kind, source_id: int, settlement_code: int
 ) -> RentFile | None:
-    """Fetch, check and store one file in its own transaction; None (counted failed) on any
-    error."""
+    """Fetch and check one file; None on any error: a settlement's 404 counted `missing` and not
+    logged (most small settlements have no file), anything else counted failed and logged."""
     path = (
         f"settlement/rent/{source_id}.json"
         if kind == "settlement"
         else f"neighborhood/rent/{source_id}.json"
     )
     try:
-        file = parse_rent_file(fetcher.fetch(path), kind, source_id, settlement_code)
+        return parse_rent_file(fetcher.fetch(path), kind, source_id, settlement_code)
+    except Exception as exc:  # failures are soft: counted, logged, never raised
+        if kind == "settlement" and isinstance(exc, RentFileMissing):
+            counts["missing"] += 1
+        else:
+            counts["files_failed"] += 1
+            log.warning("rent reference: %s skipped (%s)", path, type(exc).__name__)
+        return None
+
+
+def _save(
+    db: Session,
+    counts: dict[str, int],
+    kind: Kind,
+    source_id: int,
+    settlement_code: int,
+    file: RentFile,
+) -> None:
+    """Store one checked file in its own transaction; a failure is counted and logged."""
+    try:
         new, changed = _store(db, kind, source_id, settlement_code, file)
         db.commit()
-    except Exception as exc:  # failures are soft: counted, logged, never raised
+    except Exception as exc:
         db.rollback()
         counts["files_failed"] += 1
-        log.warning("rent reference: %s skipped (%s)", path, type(exc).__name__)
-        return None
+        log.warning("rent reference: %s %s not stored (%s)", kind, source_id, type(exc).__name__)
+        return
     counts["files_ok"] += 1
     counts["areas"] += 1
     counts["prices_new"] += new
     counts["prices_changed"] += changed
-    return file
+
+
+def settlement_codes(db: Session) -> list[int]:
+    """The source code of every active settlement of the area catalogue (nadlan's `settlementID`
+    is the CBS code), ascending."""
+    return list(
+        db.scalars(
+            select(Area.source_code)
+            .where(Area.kind == "settlement", Area.is_active.is_(True))
+            .order_by(Area.source_code)
+        )
+    )
 
 
 def import_rent_reference(db: Session, fetcher: RentFetcher) -> dict[str, int]:
-    """Every settlement of `RENT_SETTLEMENT_CODES`, then its listed neighbourhoods (none when the
-    settlement file failed). Logs one INFO line with the counts and the source version."""
-    counts = dict.fromkeys(("files_ok", "files_failed", "areas", "prices_new", "prices_changed"), 0)
+    """Every settlement of `settlement_codes`, then its listed neighbourhoods (none when the
+    settlement file failed); the settlement row is stored after its neighbourhoods, so a row at
+    the run's version (the first parsed file's) is a finished settlement: skipped with no request,
+    which resumes an interrupted run. Logs one INFO line with the counts and the source version."""
+    counts = dict.fromkeys(
+        (
+            "files_ok",
+            "files_failed",
+            "missing",
+            "skipped",
+            "areas",
+            "prices_new",
+            "prices_changed",
+        ),
+        0,
+    )
+    codes = settlement_codes(db)
+    stored: dict[int, str] = dict(
+        db.execute(
+            select(RentArea.source_id, RentArea.source_version).where(RentArea.kind == "settlement")
+        )
+        .tuples()
+        .all()
+    )
+    db.rollback()  # no transaction held open through hours of fetching
     version: str | None = None
-    for code in RENT_SETTLEMENT_CODES:
-        settlement = _import_file(db, fetcher, counts, "settlement", code, code)
+    for code in codes:
+        if version is not None and stored.get(code) == version:
+            counts["skipped"] += 1
+            continue
+        settlement = _fetch(fetcher, counts, "settlement", code, code)
         if settlement is None:
             continue
-        version = version or settlement.version
+        if version is None:
+            version = settlement.version
+            if stored.get(code) == version:
+                counts["skipped"] += 1
+                continue
         for hood_id in settlement.neighbourhood_ids:
-            _import_file(db, fetcher, counts, "neighbourhood", hood_id, code)
+            hood = _fetch(fetcher, counts, "neighbourhood", hood_id, code)
+            if hood is not None:
+                _save(db, counts, "neighbourhood", hood_id, code, hood)
+        _save(db, counts, "settlement", code, code, settlement)
     log.info("rent reference import: %s, source version %s", counts, version)
     return counts
 

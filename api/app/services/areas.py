@@ -8,6 +8,7 @@ inactive; a failed fetch deactivates nothing. An upsert never touches `is_active
 row (the admin's switch)."""
 
 import csv
+import functools
 import logging
 import uuid
 from collections.abc import Sequence
@@ -116,20 +117,35 @@ def _deactivate(db: Session, *where: ColumnElement[bool]) -> int:
     return int(getattr(result, "rowcount", 0))
 
 
-def read_settlements(csv_path: Path) -> list[dict[str, Any]]:
-    """The CSV's rows as upsert rows (the first line is a `#` comment)."""
+def _csv_rows(csv_path: Path) -> list[dict[str, str]]:
+    """The CSV's rows by column name (the first line is a `#` comment)."""
     with csv_path.open(encoding="utf-8", newline="") as file:
-        lines = (line for line in file if not line.startswith("#"))
-        return [
-            {
-                "kind": "settlement",
-                "source_code": int(row["code"]),
-                "name_he": row["name_he"],
-                "x": int(row["itm_x"]),
-                "y": int(row["itm_y"]),
-            }
-            for row in csv.DictReader(lines)
-        ]
+        return list(csv.DictReader(line for line in file if not line.startswith("#")))
+
+
+def read_settlements(csv_path: Path) -> list[dict[str, Any]]:
+    """The CSV's rows as upsert rows."""
+    return [
+        {
+            "kind": "settlement",
+            "source_code": int(row["code"]),
+            "name_he": row["name_he"],
+            "x": int(row["itm_x"]),
+            "y": int(row["itm_y"]),
+        }
+        for row in _csv_rows(csv_path)
+    ]
+
+
+@functools.cache
+def settlement_districts() -> dict[int, int]:
+    """Settlement code → CBS district (1-7) from the committed CSV (spec 0021c); a row whose
+    district is empty or outside 1-7 is left out."""
+    return {
+        int(row["code"]): int(row["district"])
+        for row in _csv_rows(CSV_PATH)
+        if row["district"] in {"1", "2", "3", "4", "5", "6", "7"}
+    }
 
 
 def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -> dict[str, int]:
