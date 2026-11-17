@@ -1,7 +1,7 @@
 ---
 id: 0019b
 title: Gilad sees homie's funnel and retention in PostHog (cookieless, no personal data), and a deleted account leaves no trace there
-status: verified
+status: in-review
 depends_on: [0019a]   # reuses its `routePattern.ts`; branches from 0019a's PR branch once it is open
 reviewers: [code, security, qa]
 estimate: 1 coder run   # coder Opus/high (data leaving the app, deletion; Speed rule 6)
@@ -122,6 +122,11 @@ dashboards (Gilad builds them in PostHog), `chat_opened` (see risks), the admin 
 
 **New dependencies:** `posthog==7.82.2` (api; pulls `requests`, `backoff`, `distro`; ships `py.typed`, else a
 mypy override), `posthog-js@1.444.4` (web, exact pin). Both are the latest releases from 2026-11-02.
+Built (coder, 2026-11-17): `posthog-js` depends on `core-js`, whose install script pnpm 12 refuses by default;
+`web/pnpm-workspace.yaml` denies it (`allowBuilds: core-js: false`, from `pnpm approve-builds '!core-js'`; the
+script only prints a banner), `infra/Dockerfile.web` copies that file before `pnpm install`, and the Makefile's
+install stamp depends on it. `set_applicant_status` reads `application.listing_type_at_apply` (already in the
+UPDATE's `RETURNING Application`; a listing's type is fixed at create), so no column was added there.
 
 ## Data
 No tables, no migration. `posthog_forget_job` reads `users.id`, `users.deleted_at`. The tombstone row (`0013c`
