@@ -90,6 +90,7 @@ describe('tailwind.config.ts', () => {
       page: '45rem',
       wide: '83.5rem',
       dialog: 'min(28rem, calc(100% - 2rem))',
+      'dialog-wide': 'min(40rem, calc(100% - 2rem))',
     });
 
     // Every brand colour is its tokens.json value, read from the file.
