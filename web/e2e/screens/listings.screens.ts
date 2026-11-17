@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, type Page, type Route } from '@playwright/test';
 
 import he from '../../src/locales/he.json' with { type: 'json' };
+import type { AreaOut } from '../../src/api/client';
 import type { MyListingOut, RentEstimateOut } from '../../src/features/listings/api';
 import { API } from '../helpers';
 import { AREA, EXPIRED, LISTING_ID, OWNER, UNKNOWN_ID, listing } from './fixtures-listings';
@@ -23,6 +24,8 @@ type Setup = {
   uploads?: (number | 'hold')[];
   /** What `GET /rent-estimate` answers (spec 0014c); by default no figures, so no hint. */
   estimate?: RentEstimateOut;
+  /** What `GET /areas` answers; by default Tel Aviv-Yafo alone. */
+  areas?: AreaOut[];
 };
 
 /** The committed e2e JPEG: every photo the screens pick, and every `/media` image they show. */
@@ -55,6 +58,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     post = { status: 201, body: listing() },
     uploads = [201],
     estimate = { estimate: null, reason: 'no_figures' },
+    areas = [AREA],
   } = setup;
   let uploaded = 0;
   await page.route(`${API}/**`, async (route) => {
@@ -74,7 +78,7 @@ async function mockApi(page: Page, setup: Setup): Promise<string[]> {
     }
     if (pathname === '/me/events') return route.abort();
     if (key === 'GET /me') return reply(route, OWNER);
-    if (key === 'GET /areas') return reply(route, [AREA]);
+    if (key === 'GET /areas') return reply(route, areas);
     if (key === 'GET /me/conversations') return reply(route, []);
     if (key === 'GET /rent-estimate') return reply(route, estimate);
     if (key === 'GET /me/listings') {
@@ -118,12 +122,12 @@ async function toDetails(page: Page, type: 'apartment' | 'room') {
   await page.goto('/listings/new');
   await page.getByText(he.listings.type[type], { exact: true }).click();
   await next(page).click();
-  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await expect(page.getByLabel(f.city, { exact: true })).toBeEnabled();
 }
 
 /** The required details, with the artboard's values (the price is typed last, so it keeps focus). */
 async function fillDetails(page: Page, type: 'apartment' | 'room') {
-  await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
+  await page.getByLabel(f.city, { exact: true }).fill(AREA.name_he);
   await page.getByLabel(f.street, { exact: true }).fill('כצנלסון');
   await page.getByLabel(f.rooms).selectOption('4');
   await page.getByLabel(f.floor, { exact: true }).fill('3');
@@ -258,7 +262,7 @@ const EDIT = `/me/listings/${LISTING_ID}/edit`;
 const NEW = '/listings/new';
 const editOpened = async (page: Page) => {
   await expect(page.getByRole('heading', { level: 1, name: he.listings.edit.title })).toBeVisible();
-  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await expect(page.getByLabel(f.city, { exact: true })).toHaveValue(AREA.name_he);
 };
 
 const STATES: State[] = [
@@ -299,6 +303,32 @@ const STATES: State[] = [
       await next(page).click();
       await expect(page.getByRole('alert').first()).toBeVisible();
       await expect(page.getByLabel(f.city, { exact: true })).toBeFocused();
+    },
+  },
+  {
+    // Spec 0021b: the city picker at 375 px with "באר" typed (the native list is the browser's,
+    // outside the page: the shot shows the field).
+    name: '01-city-picker-375',
+    spec: '0021b',
+    setup: {
+      areas: [
+        AREA,
+        { ...AREA, id: '00000000-0000-0000-0000-00000000b5b5', slug: 's-9000', name_he: 'באר שבע' },
+        {
+          ...AREA,
+          id: '00000000-0000-0000-0000-00000000b6b6',
+          slug: 's-2530',
+          name_he: 'באר יעקב',
+        },
+      ],
+    },
+    path: NEW,
+    modal: true,
+    act: async (page) => {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await toDetails(page, 'apartment');
+      await page.getByLabel(f.city, { exact: true }).fill('באר');
+      await expect(page.getByLabel(f.city, { exact: true })).toHaveValue('באר');
     },
   },
   {

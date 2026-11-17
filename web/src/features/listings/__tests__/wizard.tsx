@@ -12,7 +12,7 @@ import { EditListingPage } from '../EditListingPage';
 import { addDays, todayInIsrael } from '../format';
 import { MyListingsPage } from '../MyListingsPage';
 import { NewListingPage } from '../NewListingPage';
-import { owner } from './fixtures';
+import { gushDan, owner } from './fixtures';
 
 export const routes = (
   <Routes>
@@ -56,10 +56,10 @@ export function change(label: string, value: string) {
   fireEvent.change(field(label), { target: { value } });
 }
 
-/** Waits until the area select has loaded (one area: preselected). */
+/** Waits until the city picker has loaded `GET /areas`. */
 export async function areasLoaded() {
   await vi.waitFor(() => {
-    expect(field(he.listings.fields.area)).not.toBeDisabled();
+    expect(field(he.listings.fields.city)).not.toBeDisabled();
   });
 }
 
@@ -73,7 +73,7 @@ export function fillValidDetails(
   shelter: string | null = he.listings.shelter.none,
 ) {
   const f = he.listings.fields;
-  change(f.city, 'גבעתיים');
+  change(f.city, gushDan.name_he); // the full name picks it (spec 0021b)
   change(f.street, 'כצנלסון');
   change(f.rooms, '3.5');
   change(f.floor, '3');

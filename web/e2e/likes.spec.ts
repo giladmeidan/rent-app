@@ -102,7 +102,9 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   await page.getByLabel(he.profile.fields.budget).fill('7500');
   await page.getByLabel(he.profile.fields.moveIn).fill(israelDay(30));
   const areas = page.getByRole('group', { name: he.profile.fields.areas });
-  await areas.getByText(TEL_AVIV, { exact: true }).click();
+  // The areas picker (spec 0021b): the full name adds the chip.
+  await areas.getByLabel(he.profile.fields.areasSearch).fill(TEL_AVIV);
+  await expect(areas.getByRole('listitem').filter({ hasText: TEL_AVIV })).toBeVisible();
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePageTitle } from '../../app/usePageTitle';
@@ -13,7 +13,8 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { retryAfterText } from '../../components/retryAfter';
 import { Skeleton } from '../../components/Skeleton';
-import { fetchAreas } from '../areas/api';
+import { areasQuery } from '../areas/api';
+import { areaLabels } from '../areas/areaLabel';
 import { Chevron } from '../landing/Icon';
 import type { LifestyleAnswers } from '../lifestyle/keys';
 import { ApiError } from '../listings/api';
@@ -90,8 +91,8 @@ function PeopleSections({
 }) {
   const { t } = useTranslation();
   const people = useMyPeopleLikes();
-  const areas = useQuery({ queryKey: ['areas'], queryFn: fetchAreas });
-  const areaName = new Map((areas.data ?? []).map((a) => [a.id, a.name_he]));
+  const areas = useQuery(areasQuery);
+  const areaName = useMemo(() => areaLabels(t, areas.data), [t, areas.data]);
 
   if (people.data === undefined) {
     if (people.isPending) {

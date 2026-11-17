@@ -72,7 +72,9 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.getByLabel(he.profile.fields.moveIn).fill(moveIn);
   const areas = page.getByRole('group', { name: he.profile.fields.areas });
   const areaName = TEL_AVIV;
-  await areas.getByText(TEL_AVIV, { exact: true }).click();
+  // The areas picker (spec 0021b): the full name adds the chip.
+  await areas.getByLabel(he.profile.fields.areasSearch).fill(TEL_AVIV);
+  await expect(areas.getByRole('listitem').filter({ hasText: TEL_AVIV })).toBeVisible();
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();
@@ -137,7 +139,9 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.goto('/me/profile');
   await expect(page.getByLabel(he.profile.fields.budget)).toHaveValue('7500');
   await expect(page.getByLabel(he.profile.fields.moveIn)).toHaveValue(moveIn);
-  await expect(page.getByRole('checkbox', { name: areaName })).toBeChecked();
+  await expect(
+    page.getByRole('button', { name: he.profile.areas.remove.replace('{{name}}', areaName) }),
+  ).toBeVisible();
   await expect(page.getByRole('radio', { name: he.profile.household.couple })).toBeChecked();
   await expect(page.getByRole('switch', { name: he.profile.fields.pets })).not.toBeChecked();
   await expect(page.getByRole('switch', { name: he.profile.fields.smoker })).not.toBeChecked();

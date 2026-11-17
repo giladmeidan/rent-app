@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AreaOut } from '../../../api/client';
 import i18n from '../../../app/i18n';
-import { choiceSegment } from '../../../components/ChoiceGroup';
 import he from '../../../locales/he.json';
 import {
   currentPath,
@@ -87,8 +86,16 @@ const budget = () => screen.getByLabelText<HTMLInputElement>(he.profile.fields.b
 const moveIn = () => screen.getByLabelText<HTMLInputElement>(he.profile.fields.moveIn);
 const toggle = (name: string) => screen.getByRole('switch', { name });
 const group = (name: string) => screen.getByRole('group', { name });
-const areaBox = (area: AreaOut) =>
-  within(group(he.profile.fields.areas)).getByRole('checkbox', { name: area.name_he });
+/** The areas picker (spec 0021b): typing a full name picks it and clears the input. */
+const areaInput = () => screen.getByLabelText<HTMLInputElement>(he.profile.fields.areasSearch);
+const pickArea = (name: string) => set(areaInput(), name);
+/** The chosen areas' chips, in order. */
+const chipNames = () =>
+  within(group(he.profile.fields.areas))
+    .queryAllByRole('listitem')
+    .map((chip) => chip.textContent);
+const removeChip = (name: string) =>
+  fireEvent.click(screen.getByRole('button', { name: i18n.t('profile.areas.remove', { name }) }));
 const radio = (groupName: string, name: string) =>
   within(group(groupName)).getByRole('radio', { name });
 const save = () => fireEvent.click(screen.getByRole('button', { name: he.profile.save }));
@@ -100,7 +107,7 @@ async function fillValid() {
   set(budget(), '7500');
   set(moveIn(), inDays(30));
   fireEvent.click(toggle(he.profile.fields.flexible));
-  fireEvent.click(areaBox(gushDan));
+  pickArea(gushDan.name_he);
   fireEvent.click(radio(he.profile.fields.household, he.profile.household.couple));
   fireEvent.click(toggle(he.profile.fields.pets));
   fireEvent.click(radio(he.profile.fields.contract, he.profile.contract['24']));
@@ -161,7 +168,6 @@ function cleanup() {
 
 const required = he.listings.errors.required;
 const range = i18n.t('listings.errors.range', { min: 500, max: 100000 });
-const firstArea = () => within(group(he.profile.fields.areas)).getAllByRole('checkbox')[0];
 
 describe('ProfilePage', () => {
   it('ac1_empty_form', async () => {
@@ -181,10 +187,14 @@ describe('ProfilePage', () => {
     expect(moveIn()).toHaveValue('');
     expect(moveIn()).toHaveAttribute('min', inDays(0));
     expect(moveIn()).toHaveAttribute('max', inDays(364));
-    // One checkbox per area from GET /areas, in its order.
-    const boxes = within(group(he.profile.fields.areas)).getAllByRole<HTMLInputElement>('checkbox');
-    expect(boxes).toEqual([areaBox(gushDan), areaBox(sharon)]);
-    for (const box of boxes) expect(box).not.toBeChecked();
+    // No chip; the picker's list offers every area from GET /areas.
+    expect(chipNames()).toEqual([]);
+    expect(areaInput()).toHaveValue('');
+    const list = document.getElementById(areaInput().getAttribute('list') ?? '');
+    expect([...(list?.querySelectorAll('option') ?? [])].map((o) => o.value)).toEqual([
+      gushDan.name_he,
+      sharon.name_he,
+    ]);
     expect(radio(he.profile.fields.parking, he.profile.parking['0'])).toBeChecked();
     for (const r of within(group(he.profile.fields.household)).getAllByRole('radio')) {
       expect(r).not.toBeChecked();
@@ -297,6 +307,67 @@ describe('ProfilePage', () => {
     });
   });
 
+  it('ac3_area_chips', async () => {
+    // Spec 0021b: a neighbourhood reads "<neighbourhood>, <city>"; chips keep the order picked.
+    const centre: AreaOut = {
+      ...sharon,
+      id: '00000000-0000-0000-0000-00000000c3c3',
+      slug: 'n-6900-1',
+      name_he: 'מרכז העיר',
+      kind: 'neighbourhood',
+      parent_id: sharon.id,
+    };
+    const centreName = i18n.t('areas.neighbourhoodOf', {
+      neighbourhood: centre.name_he,
+      city: sharon.name_he,
+    });
+    expect(centreName).toBe('מרכז העיר, כפר סבא');
+    // Enough settlements for the 21st pick; no name is the start of another.
+    const more = Array.from({ length: 18 }, (_, i): AreaOut => ({
+      ...sharon,
+      id: `00000000-0000-0000-0000-0000000010${String(i).padStart(2, '0')}`,
+      slug: `s-${String(i)}`,
+      name_he: `יישוב ${String(i)}א`,
+    }));
+    const api = renderPage({ [AREAS]: [json([gushDan, sharon, centre, ...more])] });
+    await fillValid();
+    pickArea(centreName);
+    pickArea(sharon.name_he);
+    expect(chipNames()).toEqual([gushDan.name_he, centreName, sharon.name_he]);
+    expect(areaInput()).toHaveValue('');
+    // Picking one already chosen does nothing.
+    pickArea(gushDan.name_he);
+    expect(chipNames()).toEqual([gushDan.name_he, centreName, sharon.name_he]);
+
+    // Backspace in the empty input removes the last chip; in a typed one it is just a key.
+    set(areaInput(), 'כפ');
+    fireEvent.keyDown(areaInput(), { key: 'Backspace' });
+    expect(chipNames()).toHaveLength(3);
+    set(areaInput(), '');
+    fireEvent.keyDown(areaInput(), { key: 'Backspace' });
+    expect(chipNames()).toEqual([gushDan.name_he, centreName]);
+
+    save();
+    await expectSaved();
+    expect((api.calls(PUT)[0]?.body as { area_ids: string[] }).area_ids).toEqual([
+      gushDan.id,
+      centre.id,
+    ]);
+
+    // Up to 20: the 21st pick is refused with areasMax; removing a chip clears it.
+    pickArea(sharon.name_he);
+    for (const area of more.slice(0, 17)) pickArea(area.name_he);
+    expect(chipNames()).toHaveLength(20);
+    expect(screen.queryByText(he.profile.errors.areasMax)).toBeNull();
+    pickArea(more[17]?.name_he ?? '');
+    expect(chipNames()).toHaveLength(20);
+    expectError(areaInput(), he.profile.errors.areasMax, false);
+    removeChip(gushDan.name_he);
+    expect(screen.queryByText(he.profile.errors.areasMax)).toBeNull();
+    expect(chipNames()).toHaveLength(19);
+    expect(areaInput()).toHaveFocus();
+  });
+
   it('ac3_prefills_and_drops_inactive_area', async () => {
     const gone = '00000000-0000-0000-0000-00000000dead';
     const stored = profile({ area_ids: [gone, sharon.id], smoker: true, move_in_flexible: false });
@@ -310,11 +381,9 @@ describe('ProfilePage', () => {
     expect(radio(he.profile.fields.household, he.profile.household.couple)).toBeChecked();
     expect(radio(he.profile.fields.contract, he.profile.contract['24'])).toBeChecked();
     expect(radio(he.profile.fields.parking, he.profile.parking['1'])).toBeChecked();
-    expect(areaBox(sharon)).toBeChecked();
-    expect(areaBox(gushDan)).not.toBeChecked();
     // The stored id that GET /areas no longer lists is nowhere on the page.
-    expect(within(group(he.profile.fields.areas)).getAllByRole('checkbox')).toHaveLength(2);
-    expect(document.querySelector(`input[value="${gone}"]`)).toBeNull();
+    expect(chipNames()).toEqual([sharon.name_he]);
+    expect(document.body.innerHTML).not.toContain(gone);
 
     save();
     await expectSaved();
@@ -412,8 +481,8 @@ describe('ProfilePage', () => {
     },
     {
       name: 'no area',
-      change: () => fireEvent.click(areaBox(gushDan)),
-      field: () => firstArea() as HTMLElement,
+      change: () => removeChip(gushDan.name_he),
+      field: areaInput,
       message: he.profile.errors.areas,
     },
     {
@@ -437,12 +506,12 @@ describe('ProfilePage', () => {
       // AC2's form without a household: fill everything else.
       set(budget(), '7500');
       set(moveIn(), inDays(30));
-      fireEvent.click(areaBox(gushDan));
+      pickArea(gushDan.name_he);
       fireEvent.click(radio(he.profile.fields.contract, he.profile.contract['24']));
     } else if (row.name === 'no contract') {
       set(budget(), '7500');
       set(moveIn(), inDays(30));
-      fireEvent.click(areaBox(gushDan));
+      pickArea(gushDan.name_he);
       fireEvent.click(radio(he.profile.fields.household, he.profile.household.couple));
     } else {
       await fillValid();
@@ -460,7 +529,7 @@ describe('ProfilePage', () => {
     save();
     expectError(budget(), required);
     expectError(moveIn(), required, false);
-    expectError(firstArea() as HTMLElement, he.profile.errors.areas, false);
+    expectError(areaInput(), he.profile.errors.areas, false);
     expectError(radio(he.profile.fields.household, he.profile.household.single), required, false);
     expectError(radio(he.profile.fields.contract, he.profile.contract['6']), required, false);
     expect(screen.getAllByRole('alert')).toHaveLength(5);
@@ -500,7 +569,7 @@ describe('ProfilePage', () => {
     expect(document.body.textContent).not.toContain(msg);
     cleanup();
 
-    // 422 at body.area_ids.0: on the areas fieldset.
+    // 422 at body.area_ids.0: on the areas picker.
     renderPage({
       [PROFILE]: [json(profile())],
       [PUT]: [json({ detail: [{ loc: ['body', 'area_ids', 0], msg, type: 'uuid' }] }, 422)],
@@ -508,7 +577,7 @@ describe('ProfilePage', () => {
     await form();
     save();
     await vi.waitFor(() => {
-      expectError(firstArea() as HTMLElement, he.listings.errors.invalid);
+      expectError(areaInput(), he.listings.errors.invalid);
     });
     cleanup();
 
@@ -525,9 +594,9 @@ describe('ProfilePage', () => {
       expect(api.calls(AREAS)).toHaveLength(2);
     });
     await vi.waitFor(() => {
-      expect(within(group(he.profile.fields.areas)).getAllByRole('checkbox')).toHaveLength(1);
+      expect(chipNames()).toEqual([gushDan.name_he]);
     });
-    expectError(firstArea() as HTMLElement, he.profile.errors.areaInactive, false);
+    expectError(areaInput(), he.profile.errors.areaInactive, false);
     save();
     await expectSaved();
     expect(api.calls(PUT).map((c) => (c.body as { area_ids: string[] }).area_ids)).toEqual([
@@ -545,11 +614,11 @@ describe('ProfilePage', () => {
     await form();
     save();
     await vi.waitFor(() => {
-      expect(within(group(he.profile.fields.areas)).getAllByRole('checkbox')).toHaveLength(1);
+      expect(chipNames()).toEqual([]);
     });
     expect(screen.getByRole('alert')).toHaveTextContent(he.profile.errors.areaInactive);
     save();
-    expectError(firstArea() as HTMLElement, he.profile.errors.areas);
+    expectError(areaInput(), he.profile.errors.areas);
     expect(api.calls(PUT)).toHaveLength(1);
     cleanup();
 
@@ -1157,23 +1226,6 @@ describe('ProfilePage', () => {
         expect(api.calls(PROFILE)).toHaveLength(2);
         expect(api.calls(AREAS)).toHaveLength(2);
       });
-    });
-
-    it('ac4_area_check_mark', async () => {
-      renderPage();
-      await form();
-      const label = (area: AreaOut) =>
-        (areaBox(area) as HTMLInputElement).labels?.[0] as HTMLLabelElement;
-      const marks = (area: AreaOut) => label(area).querySelectorAll('svg[aria-hidden="true"]');
-      for (const area of [gushDan, sharon]) {
-        for (const cls of choiceSegment.split(' ')) expect(label(area)).toHaveClass(cls);
-        expect(marks(area)).toHaveLength(0);
-      }
-      fireEvent.click(areaBox(gushDan));
-      expect(marks(gushDan)).toHaveLength(1);
-      expect(marks(sharon)).toHaveLength(0);
-      fireEvent.click(areaBox(gushDan));
-      expect(marks(gushDan)).toHaveLength(0);
     });
   });
 

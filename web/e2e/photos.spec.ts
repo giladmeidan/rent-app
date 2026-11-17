@@ -28,9 +28,9 @@ test('ac7_wizard_photo', async ({ page }) => {
   await signUpOwner(page);
 
   await page.goto('/listings/new?type=apartment');
-  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
-  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
-  await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
+  await expect(page.getByLabel(f.city, { exact: true })).toBeEnabled();
+  // The city picker (spec 0021b): the full name picks the settlement.
+  await page.getByLabel(f.city, { exact: true }).fill(TEL_AVIV);
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('3');
   await page.getByLabel(f.floor, { exact: true }).fill('2');
@@ -104,8 +104,6 @@ test('ac7_wizard_photo', async ({ page }) => {
 // its search card; the owner's own photo is set on the profile page and shown there. One sign-up
 // (the owner is also the profile-photo user); the visitor is a second context with no session.
 test('ac5_gallery_and_profile_photo', async ({ page, browser }) => {
-  // axe on /me/profile scans the whole area catalogue (~1,900 checkboxes) until 0021b's picker.
-  test.slow();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   await signUpOwner(page);
   const id = await postListing(page, street);

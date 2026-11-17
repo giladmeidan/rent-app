@@ -31,7 +31,6 @@ export type YesNo = 'yes' | 'no' | '';
 export type ListingForm = {
   listing_type: ListingType | null;
   area_id: string;
-  city: string;
   street: string;
   rooms: string;
   floor: string;
@@ -76,7 +75,6 @@ export type ListingForm = {
 export const emptyForm: ListingForm = {
   listing_type: null,
   area_id: '',
-  city: '',
   street: '',
   rooms: '',
   floor: '',
@@ -114,7 +112,6 @@ export const emptyForm: ListingForm = {
  * `lifestyle` always hold valid values, never an error). */
 export const FIELD_ORDER = [
   'area_id',
-  'city',
   'street',
   'rooms',
   'floor',
@@ -153,7 +150,6 @@ export type FieldErrors = Partial<Record<FieldName, FieldError>>;
 export const AVAILABLE_FROM_MAX_DAYS = 729;
 
 export const LIMITS = {
-  city: 40,
   street: 80,
   description: 2000,
   rooms: { min: 1, max: 20 },
@@ -180,7 +176,7 @@ export const LIMITS = {
 const INVISIBLE =
   /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}\p{Noncharacter_Code_Point}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}\u{2065}\u{FFF0}-\u{FFF8}\u{E0000}-\u{E00FF}\u{E01F0}-\u{E0FFF}]/gu;
 const JOINERS = new Set(['\u200c', '\u200d']);
-/** City and street need one letter or digit (`require_alnum` in the API). */
+/** The street needs one letter or digit (`require_alnum` in the API). */
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
 /**
@@ -204,7 +200,7 @@ const required = { key: 'listings.errors.required' } as const;
 const INTEGER = /^-?\d+$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** City and street: required, at most `max` code points, at least one letter or digit. */
+/** The street: required, at most `max` code points, at least one letter or digit. */
 function text(value: string, max: number): FieldError | undefined {
   const cleaned = cleanText(value);
   if (!LETTER_OR_DIGIT.test(cleaned)) return required;
@@ -255,7 +251,6 @@ function day(value: string, today: string): FieldError | undefined {
 export function validate(form: ListingForm, today: string): FieldErrors {
   const found: Record<FieldName, FieldError | undefined> = {
     area_id: form.area_id === '' ? required : undefined,
-    city: text(form.city, LIMITS.city),
     street: text(form.street, LIMITS.street),
     rooms: rooms(form.rooms),
     floor: integer(form.floor, LIMITS.floor),
@@ -434,7 +429,6 @@ export function formFromListing(listing: ListingOut): ListingForm {
   return {
     listing_type: listing.listing_type,
     area_id: listing.area_id,
-    city: listing.city,
     street: listing.street,
     rooms: String(listing.rooms),
     floor: String(listing.floor),
