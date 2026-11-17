@@ -4,17 +4,35 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { clusterPins } from '../../components/map/cluster';
-import { GUSH_DAN_BOUNDS, MAP_MIN_ZOOM } from '../../components/map/config';
+import { ISRAEL_BOUNDS, MAP_MIN_ZOOM, type Bbox } from '../../components/map/config';
 import {
   MapCanvas,
   type Bubble,
   type MapCamera,
   type MapView,
+  type Pin,
 } from '../../components/map/MapCanvas';
 import type { ListingPublic, ListingSearchOut } from './api';
 import { bubbleLabel } from './pins';
-import { extentOf, FIT_MAX_ZOOM } from './SearchMap';
 import { useListingPins } from './useListingPins';
+
+/** The side map's fit never zooms past this, so a single pin does not land at street level. */
+const FIT_MAX_ZOOM = 15;
+
+/** The `[west, south, east, north]` extent of the pins. */
+function extentOf(pins: readonly Pin[]): Bbox {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const { lng, lat } of pins) {
+    west = Math.min(west, lng);
+    south = Math.min(south, lat);
+    east = Math.max(east, lng);
+    north = Math.max(north, lat);
+  }
+  return [west, south, east, north];
+}
 
 type Props = {
   /** The list's loaded listings, in its order; none while a new first page loads or failed. */
@@ -96,7 +114,7 @@ export function SideMap({
       </div>
       <MapCanvas
         label={t('search.sideMap.label')}
-        bounds={GUSH_DAN_BOUNDS}
+        bounds={ISRAEL_BOUNDS}
         minZoom={MAP_MIN_ZOOM}
         keyboard={false}
         camera={camera}

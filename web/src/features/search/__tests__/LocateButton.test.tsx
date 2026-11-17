@@ -24,6 +24,7 @@ const SEARCH = 'GET /listings';
 const RAW: [number, number] = [34.78123, 32.08167];
 const SNAPPED: [number, number] = [34.782, 32.082];
 const HAIFA = { longitude: 34.99, latitude: 32.79 };
+const AMMAN = { longitude: 35.93, latitude: 31.95 };
 
 type Success = (position: GeolocationPosition) => void;
 type Failure = (error: GeolocationPositionError) => void;
@@ -90,7 +91,7 @@ describe('LocateButton', () => {
     const api = mockApi({
       [SEARCH]: [() => json(page([publicListing({ lat: 32.08, lng: 34.8 })]))],
     });
-    // Opened at a position, so no first-open fit camera is sent.
+    // Opened at a position.
     const view = render('/search?view=map&c=32.07,34.8&z=13');
     moveTo([34.75, 32.05, 34.85, 32.09], { center: [34.8, 32.07], zoom: 13 });
     await vi.waitFor(() => {
@@ -119,7 +120,7 @@ describe('LocateButton', () => {
     fireEvent.click(locate());
     expect(getCurrentPosition).toHaveBeenCalledTimes(1);
 
-    // Inside the launch area: the camera goes to the grid point, the dot to the raw fix.
+    // Inside Israel: the camera goes to the grid point, the dot to the raw fix.
     answer(getCurrentPosition, 0).at({ longitude: RAW[0], latitude: RAW[1] });
     expect(cameras()).toEqual([{ seq: 1, center: SNAPPED, zoom: 15 }]);
     expect(lastProps().userPosition).toEqual(RAW);
@@ -148,9 +149,9 @@ describe('LocateButton', () => {
       expect(stored()).not.toContain(text);
     }
 
-    // Outside (Haifa): no camera, the dot is gone, the status line says so.
+    // Outside (Amman): no camera, the dot is gone, the status line says so.
     fireEvent.click(locate());
-    answer(getCurrentPosition, 1).at(HAIFA);
+    answer(getCurrentPosition, 1).at(AMMAN);
     expect(cameras()).toHaveLength(1);
     expect(lastProps().userPosition).toBeUndefined();
     await vi.waitFor(() => {
@@ -191,5 +192,26 @@ describe('LocateButton', () => {
     render('/search?view=map');
     expect(screen.getByRole('region', { name: he.search.map.label })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: he.search.map.locate })).toBeNull();
+  });
+
+  it('ac5_in_israel', async () => {
+    const getCurrentPosition = stubGeolocation();
+    mockApi({ [SEARCH]: [() => json(page([]))] });
+    render('/search?view=map&c=32.07,34.8&z=13');
+    moveTo([34.75, 32.05, 34.85, 32.09], { center: [34.8, 32.07], zoom: 13 });
+
+    // Haifa is inside: the map goes to its grid point.
+    fireEvent.click(locate());
+    answer(getCurrentPosition, 0).at(HAIFA);
+    expect(cameras()).toEqual([{ seq: 1, center: [34.99, 32.79], zoom: 15 }]);
+    expect(lastProps().userPosition).toEqual([HAIFA.longitude, HAIFA.latitude]);
+
+    // Amman is not: no camera, and the status line says the position is outside Israel.
+    fireEvent.click(locate());
+    answer(getCurrentPosition, 1).at(AMMAN);
+    expect(cameras()).toHaveLength(1);
+    await vi.waitFor(() => {
+      expect(status()).toHaveTextContent('נראה שהמיקום שלך מחוץ לישראל.');
+    });
   });
 });

@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
@@ -16,32 +17,61 @@ import { Button } from '../../components/Button';
 import { EmptyState, emptyStateBox } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import {
-  GUSH_DAN_BOUNDS,
+  DEFAULT_VIEW,
+  ISRAEL_BOUNDS,
   MAP_MIN_ZOOM,
   roundBbox,
   snapToGrid,
   type Bbox,
 } from '../../components/map/config';
 import { clusterPins } from '../../components/map/cluster';
-import { MapCanvas, type Bubble, type MapCamera, type Pin } from '../../components/map/MapCanvas';
+import {
+  MapCanvas,
+  type Bubble,
+  type MapCamera,
+  type MapView,
+} from '../../components/map/MapCanvas';
+import { Skeleton } from '../../components/Skeleton';
+import { areasQuery } from '../areas/api';
+import { useMe } from '../auth/useMe';
 import { todayInIsrael } from '../listings/format';
 import { ListingCard } from '../listings/ListingCard';
 import { MatchBadge } from '../match/MatchBadge';
 import { MatchChips } from '../match/MatchChips';
-import type { LookingProfile } from '../profile/api';
+import { hasLooking, type LookingProfile } from '../profile/api';
+import { useProfile } from '../profile/useProfile';
 import type { ListingPublic } from './api';
 import type { Filters } from './filters';
 import { LocateButton, type LocateMessage } from './LocateButton';
 import { parseMapPosition, writeMapPosition } from './mapPosition';
-import { PlaceSearch } from './PlaceSearch';
+import { areaView, PlaceSearch } from './PlaceSearch';
 import { bubbleLabel } from './pins';
 import { useListingPins } from './useListingPins';
 import { useMapSearch } from './useMapSearch';
 
 const NO_ITEMS: ListingPublic[] = [];
 
-/** The first-open fit never zooms past this, so a single pin does not land at street level. */
-export const FIT_MAX_ZOOM = 15;
+/**
+ * Where the map opens without a URL position (spec 0021d), `undefined` while it is not known: a
+ * visitor at `DEFAULT_VIEW`; a signed-in person, once `/me/profile` and `/areas` (asked together) have answered, at
+ * the first preferred area (`areaView`), else (no looking part, no area, a failed request) at
+ * `DEFAULT_VIEW`.
+ */
+function useDefaultView(): MapView | undefined {
+  const me = useMe();
+  const signedIn = me.data != null;
+  const profile = useProfile(signedIn);
+  const firstId = hasLooking(profile.data) ? profile.data.area_ids[0] : undefined;
+  // Asked with `/me/profile`, not after it: the first area's centre is in the catalogue.
+  const areas = useQuery({ ...areasQuery, enabled: signedIn });
+  if (me.isPending) return undefined;
+  if (!signedIn) return DEFAULT_VIEW;
+  if (profile.isPending) return undefined;
+  if (firstId === undefined) return DEFAULT_VIEW;
+  if (areas.isPending) return undefined;
+  const area = areas.data?.find(({ id }) => id === firstId);
+  return area === undefined ? DEFAULT_VIEW : areaView(area);
+}
 
 /**
  * Where focus goes once the render reflects a press (react-router applies every URL change in a
@@ -57,20 +87,8 @@ type StatusKey = LocateMessage | 'placeNotFound';
 const contains = (outer: Bbox, inner: Bbox) =>
   outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
 
-/** The `[west, south, east, north]` extent of the pins. */
-export function extentOf(pins: readonly Pin[]): Bbox {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  for (const { lng, lat } of pins) {
-    west = Math.min(west, lng);
-    south = Math.min(south, lat);
-    east = Math.max(east, lng);
-    north = Math.max(north, lat);
-  }
-  return [west, south, east, north];
-}
+// The map keeps today's height at every width (no token fits a viewport-relative height).
+const mapClassName = 'h-[60vh] min-h-[360px] rounded-lg border border-border';
 
 // The docked panel (spec 0009w): along the bottom of a phone's map above the attribution line,
 // 360 px in the bottom inline-end corner from `lg` (attribution at the bottom inline start, zoom at
@@ -117,23 +135,24 @@ export function SearchMap({
   const [searchParams, setSearchParams] = useSearchParams();
   // The selected listing lives in the URL.
   const pinId = parseMapPosition(searchParams).pin;
-  // The view the map opens at, read once: the URL's position (Back, a reload, a link), else none.
-  // The `load` move writes `c`/`z` before the first answer, so the URL cannot tell this later.
-  const [initialView] = useState(() => {
+  // The view the map opens at, set once: the URL's position (Back, a reload, a link), else the
+  // default view once it is known (the map's loading state until then). The `load` move writes
+  // `c`/`z`, so the URL cannot tell this later.
+  const [initialView, setInitialView] = useState<MapView | undefined>(() => {
     const { center, zoom } = parseMapPosition(searchParams);
-    return center === undefined ? undefined : { center, zoom };
+    return center === undefined ? undefined : { center, zoom: zoom ?? 14 };
   });
+  const defaultView = useDefaultView();
+  if (initialView === undefined && defaultView !== undefined) setInitialView(defaultView);
   const [bbox, setBbox] = useState<Bbox>();
   // The zoom of the last reported view; until one arrives the pins are drawn unclustered.
   const [zoom, setZoom] = useState<number>();
   // A pressed bubble whose members never separate: their ids, best first (the anchor first).
   const [samePlace, setSamePlace] = useState<string[]>();
   const [unavailable, setUnavailable] = useState(false);
-  // The camera moves sent after mount, each with the next `seq`. Opened without a position, the map
-  // fits the first answer with a located listing once; any other camera sent first (a later
-  // spec's) sets `fitPending` false, so that fit never follows.
+  // The camera moves sent after mount (locate, a place, the whole country), each with the next
+  // `seq`. The map never fits an answer on its own: the view it opens at is a deliberate place.
   const [camera, setCamera] = useState<MapCamera>();
-  const [fitPending, setFitPending] = useState(initialView === undefined);
   // The device's position (spec 0009y), the raw fix, for the dot only: in memory until the next
   // locate or unmount, never written to the URL, a request or storage.
   const [userPosition, setUserPosition] = useState<[lng: number, lat: number]>();
@@ -190,26 +209,12 @@ export function SearchMap({
 
   const selected = items.find((item) => item.id === selectedId);
 
-  // The first answer with a located listing fits the map to them, once per mount (an answer with
-  // none leaves the Gush Dan view). Adjusted during render, as React's "state from data" pattern.
-  if (fitPending && data !== undefined && !search.isPlaceholderData && pins.length > 0) {
-    setFitPending(false);
-    setCamera((previous) => ({
-      seq: (previous?.seq ?? 0) + 1,
-      bounds: extentOf(pins),
-      maxZoom: FIT_MAX_ZOOM,
-    }));
-  }
-
   if (data !== undefined && !search.isPlaceholderData && answeredBox !== bbox) {
     setAnsweredBox(bbox);
   }
 
-  /** A camera this view sends (locate, a place, the whole area): it cancels the first-open fit. */
-  const sendCamera = (
-    move: { bounds: Bbox } | { center: [lng: number, lat: number]; zoom: number },
-  ) => {
-    setFitPending(false);
+  /** A camera this view sends (locate, a place, the whole country). */
+  const sendCamera = (move: { bounds: Bbox } | MapView) => {
     setCamera((previous) => ({ seq: (previous?.seq ?? 0) + 1, ...move }));
   };
 
@@ -415,8 +420,8 @@ export function SearchMap({
     }
   }
 
-  // An empty answer for a box that does not hold the whole launch area can widen to it.
-  const showAll = empty && answeredBox !== undefined && !contains(answeredBox, GUSH_DAN_BOUNDS);
+  // An empty answer for a box that does not hold the whole country can widen to it.
+  const showAll = empty && answeredBox !== undefined && !contains(answeredBox, ISRAEL_BOUNDS);
   useEffect(() => {
     if (showAll || !showAllPressed.current) return;
     // The wider box failed: the error state's retry keeps focus's place; leave focus alone.
@@ -462,7 +467,7 @@ export function SearchMap({
                   onClick={() => {
                     hushStatus();
                     showAllPressed.current = true;
-                    sendCamera({ bounds: GUSH_DAN_BOUNDS });
+                    sendCamera({ bounds: ISRAEL_BOUNDS });
                   }}
                 >
                   {t('search.map.showAll')}
@@ -478,9 +483,9 @@ export function SearchMap({
         </div>
         {fullMap && (
           <PlaceSearch
-            onJump={(place) => {
+            onJump={(view) => {
               hushStatus();
-              sendCamera({ center: place.center, zoom: place.zoom });
+              sendCamera(view);
             }}
             onNotFound={() => sayStatus('placeNotFound')}
             className="w-full lg:max-w-xs"
@@ -495,14 +500,23 @@ export function SearchMap({
             {t('search.view.list')}
           </Button>
         </div>
+      ) : initialView === undefined ? (
+        // The map's own loading state while the default view is not known yet.
+        <div
+          role="region"
+          aria-label={t('search.map.label')}
+          aria-busy="true"
+          className={`relative overflow-hidden ${mapClassName}`}
+        >
+          <Skeleton className="absolute inset-0 h-full w-full" />
+        </div>
       ) : (
         // Escape from anywhere in the map (a pin, the canvas, the panel) closes the panel.
         <div ref={wrapperRef} onKeyDown={onKeyDown}>
           <MapCanvas
             label={t('search.map.label')}
-            {...(initialView === undefined
-              ? { bounds: GUSH_DAN_BOUNDS }
-              : { center: initialView.center, zoom: initialView.zoom })}
+            center={initialView.center}
+            zoom={initialView.zoom}
             minZoom={MAP_MIN_ZOOM}
             camera={camera}
             userPosition={userPosition}
@@ -548,8 +562,7 @@ export function SearchMap({
               }
             }}
             onError={() => setUnavailable(true)}
-            // The map keeps today's height at every width (no token fits a viewport-relative height).
-            className="h-[60vh] min-h-[360px] rounded-lg border border-border"
+            className={mapClassName}
           />
         </div>
       )}

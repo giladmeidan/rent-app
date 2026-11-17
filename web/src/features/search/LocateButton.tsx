@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
-import { inLaunchArea } from '../../components/map/config';
+import { inIsrael } from '../../components/map/config';
 
 /** What the status line says after a locate press that did not move the map. */
 export type LocateMessage = 'locateOutside' | 'locateDenied' | 'locateFailed';
 
 type Props = {
-  /** A fix inside the launch area, `[lng, lat]`: the raw position, for the caller to snap. */
+  /** A fix inside Israel, `[lng, lat]`: the raw position, for the caller to snap. */
   onLocated: (position: [lng: number, lat: number]) => void;
   onMessage: (key: LocateMessage) => void;
   /** Called on every press, before the browser answers. */
@@ -22,7 +22,7 @@ const OPTIONS: PositionOptions = { enableHighAccuracy: false, timeout: 10_000, m
 
 /**
  * "Show my location" (spec 0009y): asks the browser for one position and hands it on only when it
- * lies inside the launch area. Absent when the browser has no geolocation. While waiting, the
+ * lies inside Israel (`inIsrael`). Absent when the browser has no geolocation. While waiting, the
  * button is busy (`aria-busy` + `aria-disabled`) and keeps focus. The position is never stored.
  */
 export function LocateButton({ onLocated, onMessage, onPress, className }: Props) {
@@ -46,7 +46,7 @@ export function LocateButton({ onLocated, onMessage, onPress, className }: Props
       ({ coords }) => {
         if (!mounted.current) return;
         setWaiting(false);
-        if (inLaunchArea(coords.longitude, coords.latitude)) {
+        if (inIsrael(coords.longitude, coords.latitude)) {
           onLocated([coords.longitude, coords.latitude]);
         } else {
           onMessage('locateOutside');

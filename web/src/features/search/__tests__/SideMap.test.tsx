@@ -10,6 +10,7 @@ import {
   moveTo,
   resetFakeMap,
 } from '../../../components/map/__tests__/fakeMapCanvas';
+import { ISRAEL_BOUNDS } from '../../../components/map/config';
 import he from '../../../locales/he.json';
 import { currentPath, deferred, json, mockApi, renderRoutes } from '../../auth/__tests__/harness';
 import type { ListingPublic } from '../api';
@@ -191,6 +192,8 @@ describe('SideMap', () => {
     });
     render('/search');
     const region = await findSideMap();
+    // It opens on the whole country (spec 0021d), then fits the list's pins.
+    expect(lastProps().bounds).toEqual(ISRAEL_BOUNDS);
     // The first page fits the map once, to its pins, never past zoom 15.
     expect(cameras()).toHaveLength(1);
     expect(at(cameras(), 0)).toMatchObject({

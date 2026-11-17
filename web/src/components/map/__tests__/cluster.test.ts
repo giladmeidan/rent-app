@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { bubbleRect, clusterPins, hitRect, intersects, project, separatesAt } from '../cluster';
-import { GUSH_DAN_BOUNDS, MAP_MAX_ZOOM } from '../config';
+import { ISRAEL_BOUNDS, MAP_MAX_ZOOM } from '../config';
 import type { Pin, PinTier } from '../MapCanvas';
 
 /** The inverse of `project`: world pixels at `zoom` to `[lng, lat]`. */
@@ -120,7 +120,7 @@ describe('cluster', () => {
 
   it('ac4_no_overlap_invariant', () => {
     const random = seeded(9009);
-    const [west, south, east, north] = GUSH_DAN_BOUNDS;
+    const [west, south, east, north] = ISRAEL_BOUNDS;
     const texts = ['5,000 ₪', '7,200 ₪ · 87%', '12,500 ₪', '3,400 ₪ · 92%', '900 ₪'];
     const marks: Pin['mark'][] = [null, null, 'applied'];
     const tiers: PinTier[] = ['high', 'good', 'partial', 'none'];
@@ -140,7 +140,7 @@ describe('cluster', () => {
     const rank: Record<PinTier, number> = { high: 3, good: 2, partial: 1, none: 0 };
 
     let bubblesSeen = 0;
-    for (const zoom of [9, 12, 14, 17]) {
+    for (const zoom of [6, 9, 12, 14, 17]) {
       const { pins: single, bubbles } = clusterPins(pins, zoom, keepApart);
       bubblesSeen += bubbles.length;
 

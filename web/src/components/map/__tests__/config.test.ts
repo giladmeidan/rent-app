@@ -5,7 +5,7 @@ import i18n from '../../../app/i18n';
 import he from '../../../locales/he.json';
 import {
   APPROXIMATE_RADIUS_M,
-  inLaunchArea,
+  inIsrael,
   mapLocale,
   metersToPixels,
   roundBbox,
@@ -79,16 +79,19 @@ describe('map config', () => {
     expect(n).toBeLessThanOrEqual(90);
   });
 
-  it('ac1_launch_area_meters_and_grid', () => {
-    // Tel Aviv is inside the launch area, Haifa is not.
-    expect(inLaunchArea(34.78, 32.08)).toBe(true);
-    expect(inLaunchArea(34.99, 32.79)).toBe(false);
+  it('ac6', () => {
+    // Eilat and Metula are inside Israel, Amman is not.
+    expect(inIsrael(34.95, 29.56)).toBe(true);
+    expect(inIsrael(35.57, 33.28)).toBe(true);
+    expect(inIsrael(35.93, 31.95)).toBe(false);
     // The box's edges count as inside; one step past them does not.
-    expect(inLaunchArea(34.74, 31.95)).toBe(true);
-    expect(inLaunchArea(34.95, 32.17)).toBe(true);
-    expect(inLaunchArea(34.7399, 32.08)).toBe(false);
-    expect(inLaunchArea(34.8, 32.1701)).toBe(false);
+    expect(inIsrael(34.2, 29.45)).toBe(true);
+    expect(inIsrael(35.9, 33.35)).toBe(true);
+    expect(inIsrael(34.1999, 32.08)).toBe(false);
+    expect(inIsrael(34.8, 33.3501)).toBe(false);
+  });
 
+  it('ac1_meters_and_grid', () => {
     // 300 m at Tel Aviv's latitude: ~74 px at zoom 14, half that at zoom 13.
     expect(APPROXIMATE_RADIUS_M).toBe(300);
     const z14 = metersToPixels(300, 32.08, 14);

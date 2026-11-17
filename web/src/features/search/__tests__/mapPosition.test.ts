@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAP_POSITION_BOUNDS } from '../../../components/map/config';
+import { MAP_MAX_ZOOM, MAP_POSITION_BOUNDS } from '../../../components/map/config';
 import { MAP_PARAMS, parseMapPosition, pickMapParams, writeMapPosition } from '../mapPosition';
 
 const UUID = '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f';
@@ -8,9 +8,20 @@ const FIXTURE_ID = '00000000-0000-0000-0000-000000000007';
 const parse = (query: string) => parseMapPosition(new URLSearchParams(query));
 
 describe('mapPosition', () => {
+  it('ac1_israel_bounds', () => {
+    // Eilat and Metula are kept; Cairo is dropped, never clamped into the box.
+    expect(parse('c=29.56,34.95&z=13')).toEqual({ center: [34.95, 29.56], zoom: 13 });
+    expect(parse('c=33.28,35.57&z=13')).toEqual({ center: [35.57, 33.28], zoom: 13 });
+    expect(parse('c=30.04,31.24&z=13')).toEqual({});
+    // The zoom is clamped to 6..MAP_MAX_ZOOM.
+    expect(parse('c=29.56,34.95&z=3').zoom).toBe(6);
+    expect(parse('c=29.56,34.95&z=6.5').zoom).toBe(6.5);
+    expect(parse('c=29.56,34.95&z=30').zoom).toBe(MAP_MAX_ZOOM);
+  });
+
   it('ac1_parse_and_write', () => {
     expect(MAP_PARAMS).toEqual(['c', 'z', 'pin']);
-    expect(MAP_POSITION_BOUNDS).toEqual([34.24, 31.45, 35.45, 32.67]);
+    expect(MAP_POSITION_BOUNDS).toEqual([33.7, 28.95, 36.4, 33.85]);
 
     // Kept: the centre (latitude first in the URL, [lng, lat] out), the zoom and a UUID pin.
     expect(parse(`c=32.0712,34.8123&z=13.5&pin=${UUID}`)).toEqual({
@@ -46,14 +57,14 @@ describe('mapPosition', () => {
     }
     expect(parse('z=13')).toEqual({});
     // The bounds' edges are inside; just past them is not.
-    expect(parse('c=31.45,34.24').center).toEqual([34.24, 31.45]);
-    expect(parse('c=32.67,35.45').center).toEqual([35.45, 32.67]);
-    expect(parse('c=31.449,34.8')).toEqual({});
-    expect(parse('c=32.07,35.451')).toEqual({});
+    expect(parse('c=28.95,33.7').center).toEqual([33.7, 28.95]);
+    expect(parse('c=33.85,36.4').center).toEqual([36.4, 33.85]);
+    expect(parse('c=28.949,34.8')).toEqual({});
+    expect(parse('c=32.07,36.401')).toEqual({});
 
     // The zoom is clamped to [MAP_MIN_ZOOM, MAP_MAX_ZOOM].
     expect(parse('c=32.0712,34.8123&z=25').zoom).toBe(19);
-    expect(parse('c=32.0712,34.8123&z=2').zoom).toBe(8);
+    expect(parse('c=32.0712,34.8123&z=2').zoom).toBe(6);
 
     // Writing rounds the centre to 4 decimals (lat first) and the zoom to 2.
     const written = writeMapPosition(new URLSearchParams('price_max=8000&view=map'), {
@@ -94,7 +105,7 @@ describe('mapPosition', () => {
     expect(parse('c=+32,34')).toEqual({});
     expect(parse('c=%2B32.0712,34.8123')).toEqual({});
     // `-0` is a number: clamped to the least zoom.
-    expect(parse(`${C}&z=-0`)).toEqual({ center: centre, zoom: 8 });
+    expect(parse(`${C}&z=-0`)).toEqual({ center: centre, zoom: 6 });
     // Not numbers: the centre's default zoom.
     expect(parse(`${C}&z=NaN`)).toEqual({ center: centre, zoom: 14 });
     expect(parse(`${C}&z=Infinity`)).toEqual({ center: centre, zoom: 14 });

@@ -347,7 +347,9 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0021b · web/src/features/profile/ProfilePage.tsx (area chips) · announce chip add/remove with a polite live count ("נבחרו N אזורים") · focus already returns to the picker; review round 1 ux minor
 - [ ] 0021b · web/src/features/areas/__tests__/api.test.ts (NF1) · render the people page and profile against one QueryClient and assert one `GET /areas`, not only a source grep + bare QueryObserver · the guarantee holds (every call site uses `areasQuery`); review round 1 qa minor
 - [ ] 0021b · web/src/locales/he.json (`profile.errors.areasMax`) · take the limit as `{{max}}` from `AREAS_MAX` instead of a hard-coded "20"; align closing-period style with `areas.notFound` · cosmetic; review round 1 ux nit
-- [ ] 0021b · web/src/features/areas/AreaSearch.tsx (datalist) · memoise the `<option>` list if the neighbourhood import makes the catalogue much larger than ~1,200 · fine today; review round 1 qa nit
+- [ ] 0021d · api/app/main.py · `GET /areas` is ~183 KB uncompressed (1,189 areas, grows with neighbourhoods) and now loads for every full-map visitor; make sure the production proxy gzips it, or add GZip middleware · one fetch per visit (staleTime Infinity, max-age 86400); deploy concern; review round 1 perf minor
+- [ ] 0021d · web/src/features/search/SearchMap.tsx (`useDefaultView`) · a 5xx on `/me/profile` or `/areas` keeps the map skeleton through the default one retry (~1-2 s) before `DEFAULT_VIEW`; pass `retry: false` here if it matters · fallback is correct and silent; review round 1 qa minor
+- [ ] 0021d · web/src/features/search/SearchPage.tsx · owners also request `GET /me/profile` (SearchPage's `useProfile(me.data != null)`), though `useProfile`'s doc says owners never do · predates 0021d; needs a role gate in SearchPage; review round 1 ux minor
 
 ## 0021c
 - [ ] 0021c · after the first national import (`RENT_REFERENCE=nadlan make rent-import` in the main stack, 4–6 h), run `make rent-backtest` and change `HALF_WIDTH` / `WINDOW_QUARTERS` / `RATIO_HALF_WIDTH` only if it says so, with the run's numbers in the comment · spec 0021c Scope 10

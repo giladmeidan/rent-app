@@ -32,10 +32,15 @@ type Props = {
   onPick: (area: AreaOut | null) => void;
   /** Backspace in the empty input. */
   onBackspace?: () => void;
+  /** Enter on a name that matches nothing: the caller says so instead of the field (the map's
+   * status line). */
+  onNotFound?: () => void;
   id?: string;
   /** The input's `name` (the profile focuses a field by name). */
   name?: string;
   error?: string;
+  /** The phone keyboard's Enter key (the map's place box: "search"). */
+  enterKeyHint?: 'search';
 };
 
 /**
@@ -77,9 +82,11 @@ function AreaInput({
   value,
   onPick,
   onBackspace,
+  onNotFound,
   id,
   name,
   error,
+  enterKeyHint,
 }: Props & { areas: AreaOut[] }) {
   const { t } = useTranslation();
   const listId = useId();
@@ -93,6 +100,17 @@ function AreaInput({
         return { area, label: text, key: normalise(text) };
       });
   }, [areas, kindsKey, t]);
+  // Typing re-renders this input: the ~1,200 options are built once per list.
+  const datalist = useMemo(
+    () => (
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option.area.id} value={option.label} />
+        ))}
+      </datalist>
+    ),
+    [options, listId],
+  );
   const labelOf = (areaId: string | undefined) =>
     options.find((option) => option.area.id === areaId)?.label ?? '';
 
@@ -107,7 +125,11 @@ function AreaInput({
 
   const find = (typed: string) => {
     const key = normalise(typed);
-    return options.find((option) => option.key === key);
+    const labelled = options.find((option) => option.key === key);
+    if (labelled !== undefined) return labelled;
+    // A bare neighbourhood name ("פלורנטין" for "פלורנטין, תל אביב-יפו"), when only one has it.
+    const named = options.filter((option) => normalise(option.area.name_he) === key);
+    return named.length === 1 ? named[0] : undefined;
   };
   const isPrefix = (key: string) =>
     options.some((other) => other.key !== key && other.key.startsWith(key));
@@ -130,8 +152,9 @@ function AreaInput({
     if (event.key !== 'Enter' || text.trim() === '') return;
     event.preventDefault();
     const match = find(text);
-    if (match === undefined) setNotFound(true);
-    else choose(match);
+    if (match !== undefined) choose(match);
+    else if (onNotFound !== undefined) onNotFound();
+    else setNotFound(true);
   };
 
   return (
@@ -140,6 +163,7 @@ function AreaInput({
         type="text"
         list={listId}
         name={name}
+        enterKeyHint={enterKeyHint}
         autoComplete="off"
         value={text}
         onChange={(event) => {
@@ -149,7 +173,9 @@ function AreaInput({
           const match = find(next);
           // A datalist choice arrives as `insertReplacementText` (Chrome, Safari).
           const listed = (event.nativeEvent as InputEvent).inputType === 'insertReplacementText';
-          if (match !== undefined && (listed || !isPrefix(match.key))) choose(match);
+          // The typed key, not the match's: a bare neighbourhood name prefixes its own label, so it
+          // waits for Enter or blur like "אזור".
+          if (match !== undefined && (listed || !isPrefix(normalise(next)))) choose(match);
           else if (value !== undefined && value !== '') {
             setShown('');
             onPick(null);
@@ -161,11 +187,7 @@ function AreaInput({
           if (match !== undefined && match.area.id !== value) choose(match);
         }}
       />
-      <datalist id={listId}>
-        {options.map((option) => (
-          <option key={option.area.id} value={option.label} />
-        ))}
-      </datalist>
+      {datalist}
     </Field>
   );
 }

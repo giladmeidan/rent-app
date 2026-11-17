@@ -1138,6 +1138,8 @@ describe('SearchPage', () => {
     // Replies are built per request: a Response body is read once.
     mockApi({ [SEARCH]: [() => json(page([publicListing({ lat: 32.08, lng: 34.8 })]))] });
     render('/search?view=map');
+    // The map mounts once `/me` has answered (a visitor's default view).
+    await vi.waitFor(() => lastProps());
     // A filter Apply first: a pushed entry, so Back shows whether a move adds one.
     openPanel();
     fireEvent.click(feature(he.search.feature.pets));
@@ -1275,6 +1277,7 @@ describe('SearchPage', () => {
         .map((li) => li.textContent),
     ).toEqual([he.search.feature.pets]);
     fireEvent.click(viewToggle().getByRole('button', { name: he.search.view.map }));
+    await vi.waitFor(() => lastProps());
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(api.calls(SEARCH)).toHaveLength(2);
@@ -1284,6 +1287,7 @@ describe('SearchPage', () => {
     vi.unstubAllGlobals();
 
     // /market: rooms, the market's title and date hint; the map asks for rooms too.
+    resetFakeMap();
     api = mockApi({ [SEARCH]: [json(page([publicListing({ listing_type: 'room' })]))] });
     view = render('/market');
     expect(await screen.findByRole('heading', { level: 1, name: he.market.title })).toBeVisible();
@@ -1296,6 +1300,7 @@ describe('SearchPage', () => {
     expect(screen.getByText(he.market.availableByHint)).toBeInTheDocument();
     expect(screen.queryByText(he.search.availableByHint)).toBeNull();
     fireEvent.click(viewToggle().getByRole('button', { name: he.search.view.map }));
+    await vi.waitFor(() => lastProps());
     moveTo(BOX);
     await vi.waitFor(() => {
       expect(api.calls(SEARCH)).toHaveLength(2);

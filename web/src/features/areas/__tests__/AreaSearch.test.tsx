@@ -130,6 +130,25 @@ describe('AreaSearch', () => {
     expect(onPick).toHaveBeenCalledWith(azor);
   });
 
+  it('bare_neighbourhood_name_picks_on_enter_when_unique', async () => {
+    const onPick = renderSearch();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('אזור')).not.toBeDisabled();
+    });
+    const input = screen.getByLabelText('אזור');
+    // "פלורנטין" is only in "פלורנטין, תל אביב-יפו": it waits while typed, Enter picks it.
+    fireEvent.change(input, { target: { value: 'פלורנטין' } });
+    expect(onPick).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith(AREAS[7]);
+    // "מרכז העיר" is in two cities: nothing picked, the field says not found.
+    onPick.mockClear();
+    fireEvent.change(input, { target: { value: 'מרכז העיר' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(he.areas.notFound);
+  });
+
   it('settlements only', async () => {
     renderSearch(['settlement']);
     await vi.waitFor(() => {
