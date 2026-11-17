@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
+import exampleHome from '../../assets/landing/example-home.jpg';
 import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
 import { Mascot } from '../../components/Mascot';
 import { Tag } from '../../components/Tag';
 import { useIsDesktop } from '../../components/useMediaQuery';
@@ -16,7 +16,7 @@ export const HERO_TITLE_ID = 'landing-title';
 /**
  * Main.html §1: the accent-soft panel. The inline-start column (the right, in RTL) holds the copy,
  * the two role CTAs, the market link and the trust claims; the inline-end one the page's one
- * turtle above the example card and why it matches.
+ * turtle above the example card (with a stock photo, Unsplash: Minh Pham).
  */
 export function Hero({ today }: { today: string }) {
   const { t } = useTranslation();
@@ -26,11 +26,6 @@ export function Hero({ today }: { today: string }) {
     t('landing.trust.verified'),
     t('landing.trust.noBrokers'),
     t('landing.trust.free'),
-  ];
-  const why = [
-    { text: t('landing.example.why.fits1'), fits: true },
-    { text: t('landing.example.why.fits2'), fits: true },
-    { text: t('landing.example.why.partial'), fits: false },
   ];
 
   return (
@@ -96,7 +91,7 @@ export function Hero({ today }: { today: string }) {
       <div className="relative mx-auto w-full max-w-md pt-24 lg:pt-[7.5rem]">
         <Mascot pose="hello" width={desktop ? 190 : 150} className="absolute start-2 top-0" />
         <figure className="relative">
-          {/* Read by a screen reader before the card; the "why" caption says it on screen. */}
+          {/* Read by a screen reader before the card. */}
           <figcaption className="sr-only">{t('landing.example.caption')}</figcaption>
           <ListingCard
             listing={exampleListing({
@@ -107,28 +102,8 @@ export function Hero({ today }: { today: string }) {
             today={today}
             badge={<MatchBadge score={EXAMPLE_SCORE} />}
             titleAs="p"
+            coverUrl={exampleHome}
           />
-          <Card className="relative -me-2 -mt-2 ms-4 flex flex-col gap-1.5">
-            <p id="landing-why" className="text-caption text-ink-muted">
-              {t('landing.example.why.title', { score: EXAMPLE_SCORE })}
-            </p>
-            <ul aria-labelledby="landing-why" className="flex flex-col gap-1.5">
-              {why.map((line) => (
-                <li key={line.text} className="flex items-center gap-2 text-body-sm">
-                  <span className={`inline-flex ${line.fits ? 'text-success' : 'text-ink-muted'}`}>
-                    {line.fits ? (
-                      <Check />
-                    ) : (
-                      <Icon size={18}>
-                        <path d="M6 12h12" />
-                      </Icon>
-                    )}
-                  </span>
-                  {line.text}
-                </li>
-              ))}
-            </ul>
-          </Card>
         </figure>
       </div>
     </section>
