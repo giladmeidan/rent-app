@@ -43,6 +43,8 @@ function TourRow({
   const online = useOnline();
   const queryClient = useQueryClient();
   const cancel = useCancelTour(item.conversation_id);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const cover = coverFailed ? null : item.listing.cover?.small_url;
   const timeId = useId();
   const titleId = useId();
   // Focus was on this row's button: when the row goes, it falls back to `#main` (spec 0009t).
@@ -89,56 +91,70 @@ function TourRow({
 
   return (
     <li>
-      <Card padding="md" className="flex flex-col gap-2">
-        <p id={timeId} className="text-label font-semibold">
-          <bdi dir="ltr">
-            {t('tours.row.time', {
-              start: formatTourTime(item.starts_at),
-              end: formatTourTime(item.ends_at),
-            })}
-          </bdi>
-        </p>
-        <p className="text-body [overflow-wrap:anywhere]">
-          <Link
-            id={titleId}
-            to={`/listings/${item.listing.id}`}
-            className={cx(
-              'inline-flex min-h-tap items-center rounded text-accent underline underline-offset-4',
-              focusRing,
-            )}
-          >
-            <span dir="auto">{cardTitle(t, item.listing)}</span>
-          </Link>
-        </p>
-        <p className="text-body-sm text-ink-muted">
-          <span dir="auto">{t('tours.row.with', { name: item.other_name })}</span>
-        </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            to={`/chat/${item.conversation_id}`}
-            aria-describedby={`${timeId} ${titleId}`}
-          >
-            {t('tours.row.chat')}
-          </Button>
-          {cancellable && (
-            <Button
-              variant="secondary"
-              size="sm"
-              busy={cancel.isPending}
-              aria-describedby={`${timeId} ${titleId}`}
-              onClick={() => void onCancel()}
+      <Card padding="none" className="flex flex-row overflow-hidden">
+        {cover && (
+          // `alt=""`: the title link names the listing. 16:10, as the listing cards.
+          <img
+            src={cover}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setCoverFailed(true)}
+            // `order-last`: the end side, the left in RTL. Edge to edge, the card's full height.
+            className="order-last w-40 shrink-0 self-stretch bg-surface-subtle object-cover sm:w-56"
+          />
+        )}
+        <div className="flex min-w-0 flex-1 flex-col gap-2 p-4">
+          <p id={timeId} className="text-label font-semibold">
+            <bdi dir="ltr">
+              {t('tours.row.time', {
+                start: formatTourTime(item.starts_at),
+                end: formatTourTime(item.ends_at),
+              })}
+            </bdi>
+          </p>
+          <p className="text-body [overflow-wrap:anywhere]">
+            <Link
+              id={titleId}
+              to={`/listings/${item.listing.id}`}
+              className={cx(
+                'inline-flex min-h-tap items-center rounded text-accent underline underline-offset-4',
+                focusRing,
+              )}
             >
-              {t('tours.row.cancel')}
+              <span dir="auto">{cardTitle(t, item.listing)}</span>
+            </Link>
+          </p>
+          <p className="text-body-sm text-ink-muted">
+            <span dir="auto">{t('tours.row.with', { name: item.other_name })}</span>
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              to={`/chat/${item.conversation_id}`}
+              aria-describedby={`${timeId} ${titleId}`}
+            >
+              {t('tours.row.chat')}
             </Button>
+            {cancellable && (
+              <Button
+                variant="secondary"
+                size="sm"
+                busy={cancel.isPending}
+                aria-describedby={`${timeId} ${titleId}`}
+                onClick={() => void onCancel()}
+              >
+                {t('tours.row.cancel')}
+              </Button>
+            )}
+          </div>
+          {cancel.isError && !gone && (
+            <p role="alert" className="text-body-sm font-semibold text-danger">
+              {tourErrorText(t, cancel.error, online)}
+            </p>
           )}
         </div>
-        {cancel.isError && !gone && (
-          <p role="alert" className="text-body-sm font-semibold text-danger">
-            {tourErrorText(t, cancel.error, online)}
-          </p>
-        )}
       </Card>
     </li>
   );
