@@ -46,7 +46,7 @@ from `0021a` replaces the Gush Dan area select, the free-text city and the profi
   `profile.areas.remove` "הסרת {{name}}". `profile/__tests__/validate.test.ts` follows.
 - **People pages** (`PeoplePage`, `MarketPeoplePage`, `MyLikesPage`): area names through `areaLabel`.
 - **Copy** in `he.json` (decided, Gilad 2026-11-17): `tagline` "מוצאים דירה ושותפים בכל הארץ"; `landing.badge`
-  "בכל הארץ · השקה בעברית"; the FAQ answer "כרגע בכל הארץ."; terms `p1` "…לבין מי שמחפשים, בכל הארץ. …" (rest
+  "כל הארץ · השקה בעברית"; the FAQ answer "בכל הארץ." (shipped as Gilad's later commit eaafbe3); terms `p1` "…לבין מי שמחפשים, בכל הארץ. …" (rest
   unchanged). These are the only four "גוש דן" strings today (lines 4, 1498, 1618, 1788). The terms change also
   goes to the lawyer with the rest of the terms review (not a build blocker).
 - **i18n keys:** added `areas.neighbourhoodOf`, `areas.notFound` "לא מצאנו את השם הזה. אפשר לבחור מהרשימה",
