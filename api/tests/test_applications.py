@@ -21,12 +21,12 @@ from app.redis_client import get_redis
 from app.services import applications as applications_service
 from app.services import chat_events, listing_views
 from app.services import people as people_service
-from scripts.seed import GUSH_DAN_WKT
 from tests import test_people as people_tests
 from tests import test_tours as tours_tests
 from tests.conftest import (
     NO_LOOKING,
     Outbox,
+    insert_settlement,
     make_application,
     make_flatmate,
     make_listing,
@@ -261,14 +261,7 @@ def test_ac2_apartments_need_a_seeker_rooms_anyone(
 def test_ac3_non_public_listing_is_404(
     seeker: TestClient, owner_id: uuid.UUID, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
-    with db_engine.begin() as conn:
-        closed_area: uuid.UUID = conn.execute(
-            text(
-                "INSERT INTO areas (slug, name_he, geom, is_active) "
-                "VALUES ('closed-area', 'closed', ST_GeomFromText(:wkt, 4326), false) RETURNING id"
-            ),
-            {"wkt": GUSH_DAN_WKT},
-        ).scalar_one()
+    closed_area = insert_settlement(db_engine, 6300, "closed", active=False)
     an_hour_ago = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
     hidden = [
         make_listing(db_engine, owner_id, gush_dan, status="paused"),

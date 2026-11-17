@@ -35,8 +35,9 @@ the server sets its city name; a seeker's preferred areas may be settlements or 
   resource id and licence. Row rule, a pure function `settlement_row(record) -> tuple | None`: keep a row only
   when its coordinate is 12 digits with X in 100000–300000 and Y in 350000–800000 (the bounds `0014a` uses);
   name stripped and the CBS spacing around a hyphen collapsed (`תל אביב -יפו` → `תל אביב-יפו`); everything
-  else unchanged. Every CBS row that passes is a settlement, Judea and Samaria (district 7) and the Golan
-  included, as PRODUCT.md "Launch area" says ("every settlement (CBS settlement list)"). Expect about 1,450.
+  else unchanged; a row in Judea and Samaria (`סמל מחוז` = 7) is dropped (Gilad 2026-11-17, PRODUCT.md
+  "Launch area": those settlements are not areas; the Golan stays). Every other CBS row that passes is a
+  settlement. Expect about 1,190 (1,188 on 2026-11-17).
   The conversion to WGS84 is done by PostGIS at import (`ST_Transform(ST_SetSRID(ST_MakePoint(x, y), 2039),
   4326)`, exactly as `rent_reference._store`), so there is **no `pyproj`** and no new dependency.
 - **Big cities.** `BIG_CITY_CODES` in `app/services/areas.py`: the 18 "Big cities" blocks of CBS Table 4.9
@@ -152,6 +153,8 @@ None beyond the generated client and the payload line above (`0021b`). No new st
   inactive stays inactive — `test_areas.py::test_ac2_import_idempotent_and_soft`
 - [ ] AC3 `settlement_row` splits a 12-digit coordinate into ITM X/Y, skips a row with no or a malformed
   coordinate, and turns `תל אביב -יפו` into `תל אביב-יפו` — `test_areas.py::test_ac3_settlement_row`
+- [ ] AC3b No Judea and Samaria (CBS district 7) code is in `settlements.csv`, and none is in the catalogue
+  after `import_areas` — `test_areas.py::test_ac_no_judea_samaria`
 - [ ] AC4 Create with a neighbourhood id or an inactive id → 422 `unknown_area`; with a settlement →
   `city` = its `name_he`; PATCH `area_id` to another settlement → `city` follows and geocoding resets to
   `pending`; PATCH with `city` → 422 — `test_listings.py::test_ac4_area_must_be_settlement`

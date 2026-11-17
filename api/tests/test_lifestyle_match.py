@@ -27,7 +27,7 @@ def owner(db_engine: Engine) -> uuid.UUID:
 @pytest.fixture
 def north(db_engine: Engine, gush_dan: uuid.UUID) -> uuid.UUID:
     """A second active area, not in `P0`'s `area_ids`."""
-    return _area(db_engine, "north", active=True)
+    return _area(db_engine, 6300, active=True)
 
 
 ROOM: dict[str, Any] = {"listing_type": "room", "flatmates_count": 2}

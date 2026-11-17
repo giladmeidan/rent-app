@@ -169,7 +169,7 @@ def test_ac2_listing_not_visible_is_404(
     owner: TestClient, seeker: TestClient, db_engine: Engine, gush_dan: uuid.UUID
 ) -> None:
     owner_id = _user_id(owner)
-    inactive = _area(db_engine, "inactive", active=False)
+    inactive = _area(db_engine, 8600, active=False)
     targets = (
         (seeker, make_listing(db_engine, owner_id, gush_dan, status="paused")),
         (seeker, make_listing(db_engine, owner_id, gush_dan, expires_at="2020-01-01T00:00:00Z")),

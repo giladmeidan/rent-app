@@ -43,7 +43,7 @@ export EMAIL_BLOCK_KEY   ?= dev-only-email-block-key-0123456789abcdef
 export ADMIN_PORT        ?= 8001
 export ADMIN_DB_PASSWORD ?= dev-only-admin-db-password
 
-.PHONY: dev dev-api admin down migrate seed rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate waitlist-secret deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api admin down migrate seed import-areas rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate waitlist-secret deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -104,9 +104,14 @@ down:
 migrate:
 	$(UV) run alembic upgrade head
 
-## seed: insert the launch areas (idempotent)
+## seed: import the areas from the committed settlement CSV and the rent fixtures (idempotent, no network)
 seed:
 	$(UV) run python scripts/seed.py
+
+## import-areas: import every settlement (api/data/settlements.csv) and the big cities' neighbourhoods
+## from nadlan.gov.il (spec 0021a1); by hand, once per environment after `make migrate`, never scheduled
+import-areas:
+	$(UV) run python scripts/import_areas.py
 
 ## rent-import: import the official rent figures once (spec 0014a); RENT_REFERENCE=off (the default)
 ## makes no request and prints {'skipped': 1}

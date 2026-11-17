@@ -36,15 +36,13 @@ from app.services.geocoding import (
     get_geocoder,
     street_query,
 )
-from scripts.seed import GUSH_DAN_WKT
-from tests.conftest import Outbox, make_listing, make_owner, set_location, signup
+from tests.conftest import Outbox, insert_settlement, make_listing, make_owner, set_location, signup
 
 KATZ = "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df"  # make_listing's default street
 GIV = "\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd"  # make_listing's default city
 WEIZ = "\u05d5\u05d9\u05e6\u05de\u05df"
 BIALIK = "\u05d1\u05d9\u05d0\u05dc\u05d9\u05e7"
 HERZL = "\u05d4\u05e8\u05e6\u05dc"
-RAMAT_GAN = "\u05e8\u05de\u05ea \u05d2\u05df"
 
 SECRET = "test-secret-for-approximate-points-0123"
 PREFIX = "test-geo:"
@@ -149,7 +147,6 @@ def _listing_body(area_id: uuid.UUID) -> dict[str, Any]:
     return {
         "listing_type": "apartment",
         "area_id": str(area_id),
-        "city": GIV,
         "street": KATZ,
         "rooms": 3.5,
         "floor": 3,
@@ -167,14 +164,7 @@ def _listing_body(area_id: uuid.UUID) -> dict[str, Any]:
 def test_ac2_create_and_address_change_mark_pending(
     client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
-    with db_engine.begin() as conn:
-        second_area: uuid.UUID = conn.execute(
-            text(
-                "INSERT INTO areas (slug, name_he, geom) "
-                "VALUES ('second-area', 'b', ST_GeomFromText(:wkt, 4326)) RETURNING id"
-            ),
-            {"wkt": GUSH_DAN_WKT},
-        ).scalar_one()
+    second_area = insert_settlement(db_engine, 6300, "גבעתיים")
     owner = signup(client, outbox, "owner@example.com", "owner")
     created = owner.post("/listings", json=_listing_body(gush_dan))
     assert created.status_code == 201, created.text
@@ -203,11 +193,7 @@ def test_ac2_create_and_address_change_mark_pending(
     assert _geo(db_engine, listing_id) == PENDING
 
     locate()
-    patch({"city": RAMAT_GAN})
-    assert _geo(db_engine, listing_id) == PENDING
-
-    locate()
-    patch({"area_id": str(second_area)})
+    patch({"area_id": str(second_area)})  # the city follows the area (spec 0021a1)
     assert _geo(db_engine, listing_id) == PENDING
 
 
@@ -234,7 +220,17 @@ def test_ac3_sweep_locates_live_pending_listings_with_cache(
 
     counts = _sweep(db_engine, stub)
 
-    assert stub.calls == [(GIV, KATZ, GUSH_DAN_ENVELOPE), (GIV, WEIZ, GUSH_DAN_ENVELOPE)]
+    # The area's box (spec 0021a1: Tel Aviv-Yafo's centre ± 0.1°).
+    with db_engine.connect() as conn:
+        box = conn.execute(
+            text(
+                "SELECT ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom) FROM areas"
+                " WHERE id = :id"
+            ),
+            {"id": gush_dan},
+        ).one()
+    envelope = tuple(box)
+    assert stub.calls == [(GIV, KATZ, envelope), (GIV, WEIZ, envelope)]
     for listing_id in (katz_1, katz_2, weiz):
         geo = _geo(db_engine, listing_id)
         assert geo.status == "ok"

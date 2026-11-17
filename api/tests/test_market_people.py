@@ -368,7 +368,7 @@ def test_ac3_card_fields_and_privacy(
 
 
 def test_ac4_order_and_paging(client: TestClient, db_engine: Engine, gush_dan: uuid.UUID) -> None:
-    north = _area(db_engine, "north", active=True)
+    north = _area(db_engine, 6300, active=True)
     viewer = _person(client, db_engine, north, "Viewer")
     now = dt.datetime.now(dt.UTC)
     ids: dict[str, uuid.UUID] = {}

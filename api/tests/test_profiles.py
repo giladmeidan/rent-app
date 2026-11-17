@@ -13,8 +13,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Engine, text
 
 from app.schemas.profile import ABOUT_ME_MAX_LENGTH, AboutMe
-from scripts.seed import GUSH_DAN_WKT
-from tests.conftest import Outbox, make_profile, make_seeker, signup
+from tests.conftest import Outbox, insert_settlement, make_profile, make_seeker, signup
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -167,15 +166,7 @@ def test_ac3_profile_for_any_account(
 
 
 def _inactive_area(engine: Engine) -> uuid.UUID:
-    with engine.begin() as conn:
-        area_id: uuid.UUID = conn.execute(
-            text(
-                "INSERT INTO areas (slug, name_he, geom, is_active) "
-                "VALUES ('closed-area', 'closed', ST_GeomFromText(:wkt, 4326), false) RETURNING id"
-            ),
-            {"wkt": GUSH_DAN_WKT},
-        ).scalar_one()
-    return area_id
+    return insert_settlement(engine, 6300, "closed", active=False)
 
 
 def _without(body: dict[str, Any], key: str) -> dict[str, Any]:
@@ -716,3 +707,26 @@ def test_ac2_shelter_needed_needs_looking_part(
     assert response.status_code == 200, response.text
     assert response.json()["shelter_needed"] == "any"
     assert _row(db_engine)["shelter_needed"] == "any"
+
+
+def test_ac7_area_kinds(seeker: TestClient, gush_dan: uuid.UUID, db_engine: Engine) -> None:
+    """Spec 0021a1: preferred areas may be settlements and neighbourhoods; inactive ones are not."""
+    with db_engine.begin() as conn:
+        hood = conn.execute(
+            text(
+                "INSERT INTO areas (slug, name_he, kind, source_code, parent_id, centre, geom)"
+                " SELECT 'n-1', 'רביבים', 'neighbourhood', 1, id, centre, geom FROM areas"
+                " WHERE id = :tel_aviv RETURNING id"
+            ),
+            {"tel_aviv": gush_dan},
+        ).scalar_one()
+
+    body = {**_p(gush_dan), "area_ids": [str(gush_dan), str(hood)]}
+    response = _put(seeker, body)
+    assert response.status_code == 200, response.text
+    assert response.json()["area_ids"] == [str(gush_dan), str(hood)]
+
+    closed = _inactive_area(db_engine)
+    response = _put(seeker, {**body, "area_ids": [str(hood), str(closed)]})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "unknown_area"}

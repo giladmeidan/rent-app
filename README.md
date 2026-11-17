@@ -18,7 +18,7 @@ Agent conventions live in `CLAUDE.md`; product decisions in `specs/PRODUCT.md`; 
 cp .env.example .env     # optional: local overrides (see Configuration); the defaults already work
 make dev                 # db + redis up, alembic upgrade head, seed, then api (reload) + worker + web (vite)
 curl localhost:8000/health   # {"status":"ok","db":"ok","redis":"ok"}
-curl localhost:8000/areas    # [{"id":"…","slug":"gush-dan","name_he":"גוש דן"}]
+curl localhost:8000/areas    # [{"id":"…","slug":"s-967","name_he":"…","kind":"settlement",…}, …]
 open http://localhost:5173   # the landing page
 ```
 
@@ -94,6 +94,7 @@ specs/          PRODUCT.md, FOLLOWUPS.md, open specs; archive/ = done specs and 
 
 Run them through `make` (which supplies the environment) or with `uv` from the repo root:
 
-- `make seed` — seed launch areas (`api/scripts/seed.py`; needs `DATABASE_URL`).
+- `make seed` — seed the areas from `api/data/settlements.csv` and the rent fixtures, no network (`api/scripts/seed.py`; needs `DATABASE_URL`).
+- `make import-areas` — import every settlement and the big cities' neighbourhoods from nadlan.gov.il, by hand (spec 0021a1).
 - `uv --directory api run python scripts/export_openapi.py > openapi.json` — dump the OpenAPI schema
   without a running server. Needs only the `.env.example` variables in the environment; nothing connects.

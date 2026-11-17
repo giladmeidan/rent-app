@@ -64,7 +64,6 @@ from app.services import listing_views, tour_mail  # noqa: E402
 from app.services.email import Attachment, get_email_sender  # noqa: E402
 from app.services.photo_store import FilePhotoStore, get_photo_store  # noqa: E402
 from scripts.admin_role import ROLE, apply_admin_role  # noqa: E402
-from scripts.seed import seed_areas  # noqa: E402
 
 get_settings.cache_clear()
 get_database_settings.cache_clear()
@@ -385,15 +384,32 @@ def photo_store(client: TestClient, tmp_path: Path) -> Iterator[FilePhotoStore]:
     app.dependency_overrides.pop(get_photo_store, None)
 
 
-@pytest.fixture
-def gush_dan(db_engine: Engine) -> uuid.UUID:
-    """The seeded launch area `gush-dan` (via `scripts/seed.py`), by id."""
-    seed_areas(db_engine)
-    with db_engine.connect() as conn:
+# Tel Aviv-Yafo as `import_areas` stores it (`api/data/settlements.csv`); one row, not the CSV.
+TEL_AVIV_AREA = "תל אביב-יפו"
+INSERT_SETTLEMENT = text(
+    "WITH c AS (SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), 2039), 4326) AS p)"
+    " INSERT INTO areas (slug, name_he, kind, source_code, centre, geom, is_active)"
+    " SELECT 's-' || :code, :name, 'settlement', :code, p, ST_Multi(ST_Expand(p, 0.1)), :active"
+    " FROM c RETURNING id"
+)
+
+
+def insert_settlement(
+    engine: Engine, code: int, name: str, *, active: bool = True, x: int = 182209, y: int = 664303
+) -> uuid.UUID:
+    """One settlement row (default centre: Givatayim's), by id."""
+    with engine.begin() as conn:
         area_id: uuid.UUID = conn.execute(
-            text("SELECT id FROM areas WHERE slug = 'gush-dan'")
+            INSERT_SETTLEMENT, {"x": x, "y": y, "code": code, "name": name, "active": active}
         ).scalar_one()
     return area_id
+
+
+@pytest.fixture
+def gush_dan(db_engine: Engine) -> uuid.UUID:
+    """The Tel Aviv-Yafo settlement (spec 0021a1; the name is from the old `gush-dan` launch area),
+    by id."""
+    return insert_settlement(db_engine, 5000, TEL_AVIV_AREA, x=180263, y=664864)
 
 
 _CODE_LINE = re.compile(r"^[0-9]{6}$", re.M)

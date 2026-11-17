@@ -1,4 +1,4 @@
-"""scripts/seed.py (AC5)."""
+"""scripts/seed.py (AC5; spec 0021a1: the areas from the CSV and the rent fixtures, no network)."""
 
 from sqlalchemy import Engine, text
 
@@ -12,11 +12,21 @@ def test_ac5_seed_is_idempotent(db_engine: Engine) -> None:
     with db_engine.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT name_he, is_active, ST_SRID(geom), GeometryType(geom)"
-                " FROM areas WHERE slug = 'gush-dan'"
+                "SELECT kind, count(*) FILTER (WHERE is_active), count(*) FROM areas GROUP BY kind"
             )
         ).all()
+        tel_aviv = conn.execute(
+            text(
+                "SELECT name_he, ST_SRID(geom), GeometryType(geom), GeometryType(centre)"
+                " FROM areas WHERE slug = 's-5000'"
+            )
+        ).one()
 
-    assert (first, second) == (1, 0)
-    assert len(rows) == 1
-    assert tuple(rows[0]) == ("גוש דן", True, 4326, "MULTIPOLYGON")
+    assert first == second
+    assert first["settlements"] > 1000
+    assert first["neighbourhoods"] == 1  # the fixtures hold one of Tel Aviv's two
+    assert {kind: (active, total) for kind, active, total in rows} == {
+        "settlement": (first["settlements"],) * 2,
+        "neighbourhood": (1, 1),
+    }
+    assert tuple(tel_aviv) == ("תל אביב-יפו", 4326, "MULTIPOLYGON", "POINT")
