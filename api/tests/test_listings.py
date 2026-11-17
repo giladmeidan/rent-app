@@ -22,7 +22,15 @@ from app.schemas.profile import LIFESTYLE_KEYS
 from app.services import chat_events
 from app.services import listings as listings_service
 from tests import test_tours as tours_tests
-from tests.conftest import Outbox, make_listing, make_seeker, signup
+from tests.conftest import (
+    TEL_AVIV_AREA,
+    Outbox,
+    insert_settlement,
+    make_listing,
+    make_seeker,
+    set_location,
+    signup,
+)
 
 _HOUR = dt.timedelta(hours=1)
 
@@ -35,7 +43,6 @@ def _body(area_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
     body: dict[str, Any] = {
         "listing_type": "apartment",
         "area_id": str(area_id),
-        "city": " גבעתיים ",
         "street": "כצנלסון",
         "rooms": 3.5,
         "floor": 3,
@@ -107,7 +114,7 @@ def test_ac1_owner_creates_listing(
     body = response.json()
     assert body["status"] == "active"
     assert body["rooms"] == 3.5
-    assert body["city"] == "גבעתיים"
+    assert body["city"] == TEL_AVIV_AREA  # the settlement's name (spec 0021a1)
     assert body["owner_id"] == owner.get("/me").json()["id"]
     assert body["area_id"] == str(gush_dan)
     assert (body["price_ils"], body["arnona_ils"], body["vaad_ils"], body["size_sqm"]) == (
@@ -122,7 +129,7 @@ def test_ac1_owner_creates_listing(
     assert _count(db_engine) == 1
     row = _row(db_engine, body["id"])
     assert str(row["rooms"]) == "3.5"
-    assert row["city"] == "גבעתיים"
+    assert row["city"] == TEL_AVIV_AREA
 
 
 def test_ac2_rooms_for_any_account_apartments_for_owners(
@@ -233,16 +240,15 @@ _TOO_FAR = (dt.date.today() + dt.timedelta(days=3 * 365)).isoformat()
         {"price_ils": 7200.5},
         {"size_sqm": 3},
         {"floor": 3, "total_floors": 2},
-        {"city": _long(41)},
-        {"city": " "},
         {"street": _long(81)},
+        {"street": " "},
         {"description": _long(2001)},
         {"available_from": _TOO_FAR},
         {"listing_type": "villa"},
         {"furnished": "yes"},
         {"parking_spots": 6},
         {"description": "דירה \u202eמוארת"},
-        {"city": "גבעת\nיים"},
+        {"street": "כצנ\nלסון"},
         {"elevator": None},  # removed from the body below
     ],
     ids=[
@@ -253,16 +259,15 @@ _TOO_FAR = (dt.date.today() + dt.timedelta(days=3 * 365)).isoformat()
         "price-fractional",
         "size-3",
         "total-floors-below-floor",
-        "city-41-code-points",
-        "city-blank",
         "street-81",
+        "street-blank",
         "description-2001",
         "available-from-3-years",
         "type-villa",
         "furnished-yes",
         "parking-6",
         "description-bidi-override",
-        "city-newline",
+        "street-newline",
         "missing-elevator",
     ],
 )
@@ -291,13 +296,13 @@ _INVISIBLE = "contains control or invisible characters"
             "\u05d3\u05d9\u05e8\u05d4 \u3164 \u05de\u05d5\u05d0\u05e8\u05ea",
             f"description {_INVISIBLE}",
         ),
-        ("city", "...", "city must contain a letter or digit"),
+        ("street", "...", "street must contain a letter or digit"),
         ("street", "\u05db\u05e6\u05e0\u05dc\u05e1\u05d5\u05df\ue000", f"street {_INVISIBLE}"),
         ("description", "a" + "\u0301" * 5, "description has too many combining marks in a row"),
     ],
     ids=[
         "description-hangul-filler",
-        "city-punctuation-only",
+        "street-punctuation-only",
         "street-private-use",
         "description-zalgo",
     ],
@@ -321,19 +326,63 @@ def test_ac6_text_rules_are_value_error_at_field(
     assert _count(db_engine) == 0
 
 
-def test_ac6_patch_rejects_blank_letter_city(
+def test_ac6_patch_rejects_blank_letter_street(
     owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
     listing = _create(owner, gush_dan)
     row_before = _row(db_engine, listing["id"])
 
-    response = _patch(owner, listing["id"], {"city": "\u3164"})
+    response = _patch(owner, listing["id"], {"street": "\u3164"})
 
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail[0]["type"] == "value_error"
-    assert detail[0]["loc"] == ["body", "city"]
-    assert detail[0]["msg"] == f"Value error, city {_INVISIBLE}"
+    assert detail[0]["loc"] == ["body", "street"]
+    assert detail[0]["msg"] == f"Value error, street {_INVISIBLE}"
+    assert _row(db_engine, listing["id"]) == row_before
+
+
+def test_ac4_area_must_be_settlement(
+    owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    givatayim = insert_settlement(db_engine, 6300, "גבעתיים")
+    closed = insert_settlement(db_engine, 8600, "רמת גן", active=False)
+    with db_engine.begin() as conn:
+        hood = conn.execute(
+            text(
+                "INSERT INTO areas (slug, name_he, kind, source_code, parent_id, centre, geom)"
+                " SELECT 'n-1', 'רביבים', 'neighbourhood', 1, id, centre, geom FROM areas"
+                " WHERE id = :tel_aviv RETURNING id"
+            ),
+            {"tel_aviv": gush_dan},
+        ).scalar_one()
+
+    for area_id in (hood, closed):
+        response = owner.post("/listings", json=_body(area_id))
+        assert response.status_code == 422
+        assert response.json() == {"detail": "unknown_area"}
+    assert _count(db_engine) == 0
+
+    # A `city` sent on create is ignored: the server names the settlement.
+    listing = _create(owner, gush_dan, city="גבעתיים")
+    assert listing["city"] == TEL_AVIV_AREA
+    set_location(db_engine, listing["id"], 34.79, 32.08)
+
+    response = _patch(owner, listing["id"], {"area_id": str(givatayim)})
+    assert response.status_code == 200
+    assert response.json()["city"] == "גבעתיים"
+    row = _row(db_engine, listing["id"])
+    assert (row["area_id"], row["city"], row["geocode_status"]) == (givatayim, "גבעתיים", "pending")
+
+    for area_id in (hood, closed):
+        response = _patch(owner, listing["id"], {"area_id": str(area_id)})
+        assert response.status_code == 422
+        assert response.json() == {"detail": "unknown_area"}
+
+    row_before = _row(db_engine, listing["id"])
+    response = _patch(owner, listing["id"], {"city": "רמת גן"})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "extra_forbidden"
     assert _row(db_engine, listing["id"]) == row_before
 
 
@@ -491,9 +540,9 @@ def test_ac7_patch_rechecks_area_and_strips_text(
     assert response.status_code == 422
     assert response.json() == {"detail": "unknown_area"}
 
-    response = _patch(owner, listing["id"], {"city": "  רמת גן ", "description": ""})
+    response = _patch(owner, listing["id"], {"street": "  ביאליק ", "description": ""})
     assert response.status_code == 200
-    assert (response.json()["city"], response.json()["description"]) == ("רמת גן", None)
+    assert (response.json()["street"], response.json()["description"]) == ("ביאליק", None)
     assert _row(db_engine, listing["id"])["area_id"] == gush_dan
 
 
@@ -612,7 +661,7 @@ def test_review_lone_surrogate_is_422_not_500(
     owner: TestClient, gush_dan: uuid.UUID, db_engine: Engine
 ) -> None:
     response = owner.post(
-        "/listings", content=_raw(_body(gush_dan, city="ab\ud800")), headers=_RAW_HEADERS
+        "/listings", content=_raw(_body(gush_dan, street="ab\ud800")), headers=_RAW_HEADERS
     )
     _assert_clean_422(response)
     assert _count(db_engine) == 0

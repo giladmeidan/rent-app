@@ -16,7 +16,7 @@ import {
 import { personalOnlyProfile, profile } from './fixtures';
 
 const TODAY = '2026-11-11';
-const areas = [gushDan, { ...gushDan, id: 'other', slug: 'sharon', name_he: 'שרון' }];
+const areas = [gushDan, { ...gushDan, id: 'other', slug: 's-6900', name_he: 'כפר סבא' }];
 const valid: ProfileForm = {
   ...formFromProfile(profile({ move_in_date: addDays(TODAY, 30) })),
 };

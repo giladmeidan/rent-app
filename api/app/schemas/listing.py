@@ -148,8 +148,8 @@ class ListingIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     listing_type: ListingType
+    # A settlement; the server sets `city` to its name (spec 0021a1). A `city` sent is ignored.
     area_id: uuid.UUID
-    city: City
     street: Street
     rooms: Rooms
     floor: Floor
@@ -237,8 +237,7 @@ class ListingPatch(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    area_id: uuid.UUID | None = None
-    city: City | None = None
+    area_id: uuid.UUID | None = None  # `city` follows it (spec 0021a1); `city` itself is a 422
     street: Street | None = None
     rooms: Rooms | None = None
     floor: Floor | None = None

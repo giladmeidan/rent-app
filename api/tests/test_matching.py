@@ -15,8 +15,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 
 from app.matching.score import CRITERIA, HARD, WEIGHTS, explain
-from scripts.seed import GUSH_DAN_WKT
-from tests.conftest import Outbox, make_listing, make_owner, make_profile, set_location, signup
+from tests.conftest import (
+    Outbox,
+    insert_settlement,
+    make_listing,
+    make_owner,
+    make_profile,
+    set_location,
+    signup,
+)
 
 TODAY = dt.datetime.now(dt.UTC).date()
 NOT_FOUND = {"detail": "not_found"}
@@ -31,22 +38,14 @@ def _execute(engine: Engine, sql: str, **params: Any) -> None:
         conn.execute(text(sql), params)
 
 
-def _area(engine: Engine, slug: str, active: bool) -> uuid.UUID:
-    with engine.begin() as conn:
-        area_id: uuid.UUID = conn.execute(
-            text(
-                "INSERT INTO areas (slug, name_he, geom, is_active) "
-                "VALUES (:slug, 'אזור', ST_GeomFromText(:wkt, 4326), :active) RETURNING id"
-            ),
-            {"slug": slug, "wkt": GUSH_DAN_WKT, "active": active},
-        ).scalar_one()
-    return area_id
+def _area(engine: Engine, code: int, active: bool) -> uuid.UUID:
+    return insert_settlement(engine, code, "אזור", active=active)
 
 
 @pytest.fixture
 def north(db_engine: Engine, gush_dan: uuid.UUID) -> uuid.UUID:
     """A second active area, not in `P0`'s `area_ids`."""
-    return _area(db_engine, "north", active=True)
+    return _area(db_engine, 6300, active=True)
 
 
 @pytest.fixture
@@ -371,7 +370,7 @@ def test_ac7_listing_page_match(
 ) -> None:
     public = _l0(db_engine, owner, gush_dan)
     paused = _l0(db_engine, owner, gush_dan, status="paused")
-    closed = _l0(db_engine, owner, _area(db_engine, "closed-area", active=False))
+    closed = _l0(db_engine, owner, _area(db_engine, 8600, active=False))
     seeker = _seeker(client, outbox, db_engine, gush_dan)
 
     page = seeker.get(f"/listings/{public}")

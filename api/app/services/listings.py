@@ -65,7 +65,7 @@ class ListingCapReachedError(Exception):
 
 
 class UnknownAreaError(Exception):
-    """`area_id` is not an active launch area."""
+    """`area_id` is not an active settlement."""
 
 
 class ListingNotFoundError(Exception):
@@ -89,10 +89,16 @@ class ListingLiveError(Exception):
     """The listing is live (`status = 'active' AND expires_at > now()`): no closure answer yet."""
 
 
-def _check_area(db: Session, area_id: uuid.UUID) -> None:
-    active = db.scalar(select(Area.id).where(Area.id == area_id, Area.is_active.is_(True)))
-    if active is None:
+def _check_area(db: Session, area_id: uuid.UUID) -> str:
+    """The name of the active settlement `area_id` (a listing's `city`), else `UnknownAreaError`."""
+    name = db.scalar(
+        select(Area.name_he).where(
+            Area.id == area_id, Area.is_active.is_(True), Area.kind == "settlement"
+        )
+    )
+    if name is None:
         raise UnknownAreaError
+    return name
 
 
 def _lock_owner_cap(db: Session, owner_id: uuid.UUID) -> int:
@@ -128,12 +134,13 @@ def create_listing(db: Session, owner: User, data: ListingIn) -> Listing:
     """Insert an active listing expiring `LISTING_TTL_DAYS` from now. Raises `UnknownAreaError`
     or `ListingCapReachedError` (nothing written). Commits."""
     try:
-        _check_area(db, data.area_id)
+        city = _check_area(db, data.area_id)
         _enforce_cap(db, owner.id)
         listing = db.scalars(
             insert(Listing)
             .values(
                 **data.model_dump(),
+                city=city,
                 owner_id=owner.id,
                 expires_at=func.now() + dt.timedelta(days=LISTING_TTL_DAYS),
             )
@@ -227,11 +234,11 @@ def update_listing(
         if expired:
             raise ListingExpiredError
         data = _merged(listing, patch)
-        if "area_id" in patch.model_fields_set:
-            _check_area(db, data.area_id)
         values: dict[str, Any] = {
             name: getattr(data, name) for name in patch.model_fields_set - {"status"}
         }
+        if "area_id" in patch.model_fields_set:
+            values["city"] = _check_area(db, data.area_id)
         if patch.status == "active" and listing.status == "paused":
             # The paused listing is not live, so the count is of the others only.
             # shortcut: resume locks listing then user, DELETE /me user then listing (spec 0013c);
@@ -244,7 +251,9 @@ def update_listing(
         pausing = patch.status == "paused" and listing.status == "active"
         if patch.status is not None:
             values["status"] = patch.status
-        if any(getattr(data, name) != getattr(listing, name) for name in _ADDRESS_FIELDS):
+        if any(
+            name in values and values[name] != getattr(listing, name) for name in _ADDRESS_FIELDS
+        ):
             # A new address: the worker geocodes it again (spec 0003c); the old point is dropped.
             values.update(location=None, geocode_status="pending", geocode_attempts=0)
         updated = db.scalars(

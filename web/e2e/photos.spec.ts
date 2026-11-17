@@ -5,7 +5,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, postListing, signUpOwner } from './helpers';
+import { API, postListing, signUpOwner, TEL_AVIV } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 /** A small committed JPEG (320x200). */
@@ -29,6 +29,7 @@ test('ac7_wizard_photo', async ({ page }) => {
 
   await page.goto('/listings/new?type=apartment');
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('3');
@@ -103,6 +104,8 @@ test('ac7_wizard_photo', async ({ page }) => {
 // its search card; the owner's own photo is set on the profile page and shown there. One sign-up
 // (the owner is also the profile-photo user); the visitor is a second context with no session.
 test('ac5_gallery_and_profile_photo', async ({ page, browser }) => {
+  // axe on /me/profile scans the whole area catalogue (~1,900 checkboxes) until 0021b's picker.
+  test.slow();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   await signUpOwner(page);
   const id = await postListing(page, street);

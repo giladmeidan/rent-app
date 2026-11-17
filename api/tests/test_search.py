@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event, text
+from sqlalchemy import Engine, event
 
-from scripts.seed import GUSH_DAN_WKT
 from tests.conftest import (
     Outbox,
+    insert_settlement,
     make_listing,
     make_owner,
     make_pair,
@@ -115,14 +115,7 @@ class World:
 
 @pytest.fixture
 def world(client: TestClient, outbox: Outbox, gush_dan: uuid.UUID, db_engine: Engine) -> World:
-    with db_engine.begin() as conn:
-        closed_area: uuid.UUID = conn.execute(
-            text(
-                "INSERT INTO areas (slug, name_he, geom, is_active) "
-                "VALUES ('closed-area', 'סגור', ST_GeomFromText(:wkt, 4326), false) RETURNING id"
-            ),
-            {"wkt": GUSH_DAN_WKT},
-        ).scalar_one()
+    closed_area = insert_settlement(db_engine, 6300, "סגור", active=False)
     owner_b = signup(client, outbox, "owner-b@example.com", "owner")
     seeker = signup(client, outbox, "seeker@example.com", "seeker")
     owner_b_id = uuid.UUID(owner_b.get("/me").json()["id"])

@@ -28,8 +28,22 @@ const ME: UserOut = {
 const AREA_A = '00000000-0000-0000-0000-00000000a1a1';
 const AREA_B = '00000000-0000-0000-0000-00000000a2a2';
 const AREAS = [
-  { id: AREA_A, slug: 'givatayim', name_he: 'גבעתיים' },
-  { id: AREA_B, slug: 'ramat-gan', name_he: 'רמת גן' },
+  {
+    id: AREA_A,
+    slug: 's-6300',
+    name_he: 'גבעתיים',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [34.80982, 32.07152],
+  },
+  {
+    id: AREA_B,
+    slug: 's-8600',
+    name_he: 'רמת גן',
+    kind: 'settlement',
+    parent_id: null,
+    centre: [34.82486, 32.07015],
+  },
 ];
 // The viewer's own profile: both parts, the card shown; the cards' answers are compared with it.
 const PROFILE = {

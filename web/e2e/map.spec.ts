@@ -3,7 +3,7 @@ import { expect, type APIRequestContext, type Locator, type Page } from '@playwr
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
 import { test } from './fixtures';
-import { intoTheDockedCard, latNorthBy, routeTiles, signUpOwner } from './helpers';
+import { intoTheDockedCard, latNorthBy, routeTiles, signUpOwner, telAvivId } from './helpers';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
 // `page.request`. `make e2e` exports API_PORT.
@@ -67,17 +67,13 @@ async function postAtOnePrice(
 
   // A fresh owner posts them through the API (as search.spec.ts).
   await signUpOwner(page);
-  const areas = await page.request.get(API + '/areas');
-  expect(areas.ok()).toBe(true);
-  const [area] = (await areas.json()) as { id: string }[];
-  expect(area).toBeDefined();
+  const areaId = await telAvivId(page);
   const ids: string[] = [];
   for (const name of streets) {
     const created = await page.request.post(API + '/listings', {
       data: {
         listing_type: 'apartment',
-        area_id: area?.id,
-        city: 'גבעתיים',
+        area_id: areaId,
         street: name,
         rooms: 3.5,
         floor: 3,

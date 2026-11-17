@@ -80,7 +80,6 @@ const expectedBody = {
   arnona_ils: null,
   vaad_ils: null,
   description: 'דירה מוארת',
-  city: 'גבעתיים',
   street: 'כצנלסון',
   area_id: gushDan.id,
   accepted_households: ['single', 'couple', 'family', 'roommates'] as Household[],
@@ -391,7 +390,8 @@ describe('ListingWizard', () => {
           count: 3.5,
           rooms: '3.5',
           street: 'כצנלסון',
-          city: 'גבעתיים',
+          // The chosen settlement's name, as the server will store it (spec 0021a1).
+          city: gushDan.name_he,
         }),
       }),
     ).toBeVisible();

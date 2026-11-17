@@ -998,7 +998,7 @@ def test_ac9_owner_match_ignores_price_and_area_edits_after_apply(
     gush_dan: uuid.UUID,
     db_engine: Engine,
 ) -> None:
-    north = _area(db_engine, "north", active=True)
+    north = _area(db_engine, 6300, active=True)
     listing = _l0(db_engine, _user_id(owner), gush_dan)
     seeker = signup(client, outbox, "s1@example.com", "seeker")
     make_profile(db_engine, _user_id(seeker), gush_dan)  # P0: budget 7500, areas [gush_dan]
@@ -1467,7 +1467,7 @@ def test_ac7_personal_only_applicant(
     )
     # Two applicants with the looking part who match worse than S's leftover columns would score
     # (3), applied before S: only the looking-part sort key puts S after them.
-    north = _area(db_engine, "north", active=True)
+    north = _area(db_engine, 6300, active=True)
     poor: dict[str, Any] = {
         "smoker": True,
         "has_pets": True,

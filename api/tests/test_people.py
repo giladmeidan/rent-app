@@ -276,7 +276,7 @@ def test_ac1_candidates_and_order(
     assert card["liked_by_me"] is False
     assert _pair(db_engine, room, _user_id(b)) is None  # not opted in: no pair, never a card
 
-    north = _area(db_engine, "north", active=True)
+    north = _area(db_engine, 6300, active=True)
     g = make_seeker(db_engine, "g@example.com", "Gal")
     _visible(db_engine, g, gush_dan, area_ids=[north])  # wants only another area
     # Spec 0010l: score, then the pair's age, then its id (no "liked the room" first).

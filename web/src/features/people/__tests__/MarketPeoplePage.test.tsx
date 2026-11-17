@@ -32,7 +32,14 @@ const PEOPLE = 'GET /people';
 const PROFILE = 'GET /me/profile';
 const likeRoute = (method: 'PUT' | 'DELETE', c: { card_id: string }) =>
   `${method} /people/${c.card_id}/like`;
-const GIVATAYIM = { id: '00000000-0000-0000-0000-00000000a2a2', slug: 'g', name_he: 'גבעתיים' };
+const GIVATAYIM = {
+  id: '00000000-0000-0000-0000-00000000a2a2',
+  slug: 's-6300',
+  name_he: 'גבעתיים',
+  kind: 'settlement' as const,
+  parent_id: null,
+  centre: [34.80982, 32.07152],
+};
 const CHAT_ID = '00000000-0000-0000-0000-00000000cccc';
 
 const routes = (
@@ -102,7 +109,7 @@ describe('MarketPeoplePage', () => {
     const one = within(cardOf('C1'));
     expect(one.getByText(he.market.people.likedMe)).toBeVisible();
     expect(one.getByText('אישה · גיל 31')).toBeVisible();
-    expect(one.getByText('אזורים: גוש דן וגבעתיים')).toBeVisible();
+    expect(one.getByText('אזורים: תל אביב-יפו וגבעתיים')).toBeVisible();
     expect(one.getByText(new RegExp(he.applicants.flexible))).toBeVisible();
     // About me is plain text: line breaks kept, never a link.
     const about = one.getByTestId('market-person-about');

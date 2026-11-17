@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, likePerson, postListing, signUpApi } from './helpers';
+import { API, likePerson, postListing, signUpApi, TEL_AVIV } from './helpers';
 import { newTileContext, test } from './fixtures';
 
 const ROOM = he.profile.room;
@@ -102,7 +102,7 @@ test('ac9_seeker_answers_invite_and_chats', async ({ page, browser }) => {
   await page.getByLabel(he.profile.fields.budget).fill('7500');
   await page.getByLabel(he.profile.fields.moveIn).fill(israelDay(30));
   const areas = page.getByRole('group', { name: he.profile.fields.areas });
-  await areas.locator('label').first().click();
+  await areas.getByText(TEL_AVIV, { exact: true }).click();
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();

@@ -2,7 +2,15 @@ import { expect, type Locator } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { latestCode, postListing, requestCode, signUpOwner, uniqueEmail } from './helpers';
+import {
+  latestCode,
+  postListing,
+  requestCode,
+  signUpOwner,
+  TEL_AVIV,
+  telAvivId,
+  uniqueEmail,
+} from './helpers';
 import { test } from './fixtures';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -45,6 +53,7 @@ test('ac9_owner_creates_and_pauses_listing', async ({ page }) => {
   await page.getByRole('button', { name: he.listings.next }).click();
 
   await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
   await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
   await page.getByLabel(f.street, { exact: true }).fill('כצנלסון');
   await page.getByLabel(f.rooms).selectOption('3.5');
@@ -166,15 +175,10 @@ test('ac12_owner_edits_listing', async ({ page }) => {
   await signUpOwner(page);
 
   // One listing with arnona, posted through the API with the owner's session (as search.spec.ts).
-  const areas = await page.request.get(API + '/areas');
-  expect(areas.ok()).toBe(true);
-  const [area] = (await areas.json()) as { id: string }[];
-  expect(area).toBeDefined();
   const created = await page.request.post(API + '/listings', {
     data: {
       listing_type: 'apartment',
-      area_id: area?.id,
-      city: '\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd',
+      area_id: await telAvivId(page),
       street,
       rooms: 3.5,
       floor: 3,
@@ -254,6 +258,7 @@ test('ac12_owner_edits_listing', async ({ page }) => {
     await page.getByRole('button', { name: he.listings.next }).click();
 
     await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
+    await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
     await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
     await page.getByLabel(f.street, { exact: true }).fill(roomStreet);
     await page.getByLabel(f.rooms).selectOption('4');

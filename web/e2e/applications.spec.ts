@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
 import { expectNoAxeViolations } from './a11y';
-import { API, postListing, putProfile, signUp } from './helpers';
+import { API, postListing, putProfile, signUp, TEL_AVIV } from './helpers';
 import { test } from './fixtures';
 
 const MESSAGE = 'Hi, we are a quiet couple';
@@ -71,8 +71,8 @@ test('ac9_fill_profile_apply_withdraw', async ({ page }) => {
   await page.getByLabel(he.profile.fields.budget).fill('7500');
   await page.getByLabel(he.profile.fields.moveIn).fill(moveIn);
   const areas = page.getByRole('group', { name: he.profile.fields.areas });
-  const areaName = (await areas.locator('label').first().textContent()) ?? '';
-  await areas.locator('label').first().click();
+  const areaName = TEL_AVIV;
+  await areas.getByText(TEL_AVIV, { exact: true }).click();
   await page.getByText(he.profile.household.couple, { exact: true }).click();
   await page.getByText(he.profile.contract['24'], { exact: true }).click();
   await page.getByText(he.profile.parking['1'], { exact: true }).click();

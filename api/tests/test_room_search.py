@@ -141,7 +141,7 @@ def test_ac1_rooms_are_public_with_room_fields(
         lifestyle={"night": 3, "kosher": 2},
     )
     apartment = _l0(db_engine, owner, gush_dan)
-    closed = _area(db_engine, "closed", active=False)
+    closed = _area(db_engine, 8600, active=False)
     an_hour_ago = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
     hidden = [
         _r0(db_engine, owner, gush_dan, status="paused"),
@@ -519,7 +519,7 @@ def test_ac5_gate_skipped_for_hidden_and_own_listing(
 ) -> None:
     """A hidden or own listing is a plain 404, as for an unknown id: the gate never reveals
     existence or ownership, and the attempt still counts against the rate limit."""
-    closed = _area(db_engine, "closed", active=False)
+    closed = _area(db_engine, 8600, active=False)
     ago = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
     hidden = {
         "paused": _r0(db_engine, owner, gush_dan, gender_preference="men", status="paused"),

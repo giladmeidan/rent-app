@@ -249,7 +249,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0014c · web/src/features/listings/useRentEstimate.ts · each field has its own 400 ms debounce, so two fields changed within 400 ms send one wasted request for a mixed combination (never shown: `settled` guards it); debounce one joined key instead · review round 1 code minor
 - [ ] 0014c · web/src/features/listings/__tests__/DetailsStep.test.tsx `ac11` · the `hint_two` plural form (2 quarters) is never rendered; add a `quarters: 2` case · review round 1 qa minor
 - [ ] 0014c · api/tests/test_rent_estimate_api.py `test_ac8_auth_and_validation` · the 200 case runs on empty tables, so the exactly-one-of check never sees `estimate` set; insert one area and price and assert `estimate` set, `reason` null · review round 1 qa minor
-- [ ] 0014d · `CBS_RENT` (api/app/config.py) · read the CBS Open License 2.1 in full (attribution, its clause on derived arrangements) before `CBS_RENT=cbs` in production · joins the Slice 13 nadlan terms item
+- [ ] 0014d · `CBS_RENT` (api/app/config.py) · read the CBS Open License 2.1 in full (attribution, its clause on derived arrangements) before `CBS_RENT=cbs` in production, and for the settlement list (`api/data/settlements.csv`, 0021a1) before launch · joins the Slice 13 nadlan terms item
 - [ ] 0014d · api/app/services/rent_estimate.py `SMALL_ROOMS` · check the CBS small-flat ratio (running tenancies) against homie's own 1–2 room listings (new contracts) once they exist · method bias the ratio backtest cannot measure
 - [ ] 0014d · api/app/services/cbs_rent.py · `.xls` bulletins before 7/2025 (needs `xlrd`) only if a longer ratio backtest is wanted · out of scope
 - [ ] 0014d · api/app/services/cbs_rent.py `_read_rows` · openpyxl parses the sheet XML with plain expat (no `defusedxml`); consider a pinned `defusedxml` (a new dependency, so a spec) · exposure bounded by Python 3.12's expat and the 20 MB unzipped cap; review round 1 security minor
@@ -341,3 +341,4 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 
 ## 0021a1
 - [ ] 0021a1 · 0013a deploy runbook · run `make import-areas` right after `make migrate` on the first production deploy (the areas catalogue is data, not a migration) · from the 0021a verification
+- [ ] 0021a1 · 0013a `api/scripts/release.sh` and the API image · the release must not rely on `scripts/seed.py` for areas: run `import_areas` with the real fetcher (`make import-areas`) as a manual post-deploy step, and ship `api/data/settlements.csv` in the API image (seed reads it; it skips once any neighbourhood is stored) · from the 0021a1 review (major 1)

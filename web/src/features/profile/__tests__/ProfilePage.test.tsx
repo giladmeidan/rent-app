@@ -41,8 +41,11 @@ const PUT = 'PUT /me/profile';
 
 const sharon: AreaOut = {
   id: '00000000-0000-0000-0000-00000000b2b2',
-  slug: 'sharon',
-  name_he: 'השרון',
+  slug: 's-6900',
+  name_he: 'כפר סבא',
+  kind: 'settlement',
+  parent_id: null,
+  centre: [34.90724, 32.17521],
 };
 const notFound = () => json({ detail: 'seeker_profile_not_found' }, 404);
 const savedReply = () => json(profile());

@@ -41,6 +41,20 @@ export function uniqueEmail(): string {
 // `page.request`. `make e2e` exports API_PORT.
 export const API = 'http://localhost:' + (process.env.API_PORT ?? '8000');
 
+/** The settlement the smoke suite posts in and prefers (spec 0021a1: the old `גוש דן` is gone). */
+export const TEL_AVIV = 'תל אביב-יפו';
+
+/** Tel Aviv-Yafo's area id from `GET /areas`. */
+export async function telAvivId(page: Page): Promise<string> {
+  const areas = await page.request.get(API + '/areas');
+  expect(areas.ok()).toBe(true);
+  const area = ((await areas.json()) as { id: string; name_he: string }[]).find(
+    (a) => a.name_he === TEL_AVIV,
+  );
+  expect(area).toBeDefined();
+  return area?.id ?? '';
+}
+
 /** Clicks "שליחת קוד", waits for that `POST /auth/otp/request` and asserts its 204, then asserts
  * the code field has focus and returns it. A refused request (429: the OTP budget per IP) fails
  * here with its status, not as a missing code field. */
@@ -163,15 +177,10 @@ export async function postListing(
   street: string,
   overrides: Record<string, unknown> = {},
 ): Promise<string> {
-  const areas = await page.request.get(API + '/areas');
-  expect(areas.ok()).toBe(true);
-  const [area] = (await areas.json()) as { id: string }[];
-  expect(area).toBeDefined();
   const created = await page.request.post(API + '/listings', {
     data: {
       listing_type: 'apartment',
-      area_id: area?.id,
-      city: '\u05d2\u05d1\u05e2\u05ea\u05d9\u05d9\u05dd',
+      area_id: await telAvivId(page),
       street,
       rooms: 3.5,
       floor: 3,
@@ -197,7 +206,7 @@ export async function postListing(
 }
 
 /** Saves a housing profile (spec 0006a `P`: budget 7500, a couple, no pets, non-smoker, 24 months,
- * one parking spot, the first area) through the API with the page's (seeker) session, so the
+ * one parking spot, Tel Aviv-Yafo) through the API with the page's (seeker) session, so the
  * seeker can apply. `overrides` replace or add fields of the body (e.g. `{ gender: 'man' }`, or
  * 0007a's room section: `gender`, `birth_year`, `lifestyle`). PUT replaces the whole profile:
  * without `overrides` the room section is cleared. */
@@ -205,16 +214,13 @@ export async function putProfile(
   page: Page,
   overrides: Record<string, unknown> = {},
 ): Promise<void> {
-  const areas = await page.request.get(API + '/areas');
-  expect(areas.ok()).toBe(true);
-  const [area] = (await areas.json()) as { id: string }[];
-  expect(area).toBeDefined();
+  const areaId = await telAvivId(page);
   const saved = await page.request.put(API + '/me/profile', {
     data: {
       budget_max_ils: 7500,
       move_in_date: israelDay(30),
       move_in_flexible: false,
-      area_ids: [area?.id],
+      area_ids: [areaId],
       household: 'couple',
       has_pets: false,
       smoker: false,

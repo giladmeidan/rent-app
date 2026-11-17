@@ -6,10 +6,14 @@ import type { ListingOut, MyListingOut } from '../api';
 export const owner: UserOut = { ...noa, role: 'owner', display_name: 'דנה' };
 export const seeker: UserOut = { ...noa, role: 'seeker' };
 
+/** Tel Aviv-Yafo (spec 0021a1: the old `gush-dan` area is gone; the name stays). */
 export const gushDan: AreaOut = {
   id: '00000000-0000-0000-0000-00000000a1a1',
-  slug: 'gush_dan',
-  name_he: 'גוש דן',
+  slug: 's-5000',
+  name_he: 'תל אביב-יפו',
+  kind: 'settlement',
+  parent_id: null,
+  centre: [34.7894, 32.07645],
 };
 
 let n = 0;

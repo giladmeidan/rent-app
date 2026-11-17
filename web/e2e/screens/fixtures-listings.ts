@@ -17,8 +17,11 @@ export const OWNER: UserOut = {
 
 export const AREA: AreaOut = {
   id: '00000000-0000-0000-0000-00000000a1a1',
-  slug: 'gush_dan',
-  name_he: 'גוש דן',
+  slug: 's-5000',
+  name_he: 'תל אביב-יפו',
+  kind: 'settlement',
+  parent_id: null,
+  centre: [34.7894, 32.07645],
 };
 
 export const LISTING_ID = '00000000-0000-0000-0000-000000000001';
