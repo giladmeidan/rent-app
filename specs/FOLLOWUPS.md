@@ -283,7 +283,6 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0013d · web/e2e/account.spec.ts:41-43 (0013f, merged after 0013d's CI run) · the sign-in as a stranger clicks "שליחת קוד" and asserts the code field's focus directly, the pattern 0013d's AC5 replaced; use `requestCode(page)` (awaits the 204, a 429 fails as such) · left out of #108 so its passed CI run stays the evidence (no untested e2e change)
 - [ ] 0015b · web/src/features/listings/DetailsStep.tsx `ShelterField` · required since 0015b, but nothing marks it before the error shows (no legend cue, no `aria-required`); the step's other required fields carry no marker either, so add one convention for the whole step · review ux minor
 - [ ] 0015b · api/tests/test_migrations.py `_profile_check_text` / `_shelter_check_text` · the same helper twice with a different table and name; one `_model_check_text(table, name)` · review code minor
-- [ ] 0013h · api/app/worker.py `purge_expired_job` · no alert on failure: one failing statement rolls back every rule each night, and the only signal is arq's traceback; alert on it with 0013a's monitoring · review minor
 - [ ] 0013h · api/tests/test_retention.py `test_r4_conversations` · add a chat with no message created inside 3 years (the other side of the `coalesce`), and a chat with only one side deleted and an old but sub-3-year message · review qa minor
 - [ ] 0013h · api/tests/test_retention.py `test_r8_admin_actions` · add `hide_listing` on a listing that no longer exists, and `resolve_reports` / `unhide_listing` rows · review qa minor
 - [ ] 0016a · web/src/features/auth/PasswordForm.tsx, ProfilePage `PasswordSection` · missing vitest: PasswordForm network/5xx, offline, pending and tab-unmount; PasswordSection 401-as-reauth, 429 + Retry-After, offline, Cancel and pending; the empty-field case on the profile "שמירה"; a ProfilePage section-order assertion · review qa minor
@@ -329,6 +328,11 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (`onKeyDown`) · Home/End/PageUp/PageDown/ArrowUp/Down do nothing when the target day falls outside today…lastDay (e.g. Home on 19 Nov when Sunday 15 Nov is past, PageDown from 25 Nov); clamp the target to the range, then step in the key's direction · spec says "stays put if none in range"; review qa minor
 - [ ] 0018f · web/src/features/tours/__tests__/MonthCalendar.test.tsx · no cases for Home/End, PageUp, ArrowUp, LTR direction · qa minor
 - [ ] 0018f · web/src/features/tours/MonthCalendar.tsx (day styles) · disabled days (bold, grey, no border) read almost as strongly as enabled ones, today is not marked; lighter weight for disabled + a today ring; `has`/`booked` dots differ by colour only (shape/ring for colour-blind users) · ux minor/nit
+
+## 0019a
+- [ ] 0019a · api/tests/test_observability.py `test_ac1_off_without_dsn` · cannot fail: `sentry_sdk.init(dsn="")` is inactive too; mock `sentry_sdk.init` and assert it is not called · review qa minor
+- [ ] 0019a · web/src/app/__tests__/sentry.test.tsx `ac9_error_boundary_fallback` · does not assert the `#main` wrapper or the offline text (`common.offline`) · review qa minor
+- [ ] 0019a · web/src/app/sentry.tsx (`beforeSend`, `beforeBreadcrumb`) · does not redact `/tour-feed/<token>` or URL-encoded emails (`%40`) as the API scrubber does · review security minor
 
 ## 0020a
 - [ ] 0020a · web/src/features/chat/ChatThreadPage.tsx (removeFailed alert) · with the panel closed, the failed-remove alert shows but its retry button is behind "פעולות"; open the panel when `removeFailed` becomes true (AC3 would change) · review ux minor, recovery works in one tap

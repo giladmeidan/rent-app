@@ -105,6 +105,17 @@ describe('LegalPage', () => {
     expect(s3.i7).toContain('Google Calendar');
   });
 
+  it('ac11_privacy_names_sentry', async () => {
+    await visit('/privacy');
+    const { s3 } = he.legal.privacy;
+    // Spec 0019a: the Sentry item is in section 3's list, right after the calendar feed.
+    const section = screen.getByRole('heading', { level: 2, name: s3.title }).parentElement;
+    const items = [...(section?.querySelectorAll('li') ?? [])].map((li) => li.textContent);
+    expect(items.indexOf(s3.i8)).toBe(items.indexOf(s3.i7) + 1);
+    expect(s3.i8).toContain('Sentry');
+    expect(s3.i8).toContain('30 יום');
+  });
+
   it('ac12_privacy_states_retention_periods', async () => {
     await visit('/privacy');
     const page = document.body.textContent ?? '';

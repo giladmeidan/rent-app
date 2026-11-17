@@ -108,6 +108,10 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
        0013c merges, `Settings` ignores it.
      - `VITE_CONTACT_EMAIL` is a web build-time variable defined by spec **0013f**, not a Fly secret: see
        `deploy-web` (item 7) and runbook §8.
+     - Sentry (spec **0019a**, added after verification; not an AC change): Fly secrets `SENTRY_DSN`,
+       `SENTRY_ENVIRONMENT=production` and `SENTRY_RELEASE` (the git sha) on **api and worker**; `VITE_SENTRY_DSN`,
+       `VITE_SENTRY_ENVIRONMENT`, `VITE_SENTRY_RELEASE`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` and `SENTRY_PROJECT` in
+       the local env for `make deploy-web`; both DSNs from EU-region (`de.sentry.io`) projects.
 2. `api/scripts/release.sh`: `set -eu`, `alembic upgrade head`, then `exec python scripts/seed.py`. It runs
    from the image's `WORKDIR /app`.
 3. `infra/Dockerfile.redis`, from a pinned `redis:7.4-alpine` tag (exact patch version).

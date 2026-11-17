@@ -1,7 +1,7 @@
 ---
 id: 0019a
 title: Gilad gets an email when the API, the worker or a browser hits an unhandled error, with no personal data sent
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, security, qa]
 estimate: 1 coder run   # coder Opus/high (data leaving the app; plan)
@@ -109,8 +109,8 @@ site, uptime monitoring (so a Postgres/Redis outage emails no one, accepted), Sl
 alert to the account owner is the alert), PostHog (`0019b`).
 
 **New dependencies (exact pins):** `sentry-sdk[fastapi]==2.75.0` (api; the arq integration ships inside it, arq
-0.28 ≥ its 0.23 minimum), `@sentry/react@11.13.0` (web; peer react 17–19 and react-router 6–8, we have 18.3.1 /
-7.18.5), `@sentry/vite-plugin@11.13.0` (web dev; needs Node ≥ 20.19 or ≥ 22.12).
+0.28 ≥ its 0.23 minimum), `@sentry/react@11.12.0` (web; peer react 17–19 and react-router 6–8, we have 18.3.1 /
+7.18.5), `@sentry/vite-plugin@11.12.0` (web dev; needs Node ≥ 20.19 or ≥ 22.12).
 
 ## Data
 No tables, no migration.
@@ -192,6 +192,15 @@ CI).
 - Exception text from our own code is kept (emails redacted); only SQLAlchemy / psycopg / pydantic messages are
   blanked. A phone or name in some other exception message would still go out; none is known today.
 - `0019b` builds on this branch and reuses `routePattern`; keep it an exported function in its own file.
+- Found in the build (coder, 2026-11-17), no decision needed: `@sentry/react` 11 has no `sendDefaultPii` (removed;
+  its replacement `dataCollection` defaults to collecting user info, cookies, headers, bodies and query params), so
+  `initSentry` sets `dataCollection` with all of those off instead; `beforeSend` scrubs either way. sentry-sdk 2.75.0
+  deprecates `send_default_pii`, so `init_sentry` passes `data_collection` with everything off instead (review).
+- Before tracing is ever turned on (`SENTRY_TRACES_SAMPLE_RATE` > 0): the scrubber redacts emails and feed tokens in
+  spans but keeps span `data`, where an httpx span holds the Nominatim query (street and city); review span
+  scrubbing then.
+- Web Sentry packages pinned to 11.12.0, not 11.13.0 (build, 2026-11-17): 11.13.0 was published 2026-11-16 and pnpm 12's
+  default `minimumReleaseAge` (1 day) refused it; no `minimumReleaseAgeExclude`, as 0000b chose. Bump both together later.
 
 ## Verifier findings (2026-11-17, applied in place)
 1. Worker init moved from `on_startup` to module level: arq's integration wraps jobs in `create_worker`, which runs
@@ -210,7 +219,7 @@ CI).
 9. AC10 path is `web/scripts/__tests__/build-check.test.ts`; web test file is `.tsx` (it renders JSX).
 10. Versions pinned; option names confirmed: sentry-sdk 2.75.0 (`include_local_variables`, `max_request_body_size`,
     `send_default_pii`, `before_send_transaction`, `transaction_style`, `failed_request_status_codes`,
-    `ArqIntegration`), `@sentry/react` 11.13.0 (`ErrorBoundary`, `beforeBreadcrumb`), `@sentry/vite-plugin` 11.13.0
+    `ArqIntegration`), `@sentry/react` 11.13.0 (`ErrorBoundary`, `beforeBreadcrumb`), `@sentry/vite-plugin` 11.13.0 (built on 11.12.0, see Risks)
     (`sourcemaps.filesToDeleteAfterUpload`; Sentry's current docs import the same plugin from
     `@sentry/bundler-plugins/vite`, which `@sentry/vite-plugin` wraps). `telemetry: false` added.
 11. `qa` added to reviewers (UI fallback + API behaviour, checklist rule 8).

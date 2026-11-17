@@ -102,7 +102,10 @@ describe('pwa', () => {
       'globPatterns',
       'navigateFallback',
       'navigateFallbackDenylist',
+      'sourcemap',
     ]);
+    // Spec 0019a: no sw.js.map / workbox-*.js.map, even in a Sentry build with hidden source maps.
+    expect(workbox.sourcemap).toBe(false);
     expect(workbox.globPatterns).toEqual([
       '**/*.{js,css,html}',
       'assets/rubik-{hebrew,latin}-wght-normal-*.woff2',

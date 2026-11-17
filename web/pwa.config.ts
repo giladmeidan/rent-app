@@ -55,6 +55,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     ],
   },
   workbox: {
+    // No sw.js.map / workbox-*.js.map, even when a Sentry build sets `build.sourcemap: 'hidden'`
+    // (spec 0019a): workbox writes them after the Sentry plugin deletes the app's maps.
+    sourcemap: false,
     // The shell's own static files: the JS, CSS and HTML, the Hebrew and Latin subsets of both brand
     // fonts (Rubik for text, Fredoka for headings) and the header lockup, so an offline reload still
     // draws the header and the headings. The mascot illustrations are not part of the shell.

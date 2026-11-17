@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal, NamedTuple, Self
 from urllib.parse import unquote, urlsplit
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The public dev value from the Makefile, compose and .env.example; refused when serving https.
@@ -100,6 +100,12 @@ class Settings(DatabaseSettings):
     # `google` = real ID tokens for the OAuth client `google_client_id` (not a secret).
     google_verifier: Literal["off", "fake", "google"] = "off"
     google_client_id: str = ""
+    # Sentry error reports (spec 0019a). No DSN = off (dev, tests, CI). The trace rate stays 0
+    # (errors only) until a decision turns performance tracing on.
+    sentry_dsn: SecretStr | None = None
+    sentry_environment: str = "development"
+    sentry_release: str | None = None
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @field_validator("photo_public_base_url")
     @classmethod
