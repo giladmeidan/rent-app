@@ -6,6 +6,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { BackLink } from '../../components/PageHeader';
 import { PageContainer } from '../../components/PageContainer';
+import { capture } from '../../app/analytics';
 import { setSide, useSide } from '../../app/side';
 import { usePageTitle } from '../../app/usePageTitle';
 import { ErrorState } from '../../components/ErrorState';
@@ -46,12 +47,14 @@ export function ListingPage() {
   const me = useMe();
   // "Seen" on this device means this page opened the listing (spec 0009v), not that a pin was pressed.
   const seenId = listing.isSuccess ? listing.data.id : undefined;
+  const loadedType = listing.isSuccess ? listing.data.listing_type : undefined;
   useEffect(() => {
-    if (seenId !== undefined) markSeen(seenId);
-  }, [seenId]);
+    if (seenId === undefined || loadedType === undefined) return;
+    markSeen(seenId);
+    capture('listing_viewed', { listing_type: loadedType }); // once per loaded id (spec 0019b)
+  }, [seenId, loadedType]);
   // A room is the market's (spec 0010a): the header's side and bottom bar follow the listing. While
   // it loads, or on an error, the page follows the last side.
-  const loadedType = listing.isSuccess ? listing.data.listing_type : undefined;
   useEffect(() => {
     if (loadedType !== undefined) setSide(loadedType === 'room' ? 'market' : 'apartments');
   }, [loadedType]);

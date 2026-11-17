@@ -8,6 +8,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { MarketViewSwitch } from '../people/MarketViewSwitch';
 import { useIsDesktop } from '../../components/useMediaQuery';
+import { capture } from '../../app/analytics';
 import { usePageTitle } from '../../app/usePageTitle';
 import { useMe } from '../auth/useMe';
 import type { ListingType } from '../listings/api';
@@ -120,7 +121,10 @@ function SearchView({ type }: Props) {
     setSearchParams(next);
   };
   const apply = (values: FormFilters) => {
-    setFilters(withMapPosition(toSearchParams({ ...parseFilters(searchParams), ...values })));
+    const next = withMapPosition(toSearchParams({ ...parseFilters(searchParams), ...values }));
+    // The number of filters set, never their values (spec 0019b).
+    capture('search_run', { type, filters: countActive(parseFilters(next)) });
+    setFilters(next);
   };
   // Clear keeps the view and the map's position: they are not filters.
   const clear = () =>

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
+import { capture } from '../../app/analytics';
 import { CONTACT_EMAIL_INLINE } from '../../app/contact';
 import { Button } from '../../components/Button';
 import { parseRetryAfter, retryAfterText } from '../../components/retryAfter';
@@ -216,7 +217,10 @@ function GoogleSignIn({
         }
         gsi.initialize({
           client_id: clientId,
-          callback: ({ credential }) => submitRef.current({ credential }),
+          callback: ({ credential }) => {
+            if (context === 'signup') capture('signup_started', { method: 'google' });
+            submitRef.current({ credential });
+          },
           context,
         });
         gsi.renderButton(el, {

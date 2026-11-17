@@ -7,6 +7,10 @@ import { CONTACT_EMAIL_INLINE } from '../../../app/contact';
 import { OtpForm } from '../OtpForm';
 import { readDraft, writeDraft } from '../../../app/drafts';
 import { deferred, empty, json, mockApi, noa, renderAt } from './harness';
+import { capture } from '../../../app/analytics';
+
+// No `importOriginal`: analytics → routePattern → routes → this page would load the real module.
+vi.mock('../../../app/analytics', () => ({ capture: vi.fn() }));
 
 // Fake timers drive the cooldown, so testing-library's polling `findBy*` cannot be used here:
 // `flush` runs pending timers due now and lets the mocked fetch promises settle instead.
@@ -708,5 +712,31 @@ describe('OtpForm password at sign-up (spec 0016a AC14)', () => {
     await verify();
     expect(screen.getByLabelText(he.auth.name.label)).toBeVisible();
     expect(screen.queryByLabelText(he.auth.password.optionalLabel)).toBeNull();
+  });
+
+  it('signup_started_only_on_signup', async () => {
+    // Spec 0019b: step 1's request success on /signup sends `signup_started`; on /login nothing.
+    vi.mocked(capture).mockClear();
+    mockApi({ 'POST /auth/otp/request': [empty(204)] });
+    const login = renderAt('/login', <OtpForm withProfile={false} />);
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    expect(screen.getByLabelText(he.auth.code.label)).toBeVisible();
+    expect(capture).not.toHaveBeenCalled();
+    login.unmount();
+
+    renderAt('/signup', <OtpForm withProfile />);
+    fireEvent.click(screen.getByRole('radio', { name: he.auth.role.owner }));
+    fireEvent.change(screen.getByLabelText(he.auth.name.label), { target: { value: 'Dana' } });
+    fireEvent.change(screen.getByLabelText(he.auth.email.label), {
+      target: { value: 'dana@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: he.auth.sendCode }));
+    await flush();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledWith('signup_started', { method: 'code' });
   });
 });

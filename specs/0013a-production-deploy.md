@@ -112,6 +112,12 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
        `SENTRY_ENVIRONMENT=production` and `SENTRY_RELEASE` (the git sha) on **api and worker**; `VITE_SENTRY_DSN`,
        `VITE_SENTRY_ENVIRONMENT`, `VITE_SENTRY_RELEASE`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` and `SENTRY_PROJECT` in
        the local env for `make deploy-web`; both DSNs from EU-region (`de.sentry.io`) projects.
+     - PostHog (spec **0019b**, added after verification; not an AC change): Fly secrets `POSTHOG_KEY`,
+       `POSTHOG_PERSONAL_API_KEY` (scope `person:write` only) and `POSTHOG_PROJECT_ID` on **api and worker**;
+       `VITE_POSTHOG_KEY` in the local env for `make deploy-web` (web build). In the EU PostHog project's settings
+       turn on **Cookieless server hash mode** (Web analytics; without it cookieless events are dropped) and
+       **Discard client IP data**. The first `posthog_forget_job` run after a deletion: check the 202 and
+       `persons_queued_for_deletion` in PostHog (the bulk-delete body was not tried against a real project).
 2. `api/scripts/release.sh`: `set -eu`, `alembic upgrade head`, then `exec python scripts/seed.py`. It runs
    from the image's `WORKDIR /app`.
 3. `infra/Dockerfile.redis`, from a pinned `redis:7.4-alpine` tag (exact patch version).

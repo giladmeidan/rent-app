@@ -23,6 +23,10 @@ import { listingDetail } from '../../search/__tests__/fixtures';
 import { parseMapPosition } from '../../search/mapPosition';
 import { ListingPage } from '../ListingPage';
 import { readSeen } from '../seen';
+import { capture } from '../../../app/analytics';
+
+// No `importOriginal`: analytics → routePattern → routes → this page would load the real module.
+vi.mock('../../../app/analytics', () => ({ capture: vi.fn() }));
 
 vi.mock(
   '../../../components/map/MapCanvas',
@@ -1519,5 +1523,21 @@ describe('ListingPage', () => {
       view.unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('listing_viewed_once_per_loaded_id', async () => {
+    // Spec 0019b: one `listing_viewed` with the listing's type, none again for the same id.
+    vi.mocked(capture).mockClear();
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      [`GET /listings/${katznelson.id}`]: [json(katznelson)],
+    });
+    const client = testQueryClient();
+    render(katznelson.id, client);
+    await screen.findByRole('heading', { level: 1 });
+    await act(() => client.invalidateQueries());
+    await act(() => client.refetchQueries());
+    expect(capture).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledWith('listing_viewed', { listing_type: 'apartment' });
   });
 });

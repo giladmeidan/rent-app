@@ -277,6 +277,6 @@ audit-web: web/node_modules/.modules.yaml
 
 # pnpm install whenever the manifest or lockfile is newer than the last install. The stamp is pnpm's
 # own .modules.yaml, not the directory: compose's anonymous volume leaves an empty web/node_modules.
-web/node_modules/.modules.yaml: web/package.json web/pnpm-lock.yaml
+web/node_modules/.modules.yaml: web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml
 	$(PNPM) install --frozen-lockfile
 	@touch $@

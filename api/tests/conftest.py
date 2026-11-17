@@ -48,10 +48,13 @@ os.environ.pop("GOOGLE_CLIENT_ID", None)
 # No Sentry, whatever `.env` says (spec 0019a): test_observability.py sets a DSN on a capturing
 # transport itself.
 os.environ.pop("SENTRY_DSN", None)
+# No PostHog, whatever `.env` says (spec 0019b): test_analytics.py injects a fake client.
+for _name in ("POSTHOG_KEY", "POSTHOG_PERSONAL_API_KEY", "POSTHOG_PROJECT_ID"):
+    os.environ.pop(_name, None)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import redis_client  # noqa: E402
+from app import analytics, redis_client  # noqa: E402
 from app.config import get_database_settings, get_settings  # noqa: E402
 from app.db import get_engine, get_ping_engine, get_sessionmaker  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -163,6 +166,13 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
         raise RuntimeError("network disabled in tests")
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", refuse)
+
+
+@pytest.fixture(autouse=True)
+def analytics_reset() -> Iterator[None]:
+    """No PostHog client outlives its test (spec 0019b)."""
+    yield
+    analytics.set_client(None)
 
 
 @pytest.fixture(autouse=True)

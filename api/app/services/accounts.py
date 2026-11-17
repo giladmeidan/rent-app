@@ -23,6 +23,7 @@ from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app import analytics
 from app.config import get_settings
 from app.models import (
     AdminAction,
@@ -226,6 +227,8 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> list[tours.Tou
     except Exception:
         db.rollback()
         raise
+    # Personless (spec 0019b): the forget job erases this person's events by its id.
+    analytics.track(None, "account_deleted")
     # 13. After the commit: a failed object delete leaves an unreferenced object (logged).
     names = [name for key in keys for name in object_names(key)]
     if names:

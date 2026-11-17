@@ -1,9 +1,10 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useEffect } from 'react';
-import { useNavigate, type NavigateFunction } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../i18n';
@@ -25,8 +26,13 @@ import { gushDan, owner, seeker } from '../../features/listings/__tests__/fixtur
 import { profile } from '../../features/profile/__tests__/fixtures';
 import { PROFILE_KEY } from '../../features/profile/useProfile';
 import { page } from '../../features/search/__tests__/fixtures';
+import { capture } from '../analytics';
 import { CONTACT_EMAIL } from '../contact';
+import { Layout } from '../Layout';
 import { AppRoutes } from '../routes';
+
+// No `importOriginal`: analytics → routePattern → routes → Layout would load the real module.
+vi.mock('../analytics', () => ({ capture: vi.fn() }));
 
 // jsdom has no WebGL: the map view renders the stand-in.
 vi.mock(
@@ -175,6 +181,49 @@ describe('Layout', () => {
     const scrolledTop = scrollTo.mock.invocationCallOrder[0] ?? Infinity;
     const scrolledToLatest = scrollIntoView.mock.invocationCallOrder[0] ?? -Infinity;
     expect(scrolledTop).toBeLessThan(scrolledToLatest);
+  });
+
+  it('ac11_one_pageview_per_navigation', async () => {
+    mockApi({ 'GET /me': [unauthenticated] });
+    vi.mocked(capture).mockClear();
+    const client = testQueryClient();
+    const tree = (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/a']}>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="/a" element={<p>page a</p>} />
+              <Route path="/b" element={<p>page b</p>} />
+              <Route path="/c" element={<p>page c</p>} />
+            </Route>
+          </Routes>
+          <NavigateProbe />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const view = render(tree);
+    await screen.findByText('page a');
+    for (const path of ['/b', '/c']) {
+      await act(async () => {
+        await router.navigate(path);
+      });
+    }
+    await screen.findByText('page c');
+    const pageviews = () => vi.mocked(capture).mock.calls.filter(([name]) => name === '$pageview');
+    expect(pageviews()).toEqual([
+      ['$pageview', {}],
+      ['$pageview', {}],
+      ['$pageview', {}],
+    ]);
+
+    // A re-render on the same path, and a query-only change: none.
+    view.rerender(tree);
+    await screen.findByText('page c');
+    await act(async () => {
+      await router.navigate('/c?x=1');
+    });
+    await screen.findByText('page c');
+    expect(pageviews()).toHaveLength(3);
   });
 
   it('ac3_full_width_shell', async () => {

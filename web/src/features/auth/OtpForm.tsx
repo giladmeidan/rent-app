@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 
 import { api, type Role, type UserOut } from '../../api/client';
 import type { components } from '../../api/schema';
+import { capture } from '../../app/analytics';
 import { CONTACT_EMAIL_INLINE } from '../../app/contact';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -217,6 +218,7 @@ export function OtpForm({ withProfile, initialRole = null, next = '/', initialEm
     request.mutate(email.trim(), {
       onSuccess: (result) => {
         if (result.kind === 'ok') {
+          if (withProfile) capture('signup_started', { method: 'code' });
           setCode('');
           setStep2Error(null);
           startCooldown();

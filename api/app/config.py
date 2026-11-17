@@ -106,6 +106,14 @@ class Settings(DatabaseSettings):
     sentry_environment: str = "development"
     sentry_release: str | None = None
     sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    # PostHog usage analytics (spec 0019b). No key = off (dev, tests, CI). `posthog_key` is the
+    # project's public ingestion key; the personal key and project id are for the worker's
+    # deletion job only, on the app host (the private REST API is not on the ingestion host).
+    posthog_key: str = ""
+    posthog_host: str = "https://eu.i.posthog.com"
+    posthog_api_host: str = "https://eu.posthog.com"
+    posthog_personal_api_key: SecretStr | None = None
+    posthog_project_id: str = ""
 
     @field_validator("photo_public_base_url")
     @classmethod

@@ -1,7 +1,7 @@
 ---
 id: 0019b
 title: Gilad sees homie's funnel and retention in PostHog (cookieless, no personal data), and a deleted account leaves no trace there
-status: verified
+status: in-review
 depends_on: [0019a]   # reuses its `routePattern.ts`; branches from 0019a's PR branch once it is open
 reviewers: [code, security, qa]
 estimate: 1 coder run   # coder Opus/high (data leaving the app, deletion; Speed rule 6)
@@ -122,6 +122,11 @@ dashboards (Gilad builds them in PostHog), `chat_opened` (see risks), the admin 
 
 **New dependencies:** `posthog==7.82.2` (api; pulls `requests`, `backoff`, `distro`; ships `py.typed`, else a
 mypy override), `posthog-js@1.444.4` (web, exact pin). Both are the latest releases from 2026-11-02.
+Built (coder, 2026-11-17): `posthog-js` depends on `core-js`, whose install script pnpm 12 refuses by default;
+`web/pnpm-workspace.yaml` denies it (`allowBuilds: core-js: false`, from `pnpm approve-builds '!core-js'`; the
+script only prints a banner), `infra/Dockerfile.web` copies that file before `pnpm install`, and the Makefile's
+install stamp depends on it. `set_applicant_status` reads `application.listing_type_at_apply` (already in the
+UPDATE's `RETURNING Application`; a listing's type is fixed at create), so no column was added there.
 
 ## Data
 No tables, no migration. `posthog_forget_job` reads `users.id`, `users.deleted_at`. The tombstone row (`0013c`
@@ -256,4 +261,10 @@ vitest with `posthog-js` mocked (`vi.mock`). E2E: none (inert in CI; no local e2
     SearchPage's `apply`.
 
 ## Digest (filled by orchestrator after verification)
-See `/digest`.
+Spec 0019b — PostHog analytics, cookieless, deleted accounts forgotten   PR open (merge sha on merge)
+Shipped: with keys set, PostHog (EU) gets route-pattern page views and 3 UI events from the browser (no cookie or storage), 7 funnel events from the API keyed by user UUID, and a 03:55 job deletes accounts removed in the last 7 days. With no keys, nothing is sent.
+Demo: set `VITE_POSTHOG_KEY`/`POSTHOG_KEY` → `make dev` → sign up, publish, apply → events appear in PostHog with `/listings/:id`-style URLs only.
+Tests: +10 api, +11 web, +0 e2e (inert in CI).   CI: see PR.
+Findings: 2 blockers fixed (a page `title` carrying a chat partner's name; `$prev_pageview_pathname` carrying raw ids), 3 majors fixed (the SDK constructor reset the `posthog` logger so upload errors would reach Sentry; utm/gclid/`ph_keyword` from the query string; a vacuous AC1 test), 6 minors fixed (one is the device-data clause added to `s3.i9`), 0 waived, 0 follow-ups.
+Changed in PRODUCT.md: the Retention row gains PostHog (1 year, EU, deleted with the account).
+Not verified: the bulk-delete JSON body against a real PostHog project; the runbook says to check the first production run's 202. To set in PostHog: Cookieless server hash mode on, Discard client IP data on.

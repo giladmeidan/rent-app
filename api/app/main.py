@@ -4,6 +4,8 @@ import logging
 import math
 import mimetypes
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import redis
@@ -17,6 +19,7 @@ from sqlalchemy.exc import OperationalError
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app import analytics
 from app.config import get_settings
 from app.observability import init_sentry
 from app.routers import (
@@ -168,6 +171,12 @@ async def _request_invalid(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": detail})
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    yield
+    analytics.shutdown()  # flush the queued PostHog events (spec 0019b)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     # Before the app is built, so Sentry's integrations patch Starlette first (spec 0019a).
@@ -176,7 +185,7 @@ def create_app() -> FastAPI:
     access_log = logging.getLogger("uvicorn.access")
     if not any(isinstance(f, RedactFeedToken) for f in access_log.filters):
         access_log.addFilter(RedactFeedToken())
-    app = FastAPI(title="Rent App API", version="0.0.1")
+    app = FastAPI(title="Rent App API", version="0.0.1", lifespan=_lifespan)
     # Added before CORS: the last added is outermost, so the 413 carries the CORS headers.
     app.add_middleware(BodySizeLimit)
     app.add_middleware(

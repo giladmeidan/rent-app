@@ -23,6 +23,7 @@ dependencies = [
   "google-auth==2.62.2",  # Google ID-token checks, jwt.decode (spec 0016b); keys fetched with httpx
   "tzdata==2026.6",       # the IANA zones for zoneinfo (spec 0018a: Asia/Jerusalem); the slim image has none
   "sentry-sdk[fastapi]==2.75.0",  # errors to Sentry (spec 0019a); the arq integration ships inside it
+  "posthog==7.82.2",  # usage analytics to PostHog (spec 0019b)
 ]
 
 [dependency-groups]
