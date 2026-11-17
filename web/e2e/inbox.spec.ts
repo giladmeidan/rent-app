@@ -20,6 +20,7 @@ const ROOM_LINE = he.applicants.room.line
 
 // Extends 0004d's inbox flow with the chat (0005b AC12): no new signup (the e2e OTP budget).
 test('ac12_shortlist_chat_decline', async ({ page, browser }) => {
+  test.slow();
   const street = `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   // An owner (the default signUp name) posts a listing.

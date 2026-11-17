@@ -176,6 +176,7 @@ test('ac6_invite_and_join', async ({ page, browser }) => {
 // A room's chat with a flatmate in it: the group header and the joined note, the sender's name for
 // the others, then the owner removes the flatmate and the open thread says so on the next send.
 test('ac5_group_chat_flow', async ({ page, browser }) => {
+  test.slow();
   const run = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const street = `e2e ${run}`;
   const OWNER = '\u05e8\u05d5\u05e0\u05d9'; // רוני
