@@ -28,9 +28,9 @@ test('ac7_wizard_photo', async ({ page }) => {
   await signUpOwner(page);
 
   await page.goto('/listings/new?type=apartment');
-  await expect(page.getByLabel(f.area, { exact: true })).toBeEnabled();
-  await page.getByLabel(f.area, { exact: true }).selectOption({ label: TEL_AVIV });
-  await page.getByLabel(f.city, { exact: true }).fill('גבעתיים');
+  await expect(page.getByLabel(f.city, { exact: true })).toBeEnabled();
+  // The city picker (spec 0021b): the full name picks the settlement.
+  await page.getByLabel(f.city, { exact: true }).fill(TEL_AVIV);
   await page.getByLabel(f.street, { exact: true }).fill(street);
   await page.getByLabel(f.rooms).selectOption('3');
   await page.getByLabel(f.floor, { exact: true }).fill('2');
