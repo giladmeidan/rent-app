@@ -21,7 +21,9 @@
 //   app-shell route; the precache route is registered inside precacheAndRoute); no importScripts and
 //   no NetworkFirst, NetworkOnly, CacheFirst or StaleWhileRevalidate. The body checks start at the
 //   AMD header: the loader shim in front of it calls importScripts to load the runtime itself.
-import { existsSync, readFileSync, statSync } from 'node:fs';
+// Source maps (spec 0019a): no `*.map` file anywhere under distDir (they are uploaded to Sentry and
+//   deleted at build; a served map would publish the source).
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -264,6 +266,11 @@ if (sw !== null) {
     if (body.includes(strategy))
       fail(`sw.js: runtime strategy ${strategy} (no runtime caching allowed)`);
   }
+}
+
+// ---- source maps -------------------------------------------------------------------------------
+for (const entry of readdirSync(distDir, { recursive: true })) {
+  if (String(entry).endsWith('.map')) fail(`${entry}: source map must not be served`);
 }
 
 for (const problem of problems) console.log(problem);

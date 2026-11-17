@@ -259,3 +259,15 @@ describe('ac6_good_passes_and_each_defect_fails', { timeout: 30_000 }, () => {
     expect(status).toBe(2);
   });
 });
+
+describe('ac10_no_source_maps_served', { timeout: 30_000 }, () => {
+  it('a .map file anywhere in dist fails; none passes', () => {
+    const withMap = runOn((files) => void files.set('assets/index-abc.js.map', '{}'));
+    expect(withMap.output).toContain('assets/index-abc.js.map: source map must not be served');
+    expect(withMap.status).toBe(1);
+
+    const without = runOn();
+    expect(without.output).not.toContain('source map');
+    expect(without.status).toBe(0);
+  });
+});
