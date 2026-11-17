@@ -1,7 +1,7 @@
 ---
 id: 0020a
 title: A chat thread opens with a short header and its messages, not a stack of captions, buttons and cards
-status: verified
+status: in-review
 depends_on: []   # web only, over the existing API
 reviewers: [ux]   # cosmetic: the same controls and states, moved and restyled (Speed rule 4); coder Sonnet/medium
 estimate: 1 coder run (small)
