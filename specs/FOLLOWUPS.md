@@ -338,6 +338,8 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0020a · web/src/features/chat/ChatThreadPage.tsx (removeFailed alert) · with the panel closed, the failed-remove alert shows but its retry button is behind "פעולות"; open the panel when `removeFailed` becomes true (AC3 would change) · review ux minor, recovery works in one tap
 - [ ] 0019b · web/e2e/flatmates.spec.ts (`ac5_group_chat_flow`), web/e2e/inbox.spec.ts (`ac12_shortlist_chat_decline`) · e2e · flatmates ac5 / inbox ac12 run ~30 s, at the default timeout; test.slow() added in 0019b; split or speed up · CI fix on PR #130, not 0019b's code
 - [ ] 0019b · web/e2e/a11y.spec.ts (`ac5_public_pages_pass_axe`) · Flaky e2e: timed out at 30 s on PR #130's run (f550c28), passed on its retry · not 0019b's code; watch whether it recurs
+- [ ] 0021a1 · web/e2e/a11y.spec.ts (`ac5_public_pages_pass_axe`) · The flaky e2e from 0019b recurred on PR #132's run (b1105b1): timed out at 30 s, passed on its retry · watch it
+- [ ] 0021a2 · api/app/services/areas.py (`import_areas`) · A neighbourhood deactivated by a re-import stays on `listings.neighbourhood_id` and keeps matching profiles that saved it · low impact; option: clear it in `import_areas` when deactivating
 
 ## 0021a1
 - [ ] 0021a1 · 0013a deploy runbook · run `make import-areas` right after `make migrate` on the first production deploy (the areas catalogue is data, not a migration) · from the 0021a verification

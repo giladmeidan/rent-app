@@ -81,6 +81,18 @@ def normalise_place(text: str) -> str:
     return " ".join(unicodedata.normalize("NFC", text).translate(_PLACE_CHARS).split())
 
 
+def street_forms(street: str) -> set[str]:
+    """`normalise_place(street)`, and the same without a leading `רחוב ` / `רח `: the forms a
+    street is looked up by in a neighbourhood's street list."""
+    form = normalise_place(street)
+    forms = {form}
+    for prefix in _STREET_PREFIXES:
+        if form.startswith(prefix):
+            forms.add(form.removeprefix(prefix))
+            break
+    return forms
+
+
 def figure_keys(rooms: Decimal) -> list[int] | None:
     """The room counts whose figures stand for `rooms`; None below 2.5 (no figures yet)."""
     if rooms < Decimal("2.5"):
@@ -161,12 +173,7 @@ def _neighbourhood(
 ) -> Row[tuple[uuid.UUID, str, list[str]]] | None:
     """The one neighbourhood of the settlement whose street list holds the street, else None
     (unplaced, or in several: city level)."""
-    form = normalise_place(street)
-    forms = {form}
-    for prefix in _STREET_PREFIXES:
-        if form.startswith(prefix):
-            forms.add(form.removeprefix(prefix))
-            break
+    forms = street_forms(street)
     rows = db.execute(
         select(RentArea.id, RentArea.name_he, RentArea.streets).where(
             RentArea.kind == "neighbourhood", RentArea.settlement_code == settlement_code

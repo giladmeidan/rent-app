@@ -14,9 +14,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 
-from app.matching.score import CRITERIA, HARD, WEIGHTS, explain
+from app.matching.score import CRITERIA, HARD, WEIGHTS, explain, match_columns
+from app.models import Listing, SeekerProfile
 from tests.conftest import (
     Outbox,
+    insert_neighbourhood,
     insert_settlement,
     make_listing,
     make_owner,
@@ -560,3 +562,39 @@ def test_ac5_weights_with_shelter(
     seeker = _seeker(client, outbox, db_engine, gush_dan, shelter_needed="mamad")
     _execute(db_engine, "UPDATE listings SET shelter = 'mamad'")
     assert seeker.get(f"/listings/{listing_id}").json()["match"] == _match(90, TOP3, "household")
+
+
+# --- 0021a2: a preferred area is a city or a neighbourhood ------------------------------------
+
+
+@pytest.mark.usefixtures("redis_clean")
+def test_ac3_area_levels(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID, owner: uuid.UUID
+) -> None:
+    hood_a = insert_neighbourhood(db_engine, gush_dan, 1, [])
+    hood_b = insert_neighbourhood(db_engine, gush_dan, 2, [])
+    listings = [
+        _l0(db_engine, owner, gush_dan, neighbourhood_id=hood_a),
+        _l0(db_engine, owner, gush_dan, neighbourhood_id=hood_b),
+        _l0(db_engine, owner, gush_dan),  # the server could not tell its neighbourhood
+    ]
+    full = _match(100, TOP3, None)
+    out = _match(59, ["budget", "move_in", "household"], "area")
+    for email, area, expected in (
+        ("hood@example.com", hood_a, [full, out, out]),
+        ("city@example.com", gush_dan, [full, full, full]),
+    ):
+        seeker = _seeker(client, outbox, db_engine, area, email)
+        for listing_id, match in zip(listings, expected, strict=True):
+            page = seeker.get(f"/listings/{listing_id}")
+            assert page.status_code == 200, page.text
+            assert page.json()["match"] == match
+        assert {item["id"]: item["match"] for item in _search(seeker)["items"]} == dict(
+            zip(listings, expected, strict=True)
+        )
+
+    # The snapshot pair is all or nothing.
+    with pytest.raises(TypeError):
+        match_columns(Listing, SeekerProfile, area_id=Listing.area_id)
+    with pytest.raises(TypeError):
+        match_columns(Listing, SeekerProfile, neighbourhood_id=Listing.neighbourhood_id)

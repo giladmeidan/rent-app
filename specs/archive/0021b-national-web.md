@@ -1,7 +1,7 @@
 ---
 id: 0021b
 title: Anyone in Israel picks their city when posting and chooses cities or neighbourhoods as preferred areas
-status: in-review
+status: done
 depends_on: [0021a1]
 reviewers: [code, qa, ux]
 estimate: 1 coder run
@@ -123,4 +123,11 @@ rent hint and `validate.ts` (2); shared `areasQuery` with `gcTime: Infinity` (3)
 order and max-20 in `profile/validate.ts` (8); `normalise` hyphen/space rule + uniqueness test (9); full datalist,
 no cap (10); e2e files (11); AC2 path and the inactive-settlement case (12).
 
-## Digest (filled by orchestrator after verification)
+## Digest (merged 2026-11-17, PR #133, merge 624121a)
+Spec 0021b — city picker, profile area chips, national copy   PR #133, merged 624121a
+Shipped: one `AreaSearch` picker over the national catalogue replaces the wizard's area select and free-text city and the profile's area checkboxes; profile areas are removable chips in picked order (max 20); the rent hint sends the chosen settlement's name; `GET /areas` is fetched once per session; neighbourhoods read "<neighbourhood>, <city>".
+Demo: `make dev` → new listing → type "באר" in עיר או יישוב → pick באר שבע → the rent hint appears; profile → add Florentin and Haifa as chips.
+Tests: web 893 green locally; e2e listings, market, photos, applications, likes drive the picker.   CI: green, no flaky retries.
+Findings: 0 blockers, 2 majors fixed (a prefix name, e.g. אזור, could never be picked without Enter; 24 px chip remove target → 44 px), 4 minors fixed, 4 to FOLLOWUPS; `test.slow()` from #132 removed.
+Changed in PRODUCT.md: none (Gilad's own national copy from eaafbe3, PR #131, kept over the spec's wording).
+Not verified: the native datalist on a real iOS/Android device.
