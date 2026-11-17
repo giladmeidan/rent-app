@@ -1,7 +1,7 @@
 ---
 id: 0021a2
 title: A listing in a big city is placed in its neighbourhood, and a seeker who prefers a neighbourhood or its city is matched at the right level
-status: verified
+status: in-progress
 depends_on: [0021a1]   # areas.kind / parent_id / centre / streets, the neighbourhood rows, migration 0031
 reviewers: [code, qa, perf, security]   # perf: the area criterion in search / people / inbox; security: the inbox snapshot (0006c, B1) must cover the neighbourhood
 estimate: 1 coder run   # coder Opus/high (migration + the B1 snapshot)
