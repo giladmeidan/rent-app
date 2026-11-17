@@ -430,6 +430,7 @@ def test_ac4_aliases(
             (6900, "כפר סבא"),
             (6100, "בני ברק"),
             (1200, "מודיעין"),  # spelt differently from the catalogue
+            (1201, "מודיעין עילית"),  # the inactive twin has figures too: still never matched
         ):
             _rent_area(conn, "settlement", row_code, row_code, name, [])
     insert_settlement(db_engine, 1200, "מודיעין-מכבים-רעות")
@@ -438,6 +439,16 @@ def test_ac4_aliases(
     row = resolve_city(db, city)
 
     assert row is not None and row.settlement_code == code
+
+
+def test_ac4_catalogue_name_without_figures_is_unknown(
+    db_engine: Engine, rent_clean: Engine, db: Session
+) -> None:
+    # Scope 7.3: an exact catalogue hit with no rent_areas row is unknown_city, no fall-through.
+    with rent_clean.begin() as conn:
+        _rent_area(conn, "settlement", 9000, 9000, "באר שבע", [])
+    insert_settlement(db_engine, 9100, "נהריה")
+    assert resolve_city(db, "נהריה") is None
 
 
 def test_ac5_ratio_backtest_national() -> None:
