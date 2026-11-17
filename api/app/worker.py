@@ -9,6 +9,7 @@ from arq.connections import RedisSettings
 
 from app.config import get_settings
 from app.db import get_sessionmaker
+from app.observability import init_sentry
 from app.redis_client import get_redis
 from app.services.cbs_rent import run_cbs_import
 from app.services.email import get_email_sender
@@ -126,6 +127,11 @@ async def on_startup(ctx: dict[str, Any]) -> None:
         handler._homie_worker = True  # type: ignore[attr-defined]
         app_log.addHandler(handler)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+# At import, not in `on_startup`: Sentry's arq integration wraps the jobs inside `create_worker`,
+# which arq calls before `on_startup` (spec 0019a).
+init_sentry(get_settings(), worker=True)
 
 
 class WorkerSettings:

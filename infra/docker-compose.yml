@@ -54,6 +54,11 @@ services:
       # Google sign-in (spec 0016b): `fake` credentials unless `.env` says otherwise.
       GOOGLE_VERIFIER: ${GOOGLE_VERIFIER:-fake}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      # Sentry error reports (spec 0019a): off (empty DSN) unless `.env` sets one.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
       # As in the image: two glibc malloc arenas, so photo decodes do not pin memory per thread.
       MALLOC_ARENA_MAX: "2"
     ports:
@@ -96,6 +101,11 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:${WEB_PORT:-5173}}
       EMAIL_BACKEND: file
       EMAIL_OUTBOX_DIR: /outbox
+      # Sentry error reports (spec 0019a): off (empty DSN) unless `.env` sets one.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
     volumes:
       - ../api:/app
       - ../.outbox:/outbox

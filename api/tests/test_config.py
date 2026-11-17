@@ -71,10 +71,16 @@ def test_web_origin_rejects_anything_but_one_origin(origin: str) -> None:
 
 
 def test_dsns_never_appear_in_repr() -> None:
-    settings = Settings(database_url=_DSN, redis_url=_REDIS, test_database_url=_DSN)
+    settings = Settings(
+        database_url=_DSN,
+        redis_url=_REDIS,
+        test_database_url=_DSN,
+        sentry_dsn="https://sentrykey@o0.ingest.de.sentry.io/1",
+    )
 
     assert "s3cret" not in repr(settings)
     assert "r3dis" not in repr(settings)
+    assert "sentrykey" not in repr(settings)
     assert settings.database_url.get_secret_value() == _DSN
 
 
@@ -388,3 +394,20 @@ def test_ac10_google_verifier_guard() -> None:
     assert Settings(**https).google_verifier == "off"
     configured = Settings(**https, google_verifier="google", google_client_id=" id.example ")
     assert (configured.google_verifier, configured.google_client_id) == ("google", "id.example")
+
+
+def test_0019a_sentry_settings() -> None:
+    settings = Settings(database_url=_DSN, redis_url=_REDIS)
+    assert settings.sentry_dsn is None
+    assert settings.sentry_environment == "development"
+    assert settings.sentry_release is None
+    assert settings.sentry_traces_sample_rate == 0.0
+    assert (
+        Settings(
+            database_url=_DSN, redis_url=_REDIS, sentry_traces_sample_rate=1
+        ).sentry_traces_sample_rate
+        == 1
+    )
+    for rate in (-0.1, 1.1):
+        with pytest.raises(ValidationError, match="sentry_traces_sample_rate"):
+            Settings(database_url=_DSN, redis_url=_REDIS, sentry_traces_sample_rate=rate)

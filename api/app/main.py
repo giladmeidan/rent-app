@@ -18,6 +18,7 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import get_settings
+from app.observability import init_sentry
 from app.routers import (
     applications,
     areas,
@@ -169,6 +170,8 @@ async def _request_invalid(request: Request, exc: Exception) -> JSONResponse:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Before the app is built, so Sentry's integrations patch Starlette first (spec 0019a).
+    init_sentry(settings, worker=False)
     # The calendar feed's token sits in its path (spec 0018d); once per process, not per app.
     access_log = logging.getLogger("uvicorn.access")
     if not any(isinstance(f, RedactFeedToken) for f in access_log.filters):

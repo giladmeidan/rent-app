@@ -45,6 +45,9 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 # verifier with `set_env` (spec 0016b), and `test_config.py`'s https settings stay valid.
 os.environ.pop("GOOGLE_VERIFIER", None)
 os.environ.pop("GOOGLE_CLIENT_ID", None)
+# No Sentry, whatever `.env` says (spec 0019a): test_observability.py sets a DSN on a capturing
+# transport itself.
+os.environ.pop("SENTRY_DSN", None)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
