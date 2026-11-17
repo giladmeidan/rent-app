@@ -342,6 +342,7 @@ const STATES: State[] = [
     setup: {},
     path: `/chat/${MATCH_ID}`,
     act: async (page) => {
+      await page.getByRole('button', { name: he.chat.thread.actions }).click();
       await expect(page.getByRole('button', { name: he.chat.thread.removeMatch })).toBeVisible();
     },
   },
@@ -350,6 +351,7 @@ const STATES: State[] = [
     setup: {},
     path: `/chat/${MATCH_ID}`,
     act: async (page) => {
+      await page.getByRole('button', { name: he.chat.thread.actions }).click();
       await page.getByRole('button', { name: he.chat.thread.removeMatch }).click();
       await expect(
         page.getByRole('dialog', { name: he.chat.thread.removeMatchTitle }),

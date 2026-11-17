@@ -69,7 +69,7 @@ export function TourCard({ id, thread }: { id: string; thread: ThreadOut }) {
   if (tour !== null) {
     content = (
       <>
-        <p className="text-body">
+        <p className="text-body-sm">
           <BookedText startsAt={tour.starts_at} />
         </p>
         <div className="flex flex-wrap gap-2">
@@ -86,21 +86,16 @@ export function TourCard({ id, thread }: { id: string; thread: ThreadOut }) {
     );
   } else if (role === 'seeker') {
     content = (
-      <Button variant="secondary" size="sm" className="self-start" onClick={() => setPicking(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setPicking(true)}>
         {t('tours.card.book')}
       </Button>
     );
   } else {
     content = (
       <>
-        <p className="text-body text-ink-muted">{t('tours.card.ownerHint')}</p>
+        <p className="text-body-sm text-ink-muted">{t('tours.card.ownerHint')}</p>
         {listing !== null && (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="self-start"
-            to={`/me/listings/${listing.id}/tours`}
-          >
+          <Button variant="secondary" size="sm" to={`/me/listings/${listing.id}/tours`}>
             {t('listings.mine.tours')}
           </Button>
         )}
@@ -109,13 +104,13 @@ export function TourCard({ id, thread }: { id: string; thread: ThreadOut }) {
   }
 
   return (
-    <Card padding="md" className="flex flex-col gap-3">
-      <h2 ref={headingRef} tabIndex={-1} className="text-h3 focus:outline-none">
+    <Card padding="sm" className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <h2 ref={headingRef} tabIndex={-1} className="text-label focus:outline-none">
         {t('tours.card.title')}
       </h2>
       {content}
       {cancel.isError && (
-        <p role="alert" className="text-body-sm font-semibold text-danger">
+        <p role="alert" className="basis-full text-body-sm font-semibold text-danger">
           {tourErrorText(t, cancel.error, online)}
         </p>
       )}

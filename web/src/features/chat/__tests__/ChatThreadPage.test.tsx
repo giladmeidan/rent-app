@@ -13,6 +13,8 @@ import {
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
+import { cardTitle } from '../../listings/cardTitle';
+import { formatIls } from '../../listings/format';
 import { owner, seeker } from '../../listings/__tests__/fixtures';
 import type { ConversationOut, MessageOut, ThreadOut } from '../api';
 import type { TourLineOut } from '../../tours/api';
@@ -68,6 +70,10 @@ function reset(view: { unmount: () => void }) {
   vi.unstubAllGlobals();
 }
 
+/** The actions panel is `hidden` until its toggle is clicked: nothing in it is in the accessibility tree. */
+const openActions = () => {
+  fireEvent.click(screen.getByRole('button', { name: he.chat.thread.actions }));
+};
 const h1 = (name: string) => screen.findByRole('heading', { level: 1, name });
 const log = () => screen.getByRole('log', { name: he.chat.thread.log });
 const bubbles = () => within(log()).getAllByRole('listitem');
@@ -93,6 +99,7 @@ describe('ChatThreadPage', () => {
       'href',
       '/chat',
     );
+    openActions();
     expect(screen.getByRole('link', { name: he.chat.thread.toListing })).toHaveAttribute(
       'href',
       `/listings/${T.listing.id}`,
@@ -121,6 +128,7 @@ describe('ChatThreadPage', () => {
     const asOwner = { ...T, my_role: 'owner' as const };
     ({ view } = renderThread(asOwner, [json(asOwner)], { me: owner }));
     expect(await h1(NAME)).toBeVisible();
+    openActions();
     expect(screen.getByRole('link', { name: he.chat.thread.toApplicants })).toHaveAttribute(
       'href',
       `/me/listings/${T.listing.id}/applicants`,
@@ -629,6 +637,7 @@ describe('ChatThreadPage', () => {
     // The sr-only label names the sender.
     expect(items[1]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: 'רוני' }));
     expect(items[4]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: 'נועה' }));
+    openActions();
     expect(screen.queryByRole('link', { name: he.chat.thread.toApplicants })).toBeNull();
     reset(view);
   });
@@ -646,6 +655,7 @@ describe('ChatThreadPage', () => {
     const asFlatmate = thread({ my_role: 'flatmate' });
     ({ view } = renderThread(asFlatmate, [() => json(asFlatmate)], { me: owner }));
     expect(await h1(asFlatmate.other_name)).toBeVisible();
+    openActions();
     expect(screen.queryByRole('link', { name: he.chat.thread.toApplicants })).toBeNull();
     reset(view);
 
@@ -653,6 +663,7 @@ describe('ChatThreadPage', () => {
     const asOwner = thread({ my_role: 'owner' });
     ({ view } = renderThread(asOwner, [() => json(asOwner)], { me: owner }));
     expect(await h1(asOwner.other_name)).toBeVisible();
+    openActions();
     expect(screen.getByRole('link', { name: he.chat.thread.toApplicants })).toHaveAttribute(
       'href',
       `/me/listings/${asOwner.listing.id}/applicants`,
@@ -683,6 +694,7 @@ describe('ChatThreadPage', () => {
       'href',
       '/chat',
     );
+    openActions();
     expect(screen.getByRole('link', { name: he.chat.thread.toListing })).toHaveAttribute(
       'href',
       `/listings/${T.listing.id}`,
@@ -704,6 +716,7 @@ describe('ChatThreadPage', () => {
     const asOwner = { ...T, my_role: 'owner' as const };
     ({ view } = renderThread(asOwner, [() => json(asOwner)], { me: owner }));
     expect(await h1(NAME)).toBeVisible();
+    openActions();
     expect(screen.getByRole('link', { name: he.chat.thread.toApplicants })).toHaveAttribute(
       'href',
       `/me/listings/${T.listing.id}/applicants`,
@@ -1023,6 +1036,82 @@ describe('ChatThreadPage', () => {
     reset(view);
   });
 
+  it('ac1_actions_behind_disclosure', async () => {
+    const toggle = () => screen.getByRole('button', { name: he.chat.thread.actions });
+    const panelOf = () => document.getElementById(toggle().getAttribute('aria-controls') ?? '');
+    const link = (name: string) => screen.queryByRole('link', { name });
+    const button = (name: string) => screen.queryByRole('button', { name });
+    const report = i18n.t('report.title.person', { name: NAME });
+    const before = (a: HTMLElement | null, b: HTMLElement | null) =>
+      expect((a as HTMLElement).compareDocumentPosition(b as HTMLElement)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+
+    // A listing chat, seeker then owner: the caption is the subtitle; the link then report.
+    const T = thread({ other_name: NAME });
+    const caption = `${cardTitle(i18n.t, T.listing)} · ${formatIls(T.listing.price_ils)} ${he.listings.units.ils}`;
+    for (const [t, me, linkName] of [
+      [T, seeker, he.chat.thread.toListing],
+      [{ ...T, my_role: 'owner' as const }, owner, he.chat.thread.toApplicants],
+    ] as const) {
+      const { view } = renderThread(t, [json(t)], { me });
+      expect(await h1(NAME)).toBeVisible();
+      const sub = screen.getByText(caption);
+      expect(sub.tagName).toBe('P');
+      expect(sub.parentElement).toContainElement(screen.getByRole('heading', { level: 1 }));
+      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+      expect(panelOf()).toHaveAttribute('hidden');
+      expect(link(linkName)).toBeNull();
+      expect(button(report)).toBeNull();
+      fireEvent.click(toggle());
+      expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+      before(link(linkName), button(report));
+      fireEvent.click(toggle());
+      expect(link(linkName)).toBeNull();
+      expect(button(report)).toBeNull();
+      reset(view);
+    }
+
+    // An open direct chat: the direct caption as the subtitle; remove match, then report.
+    const D = directThread({ other_name: NAME });
+    renderThread(D, [json(D)]);
+    expect(await h1(NAME)).toBeVisible();
+    expect(screen.getByText(he.chat.thread.direct).parentElement).toContainElement(
+      screen.getByRole('heading', { level: 1 }),
+    );
+    expect(button(he.chat.thread.removeMatch)).toBeNull();
+    expect(button(report)).toBeNull();
+    fireEvent.click(toggle());
+    before(button(he.chat.thread.removeMatch), button(report));
+    fireEvent.click(toggle());
+    expect(button(he.chat.thread.removeMatch)).toBeNull();
+  });
+
+  it('ac2_warning_is_a_system_line_above_the_log', async () => {
+    const T = thread({
+      other_name: NAME,
+      visible_from: '2026-11-10T23:30:00Z',
+      truncated: true,
+      tour: {
+        id: '00000000-0000-0000-0000-0000000000b1',
+        starts_at: '2026-11-20T15:00:00Z',
+        ends_at: '2026-11-20T15:20:00Z',
+        status: 'booked',
+      },
+      messages: [message({ body: 'hi' })],
+    });
+    renderThread(T, [json(T)]);
+    const heading = await screen.findByRole('heading', { level: 2, name: he.tours.card.title });
+    const note = screen.getByRole('note');
+    expect(note).toHaveTextContent(he.chat.thread.warning);
+    const after = (a: Element, b: Element) =>
+      expect(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    after(heading, note);
+    after(note, screen.getByText(i18n.t('chat.joinedNote', { date: '11.11.2026' })));
+    after(note, screen.getByText(he.chat.thread.truncated));
+    after(note, log());
+  });
+
   it('ac1_report_from_chat', async () => {
     const name = (n: string) => i18n.t('report.title.person', { name: n });
     const reports = { 'POST /reports': [() => json({ already_reported: false }, 201)] };
@@ -1032,6 +1121,7 @@ describe('ChatThreadPage', () => {
     const { api, view: first } = renderThread(T, [json(T)], { extra: reports });
     let view = first;
     expect(await h1(NAME)).toBeVisible();
+    openActions();
     const button = screen.getByRole('button', { name: name(NAME) });
     expect(button).toHaveTextContent(he.report.button);
     expect(button.closest('div')).toContainElement(
@@ -1057,8 +1147,9 @@ describe('ChatThreadPage', () => {
     for (const t of [D, { ...D, can_send: false }]) {
       ({ view } = renderThread(t, [json(t)]));
       expect(await h1(NAME)).toBeVisible();
+      openActions();
       const report = screen.getByRole('button', { name: name(NAME) });
-      expect(report.closest('div')).toHaveTextContent(he.chat.thread.direct);
+      expect(screen.getByText(he.chat.thread.direct).tagName).toBe('P');
       fireEvent.click(report);
       const direct = screen.getByRole('dialog', { name: name(NAME) });
       expect(within(direct).getAllByRole('radio')).toHaveLength(5);
@@ -1071,6 +1162,7 @@ describe('ChatThreadPage', () => {
     const G = group();
     ({ view } = renderThread(G, [json(G)]));
     expect(await h1(G.other_name)).toBeVisible();
+    openActions();
     fireEvent.click(screen.getByRole('button', { name: name(G.other_name) }));
     expect(within(screen.getByRole('dialog')).getAllByRole('radio')).toHaveLength(6);
     expect(
@@ -1089,8 +1181,9 @@ describe('ChatThreadPage', () => {
     expect(await h1(NAME)).toBeVisible();
     const caption = screen.getByText(he.chat.thread.direct);
     expect(caption.tagName).toBe('P');
-    expect(caption).toHaveClass('text-caption', 'text-ink-muted');
+    expect(caption).toHaveClass('text-body-sm', 'text-ink-muted');
     expect(caption.textContent).toBe(he.chat.thread.direct);
+    openActions();
     expect(screen.queryByRole('link', { name: he.chat.thread.toListing })).toBeNull();
     expect(screen.queryByRole('link', { name: he.chat.thread.toApplicants })).toBeNull();
     expect(screen.getByRole('note').textContent).toBe(he.chat.thread.warning);
@@ -1132,6 +1225,7 @@ describe('ChatThreadPage', () => {
     const T = thread({ other_name: NAME, can_send: false });
     renderThread(T, [json(T)]);
     expect(await h1(NAME)).toBeVisible();
+    openActions();
     expect(screen.getByRole('link', { name: he.chat.thread.toListing })).toHaveAttribute(
       'href',
       `/listings/${T.listing.id}`,
@@ -1150,10 +1244,12 @@ describe('ChatThreadPage', () => {
       extra: { [deleteRoute]: [() => new Response(null, { status: 204 })] },
     });
     expect(await h1(NAME)).toBeVisible();
+    openActions();
 
-    // A ghost button in the caption line, beside the direct caption.
-    const caption = screen.getByText(he.chat.thread.direct);
-    expect(caption.parentElement).toContainElement(removeButton());
+    // A ghost button in the actions panel, which the toggle opens.
+    const toggle = screen.getByRole('button', { name: he.chat.thread.actions });
+    const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    expect(panel).toContainElement(removeButton());
 
     // Cancel: the confirm closes, nothing is sent, focus returns to the button.
     act(() => removeButton().focus());
@@ -1191,6 +1287,7 @@ describe('ChatThreadPage', () => {
       extra: { [`DELETE /me/matches/${D.id}`]: [() => json({ detail: 'boom' }, 500)] },
     });
     expect(await h1(NAME)).toBeVisible();
+    openActions();
     fireEvent.click(screen.getByRole('button', { name: he.chat.thread.removeMatch }));
     const box = await screen.findByRole('dialog', { name: he.chat.thread.removeMatchTitle });
     fireEvent.click(within(box).getByRole('button', { name: he.chat.thread.removeMatchConfirm }));
@@ -1198,6 +1295,10 @@ describe('ChatThreadPage', () => {
     expect(textarea()).toBeVisible();
     expect(screen.queryByText(he.chat.thread.closedDirect)).toBeNull();
     expect(screen.getByRole('button', { name: he.chat.thread.removeMatch })).toBeVisible();
+    // The alert is outside the panel: it stays with the panel closed.
+    fireEvent.click(screen.getByRole('button', { name: he.chat.thread.actions }));
+    expect(screen.queryByRole('button', { name: he.chat.thread.removeMatch })).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent(he.chat.thread.removeMatchFailed);
     expect(api.calls(`DELETE /me/matches/${D.id}`)).toHaveLength(1);
   });
 
@@ -1208,6 +1309,7 @@ describe('ChatThreadPage', () => {
     let { view } = renderThread(T, [json(T)]);
     expect(await h1(NAME)).toBeVisible();
     expect(textarea()).toBeVisible();
+    openActions();
     expect(screen.queryByRole('button', { name })).toBeNull();
     reset(view);
 
@@ -1216,6 +1318,7 @@ describe('ChatThreadPage', () => {
     ({ view } = renderThread(closed, [json(closed)]));
     expect(await h1(NAME)).toBeVisible();
     expect(screen.getByText(he.chat.thread.closedDirect)).toBeVisible();
+    openActions();
     expect(screen.queryByRole('button', { name })).toBeNull();
     reset(view);
   });
@@ -1257,6 +1360,7 @@ describe('ChatThreadPage', () => {
     ]);
     expect(bubbles()[0]).toHaveTextContent(i18n.t('chat.thread.theirs', { name: DELETED }));
     // The report dialog's title and hint name the placeholder.
+    openActions();
     expect(
       screen.getByRole('button', { name: i18n.t('report.title.person', { name: DELETED }) }),
     ).toBeVisible();
