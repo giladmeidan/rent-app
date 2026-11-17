@@ -20,9 +20,22 @@ from app.services.tour_feed import redact_path
 # Email-shaped: something@something.something, none of the parts holding a space or a delimiter.
 _EMAIL = re.compile(r"[^\s@\"'<>()\[\]{},;:]+@[^\s@\"'<>()\[\]{},;:]+\.[^\s@\"'<>()\[\]{},;:]+")
 # Their str() carries bound parameters, `DETAIL: Key (phone)=(…)` and `input_value=…`.
-_BLANKED_MODULES = ("sqlalchemy", "psycopg", "pydantic")
+# FastAPI's ResponseValidationError (an unhandled 500) quotes the whole response as `input`.
+_BLANKED_MODULES = ("sqlalchemy", "psycopg", "pydantic", "fastapi.exceptions")
 _KEPT_CONTEXTS = {"runtime", "os", "trace"}
 _KEPT_BREADCRUMB_FIELDS = {"type", "category", "level", "timestamp", "message"}
+_OFF: Any = {"mode": "off"}
+# sentry-sdk 2.75.0's replacement for the deprecated `send_default_pii=False`: collect none of it.
+_DATA_COLLECTION: Any = {
+    "user_info": False,
+    "cookies": _OFF,
+    "http_headers": {"request": _OFF},
+    "http_bodies": [],
+    "url_query_params": _OFF,
+    "database_query_data": False,
+    "queues": False,
+    "stack_frame_variables": False,
+}
 
 
 def _redact(value: Any) -> Any:
@@ -71,7 +84,7 @@ def init_sentry(settings: Settings, *, worker: bool) -> None:
         dsn=dsn,
         environment=settings.sentry_environment,
         release=settings.sentry_release or None,
-        send_default_pii=False,
+        data_collection=_DATA_COLLECTION,
         include_local_variables=False,  # frames would carry emails, passwords, codes
         max_request_body_size="never",
         traces_sample_rate=settings.sentry_traces_sample_rate,
@@ -83,3 +96,5 @@ def init_sentry(settings: Settings, *, worker: bool) -> None:
     # outage, which uptime monitoring (not Sentry) is for.
     ignore_logger("app.main")
     ignore_logger("app.services.health")
+    # Each line holds the peer IP and the path with its query.
+    ignore_logger("uvicorn.access")

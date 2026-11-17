@@ -27,7 +27,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
 from app.main import create_app
-from app.observability import init_sentry, scrub_event
+from app.observability import scrub_event
 from app.services import health
 from app.services import tour_feed as tour_feed_service
 
@@ -57,6 +57,16 @@ class _Capture(Transport):
                 self.events.append(item.payload.json)
 
 
+@pytest.fixture(autouse=True)
+def httpx_log_level() -> Iterator[None]:
+    """Reloading `app.worker` sets the `httpx` logger to WARNING for the process, which would hide
+    the TestClient request logs later tests rely on (test_auth's NF1); restored after each test."""
+    httpx_logger = logging.getLogger("httpx")
+    level = httpx_logger.level
+    yield
+    httpx_logger.setLevel(level)
+
+
 @pytest.fixture
 def sentry_events(
     monkeypatch: pytest.MonkeyPatch, set_env: Callable[..., None]
@@ -71,6 +81,8 @@ def sentry_events(
     monkeypatch.setattr(sentry_sdk, "init", init)
     set_env(SENTRY_DSN=DSN, SENTRY_ENVIRONMENT="test")
     yield events
+    # Closing does not undo `ignore_logger`: those entries are process-global and stay (they only
+    # matter to Sentry, which is off from here on).
     sentry_sdk.get_client().close()
     sentry_sdk.get_global_scope().set_client(None)
     assert not sentry_sdk.get_client().is_active()
@@ -216,6 +228,14 @@ def test_ac5_personal_data_redacted_in_messages(
     def mail() -> None:
         raise ValueError(f"cannot send to {EMAIL}")
 
+    class PersonOut(BaseModel):
+        name: str
+        age: int
+
+    @app.get("/bad-response", response_model=PersonOut)
+    def bad_response() -> Any:
+        return {"name": NAME, "phone": PHONE, "age": "not a number"}
+
     @app.get("/duplicate")
     def duplicate() -> None:
         with db_engine.begin() as conn:
@@ -228,9 +248,10 @@ def test_ac5_personal_data_redacted_in_messages(
     with TestClient(app, raise_server_exceptions=False) as client:
         assert client.get("/mail").status_code == 500
         assert client.get("/duplicate").status_code == 500
+        assert client.get("/bad-response").status_code == 500
 
-    assert len(sentry_events) == 3
-    logged, mailed, integrity = sentry_events
+    assert len(sentry_events) == 4
+    logged, mailed, integrity, response = sentry_events
     for event in (logged, mailed):
         assert EMAIL not in _dump(event)
         assert any("[email]" in s for s in _strings(event))
@@ -244,6 +265,11 @@ def test_ac5_personal_data_redacted_in_messages(
     dump = _dump(integrity)
     assert NAME not in dump
     assert PHONE not in dump
+    # FastAPI's ResponseValidationError quotes the whole response object as `input`.
+    assert _exception_values(response)[-1]["type"] == "ResponseValidationError"
+    assert _exception_values(response)[-1]["value"] == ""
+    assert NAME not in _dump(response)
+    assert PHONE not in _dump(response)
 
 
 async def purge_canary_job(ctx: dict[str, Any]) -> None:
@@ -251,7 +277,11 @@ async def purge_canary_job(ctx: dict[str, Any]) -> None:
 
 
 def test_ac6_failing_worker_job_is_reported(sentry_events: list[dict[str, Any]]) -> None:
-    init_sentry(get_settings(), worker=True)  # as `app.worker` does at import, before create_worker
+    from app import worker as app_worker
+
+    importlib.reload(app_worker)  # its module-level init, now with a DSN (the fixture's)
+    assert sentry_sdk.get_client().is_active()
+    assert hasattr(arq.worker.create_worker, "__wrapped__")  # the integration's patch
 
     queue = f"test-sentry:{uuid.uuid4().hex}"
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url.get_secret_value())
@@ -318,6 +348,7 @@ def test_scrub_event_on_a_hand_built_event() -> None:
                 {"type": "UniqueViolation", "module": "psycopg.errors", "value": PHONE},
                 {"type": "ValidationError", "module": "pydantic_core", "value": NAME},
                 {"type": "IntegrityError", "module": "sqlalchemy.exc", "value": PHONE},
+                {"type": "ResponseValidationError", "module": "fastapi.exceptions", "value": NAME},
                 {"type": "ValueError", "value": f"bad {EMAIL}", "stacktrace": {"frames": []}},
             ]
         },
@@ -339,7 +370,7 @@ def test_scrub_event_on_a_hand_built_event() -> None:
             "message": "/tour-feed/[redacted]",
         }
     ]
-    assert [v["value"] for v in scrubbed["exception"]["values"]] == ["", "", "", "bad [email]"]
+    assert [v["value"] for v in scrubbed["exception"]["values"]] == ["", "", "", "", "bad [email]"]
     assert scrubbed["message"] == "hello [email]"
     assert scrubbed["logentry"] == {"message": "to %s", "params": ["[email]"]}
     dump = _dump(scrubbed)
