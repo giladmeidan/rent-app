@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app.db import make_engine  # noqa: E402
 from app.models import Area  # noqa: E402
 from app.services.areas import import_areas  # noqa: E402
-from app.services.rent_reference import RentSourceError  # noqa: E402
+from app.services.rent_reference import RentFileMissing  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "rent_reference"
 
@@ -30,7 +30,7 @@ class FixtureFetcher:
         kind, _rent, name = path.split("/")
         file = FIXTURES / f"{kind}_{name}"
         if not file.is_file():
-            raise RentSourceError("status 404")
+            raise RentFileMissing("status 404")
         return json.loads(file.read_text(encoding="utf-8"))
 
 

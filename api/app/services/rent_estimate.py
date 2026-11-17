@@ -20,13 +20,14 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from decimal import Decimal
 from fractions import Fraction
-from typing import Literal, NamedTuple
+from typing import Literal, NamedTuple, cast
 
-from sqlalchemy import Row, func, select, tuple_
+from sqlalchemy import ColumnElement, Row, func, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.models import CbsRentPrice, RentArea, RentPrice
+from app.models import Area, CbsRentPrice, RentArea, RentPrice
 from app.schemas.rent_estimate import RentEstimateOut, RentEstimateRange, RentEstimateReason
+from app.services import areas  # module import: areas imports this module too (cycle)
 
 Level = Literal["neighbourhood", "city"]
 RatioLevel = Literal["city", "district"]
@@ -49,17 +50,6 @@ RATIO_MIN_QUARTERS = min(2, RATIO_WINDOW_QUARTERS)  # policy, spec 0014d
 # backtest (same run): ratio p80 error at window 1, rounded up (city 1.25 %: a city's own ratio;
 # district 6.27 %: a launch-box city's ratio predicted from its district's)
 RATIO_HALF_WIDTH: dict[RatioLevel, float] = {"city": 0.02, "district": 0.07}
-# policy, spec 0014d: CBS district of each launch-box settlement (RENT_SETTLEMENT_CODES, 0014a),
-# from CBS's settlement list on data.gov.il (district = subdistrict code // 10), checked 2026-11-14
-SETTLEMENT_DISTRICT: dict[int, int] = {
-    # Tel Aviv District (5): Tel Aviv-Yafo, Ramat Gan, Givatayim, Bnei Brak, Holon, Bat Yam,
-    # Herzliya, Ramat HaSharon, Kiryat Ono, Or Yehuda, Azor
-    **dict.fromkeys((5000, 8600, 6300, 6100, 6600, 6200, 6400, 2650, 2620, 2400, 565), 5),
-    # Center District (4): Petah Tikva, Rishon LeZion, Givat Shmuel, Yehud-Monosson, Ganei Tikva,
-    # Savyon, Hod HaSharon, Beit Dagan
-    **dict.fromkeys((7900, 8300, 681, 9400, 229, 587, 9700, 466), 4),
-}
-
 # Normalised alias → settlement code (the source's own names match without an alias).
 CITY_ALIASES: dict[str, int] = {
     "תל אביב": 5000,
@@ -75,6 +65,11 @@ CITY_ALIASES: dict[str, int] = {
     "מונוסון": 9400,
     "גני תקוה": 229,
     "רג": 8600,
+    "בש": 9000,  # spec 0021c
+    "י ם": 3000,
+    "ים": 3000,
+    "כס": 6900,
+    "בב": 6100,
 }
 _STREET_PREFIXES = ("רחוב ", "רח ")
 _PLACE_CHARS = str.maketrans({c: None for c in "\"'`׳״"} | {c: " " for c in "-–־"})
@@ -128,17 +123,46 @@ def mean_if_enough(prices: Sequence[int | Fraction], minimum: int) -> Fraction |
     return Fraction(sum(prices), len(prices))
 
 
-def resolve_city(db: Session, city: str) -> Row[tuple[uuid.UUID, int, str]] | None:
-    """The settlement row (id, settlement_code, name_he) for the owner's city text: by its own
-    name, then by `CITY_ALIASES`; None when neither matches or the code has no settlement row."""
+def resolve_city(db: Session, city: str) -> Row[tuple[uuid.UUID, int, str, str | None]] | None:
+    """The settlement row (id, settlement_code, name_he, catalogue name) for the owner's city text,
+    first hit wins (spec 0021c): an active catalogue settlement named exactly the stripped text;
+    the row's own name; its catalogue name; `CITY_ALIASES`. None when nothing matches or the code
+    has no settlement row. One query: an exact catalogue hit narrows it to that code's row."""
+    stripped = city.strip()
+    exact = (
+        select(Area.source_code)
+        .where(Area.kind == "settlement", Area.is_active.is_(True), Area.name_he == stripped)
+        .limit(1)
+        .correlate(None)  # the outer join's `areas` is a different row
+        .scalar_subquery()
+    )
     rows = db.execute(
-        select(RentArea.id, RentArea.settlement_code, RentArea.name_he).where(
-            RentArea.kind == "settlement"
+        select(
+            RentArea.id,
+            RentArea.settlement_code,
+            RentArea.name_he,
+            cast("ColumnElement[str | None]", Area.name_he).label("catalogue_name"),  # outer join
+        )
+        .outerjoin(
+            Area,
+            (Area.kind == "settlement")
+            & Area.is_active.is_(True)
+            & (Area.source_code == RentArea.settlement_code),
+        )
+        .where(
+            RentArea.kind == "settlement",
+            exact.is_(None) | (RentArea.settlement_code == exact),
         )
     ).all()
     wanted = normalise_place(city)
     for row in rows:
+        if row.catalogue_name == stripped:
+            return row
+    for row in rows:
         if normalise_place(row.name_he) == wanted:
+            return row
+    for row in rows:
+        if row.catalogue_name is not None and normalise_place(row.catalogue_name) == wanted:
             return row
     code = CITY_ALIASES.get(wanted)
     return next((row for row in rows if row.settlement_code == code), None)
@@ -182,7 +206,7 @@ def _small_flat_ratio(db: Session, settlement_code: int) -> tuple[RatioLevel, Fr
     """Step 5b: the mean CBS ratio over the CBS window, the city's when it has enough periods,
     else its district's; None when neither has. One query."""
     geos: list[tuple[RatioLevel, int]] = [("city", settlement_code)]
-    district = SETTLEMENT_DISTRICT.get(settlement_code)
+    district = areas.settlement_districts().get(settlement_code)
     if district is not None:
         geos.append(("district", district))
     newest = select(func.max(CbsRentPrice.period)).scalar_subquery()
@@ -347,13 +371,14 @@ def _summaries(
 def backtest_ratio(
     figures: Sequence[CbsFigure], *, windows: Iterable[int] = range(1, 7), targets: int = 4
 ) -> list[BacktestRow]:
-    """Predict each launch-box city's ratio at its newest `targets` periods from the `window`
-    quarters strictly before it: from the city's own ratios and from its district's; the relative
-    errors per (window, level)."""
+    """Predict each CBS city's ratio (one with a district in `settlement_districts`) at its newest
+    `targets` periods from the `window` quarters strictly before it: from the city's own ratios
+    and from its district's; the relative errors per (window, level)."""
     by_geo = ratios(
         ((f.geo_kind, f.geo_code), f.room_group, f.period, f.price_ils) for f in figures
     )
-    cities = [geo for geo in by_geo if geo[0] == "city" and geo[1] in SETTLEMENT_DISTRICT]
+    districts = areas.settlement_districts()
+    cities = [geo for geo in by_geo if geo[0] == "city" and geo[1] in districts]
     rows: list[BacktestRow] = []
     for size in windows:
         errors: dict[RatioLevel, list[float]] = {"city": [], "district": []}
@@ -361,7 +386,7 @@ def backtest_ratio(
             own = by_geo[city]
             sources: dict[RatioLevel, dict[dt.date, Fraction]] = {
                 "city": own,
-                "district": by_geo.get(("district", SETTLEMENT_DISTRICT[city[1]]), {}),
+                "district": by_geo.get(("district", districts[city[1]]), {}),
             }
             for target in sorted(own, reverse=True)[:targets]:
                 first, last = window(quarters_back(target, 1), size)
