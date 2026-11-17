@@ -289,4 +289,22 @@ describe('Dialog', () => {
     expect(results).toEqual([true, false]);
     expect(opener()).toHaveFocus();
   });
+
+  it('ac2_wide_size_uses_the_wide_width', () => {
+    render(
+      <>
+        <Dialog open={false} onClose={() => {}} title="a" size="wide" />
+        <Dialog open={false} onClose={() => {}} title="b" />
+      </>,
+    );
+    const [wide, plain] = document.querySelectorAll('dialog') as unknown as [
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(wide).toHaveClass('max-w-dialog-wide', 'min-h-[min(36rem,calc(100dvh-3rem))]');
+    expect(wide).not.toHaveClass('max-w-dialog');
+    expect(plain).toHaveClass('max-w-dialog');
+    expect(plain).not.toHaveClass('max-w-dialog-wide');
+    expect(plain.className).not.toMatch(/min-h-/);
+  });
 });

@@ -101,4 +101,19 @@ describe('MonthCalendar', () => {
     expect(byDigit('19')).toHaveAttribute('aria-pressed', 'false');
     expect(byDigit('20')).not.toHaveAccessibleName(new RegExp(c.hasTimes));
   });
+
+  it('ac1_month_bar_arrows_have_hebrew_names', () => {
+    setup('2026-11-17', '2026-12-31');
+    const prev = screen.getByRole('button', { name: 'החודש הקודם' });
+    const next = screen.getByRole('button', { name: 'החודש הבא' });
+    const title = document.querySelector('p[aria-live="polite"]') as HTMLElement;
+    for (const b of [prev, next]) {
+      expect(b.textContent).toBe('');
+      expect(b.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(prev.parentElement).toBe(title.parentElement);
+    expect(next.parentElement).toBe(title.parentElement);
+    expect(Array.from(title.parentElement?.children ?? [])).toEqual([prev, title, next]);
+    expect(title.parentElement).toHaveClass('flex-nowrap');
+  });
 });
