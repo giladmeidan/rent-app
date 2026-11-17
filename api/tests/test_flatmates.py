@@ -525,8 +525,9 @@ def test_ac2_preview_and_join(
     app = cast(FastAPI, client.app)
     routes = list(_api_routes(app.routes))
     assert len(routes) > 30  # the walk reaches every router (none is mounted with a prefix)
+    assert any(route.path == "/tour-feed/{token}.ics" for route in routes)  # keeps the skip honest
     for route in routes:
-        if route.path == "/tour-feed/{token}.ics":
+        if route.path == "/tour-feed/{token}.ics" and route.methods == {"GET"}:
             # Spec 0018d's calendar feed: a calendar app can send no body, header or cookie, so
             # its token must sit in the path (redacted from the logs, `services/tour_feed.py`).
             continue

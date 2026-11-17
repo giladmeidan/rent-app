@@ -274,6 +274,8 @@ be reached by Google.
   the button, so its tests need the `['tour-feed']` query idle until the dialog opens (fetched on open, above).
 - `web/src/features/legal/content.ts` (`privacyDoc` s3), `he.json` `legal.privacy.s3`: one item after `i6`;
   `LegalPage.test.tsx::ac14_privacy_names_google_sign_in` (`i6` right after `i3`) unchanged.
+- `tests/test_flatmates.py::test_ac2_preview_and_join` (found in build, invisible to graphify: it walks `app.routes`)
+  asserts no route path holds a token; it skips exactly `GET /tour-feed/{token}.ics` and asserts that route exists.
 
 ## Risks / open questions
 - **Q1 (Gilad) — what the feed reveals.** Google stores whatever the feed carries, outside homie's control, and keeps

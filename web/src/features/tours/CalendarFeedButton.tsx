@@ -179,6 +179,12 @@ export function CalendarFeedButton() {
     body = <p className="text-body font-semibold">{t('tours.feed.active')}</p>;
   }
 
+  // A mutation error belongs to the visit it happened in; reopening starts clean.
+  const close = () => {
+    setOpen(false);
+    setFailure(null);
+  };
+
   return (
     <>
       <Button
@@ -192,10 +198,10 @@ export function CalendarFeedButton() {
       </Button>
       <Dialog
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={close}
         title={t('tours.feed.title')}
         actions={
-          <Button variant="secondary" onClick={() => setOpen(false)}>
+          <Button variant="secondary" onClick={close}>
             {t('tours.feed.close')}
           </Button>
         }
