@@ -117,6 +117,36 @@ describe('analytics', () => {
     expect(scrubEvent(null)).toBeNull();
   });
 
+  it('nf3_search_url_scrubbed', async () => {
+    // Spec 0023a: a filtered search's URL holds area ids, which must never leave the browser.
+    const { scrubEvent } = await load();
+    const origin = window.location.origin;
+    const area = '3f2c9a1e-0000-4000-8000-000000000001';
+    const query = `?area_ids=${area}&area_ids=${area}&pets=true`;
+    const event = scrubEvent(
+      result({
+        properties: {
+          $current_url: `${origin}/search${query}`,
+          $pathname: `/market${query}`,
+          $prev_pageview_pathname: `/search${query}`,
+          type: 'apartment',
+          filters: 3,
+        },
+        $set: { $current_url: `${origin}/market${query}` },
+        $set_once: { $initial_current_url: `${origin}/search${query}` },
+      }),
+    );
+    expect(event?.properties).toEqual({
+      $current_url: `${origin}/search`,
+      $pathname: '/market',
+      $prev_pageview_pathname: '/search',
+      type: 'apartment',
+      filters: 3,
+    });
+    expect(event?.$set).toEqual({ $current_url: `${origin}/market` });
+    expect(JSON.stringify(event)).not.toContain(area);
+  });
+
   it('ac10_toolbar_hash_dropped_before_posthog_loads', async () => {
     const { dropToolbarHash } = await import('../toolbarHash');
     const go = (url: string) => window.history.replaceState(null, '', url);

@@ -1,7 +1,7 @@
 ---
 id: 0023a
 title: A seeker narrows apartments and rooms to chosen cities or neighbourhoods, sees how many results a filter gives before applying it, and edits filters comfortably on a phone
-status: verified
+status: done
 depends_on: []
 reviewers: [code, qa, ux, perf]   # perf: a new search predicate and a new source of search requests
 estimate: 1 long coder run        # full-stack on purpose; if it must shrink, the room chips move out first
@@ -123,6 +123,10 @@ Layout anatomy: `Search.dc.html` and `SearchDesktop.dc.html` under `design/scree
   `search.applyNone` plus Clear does not fit the 240 px desktop panel on one line.
 - A valid Apply and any Clear close the sheet. If the filters changed, focus goes to the results count line
   (existing behaviour); otherwise it returns to the toggle.
+- **Back (Gilad 2026-11-18):** a phone's Back while the sheet is open only closes the sheet. The draft is discarded,
+  as with the X; the URL, the applied filters and the results stay as they were. Opening the sheet pushes a history
+  entry for this. Apply and Clear take that entry over, the X and Esc remove it, and the map's `replace` writes neither
+  close the sheet nor disturb it.
 - The form's own `<h2>` renders only in the desktop panel. The desktop `Card` region named by it is unchanged.
 
 **Removable tags (`ActiveFilterTags`)**
@@ -218,18 +222,15 @@ Accepted at verification, nothing left for the coder to decide:
 - A `moveend` landing between a filter push and its commit can write the old params back. This race already exists
   for Apply and lasts milliseconds. The coder logs it in `specs/FOLLOWUPS.md`.
 
-## Digest (filled by orchestrator after verification)
-    Spec 0023a — Search filters upgrade, phase 1   (verified, 1 part)
-    What a user can do after this: filter apartments and rooms by cities or neighbourhoods, see the result count
-    before applying, remove any active filter in one tap, and edit filters in a full-screen phone sheet.
-    Decisions I need from you: none open. Neighbourhood filters are strict (decided 2026-11-18).
-    KPIs this slice moves: searches run (`search_run`) and listings opened from search; no baseline measured yet.
-    Acceptance targets: two SQL statements per search; p95 with 20 areas at 10,000 listings no worse than without;
-    counts debounced 400 ms and stopped after a 429; area ids never reach analytics.
-    Risks: the area list inside the phone sheet cannot be tested by CI — typing a full name plus Enter still works,
-    and Gilad checks it on a phone after merge.
-    Reviewers: code, qa, ux, perf   Estimated: 1 long coder run, 1 review round
-    Links: specs/0023a-search-filters-upgrade.md · PRODUCT.md "Search" · Search.dc.html, SearchDesktop.dc.html
+## Digest (merged 2026-11-18, PR #140, merge 0573024)
+`/search` and `/market` filter by cities and neighbourhoods. The apply button shows the result count, active filters
+are removed from their tags, a phone edits filters in a full-screen sheet, and rooms use quick choices. Review: code,
+qa, ux and perf: 1 blocker waived, 5 majors fixed, 10 minors fixed, 17 follow-ups logged. The first CI run failed three
+phone e2e tests on a too-broad double-tap guard; fixed. CI passed on `702944c`.
+Decided by Gilad 2026-11-18: a neighbourhood filter hides listings with an unknown neighbourhood; phone Back with the
+sheet open only closes the sheet. Waived by Gilad: NF2 misses for a signed-out visitor filtering on 20 broad cities
+(about 79% of 10,000 apartments): search p95 77 to 124 ms, live count 75 to 141 ms, busy Mac in Docker. The index is in
+`specs/FOLLOWUPS.md`. Owed: Gilad checks the area list inside the sheet on a real phone.
 
 ## Verifier findings
 One round (2026-11-18): 6 must-fix and 10 should-fix findings, all applied to the sections above by the orchestrator.

@@ -6,7 +6,9 @@ the listing's **approximate** point (the street's point plus a fixed per-listing
 ~200 m, 4 decimals), `null` until the worker has located it; never a geocoder's raw point.
 
 `SearchParams`' optional map box (`west`, `south`, `east`, `north`, all four or none) matches only
-listings whose approximate point is inside it.
+listings whose approximate point is inside it. Its optional `area_ids` (spec 0023a, repeated, up to
+`AREA_IDS_MAX`) keeps listings in any of those cities or neighbourhoods; an id the catalogue does
+not hold just matches nothing.
 
 `ListingPublic.match` (spec 0006b) is the caller's match score and its explanation: only a score and
 criterion codes, never a profile value; `null` for everyone but an account with a profile with the
@@ -54,6 +56,7 @@ from app.schemas.listing import Condition, Furnished, ListingType, Poster, Rooms
 from app.schemas.match import MatchOut
 from app.schemas.photo import PhotoOut
 from app.schemas.profile import (
+    AREA_IDS_MAX,
     ContractMonths,
     GenderPreference,
     HouseholdsOut,
@@ -77,6 +80,8 @@ class SearchParams(BaseModel):
     """`GET /listings` query. Every filter is optional; a boolean feature filter applies only when
     `true`. Unknown query params are ignored."""
 
+    # Spec 0023a: cities and neighbourhoods, any of them (`services/search.py`).
+    area_ids: Annotated[list[uuid.UUID], Field(max_length=AREA_IDS_MAX)] | None = None
     price_min: SearchPrice | None = None
     price_max: SearchPrice | None = None
     rooms_min: Rooms | None = None

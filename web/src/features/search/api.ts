@@ -31,6 +31,7 @@ export async function searchListings(
   if (opts.bbox !== undefined) {
     [query.west, query.south, query.east, query.north] = opts.bbox;
   }
+  if (filters.area_ids !== undefined) query.area_ids = filters.area_ids;
   if (filters.price_min !== undefined) query.price_min = filters.price_min;
   if (filters.price_max !== undefined) query.price_max = filters.price_max;
   if (filters.rooms_min !== undefined) query.rooms_min = filters.rooms_min;

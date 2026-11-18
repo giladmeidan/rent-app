@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../locales/he.json';
 import { Dialog, useConfirm, type ConfirmFn, type ConfirmOptions } from '../Dialog';
+import { GHOST_CLICK_MS, GHOST_CLICK_RADIUS_PX } from '../ghostClick';
 
 const TITLE = he.flatmates.mine.leaveConfirm;
 const BODY = he.listings.edit.expiredBody;
@@ -72,6 +73,155 @@ const open = () => {
 };
 
 describe('Dialog', () => {
+  it('ac19_sheet_size', () => {
+    const onClose = vi.fn();
+    const sheet = render(
+      <Dialog open onClose={onClose} title={TITLE} size="sheet" closeLabel={he.search.closeFilters}>
+        <input aria-label={he.listings.fields.city} />
+      </Dialog>,
+    );
+    const dialog = dialogEl();
+    // It overrides the browser's modal margin and maximum sizes, and scrolls by itself.
+    expect(dialog).toHaveClass(
+      'm-0',
+      'h-dvh',
+      'max-h-none',
+      'w-full',
+      'max-w-none',
+      'rounded-none',
+      'border-0',
+      'overflow-y-auto',
+      'overscroll-contain',
+      'scroll-pb-[5.5rem]',
+    );
+    expect(dialog).not.toHaveClass('max-w-dialog');
+    expect(dialog).not.toHaveClass('rounded-lg');
+    expect(dialog).not.toHaveClass('border');
+    expect(dialog.firstElementChild).toHaveClass('min-h-full');
+
+    // The X is named and is the first thing `showModal` can focus.
+    const close = screen.getByRole('button', { name: he.search.closeFilters });
+    expect(dialog.querySelector('button, input, select, textarea, a[href]')).toBe(close);
+
+    // A backdrop press does nothing; the X closes.
+    fireEvent.pointerDown(dialog);
+    fireEvent.click(dialog);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    sheet.unmount();
+
+    // The other sizes render as before, with no X and a working backdrop.
+    for (const [size, width] of [
+      ['default', 'max-w-dialog'],
+      ['wide', 'max-w-dialog-wide'],
+    ] as const) {
+      const other = render(<Dialog open onClose={onClose} title={TITLE} size={size} />);
+      const element = dialogEl();
+      expect(element).toHaveClass(width, 'w-full', 'rounded-lg', 'border', 'border-border', 'p-0');
+      expect(element).not.toHaveClass('h-dvh');
+      expect(element.firstElementChild).not.toHaveClass('min-h-full');
+      expect(element.querySelector('button')).toBeNull();
+      onClose.mockClear();
+      fireEvent.pointerDown(element);
+      fireEvent.click(element);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      other.unmount();
+    }
+  });
+
+  describe('ac19_sheet_swallows_the_second_tap', () => {
+    const AT = { detail: 1, clientX: 100, clientY: 700 };
+    const behind = vi.fn();
+
+    function Page({ size = 'sheet' }: { size?: 'sheet' | 'default' }) {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={behind}>
+            {he.common.retry}
+          </button>
+          <Dialog open={open} onClose={() => setOpen(false)} title={TITLE} size={size}>
+            <button type="button" onClick={() => setOpen(false)}>
+              {he.common.confirm}
+            </button>
+            <input aria-label={he.listings.fields.city} />
+          </Dialog>
+        </>
+      );
+    }
+    const page = () => screen.getByRole('button', { name: he.common.retry, hidden: true });
+    const inside = () => screen.getByRole('button', { name: he.common.confirm });
+    const wait = (ms: number) => {
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      behind.mockClear();
+    });
+    afterEach(() => {
+      wait(GHOST_CLICK_MS);
+      vi.useRealTimers();
+    });
+
+    it('drops_one_tap_at_the_same_place', () => {
+      render(<Page />);
+      fireEvent.click(inside(), AT);
+      // Near the first tap, not exactly on it.
+      fireEvent.click(page(), { ...AT, clientX: AT.clientX + GHOST_CLICK_RADIUS_PX - 1 });
+      expect(behind).not.toHaveBeenCalled();
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets_a_click_elsewhere_through', () => {
+      render(<Page />);
+      fireEvent.click(inside(), AT);
+      fireEvent.click(page(), { ...AT, clientY: AT.clientY - GHOST_CLICK_RADIUS_PX - 1 });
+      expect(behind).toHaveBeenCalledTimes(1);
+      // It disarmed nothing: the double tap's second tap is still dropped.
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends_after_the_moment_has_passed', () => {
+      render(<Page />);
+      fireEvent.click(inside(), AT);
+      wait(GHOST_CLICK_MS);
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('is_not_armed_by_a_keyboard_press', () => {
+      render(<Page />);
+      fireEvent.click(inside());
+      fireEvent.click(page(), { ...AT, clientX: 0, clientY: 0 });
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('is_not_armed_by_esc_after_an_earlier_press', () => {
+      render(<Page />);
+      fireEvent.click(screen.getByRole('textbox'), AT);
+      wait(0);
+      act(() => {
+        dialogEl().dispatchEvent(new Event('cancel', { cancelable: true }));
+      });
+      expect(dialogEl()).not.toHaveAttribute('open');
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('never_guards_other_dialogs', () => {
+      render(<Page size="default" />);
+      fireEvent.click(inside(), AT);
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('ac7_dialog_and_confirm', async () => {
     // ---- Dialog ----
     const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');

@@ -162,7 +162,10 @@ describe('SearchMap', () => {
     fireEvent.change(price.getByLabelText(he.search.to), { target: { value: '8000' } });
     fireEvent.click(screen.getByRole('button', { name: he.search.apply }));
     expect(currentPath()).toBe('/search?price_max=8000&pets=true&view=map');
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    fireEvent.click(screen.getByRole('button', { name: /^מסננים/ }));
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: he.search.clear }),
+    );
     expect(currentPath()).toBe('/search?view=map');
     expect(mapRegion()).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
@@ -1226,5 +1229,137 @@ describe('SearchMap', () => {
     await settle();
     expect(document.activeElement).not.toBe(liveRegion());
     expect(retry).toBeVisible();
+  });
+
+  it('ac18_map_follows_area_filter', async () => {
+    const VIEW = { center: [34.8, 32.08] as [number, number], zoom: 14 };
+    const HAIFA_VIEW = { center: haifa.centre as [number, number], zoom: 13 };
+    const mapView = () => ({ center: lastProps().center, zoom: lastProps().zoom });
+    const listing = located();
+    const openFilters = () => {
+      fireEvent.click(screen.getByRole('button', { name: /^מסננים/ }));
+      return within(screen.getByRole('dialog', { name: he.search.filters }));
+    };
+    const pickArea = async (name: string) => {
+      const sheet = openFilters();
+      const picker = await vi.waitFor(() => sheet.getByRole('combobox', { name: he.search.area }));
+      fireEvent.change(picker, { target: { value: name } });
+      const submit = screen.getByRole('dialog').querySelector('button[type="submit"]');
+      fireEvent.click(submit as HTMLButtonElement);
+    };
+
+    // A new area, on a map whose box holds no listing: the old answer stays out of the way.
+    let api = mockApi({
+      'GET /areas': [() => json(AREAS)],
+      [SEARCH]: [() => json(page([])), () => json(page([listing]))],
+    });
+    let view = await openMap('/search?view=map&c=32.08%2C34.8&z=14');
+    moveTo(BOX, VIEW);
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(he.search.map.empty);
+    });
+    expect(api.calls(SEARCH)).toHaveLength(1);
+    await pickArea(haifa.name_he);
+    expect(params().getAll('area_ids')).toEqual([haifa.id]);
+    await vi.waitFor(() => {
+      expect(cameras()).toEqual([{ seq: 1, ...HAIFA_VIEW }]);
+    });
+    // Nothing was asked for the old box, and "no listings here" is not said about it.
+    await settle();
+    expect(api.calls(SEARCH)).toHaveLength(1);
+    expect(liveRegion()).not.toHaveTextContent(he.search.map.empty);
+
+    // The move's box brings exactly one request, with the filter.
+    moveTo(OTHER_BOX, HAIFA_VIEW);
+    await screen.findByRole('button', { name: pinLabel(listing) });
+    expect(api.calls(SEARCH)).toHaveLength(2);
+    const sentParams = new URL(sent(api, 1).url).searchParams;
+    expect(sentParams.getAll('area_ids')).toEqual([haifa.id]);
+    expect(Number(sentParams.get('west'))).toBeCloseTo(OTHER_BOX[0], 3);
+    expect(Number(sentParams.get('north'))).toBeCloseTo(OTHER_BOX[3], 3);
+    expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+
+    // Removing the area does not move the map; the search reruns in the same box.
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('search.tags.remove', { name: haifa.name_he }) }),
+    );
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(3);
+    });
+    expect(cameras()).toHaveLength(1);
+    const after = new URL(sent(api, 2).url).searchParams;
+    expect(after.has('area_ids')).toBe(false);
+    expect(Number(after.get('west'))).toBeCloseTo(OTHER_BOX[0], 3);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Two new areas at once (Back after a Clear), the unknown one first: the map goes to the first
+    // the catalogue holds, and the count line says nothing about the old box meanwhile.
+    const unknown = '00000000-0000-0000-0000-0000000dead0';
+    mockApi({ 'GET /areas': [() => json(AREAS)], [SEARCH]: [() => json(page([listing]))] });
+    view = await openMap(
+      `/search?view=map&c=32.08%2C34.8&z=14&area_ids=${unknown}&area_ids=${haifa.id}`,
+    );
+    moveTo(BOX, VIEW);
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
+    });
+    const sheet = openFilters();
+    fireEvent.click(sheet.getByRole('button', { name: he.search.clear }));
+    expect(params().has('area_ids')).toBe(false);
+    await settle();
+    expect(cameras()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+    await vi.waitFor(() => {
+      expect(cameras()).toEqual([{ seq: 1, ...HAIFA_VIEW }]);
+    });
+    expect(liveRegion()).toBeEmptyDOMElement();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Opened with a filter and no position: on the first area, for a visitor...
+    mockApi({
+      'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+      'GET /areas': [() => json(AREAS)],
+      [SEARCH]: [() => json(page([listing]))],
+    });
+    view = await openMap(`/search?view=map&area_ids=${unknown}&area_ids=${haifa.id}`);
+    expect(mapView()).toEqual(HAIFA_VIEW);
+    await settle();
+    expect(cameras()).toEqual([]);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // ...and ahead of a seeker's first preferred area.
+    mockApi({
+      'GET /me': [json(noa)],
+      'GET /me/profile': [json(profile({ area_ids: [florentin.id] }))],
+      'GET /areas': [() => json(AREAS)],
+      [SEARCH]: [() => json(page([listing]))],
+    });
+    view = await openMap(`/search?view=map&area_ids=${haifa.id}`);
+    expect(mapView()).toEqual(HAIFA_VIEW);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A position in the URL still wins.
+    mockApi({ 'GET /areas': [() => json(AREAS)], [SEARCH]: [() => json(page([listing]))] });
+    view = await openMap(`/search?view=map&area_ids=${haifa.id}&c=32.08%2C34.8&z=14`);
+    expect(mapView()).toEqual(VIEW);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // `/areas` failed or holds none of the ids: today's default view.
+    for (const areas of [json({ detail: 'boom' }, 500), json([gushDan])]) {
+      api = mockApi({
+        'GET /me': [json({ detail: 'unauthenticated' }, 401)],
+        'GET /areas': [areas],
+        [SEARCH]: [() => json(page([listing]))],
+      });
+      view = await openMap(`/search?view=map&area_ids=${haifa.id}`);
+      expect(mapView()).toEqual(DEFAULT_VIEW);
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 });

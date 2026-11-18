@@ -20,6 +20,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { Tag } from '../../components/Tag';
+import { TagRemoveButton } from '../../components/TagRemoveButton';
 import { Switch } from '../../components/Switch';
 import { TextInput } from '../../components/TextInput';
 import { Textarea } from '../../components/Textarea';
@@ -67,21 +68,6 @@ const sectionHeading = 'font-display text-h2';
 const mutedNote = 'text-body-sm text-ink-muted';
 // Preferred areas are cities and neighbourhoods (spec 0021b).
 const PREFERRED_KINDS = ['settlement', 'neighbourhood'] as const;
-const REMOVE = (
-  <svg
-    aria-hidden="true"
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M6 6l12 12M18 6L6 18" />
-  </svg>
-);
 const switchCard = 'flex flex-col divide-y divide-border';
 const navLink = cx(
   'flex min-h-11 items-center rounded-md px-3 text-body font-medium text-ink-muted hover:bg-surface-subtle hover:text-ink',
@@ -278,22 +264,14 @@ function ProfileFormView({ initial, areas, refetchAreas }: FormProps) {
               return (
                 <Tag key={area.id} as="li" tone="accent">
                   {name}
-                  <button
-                    type="button"
+                  <TagRemoveButton
                     aria-label={t('profile.areas.remove', { name })}
                     onClick={() => {
                       removeArea(area.id);
                       // The focused button unmounts: keep focus in the picker.
                       focus('area_ids');
                     }}
-                    // 24 px look, 44 px hit area.
-                    className={cx(
-                      "relative inline-flex size-6 shrink-0 items-center justify-center rounded-full after:absolute after:-inset-2.5 after:content-['']",
-                      focusRing,
-                    )}
-                  >
-                    {REMOVE}
-                  </button>
+                  />
                 </Tag>
               );
             })}

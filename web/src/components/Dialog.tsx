@@ -4,6 +4,7 @@ import {
   useId,
   useRef,
   useState,
+  type MouseEvent,
   type PointerEvent,
   type ReactNode,
   type RefObject,
@@ -12,6 +13,8 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button } from './Button';
+import { cx } from './cx';
+import { swallowGhostClick, type GhostPress } from './ghostClick';
 
 export type DialogProps = {
   open: boolean;
@@ -24,13 +27,19 @@ export type DialogProps = {
   actions?: ReactNode;
   /** Focused after opening; otherwise the browser focuses the first focusable element. */
   initialFocusRef?: RefObject<HTMLElement | null>;
-  /** `wide` is wider and tall, for a calendar. */
-  size?: 'default' | 'wide';
+  /** `wide` is wider and tall, for a calendar. `sheet` fills the screen, for a phone's long form;
+   * a press outside its content does not close it. */
+  size?: 'default' | 'wide' | 'sheet';
+  /** Names an X button at the title's inline end, first in the tab order. */
+  closeLabel?: string;
 };
 
 const SIZE = {
-  default: 'max-w-dialog',
-  wide: 'max-w-dialog-wide min-h-[min(36rem,calc(100dvh-3rem))]',
+  default: 'w-full max-w-dialog rounded-lg border border-border',
+  wide: 'w-full max-w-dialog-wide min-h-[min(36rem,calc(100dvh-3rem))] rounded-lg border border-border',
+  // Overrides the browser's margin and maximum sizes for a modal.
+  sheet:
+    'm-0 h-dvh max-h-none w-full max-w-none scroll-pb-[5.5rem] overflow-y-auto overscroll-contain rounded-none border-0',
 };
 
 /**
@@ -47,10 +56,13 @@ export function Dialog({
   actions,
   initialFocusRef,
   size = 'default',
+  closeLabel,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const pointerDownOnDialog = useRef(false);
+  // A sheet's click still being handled: the press behind a close in this same task, if any.
+  const pressNow = useRef<GhostPress | null>(null);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -74,6 +86,9 @@ export function Dialog({
       // Synchronously: the browser fires `close` a task later, after the caller (e.g. an awaited
       // `confirm()`) may already have moved focus on.
       restoreFocus();
+      // A sheet covers the whole page, so a double tap's second tap would land on the page. Not
+      // armed by a close without a press there (Back, Esc, a rotation).
+      if (pressNow.current !== null) swallowGhostClick(pressNow.current);
     }
   }, [open, initialFocusRef]);
 
@@ -89,6 +104,15 @@ export function Dialog({
     if (open) onClose();
   };
 
+  const handleClickCapture = ({ detail, clientX, clientY }: MouseEvent<HTMLDialogElement>) => {
+    if (size !== 'sheet') return;
+    pressNow.current = { detail, clientX, clientY };
+    // React closes within this task; anything later did not come from this press.
+    setTimeout(() => {
+      pressNow.current = null;
+    }, 0);
+  };
+
   const handleCancel = (event: SyntheticEvent<HTMLDialogElement>) => {
     event.preventDefault();
     onClose();
@@ -102,8 +126,14 @@ export function Dialog({
   const handleClick = (event: SyntheticEvent<HTMLDialogElement>) => {
     const fromBackdrop = pointerDownOnDialog.current && event.target === event.currentTarget;
     pointerDownOnDialog.current = false;
-    if (fromBackdrop) onClose();
+    if (fromBackdrop && size !== 'sheet') onClose();
   };
+
+  const heading = (
+    <h2 id={titleId} className="text-h3">
+      {title}
+    </h2>
+  );
 
   return (
     <dialog
@@ -113,13 +143,39 @@ export function Dialog({
       onClose={handleClose}
       onCancel={handleCancel}
       onPointerDown={handlePointerDown}
+      onClickCapture={handleClickCapture}
       onClick={handleClick}
-      className={`w-full ${SIZE[size]} p-0 rounded-lg border border-border bg-surface text-ink backdrop:bg-ink/40`}
+      className={`${SIZE[size]} p-0 bg-surface text-ink backdrop:bg-ink/40`}
     >
-      <div className="flex flex-col gap-4 p-6">
-        <h2 id={titleId} className="text-h3">
-          {title}
-        </h2>
+      <div className={cx('flex flex-col gap-4 p-6', size === 'sheet' && 'min-h-full')}>
+        {closeLabel === undefined ? (
+          heading
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            {heading}
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={closeLabel}
+              onClick={onClose}
+              className="shrink-0"
+              icon={
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              }
+            />
+          </div>
+        )}
         {description !== undefined && (
           <p id={descriptionId} className="text-body text-ink-muted">
             {description}

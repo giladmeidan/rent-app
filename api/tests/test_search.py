@@ -1,4 +1,5 @@
-"""Public search and listing page API (spec 0003a): AC1-AC9; spec 0010a AC1 (the type default)."""
+"""Public search and listing page API (spec 0003a): AC1-AC9; spec 0010a AC1 (the type default);
+spec 0023a AC1-AC4 and NF1 (the area filter)."""
 
 import datetime as dt
 import uuid
@@ -13,6 +14,7 @@ from sqlalchemy import Engine, event
 
 from tests.conftest import (
     Outbox,
+    insert_neighbourhood,
     insert_settlement,
     make_listing,
     make_owner,
@@ -534,3 +536,114 @@ def test_ac8_is_mine_and_own_room_never_hidden(
     rooms = [entry["listing"] for entry in likes.json()["liked_me"]]
     assert [room["id"] for room in rooms] == [theirs]
     assert all(room["is_mine"] is False for room in rooms)
+
+
+# --- Spec 0023a: the area filter ------------------------------------------------------------------
+
+
+def _areas(*ids: object) -> str:
+    return "&".join(f"area_ids={area_id}" for area_id in ids)
+
+
+def test_ac1_area_filter_by_city(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    other_city = insert_settlement(db_engine, 6300, "חיפה")
+    closed_city = insert_settlement(db_engine, 6400, "סגורה", active=False)
+    owner = make_owner(db_engine, "owner@example.com")
+    hood = insert_neighbourhood(db_engine, gush_dan, 1, [])
+    in_city = str(make_listing(db_engine, owner, gush_dan))
+    in_hood = str(make_listing(db_engine, owner, gush_dan, neighbourhood_id=hood))
+    elsewhere = str(make_listing(db_engine, owner, other_city))
+    make_listing(db_engine, owner, closed_city)
+
+    # A city id holds its listings with or without a known neighbourhood; `_id_set` checks `total`.
+    assert _id_set(client, _areas(gush_dan)) == {in_city, in_hood}
+    assert _id_set(client, _areas(other_city)) == {elsewhere}
+    assert _id_set(client) == {in_city, in_hood, elsewhere}
+    # An inactive city matches nothing: its listings are not public.
+    assert _id_set(client, _areas(closed_city)) == set()
+
+
+def test_ac2_area_filter_by_neighbourhood(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    hood = insert_neighbourhood(db_engine, gush_dan, 1, [])
+    other_hood = insert_neighbourhood(db_engine, gush_dan, 2, [])
+    closed_hood = insert_neighbourhood(db_engine, gush_dan, 3, [], active=False)
+    placed = str(make_listing(db_engine, owner, gush_dan, neighbourhood_id=hood))
+    other = str(make_listing(db_engine, owner, gush_dan, neighbourhood_id=other_hood))
+    in_closed = str(make_listing(db_engine, owner, gush_dan, neighbourhood_id=closed_hood))
+    unknown_hood = str(make_listing(db_engine, owner, gush_dan))
+
+    assert _id_set(client, _areas(hood)) == {placed}
+    # Strict (Gilad 2026-11-18): no neighbourhood never matches one, but the city still shows it.
+    assert unknown_hood in _id_set(client, _areas(gush_dan))
+    assert other in _id_set(client, _areas(other_hood))
+    # An inactive neighbourhood still matches the public listings placed in it.
+    assert _id_set(client, _areas(closed_hood)) == {in_closed}
+
+
+def test_ac3_area_filter_union_with_filters_and_bbox(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    other_city = insert_settlement(db_engine, 6300, "חיפה")
+    third_city = insert_settlement(db_engine, 6400, "עכו")
+    owner = make_owner(db_engine, "owner@example.com")
+    hood = insert_neighbourhood(db_engine, other_city, 1, [])
+    in_city = make_listing(db_engine, owner, gush_dan, price_ils=5000)
+    in_hood = make_listing(db_engine, owner, other_city, neighbourhood_id=hood, price_ils=5000)
+    dear = make_listing(db_engine, owner, gush_dan, price_ils=9000)
+    no_hood = make_listing(db_engine, owner, other_city, price_ils=5000)
+    third = make_listing(db_engine, owner, third_city, price_ils=5000)
+    for listing in (in_city, dear, no_hood, third):
+        set_location(db_engine, listing, 34.80, 32.05)
+    set_location(db_engine, in_hood, 34.99, 32.80)  # outside the box
+    both = _areas(gush_dan, hood)
+
+    assert _id_set(client, both) == {str(in_city), str(in_hood), str(dear)}
+    assert _id_set(client, f"{both}&price_max=6000") == {str(in_city), str(in_hood)}
+    box = "west=34.75&south=32.00&east=34.85&north=32.10"
+    assert _id_set(client, f"{both}&{box}") == {str(in_city), str(dear)}
+    assert _id_set(client, f"{both}&{box}&price_max=6000") == {str(in_city)}
+
+
+def test_ac4_area_ids_validation(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine
+) -> None:
+    listing = str(make_listing(db_engine, make_owner(db_engine, "owner@example.com"), gush_dan))
+
+    # An id outside the catalogue is no error, it matches nothing.
+    body = _search(client, _areas(uuid.uuid4()))
+    assert (body["items"], body["total"]) == ([], 0)
+    # A repeated id is harmless.
+    assert _id_set(client, _areas(gush_dan, gush_dan)) == {listing}
+    # The limit is 20 ids, repeats included.
+    assert _id_set(client, _areas(gush_dan, *(uuid.uuid4() for _ in range(19)))) == {listing}
+    for query in (
+        "area_ids=not-a-uuid",
+        "area_ids=",
+        _areas(gush_dan, "not-a-uuid"),
+        _areas(gush_dan, *(uuid.uuid4() for _ in range(20))),
+    ):
+        response = client.get(f"/listings?{query}")
+        assert response.status_code == 422, (query, response.text)
+
+
+def test_nf1_area_filter_two_statements(
+    client: TestClient, gush_dan: uuid.UUID, db_engine: Engine, statements: list[str]
+) -> None:
+    owner = make_owner(db_engine, "owner@example.com")
+    hood = insert_neighbourhood(db_engine, gush_dan, 1, [])
+    for _ in range(25):
+        make_listing(db_engine, owner, gush_dan, neighbourhood_id=hood)
+    _search(client)  # warm the connection: a first connect sends its own setup statements
+
+    statements.clear()
+    body = _search(client, _areas(gush_dan, hood))
+    sent = list(statements)
+
+    assert (len(body["items"]), body["total"]) == (20, 25)
+    assert len(sent) == 2, sent
+    assert all("FROM listings" in statement for statement in sent), sent

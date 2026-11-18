@@ -21,6 +21,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0003a · api/app/schemas/search.py:65 · share one `RoomsOut` alias (Decimal + `PlainSerializer(float)`) between `ListingPublic` and `ListingOut` (schemas/listing.py:170) instead of repeating the annotation · touches two schemas, not one line; review round 1 code minor
 - [ ] 0003a · api/app/routers/search.py:28 · a repeated query param silently takes the last value (`price_max=8000&price_max=6000` → 6000, `pets=true&pets=false` → no filter); pin it with a test or document it · FastAPI default, no leak or 500; review round 1 qa minor
 - [ ] 0003a · api/app/services/search.py:96 · no index serves search; every statement seq-scans `listings` (worst 10.9 ms at 10k rows, roughly linear); add `0004_listings_search_index`, e.g. partial btree `(created_at DESC, id) WHERE status='active' AND listing_type='apartment'`, when live listings near ~50k · NF2 passes at 10k and the spec adds an index only on a miss; review round 1 perf minor
+- [ ] 0023a · api/app/services/search.py (`_filtered`) · add the index `listings (listing_type, created_at DESC, id) WHERE status = 'active'` for a signed-out visitor filtering on 20 broad cities (about 79% of 10,000 apartments), which misses NF2: service p95 search 77 to 124 ms, live count 75 to 141 ms, on a busy Mac in Docker. On a scratch database with the index: 20 cities 16.0 ms against 15.2 ms without the area filter (1.05x); live count 1.23x (95% CI 0.82-1.50); rooms 1.18x (about 1.5 ms); seeker counts about 17 ms · waived by Gilad 2026-11-18, no index or migration in 0023a
 - [ ] 0003b · web/src/features/listings/ListingPage.tsx:55-71 and ListingCard · the no-photo grey placeholder takes most of the first screen; use a shorter placeholder when there is no photo · photos belong to a later slice; review round 1 ux minor · the listing page's half closed by 0009j (a 160 px band, 256 px from `lg`); the full gallery comes with photos (0002c)
 - [ ] 0003b · web/src/features/search/FiltersForm.tsx · the native `type="date"` input shows the browser-locale `dd/mm/yyyy` placeholder; wrap or format it in Slice 9 (copy/locale pass) · native control, works; review round 1 qa minor
 - [ ] 0002d · web/src/features/listings/validate.ts · the wizard does not mirror the API's >4-combining-marks rule: a "Zalgo" body gets the generic publish error with no field named, and no vitest pins that gap; mirror the rule with a field error · spec 0002d keeps the rule API-only; review round 1 qa minor · partly done in 0002e: a server 422 now names the field (`listings.errors.invalid`); the rule itself is still not mirrored
@@ -339,6 +340,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0019b · web/e2e/flatmates.spec.ts (`ac5_group_chat_flow`), web/e2e/inbox.spec.ts (`ac12_shortlist_chat_decline`) · e2e · flatmates ac5 / inbox ac12 run ~30 s, at the default timeout; test.slow() added in 0019b; split or speed up · CI fix on PR #130, not 0019b's code
 - [ ] 0019b · web/e2e/a11y.spec.ts (`ac5_public_pages_pass_axe`) · Flaky e2e: timed out at 30 s on PR #130's run (f550c28), passed on its retry · not 0019b's code; watch whether it recurs
 - [ ] 0021a1 · web/e2e/a11y.spec.ts (`ac5_public_pages_pass_axe`) · The flaky e2e from 0019b recurred on PR #132's run (b1105b1): timed out at 30 s, passed on its retry · watch it
+- [ ] 0023a · web/e2e/a11y.spec.ts:18 (`ac5_public_pages_pass_axe`) · The same flake on PR #140's run 44289593607: hit the whole test's 30 s budget at a11y.spec.ts:84 and passed on retry in 19.0 s. It also timed out first on runs without 0023a's code (44140856353, 44286939418, 44289308133; retries 17.4-18.2 s). 0023a adds about 50 ms of axe time on each search page in headless Chrome (1,189 more `<option>`s), so it is not the cause · the test covers many pages in one 30 s budget; split it or give it its own timeout
 - [ ] 0021a2 · api/app/services/areas.py (`import_areas`) · A neighbourhood deactivated by a re-import stays on `listings.neighbourhood_id` and keeps matching profiles that saved it · low impact; option: clear it in `import_areas` when deactivating
 
 ## 0021a1
@@ -349,6 +351,25 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0021d · web/src/features/search/SearchPage.tsx · owners also request `GET /me/profile` (SearchPage's `useProfile(me.data != null)`), though `useProfile`'s doc says owners never do · predates 0021d; needs a role gate in SearchPage; review round 1 ux minor
 
 ## 0021c
+- [ ] 0021c · after the first national import (`RENT_REFERENCE=nadlan make rent-import` in the main stack, 4–6 h), run `make rent-backtest` and change `HALF_WIDTH` / `WINDOW_QUARTERS` / `RATIO_HALF_WIDTH` only if it says so, with the run's numbers in the comment · spec 0021c Scope 10
+
+## 0023a
+- [ ] 0023a · web/src/features/search/SearchMap.tsx (`onMoveEnd`) · a `moveend` that lands between a filter push and its commit writes `c`/`z` onto the old params, which can put the old filters back in the URL; the race already exists for Apply and lasts milliseconds · accepted at verification (spec 0023a, Risks)
+- [ ] 0023a · web/src/features/search/FiltersForm.tsx:377 · the Apply and Clear row jumps as the count label lengthens · review minor, layout polish
+- [ ] 0023a · web/src/features/search/ActiveFilterTags.tsx:65-68 · chips 3 and 4 show the tag "חדרים: 3–4.5" where people picked 3 and 4 · review minor; the 0009b/0009i tag-range follow-ups are out of this spec's scope
+- [ ] 0023a · web/src/features/search/filters.ts:143-148 · the filter count (per price and rooms bound) disagrees with the visible tags (one per range) · kept on purpose by the spec
+- [ ] 0023a · web/src/features/search/FiltersForm.tsx:316, web/src/features/search/AreaFilterField.tsx:32-66 · adding or removing an area, and a chip tap that changes the run, are not announced to screen readers · review minor, needs its own wording
+- [ ] 0023a · web/src/features/search/AreaFilterField.tsx:42 · removing an area chip moves focus to the picker, which probably opens the phone keyboard · review minor, needs a check on a phone
+- [ ] 0023a · web/src/components/Dialog.tsx:136 · the sheet's side padding is 24 px against the brand's 16 px · review minor, shared with the other dialog sizes
+- [ ] 0023a · web/src/features/search/FiltersForm.tsx:229 · text in the area input that matches nothing is silently ignored on Apply · review minor
+- [ ] 0023a · web/src/features/search/SearchPage.tsx:91 · rotating across `lg` with the sheet open drops focus to body · review minor
+- [ ] 0023a · web/src/features/search/SearchPage.tsx:172 · on a desktop, Apply with no change adds a history entry · review minor; the phone sheet no longer does
+- [ ] 0023a · web/src/features/search/useFilterCount.ts:38 · a live count costs as much as a results page · a count-only endpoint is out of the spec's scope
+- [ ] 0023a · api/app/routers/areas.py:21-35 · `GET /areas` is 255 KB uncompressed and loads on every desktop `/search`; confirm the production proxy compresses it · review minor, a deploy check
+- [ ] 0023a · web/src/features/search/useFilterCount.ts:36-38 · count requests for a superseded draft are not cancelled · review minor; the 400 ms wait bounds them
+- [ ] 0023a · web/src/features/search/SearchPage.tsx:128 · a sort or view change remounts the form and its area picker (about 1,200 options) · review minor
+- [ ] 0023a · web/src/features/search/FiltersForm.tsx:149 · a press on a pill while a typed area name is pending can be lost, as the chip added on blur moves the pill; Apply and Clear are protected · found in the 0023a fix round
+- [ ] 0023a · web/src/features/search/SearchPage.tsx:150 · a double tap on the filters toggle may land its second tap on the sheet's X, and a reload with the sheet open leaves a copy of the URL in history · found in the 0023a fix round, neither reproduced
 
 ## 0022a
 - [ ] 0022a · api/app/routers/auth.py (`DELETE /me`, `PUT /me/password`) · require the current password for both, so someone who knows only a fresh session or the password cannot act and the owner hears about it only afterwards · the 0016a "option 3, later" (Gilad 2026-11-16); out of scope in 0022a, which only adds the emails
