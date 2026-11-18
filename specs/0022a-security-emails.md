@@ -248,10 +248,10 @@ Defaults taken, so nothing blocks the build. Gilad can overrule any of them in t
    there too, which adds noise to every password sign-up.
 2. **Security mail is best effort.** Options: (a) one attempt after the response, recommended for launch; (b) a durable
    outbox, which needs a table that would hold an address after the account is gone, against the deletion promise.
-3. **Password-mail cap.** Q1 default B, awaiting Gilad's confirmation; only AC7 and Scope 5 change if he picks
-   otherwise. Options: (a) 1 per hour, the quietest, but the owner's own change can silence the warning about an
-   intruder's change in that hour; (b) up to 3 per hour per account, recommended; (c) mail every change, no gap, but
-   up to 200 mails an hour from one account.
+3. **Password-mail cap. Q1 decided by Gilad, 2026-11-18: option (b), up to 3 per hour per account.** Options were:
+   (a) 1 per hour, the quietest, but the owner's own change can silence the warning about an intruder's change in
+   that hour; (b) up to 3 per hour per account; (c) mail every change, no gap, but up to 200 mails an hour from one
+   account.
 
 Other risks:
 - **Privacy text:** Scope 8 changes three strings in the legal draft, and now says the email stays in rate-limit data for up to a day. They join the wording Gilad already has to
