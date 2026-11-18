@@ -1,7 +1,7 @@
 ---
 id: 0022a
 title: "An account owner is told by email when the password is set or changed and when the account is deleted, and a dead mail server can no longer stall the tour-mail job"
-status: verified
+status: done
 depends_on: []
 reviewers: [code, security, qa]   # security: auth paths, PII after deletion, mail abuse; qa: API behaviour and the changed job
 estimate: 1 coder run             # coder Opus/high (auth and account deletion, Speed rule 6)
@@ -286,3 +286,11 @@ Other risks:
   attacker can then spend the address's 20-a-day code ceiling from a few networks (`auth.py:7-9`, `:165`), so the owner
   may get no code for up to 24 h. The mail's contact line is the fallback. No code here; FOLLOWUPS line in Scope 11.
 - The `EMAIL_BACKEND=file` outbox stores the mail in dev and e2e only; FOLLOWUPS 0018c already tracks that outbox.
+
+## Digest (merged 2026-11-18, PR #137, merge ee2e2a7)
+The account owner now gets an email when the password is set or changed and when the account is deleted. Mail goes after
+the response in one attempt, so a mail failure cannot block the action. Limits follow the mailbox through a keyed hash:
+3 password mails an hour and 3 deletion mails a day (Gilad), failing open, so deleting and re-signing up does not reset
+them. Deleting an account clears any pending login code. `send_pending` stops at the first mail failure and re-queues the
+rest in order. The API now requires a real `CONTACT_EMAIL` on https. Reviews: code, security (one blocker, fixed by the
+mailbox limits) and qa. CI passed on `998bbf8`; 1067 API and 898 web tests passed locally. Not tested against a real SMTP server.
