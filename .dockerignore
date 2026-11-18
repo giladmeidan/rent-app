@@ -17,3 +17,7 @@ web/dist
 web/test-results
 # Test fixtures stay out of production images. Compose bind-mounts api/; tests and seed run on the host.
 api/tests
+# Local secrets and state that no image needs; the whole root is uploaded to Fly's remote builder.
+waitlist/.dev.vars*
+waitlist/.wrangler/
+graphify-out/

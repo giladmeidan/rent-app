@@ -33,7 +33,9 @@ Each section is done once unless it says otherwise. Day-to-day deploys are secti
 3. Buy the domain, add it to Cloudflare (free plan) and point the registrar's nameservers there.
 4. On the deploy computer: Node `>=22.12 <23`, pnpm, uv, and a **dedicated clean checkout of `main`**. Every
    `make deploy-*` refuses a checkout that has local commits or untracked files, so do not use a working checkout.
-5. Create the apps:
+5. **Keep only homie's apps in this Fly organisation.** All its apps share one private network. Gilad accepted that
+   for launch on 2026-11-18, relying on the 16+ character admin password, the Redis password and the admin login lock.
+6. Create the apps:
 
    ```sh
    fly apps create homie-api
@@ -93,9 +95,22 @@ fly ips list -a homie-redis   # must be empty; release anything it lists
 
 ## 5. Email
 
-Use any provider with SMTP and domain authentication. Its free tier should allow at least 300 emails a day: every
-login is one. Add its SPF and DKIM records and `_dmarc` (`v=DMARC1; p=none`; tighten to `quarantine` after a clean
-week). This gives `SMTP_URL` and `EMAIL_FROM=noreply@<domain>`, set in section 6.
+Email is **Resend Pro** ($20 a month: the free plan allows only 100 emails a day, and every login is one), sending from
+the EU region, over SMTP.
+
+1. In Resend, open **Domains**, choose **Add Domain**, enter `<domain>` and select **Ireland (`eu-west-1`)**. Choose the
+   region now: changing it later means deleting the domain and adding it again with new DNS records.
+2. Copy the records from its **Records** tab into Cloudflare DNS exactly as shown: the DKIM `TXT`, and the SPF `TXT` and
+   `MX` of the Return-Path subdomain (`send.<domain>` by default). If a record is a `CNAME`, set it to **DNS only**.
+   Wait until Resend shows the domain as verified, usually within minutes and up to 72 hours.
+3. Add a `TXT` record named `_dmarc` with `v=DMARC1; p=none`. Tighten it to `p=quarantine` after a clean week.
+4. Leave **click and open tracking off** (Resend's default): these are login and security emails. If click tracking is
+   ever turned on, its tracking subdomain must serve https, because the web's HSTS header has `includeSubDomains`.
+5. Create an API key that can only send, restricted to `<domain>`, and keep it in the password manager. Its value cannot
+   be viewed again, and it is the SMTP password.
+
+`SMTP_URL` and `EMAIL_FROM` go in through `fly secrets import` in section 6, so the key stays out of the shell history.
+`smtps://` on port 465 is implicit TLS, which is what homie's mail sender uses for that scheme.
 
 ## 6. API
 
@@ -115,7 +130,7 @@ literally: do not quote anything.
 DATABASE_URL=<direct connection string from section 2, scheme postgresql+psycopg://>
 REDIS_URL=redis://:<redis password>@homie-redis.internal:6379/0
 EMAIL_BLOCK_KEY=<generated value>
-SMTP_URL=<smtp or smtps URL from the provider>
+SMTP_URL=smtps://resend:<resend-api-key>@smtp.resend.com:465
 EMAIL_FROM=noreply@<domain>
 WEB_ORIGIN=https://<domain>
 PHOTO_PUBLIC_BASE_URL=https://media.<domain>
@@ -143,24 +158,18 @@ curl https://api.<domain>/health        # must answer {"status":"ok",...}
 fly scale count app=1 worker=1 -a homie-api   # exactly one worker: arq crons
 ```
 
-**Areas, once, after the first deploy, when open question Q1 of spec 0013a (the nadlan.gov.il terms) is settled.**
-Until then the app runs on migration `0031`'s 19 settlements.
+**Areas, once, after the first deploy.** Until then the app runs on migration `0031`'s 19 settlements.
 
 ```sh
 make import-areas-prod
 ```
 
-It loads every settlement from the CSV, then the 18 big cities' neighbourhoods from nadlan.gov.il, one request per
-5 s: about an hour. It commits after each city, so if the session drops, run it again.
+It loads every settlement from the committed `api/data/settlements.csv` and makes no outside request. Read the counts
+it prints: expect about 1,188 settlements, `neighbourhoods: 0` and `files_failed: 0`. It is safe to run again.
 
-**It exits 0 even when nadlan refuses every request: read the counts it prints.** Expect about 1,188 settlements and
-701 neighbourhoods. `neighbourhoods: 0` with `files_failed: 18` means nadlan does not answer from Frankfurt (it is
-reported to serve Israeli addresses only). The settlements are stored anyway. Then run the import from a computer in
-Israel through `fly mpg proxy <cluster id>`: in a clean checkout run
-`DATABASE_URL=<proxied migration-role URL> make import-areas`, so the value lives in that one command.
-
-This result is also the production-region check owed before `RENT_REFERENCE=nadlan` is ever turned on: if Frankfurt
-fails, the monthly rent job cannot run from Fly as it stands.
+**Production never contacts nadlan.gov.il** (decided 2026-11-18): its terms forbid commercial use without written
+approval and automated collection. `RENT_REFERENCE` and `CBS_RENT` stay `off`, so launch has no big-city neighbourhoods
+and no official rent figures.
 
 ## 7. Admin
 
@@ -176,13 +185,18 @@ fly mpg connect <cluster id> -u homie_admin -d <db> \
   -c "select current_user, session_user" \
   -c "set role none" \
   -c "select current_user, rolbypassrls from pg_roles where rolname = current_user" \
+  -c "select rolname, rolsuper, rolbypassrls from pg_roles where pg_has_role(current_user, oid, 'MEMBER')" \
   -c "select has_table_privilege(current_user, 'users', 'UPDATE') as users_update, has_table_privilege(current_user, 'user_passwords', 'INSERT') as hash_insert, has_table_privilege(current_user, 'user_passwords', 'SELECT') as hash_select"
 ```
 
 After `set role none`, `current_user` must be `homie_admin`, `rolbypassrls` false, and `users_update` and
-`hash_insert` false. `hash_select` may be true: the next step hides those rows. **If anything else shows, stop and
-bring it to the orchestrator.** If a statement in the next step is refused, it rolls back whole: stop and bring the
-error too.
+`hash_insert` false. In the list of roles it belongs to, **stop if any row shows true**. `hash_select` may be true: the
+next step hides those rows. **If anything else shows, stop and bring it to the orchestrator.**
+
+**If Fly's Reader has `BYPASSRLS` or superuser, or can otherwise reach the hash tables, `make admin-role-prod` refuses.
+Decided by Gilad on 2026-11-18: stop, leave the admin undeployed and ask Fly for a narrower role.** Do not work around
+the refusal. Any other refused statement rolls back whole: stop and bring the error. A lock timeout only means a table
+was busy: run it again.
 
 ```sh
 make admin-role-prod   # grants, row-level security on the two hash tables, post-check
@@ -276,7 +290,7 @@ Then check each of these:
       `text/event-stream`, **no** `content-encoding`, and stays open past 2 minutes.
 - [ ] `curl --http2 -s -D- -o /dev/null -H 'Accept-Encoding: gzip' https://api.<domain>/areas` shows `HTTP/2 200` and
       `content-encoding: gzip`.
-- [ ] The city picker offers settlements across Israel and a big city's neighbourhoods.
+- [ ] The city picker offers settlements across Israel.
 - [ ] Log in with a password, and with Google if it is on.
 - [ ] Book a tour between the two accounts: the email with its `.ics` arrives. Press "הוספה ליומן Google" and check the
       tour appears in Google Calendar (Google may take hours to fetch a new feed). `fly logs -a homie-api` must show
@@ -307,7 +321,9 @@ bottom of this file.
 - **Deploy** = `make deploy-redis`, `make deploy-api`, `make deploy-admin` and `make deploy-web` from a clean `main`
   (`make deploy-web` needs `DOMAIN` and `CONTACT_EMAIL`). Deploy only what changed; Redis at a quiet hour.
 - **Roll back:** `fly releases --image -a <app>` lists the images; `fly deploy --image <image> --config
-  infra/fly/<name>.toml` redeploys one. A rollback does not undo a migration.
+  infra/fly/<name>.toml --skip-release-command` redeploys one. Without that flag the release step runs the old image's
+  `alembic upgrade head`, which fails on a newer revision it does not know and aborts the rollback. A rollback undoes no
+  migration, so the old code must work with the newer schema; if it cannot, fix forward instead.
 - **A release that changes the admin's grants** (a new table, or changed admin columns) deploys in this order:
   `make deploy-api` (migrates), `make admin-role-prod`, `make deploy-admin`, then `make admin-role-verify-prod`.
 - **Logs:** `fly logs -a homie-api`. Fly's docs say logs are kept 7 days (checked 2026-11-18), inside the 30 days the
