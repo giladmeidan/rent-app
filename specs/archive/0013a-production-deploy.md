@@ -755,25 +755,14 @@ wrote the spec; forks cannot start agents.
 Also changed: `font-src` gains `data:`, and `admin-role-prod` gains `--process-group app`. Runbook §2 names
 the `fly mpg databases extensions enable` command, to be confirmed with `--help`.
 
-## Digest (filled by orchestrator after verification)
-Verified 2026-11-18. The build adds the Fly and Cloudflare configs, `make deploy-*` targets and `infra/DEPLOY.md`; it
-deploys nothing and costs nothing. Running homie will cost about $76–81 a month with email. Gilad chose row-level security
-to keep the admin away from password and calendar-token hashes (Q2); if Fly's Reader can get past it, the admin stays
-undeployed. Q1 is decided: production never contacts nadlan.gov.il, so launch has settlements only. The MPG role behaviour
-is simulated, so runbook §7 probes it first on the real cluster.
-
-Built 2026-11-18, not deployed.
-Shipped: Fly and Cloudflare Pages configs, `make deploy-*` targets, gzip API responses, the admin role for Managed
-Postgres and the runbook `infra/DEPLOY.md`. Demo: `make check-images`; read `infra/DEPLOY.md`; `make deploy-api` refuses
-outside a clean `main`.
-Tests: +20 API test functions, +3 web, +0 e2e; a new CI step builds and checks the three production images.
-Findings: 1 blocker fixed (the admin check missed roles it can switch to), 2 majors fixed, 0 waived, 1 follow-up logged
-(run `--help` for every `fly` command once flyctl is installed: none has been run, they were read from Fly's docs).
-Decided by Gilad during the build: if Fly's Reader can reach the hash tables, the admin stays undeployed until Fly offers
-a narrower role; the shared Fly private network is accepted, with only homie apps in the org. Fly refuses
-`RENT_REFERENCE` other than `off`.
-To know: Resend's EU region covers sending only and its account data stays in the US, so the legal text's provider list
-must say so.
+## Digest (merged 2026-11-18, PR #138, merge 2176dc0)
+homie can now be deployed from `main` with `make deploy-*` and `infra/DEPLOY.md`: API and worker, private Redis and admin on
+Fly in Frankfurt, web on Cloudflare Pages. Nothing was deployed and no account was created. The admin is kept from the
+password and calendar-token hash tables by row-level security, with a rights check over every role it belongs to. Production
+refuses `RENT_REFERENCE` other than `off`, and the area import makes no nadlan.gov.il request while it is off. API responses
+are gzipped, except the event stream. Reviews: code, security, qa. CI passed on `36dd475`. Not verified on real services: no
+`fly` command was run, Managed Postgres role behaviour is simulated (runbook section 7 probes it first), and the CSP can only
+be proven on the live site (section 9). Expected cost with Resend Pro: about $76–81 a month.
 
 ## Verifier findings (independent, 2026-11-15)
 *Historical: applied to the 2026-11-15 text; the sibling and Mac-runner items no longer apply.*

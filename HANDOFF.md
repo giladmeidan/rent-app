@@ -13,6 +13,7 @@ A session started in `/Users/giladmeidan/rent_app` (one folder up) does not regi
 as `general-purpose` agents told to read their definition file first.
 
 ## Current Status
+**Pre-launch build done 2026-11-18:** `0022a` security emails (PR #137), `0024a` launch without the rent estimate (PR #139) and `0013a` deploy setup (PR #138) are merged and archived; the waitlist was redeployed without the estimate promise. **Nothing of the app is deployed.** nadlan.gov.il's terms forbid our use without written approval, so the rent estimate engine is postponed (code dormant, `RENT_REFERENCE=off`) and launch has settlements only, no big-city neighbourhoods. Decisions in PRODUCT.md "Launch (Slice 13)", "Launch area", "Rent price estimate": hosting approved, domain `homieil.com` (Gilad buys), Resend Pro for email, Sentry and PostHog on. **To launch:** Gilad buys the domain and opens Fly, Cloudflare, Resend, Sentry and PostHog accounts, finishes the legal text (FOLLOWUPS "Before going public"), then follow `infra/DEPLOY.md`.
 **Search filters phase 1 done 2026-11-18:** `0023a` (PR #140): area filter, live count, removable tags, phone sheet, room chips. Owed: Gilad checks the area list in the sheet on a real phone. Not built: phase 2 (more filters, "from my profile", desktop top bar) and phase 3 (saved searches with alerts, people filters).
 **Slice 21 (national) done 2026-11-17:** all of Israel at once (decisions in PRODUCT.md "Launch area"). `0021a1` area catalogue (PR #132: 1,188 CBS settlements without Judea and Samaria + 701 big-city neighbourhoods, migration `0031`), `0021a2` listing neighbourhoods + two-level area match (PR #135, migration `0032`), `0021b` city picker + profile chips + copy (PR #133), `0021c` national rent data (PR #134), `0021d` Israel-wide map, default view Tel Aviv (PR #136); all archived with digests. Owed before launch (FOLLOWUPS): `make import-areas` after `make migrate` on the first production deploy (`api/data/settlements.csv` ships in the image), the first national rent import (4–6 h) then `make rent-backtest`, and a check that nadlan.gov.il answers from the production region (reportedly Israeli IPs only). The a11y `ac5_public_pages_pass_axe` e2e flaked on #132, #135 and #134: worth a real fix.
 **Waitlist (2026-11-16):** `0017` (PR #116) and `0017b` Turnstile (PR #120) merged and archived; live on `https://homie-waitlist.pages.dev` (own Pages project + D1 `homie-waitlist`, deployed by hand with `make deploy-waitlist CONTACT_EMAIL=… TURNSTILE_SITE_KEY=…`, the secret via `make waitlist-secret`; README in `waitlist/`). `specs/0017c-waitlist-hardening.md` is `draft` and **not queued** (Gilad: no build yet; Q0 decides whether email confirmation is built).
@@ -71,9 +72,7 @@ code unchanged. Decisions in PRODUCT.md "Login". Gilad's Google OAuth client id 
 Last updated: 2026-11-17 (after Slice 18's last merges #123/#124; Slice 18 lines, Current Work, Next Steps 0, ports and Session History updated).
 
 ## Current Work
-Nothing in flight. No open PRs of ours; Slice 18 worktrees removed. `0013a-production-deploy` (`status: verified`, worktree `../rent-app-0013a`, ports
-5550/6500/8120/8121/5260) waits for Gilad's go on paid hosting (~$55/month). Building it costs nothing (configs,
-`make deploy-*`, `infra/DEPLOY.md`); deploying does.
+Nothing in flight from the pre-launch build. Next is the real deploy, which waits on Gilad's accounts and the domain.
 
 ## Completed
 - [x] Slices 1–12 (MVP features, trust, admin), Slice 14 through `0014d` (rent estimate), `0015a` (protected space).
@@ -91,8 +90,7 @@ Nothing in flight. No open PRs of ours; Slice 18 worktrees removed. `0013a-produ
 ## Next Steps
 0. **After Slice 18:** main checkout: `git pull`, `make migrate` (`0030`), re-apply `api/scripts/admin_role.py` grants,
    `make client`. Production tour emails wait for the parked email provider (`0013a`).
-1. Parked until Gilad approves paid services: build/deploy `0013a`; buy the domain; Fly, Cloudflare and an
-   email-provider account (free tier ≥ 300/day); Sentry or no alerts; a second API machine (+~$7/month).
+1. Deploy per `infra/DEPLOY.md` once Gilad has the domain and accounts (Status above); a second API machine stays optional (+~$7/month).
    **homie must not go public before `0013b` is deployed with `TRUST_PROXY=fly`** (runbook §9).
 2. **Before going public (Gilad 2026-11-16):** a security-email spec ("your password was changed" / "your account was
    deleted"), FOLLOWUPS 0016a. Gilad to approve the 0016b privacy draft (`legal.privacy.s1.i1`, `s3.i6`).
