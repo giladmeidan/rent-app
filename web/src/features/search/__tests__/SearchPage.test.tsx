@@ -1757,6 +1757,82 @@ describe('SearchPage filters (spec 0023a)', () => {
     expect(params().get('view')).toBe('map');
   });
 
+  // Where a phone's Apply sits, and a place far from it.
+  const APPLY_POINT = { detail: 1, clientX: 100, clientY: 780 };
+  const ELSEWHERE = { detail: 1, clientX: 300, clientY: 60 };
+
+  it('ac9_apply_then_open_the_sheet_at_once', async () => {
+    await noGuardLeft();
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    fireEvent.click(submitButton(), APPLY_POINT);
+    expect(currentPath()).toBe('/search?pets=true');
+    expectSheetClosed();
+    fireEvent.click(toggleButton(), ELSEWHERE);
+    expect(sheet()).toBeVisible();
+  });
+
+  it('ac15_apply_then_remove_a_tag_at_once', async () => {
+    await noGuardLeft();
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    fireEvent.click(submitButton(), APPLY_POINT);
+    fireEvent.click(
+      screen.getByRole('button', { name: removeLabel(he.search.feature.pets) }),
+      ELSEWHERE,
+    );
+    expect(params().has('pets')).toBe(false);
+  });
+
+  it('ac15_a_click_elsewhere_after_removing_a_tag_goes_through', async () => {
+    await noGuardLeft();
+    mockApi({ [SEARCH]: [results] });
+    render('/search?pets=true&elevator=true');
+    await screen.findAllByRole('article');
+    const remove = (name: string) => screen.getByRole('button', { name: removeLabel(name) });
+    fireEvent.click(remove(he.search.feature.pets), ELSEWHERE);
+    fireEvent.click(remove(he.search.feature.elevator), APPLY_POINT);
+    expect(params().has('pets')).toBe(false);
+    expect(params().has('elevator')).toBe(false);
+  });
+
+  it('ac10_closing_without_a_press_arms_nothing', async () => {
+    await noGuardLeft();
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    const behind = () => viewToggle().getByRole('button', { name: he.search.view.map });
+
+    // Back, right after a tap inside the sheet.
+    openPanel();
+    await settle();
+    fireEvent.click(feature(he.search.feature.pets), APPLY_POINT);
+    await settle();
+    back();
+    await vi.waitFor(expectSheetClosed);
+    fireEvent.click(behind(), APPLY_POINT);
+    expect(params().get('view')).toBe('map');
+    fireEvent.click(viewToggle().getByRole('button', { name: he.search.view.list }));
+
+    // Esc, likewise.
+    openPanel();
+    await settle();
+    fireEvent.click(feature(he.search.feature.pets), APPLY_POINT);
+    await settle();
+    act(() => {
+      sheet().dispatchEvent(new Event('cancel', { cancelable: true }));
+    });
+    expectSheetClosed();
+    fireEvent.click(behind(), APPLY_POINT);
+    expect(params().get('view')).toBe('map');
+  });
+
   it('ac7_first_click_applies_a_name_resolved_on_blur', async () => {
     await noGuardLeft();
     stubDesktop();

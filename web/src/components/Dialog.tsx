@@ -4,6 +4,7 @@ import {
   useId,
   useRef,
   useState,
+  type MouseEvent,
   type PointerEvent,
   type ReactNode,
   type RefObject,
@@ -13,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from './Button';
 import { cx } from './cx';
-import { swallowGhostClick } from './ghostClick';
+import { swallowGhostClick, type GhostPress } from './ghostClick';
 
 export type DialogProps = {
   open: boolean;
@@ -60,6 +61,8 @@ export function Dialog({
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const pointerDownOnDialog = useRef(false);
+  // A sheet's click still being handled: the press behind a close in this same task, if any.
+  const pressNow = useRef<GhostPress | null>(null);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -83,10 +86,11 @@ export function Dialog({
       // Synchronously: the browser fires `close` a task later, after the caller (e.g. an awaited
       // `confirm()`) may already have moved focus on.
       restoreFocus();
-      // A sheet covers the whole page, so a double tap's second tap would land on the page.
-      if (size === 'sheet') swallowGhostClick();
+      // A sheet covers the whole page, so a double tap's second tap would land on the page. Not
+      // armed by a close without a press there (Back, Esc, a rotation).
+      if (pressNow.current !== null) swallowGhostClick(pressNow.current);
     }
-  }, [open, initialFocusRef, size]);
+  }, [open, initialFocusRef]);
 
   const handleClose = () => {
     // Closed by the browser (a forced Esc close) or from outside: return focus only if it is
@@ -98,6 +102,15 @@ export function Dialog({
       opener.current = null;
     }
     if (open) onClose();
+  };
+
+  const handleClickCapture = ({ detail, clientX, clientY }: MouseEvent<HTMLDialogElement>) => {
+    if (size !== 'sheet') return;
+    pressNow.current = { detail, clientX, clientY };
+    // React closes within this task; anything later did not come from this press.
+    setTimeout(() => {
+      pressNow.current = null;
+    }, 0);
   };
 
   const handleCancel = (event: SyntheticEvent<HTMLDialogElement>) => {
@@ -130,6 +143,7 @@ export function Dialog({
       onClose={handleClose}
       onCancel={handleCancel}
       onPointerDown={handlePointerDown}
+      onClickCapture={handleClickCapture}
       onClick={handleClick}
       className={`${SIZE[size]} p-0 bg-surface text-ink backdrop:bg-ink/40`}
     >

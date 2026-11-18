@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../locales/he.json';
 import { Dialog, useConfirm, type ConfirmFn, type ConfirmOptions } from '../Dialog';
-import { GHOST_CLICK_MS } from '../ghostClick';
+import { GHOST_CLICK_MS, GHOST_CLICK_RADIUS_PX } from '../ghostClick';
 
 const TITLE = he.flatmates.mine.leaveConfirm;
 const BODY = he.listings.edit.expiredBody;
@@ -130,58 +130,96 @@ describe('Dialog', () => {
     }
   });
 
-  it('ac19_sheet_swallows_the_second_tap', () => {
-    vi.useFakeTimers();
-    try {
-      const behind = vi.fn();
-      const Page = ({ open, size }: { open: boolean; size: 'sheet' | 'default' }) => (
+  describe('ac19_sheet_swallows_the_second_tap', () => {
+    const AT = { detail: 1, clientX: 100, clientY: 700 };
+    const behind = vi.fn();
+
+    function Page({ size = 'sheet' }: { size?: 'sheet' | 'default' }) {
+      const [open, setOpen] = useState(true);
+      return (
         <>
           <button type="button" onClick={behind}>
             {he.common.retry}
           </button>
-          <Dialog open={open} onClose={() => undefined} title={TITLE} size={size} />
+          <Dialog open={open} onClose={() => setOpen(false)} title={TITLE} size={size}>
+            <button type="button" onClick={() => setOpen(false)}>
+              {he.common.confirm}
+            </button>
+            <input aria-label={he.listings.fields.city} />
+          </Dialog>
         </>
       );
-      const target = () => screen.getByRole('button', { name: he.common.retry, hidden: true });
-      const view = render(<Page open size="sheet" />);
-      const close = (size: 'sheet' | 'default') => {
-        view.rerender(<Page open size={size} />);
-        view.rerender(<Page open={false} size={size} />);
-      };
-
-      // One pointer click right after closing is dropped, and only one.
-      close('sheet');
-      fireEvent.click(target(), { detail: 1 });
-      expect(behind).not.toHaveBeenCalled();
-      fireEvent.click(target(), { detail: 1 });
-      expect(behind).toHaveBeenCalledTimes(1);
-
-      // A keyboard click (detail 0) is never dropped.
-      behind.mockClear();
-      close('sheet');
-      fireEvent.click(target());
-      expect(behind).toHaveBeenCalledTimes(1);
-
-      // Nor is a tap once the moment has passed.
-      behind.mockClear();
-      act(() => {
-        vi.advanceTimersByTime(GHOST_CLICK_MS);
-      });
-      close('sheet');
-      act(() => {
-        vi.advanceTimersByTime(GHOST_CLICK_MS);
-      });
-      fireEvent.click(target(), { detail: 1 });
-      expect(behind).toHaveBeenCalledTimes(1);
-
-      // Other dialogs do not guard at all.
-      behind.mockClear();
-      close('default');
-      fireEvent.click(target(), { detail: 1 });
-      expect(behind).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
     }
+    const page = () => screen.getByRole('button', { name: he.common.retry, hidden: true });
+    const inside = () => screen.getByRole('button', { name: he.common.confirm });
+    const wait = (ms: number) => {
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      behind.mockClear();
+    });
+    afterEach(() => {
+      wait(GHOST_CLICK_MS);
+      vi.useRealTimers();
+    });
+
+    it('drops_one_tap_at_the_same_place', () => {
+      render(<Page />);
+      fireEvent.click(inside(), AT);
+      // Near the first tap, not exactly on it.
+      fireEvent.click(page(), { ...AT, clientX: AT.clientX + GHOST_CLICK_RADIUS_PX - 1 });
+      expect(behind).not.toHaveBeenCalled();
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets_a_click_elsewhere_through', () => {
+      render(<Page />);
+      fireEvent.click(inside(), AT);
+      fireEvent.click(page(), { ...AT, clientY: AT.clientY - GHOST_CLICK_RADIUS_PX - 1 });
+      expect(behind).toHaveBeenCalledTimes(1);
+      // It disarmed nothing: the double tap's second tap is still dropped.
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends_after_the_moment_has_passed', () => {
+      render(<Page />);
+      fireEvent.click(inside(), AT);
+      wait(GHOST_CLICK_MS);
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('is_not_armed_by_a_keyboard_press', () => {
+      render(<Page />);
+      fireEvent.click(inside());
+      fireEvent.click(page(), { ...AT, clientX: 0, clientY: 0 });
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('is_not_armed_by_esc_after_an_earlier_press', () => {
+      render(<Page />);
+      fireEvent.click(screen.getByRole('textbox'), AT);
+      wait(0);
+      act(() => {
+        dialogEl().dispatchEvent(new Event('cancel', { cancelable: true }));
+      });
+      expect(dialogEl()).not.toHaveAttribute('open');
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
+
+    it('never_guards_other_dialogs', () => {
+      render(<Page size="default" />);
+      fireEvent.click(inside(), AT);
+      fireEvent.click(page(), AT);
+      expect(behind).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('ac7_dialog_and_confirm', async () => {

@@ -115,10 +115,10 @@ export function ActiveFilterTags({ filters, onRemove, className }: Props) {
           {label}
           <TagRemoveButton
             aria-label={t('search.tags.remove', { name: label })}
-            onClick={() => {
+            onClick={(event) => {
               onRemove(patch);
               // The next tag slides under the finger.
-              swallowGhostClick();
+              swallowGhostClick(event);
             }}
           />
         </Tag>
