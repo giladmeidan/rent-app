@@ -1,22 +1,28 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
+import { cx } from '../../components/cx';
 import { DateReadback, withReadback } from '../../components/DateReadback';
 import { Field } from '../../components/Field';
-import { Select } from '../../components/Select';
 import { TextInput } from '../../components/TextInput';
 import type { ListingType } from '../listings/api';
 import { formatRooms } from '../listings/format';
+import { AreaFilterField } from './AreaFilterField';
 import {
   FEATURES,
   PRICE_MAX,
-  ROOMS_MAX,
-  ROOMS_MIN,
+  ROOM_CHIPS,
   parseFilters,
+  roomChipsOn,
+  toSearchParams,
+  toggleRoomChip,
   type Feature,
   type Filters,
+  type RoomChip,
 } from './filters';
+import { useFilterCount } from './useFilterCount';
 
 // `listing_type` is the page's side (spec 0010a), never a form field.
 type FormKey = Exclude<keyof Filters, 'sort' | 'view' | 'listing_type'>;
@@ -32,37 +38,34 @@ type Props = {
   titleId?: string;
   /** The page's side (spec 0010a): words the date hint for apartments or rooms. */
   type?: ListingType;
+  /** In the phone's full-screen sheet, which has its own title: no `<h2>`, and the buttons stay in
+   * view at its bottom edge. */
+  sheet?: boolean;
 };
 
 type Values = {
+  area_ids: string[];
   price_min: string;
   price_max: string;
-  rooms_min: string;
-  rooms_max: string;
+  rooms_min: number | undefined;
+  rooms_max: number | undefined;
   available_by: string;
 } & Record<Feature, boolean>;
 
-type ErrorField = 'price_min' | 'price_max' | 'rooms_max';
+type ErrorField = 'price_min' | 'price_max';
 type FieldError =
-  | { key: 'listings.errors.range'; min: number; max: number }
-  | { key: 'search.errors.priceOrder' }
-  | { key: 'search.errors.roomsOrder' };
+  { key: 'listings.errors.range'; min: number; max: number } | { key: 'search.errors.priceOrder' };
 type Errors = Partial<Record<ErrorField, FieldError>>;
-
-// 1 … 10 rooms in half steps, as the listing wizard offers.
-const ROOM_OPTIONS = Array.from(
-  { length: (ROOMS_MAX - ROOMS_MIN) * 2 + 1 },
-  (_, i) => ROOMS_MIN + i / 2,
-);
 
 const toText = (value: number | undefined) => (value === undefined ? '' : String(value));
 
 function initialValues(filters: Filters): Values {
   return {
+    area_ids: filters.area_ids ?? [],
     price_min: toText(filters.price_min),
     price_max: toText(filters.price_max),
-    rooms_min: toText(filters.rooms_min),
-    rooms_max: toText(filters.rooms_max),
+    rooms_min: filters.rooms_min,
+    rooms_max: filters.rooms_max,
     available_by: filters.available_by ?? '',
     pets: filters.pets === true,
     furnished: filters.furnished === true,
@@ -90,55 +93,131 @@ function validate(values: Values): Errors {
   ) {
     errors.price_max = { key: 'search.errors.priceOrder' };
   }
-  if (
-    values.rooms_min !== '' &&
-    values.rooms_max !== '' &&
-    Number(values.rooms_min) > Number(values.rooms_max)
-  ) {
-    errors.rooms_max = { key: 'search.errors.roomsOrder' };
-  }
   return errors;
+}
+
+/** Only the form's own filters of `filters`. */
+function formFilters(filters: Filters): FormFilters {
+  return {
+    area_ids: filters.area_ids,
+    price_min: filters.price_min,
+    price_max: filters.price_max,
+    rooms_min: filters.rooms_min,
+    rooms_max: filters.rooms_max,
+    available_by: filters.available_by,
+    pets: filters.pets,
+    furnished: filters.furnished,
+    elevator: filters.elevator,
+    parking: filters.parking,
+    shelter: filters.shelter,
+  };
 }
 
 /** Valid form values as filters, through the URL parser (so the form can only write what it reads). */
 function toFilters(values: Values): FormFilters {
   const params = new URLSearchParams();
+  for (const areaId of values.area_ids) params.append('area_ids', areaId);
   for (const key of ['price_min', 'price_max'] as const) {
     // `007` → `7`: the URL holds canonical numbers.
     if (values[key] !== '') params.set(key, String(Number(values[key])));
   }
-  for (const key of ['rooms_min', 'rooms_max', 'available_by'] as const) {
-    if (values[key] !== '') params.set(key, values[key]);
+  for (const key of ['rooms_min', 'rooms_max'] as const) {
+    const rooms = values[key];
+    if (rooms !== undefined) params.set(key, String(rooms));
   }
+  if (values.available_by !== '') params.set('available_by', values.available_by);
   for (const feature of FEATURES) {
     if (values[feature]) params.set(feature, 'true');
   }
-  const parsed = parseFilters(params);
-  return {
-    price_min: parsed.price_min,
-    price_max: parsed.price_max,
-    rooms_min: parsed.rooms_min,
-    rooms_max: parsed.rooms_max,
-    available_by: parsed.available_by,
-    pets: parsed.pets,
-    furnished: parsed.furnished,
-    elevator: parsed.elevator,
-    parking: parsed.parking,
-    shelter: parsed.shelter,
-  };
+  return formFilters(parseFilters(params));
 }
 
 const legend = 'mb-2 text-label';
 
+type PillProps = {
+  id: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  /** The label's direction, for text RTL would reorder. */
+  dir?: 'ltr';
+  /** Fills a grid cell, for a row of equal pills. */
+  fill?: boolean;
+  children: ReactNode;
+};
+
+/** A checkbox drawn as a pill. */
+function PillCheckbox({ id, checked, onChange, dir, fill = false, children }: PillProps) {
+  return (
+    <div className="flex">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="peer sr-only"
+      />
+      <label
+        htmlFor={id}
+        dir={dir}
+        className={cx(
+          'flex min-h-tap cursor-pointer items-center rounded-full border border-border-strong bg-surface text-label text-ink peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent',
+          fill ? 'w-full justify-center px-0' : 'px-3.5',
+        )}
+      >
+        {children}
+      </label>
+    </div>
+  );
+}
+
+/**
+ * Keeps focus where it is during a press on Apply or Clear. Leaving the area input can add a chip,
+ * which would move the button out from under the pointer before the press ends and lose the click.
+ */
+const holdFocusDuringPress = (event: MouseEvent) => {
+  event.preventDefault();
+};
+
+/** The focus move the press held back, applied before the button acts: the area input's blur may
+ * add a chip, and the submit must see it. A keyboard press (`detail` 0) has no focus to move. */
+function finishPress(event: MouseEvent<HTMLElement>) {
+  if (event.detail === 0) return;
+  const button = event.currentTarget;
+  flushSync(() => {
+    button.focus();
+  });
+}
+
 /** The filters panel of SearchDesktop.dc.html, in a single column. Validates on submit only. */
-export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartment' }: Props) {
+export function FiltersForm({
+  filters,
+  onApply,
+  onClear,
+  titleId,
+  type = 'apartment',
+  sheet = false,
+}: Props) {
   const { t } = useTranslation();
   const formId = useId();
   const [values, setValues] = useState<Values>(() => initialValues(filters));
   const [errors, setErrors] = useState<Errors>({});
+  const [areasOverLimit, setAreasOverLimit] = useState(false);
+  // Bumped by Clear: a new area field drops its typed text and its "not found" message.
+  const [areaFieldKey, setAreaFieldKey] = useState(0);
 
   const fieldId = (name: keyof Values) => `${formId}-${name}`;
   const set = (patch: Partial<Values>) => setValues((current) => ({ ...current, ...patch }));
+
+  // The list view's live count: only for a valid draft that differs from what the URL already shows.
+  const mapView = filters.view === 'map';
+  const draft = toFilters(values);
+  const edited =
+    toSearchParams(draft).toString() !== toSearchParams(formFilters(filters)).toString();
+  const countable = !mapView && edited && Object.keys(validate(values)).length === 0;
+  const count = useFilterCount({ ...draft, listing_type: type }, countable);
+  let countText: string | undefined;
+  if (count === 0) countText = t('search.applyNone');
+  else if (count !== undefined) countText = t('search.applyCount', { count });
 
   const errorText = (name: ErrorField): string | undefined => {
     const error = errors[name];
@@ -151,9 +230,7 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
     event.preventDefault();
     const found = validate(values);
     setErrors(found);
-    const first = (['price_min', 'price_max', 'rooms_max'] as const).find(
-      (name) => found[name] !== undefined,
-    );
+    const first = (['price_min', 'price_max'] as const).find((name) => found[name] !== undefined);
     if (first !== undefined) {
       document.getElementById(fieldId(first))?.focus();
       return;
@@ -165,6 +242,8 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
     // The URL change remounts the form; when the URL is already clean, reset the edits here.
     setValues(EMPTY);
     setErrors({});
+    setAreasOverLimit(false);
+    setAreaFieldKey((key) => key + 1);
     onClear();
   }
 
@@ -188,24 +267,6 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
     </Field>
   );
 
-  const roomsSelect = (name: 'rooms_min' | 'rooms_max', text: string) => (
-    <Field
-      id={fieldId(name)}
-      label={text}
-      error={name === 'rooms_max' ? errorText(name) : undefined}
-      className="min-w-0 flex-1"
-    >
-      <Select value={values[name]} onChange={(e) => set({ [name]: e.target.value })}>
-        <option value="">{t('search.any')}</option>
-        {ROOM_OPTIONS.map((rooms) => (
-          <option key={rooms} value={String(rooms)}>
-            {formatRooms(rooms)}
-          </option>
-        ))}
-      </Select>
-    </Field>
-  );
-
   const featureLabels: Record<Feature, string> = {
     pets: t('search.feature.pets'),
     furnished: t('search.feature.furnished'),
@@ -214,14 +275,32 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
     shelter: t('search.feature.shelter'),
   };
 
+  const roomRange = { rooms_min: values.rooms_min, rooms_max: values.rooms_max };
+  const roomsOn = roomChipsOn(roomRange);
+  const roomChipId = (chip: RoomChip) => `${formId}-rooms-${String(chip)}`;
+
   const dateId = fieldId('available_by');
   const chosenId = `${dateId}-chosen`;
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-5">
-      <h2 id={titleId} className="sr-only text-h3 lg:not-sr-only">
-        {t('search.filters')}
-      </h2>
+    <form noValidate onSubmit={submit} className={cx('flex flex-col gap-5', sheet && 'flex-1')}>
+      {!sheet && (
+        <h2 id={titleId} className="text-h3">
+          {t('search.filters')}
+        </h2>
+      )}
+
+      <AreaFilterField
+        key={areaFieldKey}
+        id={fieldId('area_ids')}
+        areaIds={values.area_ids}
+        overLimit={areasOverLimit}
+        onChange={(areaIds) => {
+          setAreasOverLimit(false);
+          set({ area_ids: areaIds });
+        }}
+        onOverLimit={() => setAreasOverLimit(true)}
+      />
 
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.price')}</legend>
@@ -233,9 +312,19 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
 
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.rooms')}</legend>
-        <div className="flex gap-2">
-          {roomsSelect('rooms_min', t('search.from'))}
-          {roomsSelect('rooms_max', t('search.to'))}
+        <div className="grid grid-cols-5 gap-2 lg:gap-1">
+          {ROOM_CHIPS.map((chip) => (
+            <PillCheckbox
+              key={chip}
+              id={roomChipId(chip)}
+              checked={roomsOn.includes(chip)}
+              onChange={() => set(toggleRoomChip(roomRange, chip))}
+              dir={chip === 5 ? 'ltr' : undefined}
+              fill
+            >
+              {chip === 5 ? t('search.roomsFivePlus') : formatRooms(chip)}
+            </PillCheckbox>
+          ))}
         </div>
       </fieldset>
 
@@ -257,30 +346,55 @@ export function FiltersForm({ filters, onApply, onClear, titleId, type = 'apartm
         <legend className={legend}>{t('search.features')}</legend>
         <div className="flex flex-wrap gap-2">
           {FEATURES.map((feature) => (
-            <div key={feature} className="flex">
-              <input
-                id={fieldId(feature)}
-                type="checkbox"
-                checked={values[feature]}
-                onChange={(e) => set({ [feature]: e.target.checked })}
-                className="peer sr-only"
-              />
-              <label
-                htmlFor={fieldId(feature)}
-                className="flex min-h-tap cursor-pointer items-center rounded-full border border-border-strong bg-surface px-3.5 text-label text-ink peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
-              >
-                {featureLabels[feature]}
-              </label>
-            </div>
+            <PillCheckbox
+              key={feature}
+              id={fieldId(feature)}
+              checked={values[feature]}
+              onChange={(checked) => set({ [feature]: checked })}
+            >
+              {featureLabels[feature]}
+            </PillCheckbox>
           ))}
         </div>
       </fieldset>
 
-      <div className="flex gap-3">
-        <Button type="submit" variant="primary" size="md" className="grow whitespace-nowrap">
-          {t('search.apply')}
+      {/* The count for a screen reader; no `aria-live`, which marks the page's results count line. */}
+      {!mapView && (
+        <p role="status" className="sr-only">
+          {countText}
+        </p>
+      )}
+
+      <div
+        className={cx(
+          // In view on a laptop too, where the panel can be taller than the screen.
+          'flex flex-wrap gap-3 lg:sticky lg:bottom-0 lg:bg-surface',
+          // Flush with the sheet's edges, over the fields that scroll under it.
+          sheet &&
+            'sticky bottom-0 -mx-6 -mb-6 mt-auto border-t border-border bg-surface px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+        )}
+      >
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          onMouseDown={holdFocusDuringPress}
+          onClick={finishPress}
+          className="grow whitespace-nowrap"
+        >
+          {countText ?? t('search.apply')}
         </Button>
-        <Button type="button" variant="secondary" size="md" onClick={clear} className="flex-1">
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          onMouseDown={holdFocusDuringPress}
+          onClick={(event) => {
+            finishPress(event);
+            clear();
+          }}
+          className="flex-1"
+        >
           {t('search.clear')}
         </Button>
       </div>

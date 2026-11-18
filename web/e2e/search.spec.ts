@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 
 import he from '../src/locales/he.json' with { type: 'json' };
-import { postListing, signUpApi, telAvivId } from './helpers';
+import { postListing, signUpApi, TEL_AVIV, telAvivId } from './helpers';
 import { test } from './fixtures';
 
 // `localhost`, not 127.0.0.1, so the session cookie set for the web's site is sent with
@@ -73,12 +73,14 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
   await expect(card).toHaveCount(1);
   await expect(card.getByText(PRICE)).toBeVisible();
 
-  // 0009i AC7: with filters set and the panel open, nothing overflows the 390px screen (the
-  // toolbar of tags, sort and toggle is the risk).
-  await test.step('0009i phone: no horizontal overflow with filters and the panel open', async () => {
+  // 0009i AC7: with filters set and the sheet open, nothing overflows the 390px screen (the
+  // toolbar of tags, sort and toggle is the risk). The tags are checked first: the open modal makes
+  // the page behind it inert.
+  await test.step('0009i phone: no horizontal overflow with filters and the sheet open', async () => {
     await page.goto('/search?price_max=8000&rooms_min=3&pets=true');
-    await page.getByRole('button', { name: /^מסננים/ }).click();
     await expect(page.getByRole('list', { name: he.search.tags.label })).toBeVisible();
+    await page.getByRole('button', { name: /^מסננים/ }).click();
+    await expect(page.getByRole('dialog', { name: he.search.filters })).toBeVisible();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
@@ -89,18 +91,23 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
 
   // Up to 5,000 ₪: the 7,200 ₪ listing is filtered out.
   await page.getByRole('button', { name: he.search.filters, exact: true }).click();
-  const price = page.getByRole('group', { name: he.search.price });
+  const sheet = page.getByRole('dialog', { name: he.search.filters });
+  const price = sheet.getByRole('group', { name: he.search.price });
   await price.getByLabel(he.search.to).fill('5000');
-  await page.getByRole('button', { name: he.search.apply }).click();
+  // By its type: the button's words follow the live count.
+  await sheet.locator('button[type="submit"]').click();
   await expect(page).toHaveURL('/search?price_max=5000');
+  await expect(sheet).toBeHidden();
   // Wait for the filtered results (the count line fills in once they land), then look.
   await expect(page.getByText(he.common.loading)).toHaveCount(0);
   await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
   await expect(card).toHaveCount(0);
 
-  // Clear: it is back.
-  await page.getByRole('button', { name: he.search.clear }).first().click();
+  // Clear, in the sheet (other listings may still match, so no empty state offers it): it is back.
+  await page.getByRole('button', { name: /^מסננים/ }).click();
+  await sheet.getByRole('button', { name: he.search.clear }).click();
   await expect(page).toHaveURL('/search');
+  await expect(sheet).toBeHidden();
   await expect(card).toHaveCount(1);
 
   // Its title opens the public listing page, which survives a reload.
@@ -166,7 +173,7 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     expect(overflow).toBeLessThanOrEqual(0);
 
     await panel.getByRole('group', { name: he.search.price }).getByLabel(he.search.to).fill('5000');
-    await panel.getByRole('button', { name: he.search.apply }).click();
+    await panel.locator('button[type="submit"]').click();
     await expect(page).toHaveURL('/search?price_max=5000');
     await expect(page.getByText(he.common.loading)).toHaveCount(0);
     await expect(page.locator('[aria-live="polite"]')).not.toBeEmpty();
@@ -223,4 +230,83 @@ test('ac9_visitor_searches_and_opens_listing', async ({ page }) => {
     await expect(bar).toHaveCount(0);
     expect(await overflow()).toBeLessThanOrEqual(0);
   });
+});
+
+test('ac20_phone_filter_flow', async ({ page }) => {
+  // Spec 0023a, at the file's 390 px: a city in the sheet, its count, Apply, then the tag's X.
+  await signUpApi(page, 'owner');
+  await postListing(
+    page,
+    `e2e ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+  );
+  const areaId = await telAvivId(page);
+  await page.context().clearCookies();
+  const overflow = () =>
+    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const removeArea = he.search.tags.remove.replace('{{name}}', TEL_AVIV);
+
+  await page.goto('/search');
+  await page.getByRole('button', { name: he.search.filters, exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: he.search.filters });
+  await expect(sheet).toBeVisible();
+  // It fills the screen, and the close button took focus, so the keyboard stays shut.
+  expect((await sheet.boundingBox())?.width).toBe(390);
+  await expect(sheet.getByRole('button', { name: he.search.closeFilters })).toBeFocused();
+
+  await sheet.getByRole('combobox', { name: he.search.area }).fill(TEL_AVIV);
+  await expect(sheet.getByRole('button', { name: removeArea })).toBeVisible();
+
+  // The count replaces the plain words, and the posted listing means it is not zero.
+  const submit = sheet.locator('button[type="submit"]');
+  await expect(submit).not.toHaveText(he.search.apply);
+  await expect(submit).not.toHaveText(he.search.applyNone);
+  expect(await sheet.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+  expect(await overflow()).toBeLessThanOrEqual(0);
+
+  await submit.click();
+  await expect(page).toHaveURL(`/search?area_ids=${areaId}`);
+  await expect(sheet).toBeHidden();
+  await expect(page.locator('[aria-live="polite"]')).toBeFocused();
+  expect(await overflow()).toBeLessThanOrEqual(0);
+
+  const tags = page.getByRole('list', { name: he.search.tags.label });
+  await tags.getByRole('button', { name: removeArea }).click();
+  await expect(page).toHaveURL('/search');
+  await expect(tags).toHaveCount(0);
+  expect(await overflow()).toBeLessThanOrEqual(0);
+});
+
+test('ac10_phone_back_closes_only_the_sheet', async ({ page }) => {
+  // Gilad 2026-11-18: Back with the sheet open closes it; the applied search stays.
+  const areaId = await telAvivId(page);
+  const removeLabel = (name: string) => he.search.tags.remove.replace('{{name}}', name);
+  const sheet = page.getByRole('dialog', { name: he.search.filters });
+  const picker = sheet.getByRole('combobox', { name: he.search.area });
+  const openSheet = () => page.getByRole('button', { name: /^מסננים/ }).click();
+
+  await page.goto('/search');
+  await openSheet();
+  await picker.fill(TEL_AVIV);
+  await sheet.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(`/search?area_ids=${areaId}`);
+  await expect(sheet).toBeHidden();
+
+  await openSheet();
+  await picker.fill('חיפה');
+  await expect(sheet.getByRole('button', { name: removeLabel('חיפה') })).toBeVisible();
+  await page.goBack();
+  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(`/search?area_ids=${areaId}`);
+  const tags = page.getByRole('list', { name: he.search.tags.label });
+  await expect(tags.getByRole('button', { name: removeLabel(TEL_AVIV) })).toBeVisible();
+  await expect(tags.getByRole('button', { name: removeLabel('חיפה') })).toHaveCount(0);
+
+  // The draft is gone, and the X leaves no entry: one Back from here is the unfiltered search.
+  await openSheet();
+  await expect(sheet.getByRole('button', { name: removeLabel(TEL_AVIV) })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: removeLabel('חיפה') })).toHaveCount(0);
+  await sheet.getByRole('button', { name: he.search.closeFilters }).click();
+  await expect(sheet).toBeHidden();
+  await page.goBack();
+  await expect(page).toHaveURL('/search');
 });

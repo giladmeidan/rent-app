@@ -1,7 +1,7 @@
 ---
 id: 0023a
 title: A seeker narrows apartments and rooms to chosen cities or neighbourhoods, sees how many results a filter gives before applying it, and edits filters comfortably on a phone
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code, qa, ux, perf]   # perf: a new search predicate and a new source of search requests
 estimate: 1 long coder run        # full-stack on purpose; if it must shrink, the room chips move out first
@@ -123,6 +123,10 @@ Layout anatomy: `Search.dc.html` and `SearchDesktop.dc.html` under `design/scree
   `search.applyNone` plus Clear does not fit the 240 px desktop panel on one line.
 - A valid Apply and any Clear close the sheet. If the filters changed, focus goes to the results count line
   (existing behaviour); otherwise it returns to the toggle.
+- **Back (Gilad 2026-11-18):** a phone's Back while the sheet is open only closes the sheet. The draft is discarded,
+  as with the X; the URL, the applied filters and the results stay as they were. Opening the sheet pushes a history
+  entry for this. Apply and Clear take that entry over, the X and Esc remove it, and the map's `replace` writes neither
+  close the sheet nor disturb it.
 - The form's own `<h2>` renders only in the desktop panel. The desktop `Card` region named by it is unchanged.
 
 **Removable tags (`ActiveFilterTags`)**
@@ -230,6 +234,18 @@ Accepted at verification, nothing left for the coder to decide:
     and Gilad checks it on a phone after merge.
     Reviewers: code, qa, ux, perf   Estimated: 1 long coder run, 1 review round
     Links: specs/0023a-search-filters-upgrade.md · PRODUCT.md "Search" · Search.dc.html, SearchDesktop.dc.html
+
+    Spec 0023a — Search filters upgrade, phase 1   BUILT, reviewed, awaiting CI and merge
+    Shipped: filter `/search` and `/market` by cities or neighbourhoods, see the count on the apply button, remove
+    filters by tag, edit filters in a full-screen phone sheet, pick rooms with quick choices.
+    Demo: on a phone width open `/search` → מסננים → add a city and watch the button count → apply → remove its tag.
+    Tests: about +30 unit, +6 integration, +2 e2e   CI: on the PR
+    Findings: 1 blocker waived, 5 majors fixed, 10 minors fixed, 17 follow-ups logged.
+    Waived (Gilad 2026-11-18): NF2 misses for a signed-out visitor filtering on 20 broad cities (about 79% of 10,000
+    apartments): search p95 77 to 124 ms, live count 75 to 141 ms, busy Mac in Docker. Index logged in FOLLOWUPS.
+    Decided (Gilad 2026-11-18): phone Back with the sheet open only closes the sheet.
+    Changed in PRODUCT.md: nothing in this branch.
+    Still for Gilad: check the area list inside the sheet on a real phone after merge.
 
 ## Verifier findings
 One round (2026-11-18): 6 must-fix and 10 should-fix findings, all applied to the sections above by the orchestrator.

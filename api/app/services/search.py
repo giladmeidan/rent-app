@@ -79,6 +79,16 @@ def _with_cover(query: Select[Any]) -> Select[Any]:
 def _filtered(params: SearchParams) -> Select[tuple[Listing]]:
     query = _public_listings()
     query = query.where(Listing.listing_type == params.listing_type)
+    if params.area_ids:
+        # Spec 0023a, the rule `match_columns` uses for a seeker's areas: a city id matches every
+        # listing in the city, a neighbourhood id only those placed in it (strict: a NULL
+        # `neighbourhood_id` never matches, Gilad 2026-11-18).
+        query = query.where(
+            or_(
+                Listing.area_id.in_(params.area_ids),
+                Listing.neighbourhood_id.in_(params.area_ids),
+            )
+        )
     if params.price_min is not None:
         query = query.where(Listing.price_ils >= params.price_min)
     if params.price_max is not None:

@@ -3,6 +3,7 @@
 // the API, never part of a query key. The URL is user input, so anything invalid is dropped
 // silently, never an error and never a request.
 import { MAP_MAX_ZOOM, MAP_MIN_ZOOM, MAP_POSITION_BOUNDS } from '../../components/map/config';
+import { UUID } from './filters';
 
 export const MAP_PARAMS = ['c', 'z', 'pin'] as const;
 
@@ -17,7 +18,6 @@ const CENTRE_ZOOM = 14;
 
 const COORD = /^-?\d{1,3}(\.\d{1,6})?$/;
 const ZOOM = /^-?\d{1,3}(\.\d{1,2})?$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `lat,lng` (latitude first, as people read coordinates) inside `MAP_POSITION_BOUNDS` (Israel
  * plus 0.5 deg, spec 0021d); a centre outside it is dropped, never clamped. */
