@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.i18n import he
 from app.models import Base, User
-from app.services import accounts, chat_events, ics, passwords, tours
+from app.services import accounts, chat_events, ics, passwords
 from app.services import auth as auth_service
 from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore
@@ -681,6 +681,7 @@ class RecordingStore(FilePhotoStore):
 
 def test_ac13_concurrent_deletes_are_one_deletion(
     client: TestClient,
+    outbox: Outbox,
     db_engine: Engine,
     photo_store: FilePhotoStore,
     monkeypatch: pytest.MonkeyPatch,
@@ -692,7 +693,7 @@ def test_ac13_concurrent_deletes_are_one_deletion(
     barrier = threading.Barrier(2, timeout=20)
     real_delete = accounts.delete_account
 
-    def delete_together(db: Session, store: Any, user: User) -> list[tours.TourChange]:
+    def delete_together(db: Session, store: Any, user: User) -> accounts.DeletedAccount | None:
         barrier.wait()
         return real_delete(db, store, user)
 
@@ -703,6 +704,10 @@ def test_ac13_concurrent_deletes_are_one_deletion(
     assert [response.status_code for response in results] == [204, 204]
     assert _count(db_engine, "users WHERE deleted_at IS NOT NULL") == 1
     assert _blocked(db_engine) == {accounts.email_hmac(U_EMAIL)}
+    # Spec 0022a AC5: one deletion, one mail.
+    assert [(to, subject) for to, subject, _ in outbox.messages] == [
+        (U_EMAIL, he.SECURITY_DELETED_SUBJECT)
+    ]
     stamped = _scalar(db_engine, "SELECT deleted_at FROM users WHERE id = :id", id=u)
 
     before = _snapshot(db_engine)

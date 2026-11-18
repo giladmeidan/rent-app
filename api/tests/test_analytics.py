@@ -378,7 +378,7 @@ def test_ac6_account_deleted_once(
     with get_sessionmaker()() as db:
         tombstone = db.get(User, seeker_id)
         assert tombstone is not None
-        assert accounts.delete_account(db, photo_store, tombstone) == []
+        assert accounts.delete_account(db, photo_store, tombstone) is None
     assert fake_posthog.events == [("account_deleted", None, {})]
 
 
