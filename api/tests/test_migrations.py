@@ -2655,7 +2655,7 @@ def test_ac1_rent_reference_upgrade_downgrade(migration_db_url: str) -> None:
     insert_area = (
         "INSERT INTO rent_areas (kind, source_id, settlement_code, name_he, centre, source_version)"
         " VALUES (:kind, :source, 5000, :name,"
-        " ST_Transform(ST_SetSRID(ST_MakePoint(179706.07, 666156.93), 2039), 4326), 'v')"
+        " ST_Transform(ST_SetSRID(ST_MakePoint(180000, 666000), 2039), 4326), 'v')"
         " RETURNING id"
     )
     insert_price = (

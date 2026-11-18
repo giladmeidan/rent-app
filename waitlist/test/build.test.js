@@ -150,3 +150,10 @@ test('ac11b_site_key', async (t) => {
     }
   });
 });
+
+// Spec 0024a AC3: the page promises no rent estimate and names no nadlan.gov.il source.
+test('ac3_no_rent_estimate_promise', () => {
+  const html = readFileSync(join(WAITLIST, 'public', 'index.html'), 'utf8');
+  assert.ok(!html.includes('nadlan'));
+  assert.ok(!html.includes('הערכת שכר דירה'));
+});
