@@ -6,7 +6,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.config import DEV_EMAIL_BLOCK_KEY, DEV_SECRET_KEY, DatabaseSettings, Settings
+from app.config import (
+    DEV_CONTACT_EMAIL,
+    DEV_EMAIL_BLOCK_KEY,
+    DEV_SECRET_KEY,
+    DatabaseSettings,
+    Settings,
+)
 
 _DSN = "postgresql+psycopg://rent:s3cret@localhost:5432/rent"
 _REDIS = "redis://:r3dis@localhost:6379/0"
@@ -14,6 +20,7 @@ _REDIS = "redis://:r3dis@localhost:6379/0"
 _HTTPS_READY: dict[str, Any] = {
     "secret_key": "p" * 32,
     "email_block_key": "b" * 32,  # spec 0013c
+    "contact_email": "help@rent.example",  # spec 0022a
     "cookie_secure": True,
     "email_backend": "file",
     "geocoder": "fake",
@@ -194,10 +201,30 @@ def test_https_web_origin_refuses_dev_defaults(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("EMAIL_BACKEND", "file")  # from the environment counts as explicit
     monkeypatch.setenv("GEOCODER", "fake")
     assert Settings(
-        **https, **_PHOTO_ENV, secret_key=_SECRET, email_block_key="b" * 32, cookie_secure=True
+        **https,
+        **_PHOTO_ENV,
+        secret_key=_SECRET,
+        email_block_key="b" * 32,
+        contact_email="help@rent.example",
+        cookie_secure=True,
     ).cookie_secure
     # Plain http (local dev) keeps the dev defaults working.
     assert Settings(database_url=_DSN, redis_url=_REDIS, secret_key=DEV_SECRET_KEY).secret_key
+
+
+@pytest.mark.parametrize("bad", [DEV_CONTACT_EMAIL, "", "not-an-address"])
+def test_ac10_contact_email_required_on_https(bad: str) -> None:
+    https: dict[str, Any] = {
+        "database_url": _DSN,
+        "redis_url": _REDIS,
+        "web_origin": "https://rent.example",
+        **_HTTPS_READY,
+    }
+    assert Settings(**https).contact_email == "help@rent.example"
+    with pytest.raises(ValidationError, match="CONTACT_EMAIL must be set"):
+        Settings(**{**https, "contact_email": bad})
+    # Plain http (local dev) keeps the placeholder.
+    assert Settings(**{**https, "web_origin": "http://localhost:5173", "contact_email": bad})
 
 
 def test_ac12_geocoder_settings(monkeypatch: pytest.MonkeyPatch) -> None:

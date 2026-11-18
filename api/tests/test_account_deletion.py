@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.i18n import he
 from app.models import Base, User
-from app.services import accounts, chat_events, ics, passwords, tours
+from app.services import accounts, chat_events, ics, passwords
 from app.services import auth as auth_service
 from app.services import photos as photos_service
 from app.services.photo_store import FilePhotoStore
@@ -681,6 +681,7 @@ class RecordingStore(FilePhotoStore):
 
 def test_ac13_concurrent_deletes_are_one_deletion(
     client: TestClient,
+    outbox: Outbox,
     db_engine: Engine,
     photo_store: FilePhotoStore,
     monkeypatch: pytest.MonkeyPatch,
@@ -692,7 +693,7 @@ def test_ac13_concurrent_deletes_are_one_deletion(
     barrier = threading.Barrier(2, timeout=20)
     real_delete = accounts.delete_account
 
-    def delete_together(db: Session, store: Any, user: User) -> list[tours.TourChange]:
+    def delete_together(db: Session, store: Any, user: User) -> accounts.DeletedAccount | None:
         barrier.wait()
         return real_delete(db, store, user)
 
@@ -703,6 +704,10 @@ def test_ac13_concurrent_deletes_are_one_deletion(
     assert [response.status_code for response in results] == [204, 204]
     assert _count(db_engine, "users WHERE deleted_at IS NOT NULL") == 1
     assert _blocked(db_engine) == {accounts.email_hmac(U_EMAIL)}
+    # Spec 0022a AC5: one deletion, one mail.
+    assert [(to, subject) for to, subject, _ in outbox.messages] == [
+        (U_EMAIL, he.SECURITY_DELETED_SUBJECT)
+    ]
     stamped = _scalar(db_engine, "SELECT deleted_at FROM users WHERE id = :id", id=u)
 
     before = _snapshot(db_engine)
@@ -727,16 +732,18 @@ def test_ac14_late_login_session_is_refused(
     u = make_owner(db_engine, U_EMAIL)
     device = _session(client, db_engine, u)
     code = _request_code(client, outbox, U_EMAIL)
-    found, deleted = threading.Event(), threading.Event()
-    real_find = auth_service._find_user
+    claimed, deleted = threading.Event(), threading.Event()
+    real_eval = auth_service._eval
 
-    def find_then_wait(db: Session, email: str) -> User | None:
-        user = real_find(db, email)
-        found.set()
-        assert deleted.wait(20)
-        return user
+    # The row is read and the code claimed: DELETE /me removes a code still pending (spec 0022a).
+    def claim_then_wait(r: Any, script: str, keys: list[str], *args: bytes | int) -> Any:
+        result = real_eval(r, script, keys, *args)
+        if script == auth_service._SETTLE_CODE:
+            claimed.set()
+            assert deleted.wait(20)
+        return result
 
-    monkeypatch.setattr(auth_service, "_find_user", find_then_wait)
+    monkeypatch.setattr(auth_service, "_eval", claim_then_wait)
     login: list[httpx.Response] = []
     late = TestClient(client.app)
 
@@ -744,7 +751,7 @@ def test_ac14_late_login_session_is_refused(
         login.append(late.post("/auth/otp/verify", json={"email": U_EMAIL, "code": code}))
 
     def delete() -> None:
-        assert found.wait(20)
+        assert claimed.wait(20)
         assert _delete(device).status_code == 204
         deleted.set()
 

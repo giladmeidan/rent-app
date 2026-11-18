@@ -248,6 +248,7 @@ async def test_ac13_tour_mail_crons_registered_and_log_counts(
             "skipped": 0,
             "retried": 0,
             "dropped": 0,
+            "deferred": 0,
         }
         assert await worker.tour_reminders_job({}) == 1
         assert await worker.tour_reminders_job({}) == 0

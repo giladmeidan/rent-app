@@ -169,8 +169,16 @@ def _backdate(engine: Engine, tour_id: Any) -> None:
     )
 
 
-def _counts(sent: int = 0, skipped: int = 0, retried: int = 0, dropped: int = 0) -> dict[str, int]:
-    return {"sent": sent, "skipped": skipped, "retried": retried, "dropped": dropped}
+def _counts(
+    sent: int = 0, skipped: int = 0, retried: int = 0, dropped: int = 0, deferred: int = 0
+) -> dict[str, int]:
+    return {
+        "sent": sent,
+        "skipped": skipped,
+        "retried": retried,
+        "dropped": dropped,
+        "deferred": deferred,
+    }
 
 
 def _booked_tour(client: TestClient, application_id: Any, starts_at: dt.datetime) -> Any:
@@ -429,7 +437,7 @@ def test_ac6_retry_per_recipient_then_drop(
     assert _queue() == []
     assert [to for to, _, _ in sender.messages] == [O_EMAIL]  # the lister once
 
-    # Redis refuses the lister's retry: only that side is dropped, the seeker's is still queued.
+    # Redis refuses the lister's retry: only that side is dropped, the seeker's goes back untried.
     class BothDown(Outbox):
         def send(
             self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
@@ -447,8 +455,112 @@ def test_ac6_retry_per_recipient_then_drop(
         return rpush(*args)
 
     monkeypatch.setattr(get_redis(), "rpush", first_refused)
-    assert _send(db_engine, BothDown()) == _counts(retried=1, dropped=1)
-    assert _queue() == [_item(tour_id, "booked", to="seeker") | {"attempt": 1}]
+    assert _send(db_engine, BothDown()) == _counts(dropped=1, deferred=1)
+    assert _queue() == [_item(tour_id, "booked", to="seeker")]
+
+
+# --- spec 0022a: a dead mail server stops the run ----------------------------------------------
+
+
+class _Down(Outbox):
+    """A mail system that refuses everything and counts the attempts."""
+
+    calls = 0
+
+    def send(
+        self, to: str, subject: str, body: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
+        self.calls += 1
+        raise EmailUnavailable
+
+
+@pytest.fixture
+def tour_id(
+    listing: uuid.UUID, application: uuid.UUID, seeker_id: uuid.UUID, db_engine: Engine
+) -> uuid.UUID:
+    return make_tour(db_engine, listing, application, seeker_id, db_now(db_engine) + 3 * HOUR)
+
+
+def _raw_queue() -> list[bytes]:
+    return get_redis().lrange(tour_mail.QUEUE_KEY, 0, -1)
+
+
+def test_ac11_dead_smtp_stops_the_run(tour_id: uuid.UUID, db_engine: Engine) -> None:
+    first = _item(tour_id, "booked", to="seeker")
+    # Never read in this run, so they need no tours of their own.
+    others = [_item(uuid.uuid4(), "booked", to="seeker") for _ in range(4)]
+    _push(first, *others)
+    sender = _Down()
+
+    assert _send(db_engine, sender) == _counts(retried=1, deferred=4)
+
+    assert sender.calls == 1
+    assert _queue() == [*others, first | {"attempt": 1}]
+
+
+def test_ac12_untried_side_is_deferred(tour_id: uuid.UUID, db_engine: Engine) -> None:
+    _push(_item(tour_id, "booked") | {"attempt": 1})
+    sender = _Down()
+
+    assert _send(db_engine, sender) == _counts(retried=1, deferred=1)
+
+    assert sender.calls == 1
+    assert _queue() == [
+        _item(tour_id, "booked", to="seeker") | {"attempt": 1},
+        _item(tour_id, "booked", to="lister") | {"attempt": 2},
+    ]
+
+
+def test_ac13_requeue_failure_counts_dropped(
+    tour_id: uuid.UUID,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    other = _item(uuid.uuid4(), "booked", to="seeker")
+    _push(_item(tour_id, "booked", to="seeker"), other, other)
+
+    def refused(*_: Any) -> None:
+        raise redis.ConnectionError("DETAIL-MARK")
+
+    monkeypatch.setattr(get_redis(), "lpush", refused)
+    assert _send(db_engine, _Down()) == _counts(retried=1, dropped=2)
+
+    assert "tour mail not re-queued: ConnectionError" in caplog.messages
+    assert "DETAIL-MARK" not in caplog.text
+
+
+def test_ac14_dropped_logs_warning(
+    tour_id: uuid.UUID, db_engine: Engine, outbox: Outbox, caplog: pytest.LogCaptureFixture
+) -> None:
+    def warnings() -> list[logging.LogRecord]:
+        return [r for r in caplog.records if r.getMessage().startswith("tour mail dropped")]
+
+    _push(_item(tour_id, "booked", to="seeker") | {"attempt": tour_mail.MAX_ATTEMPTS - 1})
+    caplog.clear()
+    assert _send(db_engine, _Down()) == _counts(dropped=1)
+    (record,) = warnings()
+    assert (record.levelno, record.getMessage()) == (logging.WARNING, "tour mail dropped: 1")
+    assert S_EMAIL not in caplog.text and str(tour_id) not in caplog.text
+
+    _push(_item(tour_id, "booked", to="seeker"))
+    caplog.clear()
+    assert _send(db_engine, _fresh(outbox)) == _counts(sent=1)
+    assert warnings() == []
+
+
+def test_nf1_deferred_raw_item_is_untouched(
+    tour_id: uuid.UUID, db_engine: Engine, outbox: Outbox
+) -> None:
+    malformed = b"{not json"
+    lister = _item(tour_id, "booked", to="lister")
+    _push(_item(tour_id, "booked", to="seeker"), malformed, lister)
+
+    assert _send(db_engine, _Down()) == _counts(retried=1, deferred=2)
+    assert _raw_queue()[:2] == [malformed, json.dumps(lister).encode()]
+
+    assert _send(db_engine, _fresh(outbox)) == _counts(sent=2, dropped=1)
+    assert _queue() == []
 
 
 # --- AC7: the hook ----------------------------------------------------------------------------

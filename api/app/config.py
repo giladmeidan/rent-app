@@ -14,6 +14,8 @@ DEV_SECRET_KEY = "dev-only-secret-change-me-0123456789abcdef"
 DEV_EMAIL_BLOCK_KEY = "dev-only-email-block-key-0123456789abcdef"
 # The dev User-Agent for Nominatim; refused with `GEOCODER=nominatim` when serving https.
 DEV_NOMINATIM_USER_AGENT = "rent-app-dev/0.0.1"
+# The placeholder contact address of the security emails (spec 0022a); refused on https.
+DEV_CONTACT_EMAIL = "contact@example.com"
 
 
 class SmtpTarget(NamedTuple):
@@ -69,6 +71,8 @@ class Settings(DatabaseSettings):
     email_outbox_dir: Path = Path("./.outbox")
     smtp_url: SecretStr | None = None
     email_from: str = "noreply@localhost"
+    # The help address in the security emails (spec 0022a).
+    contact_email: str = DEV_CONTACT_EMAIL
     cookie_secure: bool = False
     # Spec 0013b: `fly` reads the client address from `Fly-Client-IP` (only behind Fly's proxy);
     # `none` uses the socket peer (`app/client_ip.py`).
@@ -265,6 +269,8 @@ class Settings(DatabaseSettings):
                 )
             if self.google_verifier == "fake":
                 raise ValueError("GOOGLE_VERIFIER must not be fake when WEB_ORIGIN is https")
+            if "@" not in self.contact_email or self.contact_email == DEV_CONTACT_EMAIL:
+                raise ValueError("CONTACT_EMAIL must be set when WEB_ORIGIN is https")
             # The last https check: the key is never rotated, so a public one cannot be fixed later.
             if self.email_block_key.get_secret_value() == DEV_EMAIL_BLOCK_KEY:
                 raise ValueError(

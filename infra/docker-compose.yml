@@ -47,6 +47,8 @@ services:
       EMAIL_BLOCK_KEY: ${EMAIL_BLOCK_KEY:-dev-only-email-block-key-0123456789abcdef}
       EMAIL_BACKEND: file
       EMAIL_OUTBOX_DIR: /outbox
+      # The help address in the security emails (spec 0022a).
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-contact@example.com}
       # Photos (spec 0010d): the file store, served by the api itself at /media.
       PHOTO_BACKEND: file
       PHOTO_DIR: /media

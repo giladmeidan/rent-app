@@ -141,7 +141,7 @@ R2_BUCKET=<bucket name>
 CONTACT_EMAIL=<contact address>
 ```
 
-`CONTACT_EMAIL` is the same public address `make deploy-web` uses. Set it whether or not spec 0022a has merged.
+`CONTACT_EMAIL` is the same public address `make deploy-web` uses. The API and worker refuse to start without it.
 
 Optional, each off without its values: Google sign-in and Sentry and PostHog, in section 8.
 

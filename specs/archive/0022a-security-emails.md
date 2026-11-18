@@ -1,7 +1,7 @@
 ---
 id: 0022a
 title: "An account owner is told by email when the password is set or changed and when the account is deleted, and a dead mail server can no longer stall the tour-mail job"
-status: verified
+status: done
 depends_on: []
 reviewers: [code, security, qa]   # security: auth paths, PII after deletion, mail abuse; qa: API behaviour and the changed job
 estimate: 1 coder run             # coder Opus/high (auth and account deletion, Speed rule 6)
@@ -46,11 +46,12 @@ Checked against the code: `UserPassword` is written only in `services/auth.py` a
 3. `infra/docker-compose.yml`, `api` service: `CONTACT_EMAIL: ${CONTACT_EMAIL:-contact@example.com}`.
 4. `.env.example`: the existing commented `CONTACT_EMAIL` block says only `make deploy-waitlist` reads it. Reword:
    the API's security emails read it too, with the placeholder as the dev default, and an https `WEB_ORIGIN` refuses it.
-5. New `api/app/services/security_mail.py`, three functions:
+5. New `api/app/services/security_mail.py`, four public functions:
    - `send_password_changed(sender, to)` and `send_account_deleted(sender, to)` build the mail from `he.py`,
      `web_origin` and `contact_email`, and call `sender.send`. They catch every exception, log its **type only**, and
      never raise.
-   - `password_mail_due(r, user_id) -> bool`: the cap under "Abuse".
+   - `password_mail_due(r, email) -> bool` and `deleted_mail_due(r, email) -> bool`: the per-mailbox caps under
+     "Abuse", sharing one small helper, each with its limit and window as named constants.
 6. `api/app/services/accounts.py`: `delete_account` returns a frozen dataclass `DeletedAccount(email: str,
    changes: list[tours.TourChange])`, or `None` when the row was already a tombstone. `email` is
    `field(repr=False)`, so a stray repr cannot log it. It is `locked.email`, read under the row lock in step 1, so a
@@ -59,11 +60,12 @@ Checked against the code: `UserPassword` is written only in `services/auth.py` a
    not written anywhere by this code.
 7. `api/app/routers/auth.py`:
    - `DELETE /me` gains `background: BackgroundTasks` and the `get_email_sender` dependency. If `delete_account`
-     returned a value: `tours.announce(r, deleted.changes)`, then
-     `background.add_task(security_mail.send_account_deleted, sender, deleted.email)`.
+     returned a value: `tours.announce(r, deleted.changes)`, the pending login code's `otp:*` key is removed, and
+     `background.add_task(security_mail.send_account_deleted, sender, deleted.email)` runs if `deleted_mail_due`
+     allows it. Only the mail is capped.
    - `PUT /me/password` gains the same two parameters. It asserts `user.email is not None` (the pattern at
      `routers/auth.py:55`), copies it **before** `set_password`, and after
-     `set_password` returns adds `send_password_changed` if `password_mail_due` allows it. A racing deletion raises
+     `set_password` returns adds `send_password_changed` if `password_mail_due(r, email)` allows it. A racing deletion raises
      `AccountDeletedError` inside `set_password`, so no mail is queued.
 8. `web/src/locales/he.json`, existing keys only (no new key, so `web/src/features/legal/content.ts` is untouched):
    - `legal.privacy.s3.i2`: "(שליחת קודי הכניסה והודעות על סיורים)" becomes
@@ -92,8 +94,8 @@ Checked against the code: `UserPassword` is written only in `services/auth.py` a
     - `specs/FOLLOWUPS.md`: delete the 0016a `DELETE /me`, `PUT /me/password` security-email line and the 0018c "dead
       SMTP host can stall one run" line; cut the 0018c "3 attempts run within ~20 s" line down to its not-before part;
       add a line for the OTP lock-out under "Other risks".
-    - `specs/PRODUCT.md` "Login": record what shipped, which paths mail and the cap of 3 password mails per account
-      per hour.
+    - `specs/PRODUCT.md` "Login": record what shipped, which paths mail and the caps: 3 password mails per mailbox per
+      hour, 3 deletion mails per mailbox per day.
 
 **Out:**
 - A durable outbox or retries for security mail (see "Delivery").
@@ -119,25 +121,31 @@ the address in Redis, which is persisted. Two delivery paths for two mails is no
   `# shortcut: one attempt, no outbox; add a durable queue if logs show lost security mail`.
 
 ## Abuse
-`limits.WRITE` allows 200 `PUT /me/password` an hour and 1,000 a day per account. Unthrottled, one account could bury
-the owner's inbox. The cap protects that inbox; it does not protect the provider's shared daily quota (see Risks).
-- `password_mail_due` uses the existing limiter, and is `True` unless the limit is reached:
+`limits.WRITE` allows 200 `PUT /me/password` an hour and 1,000 a day per account, and deleting an account and signing
+up again gives the same address a new user id, so per-user limits would reset. Unthrottled, one person could bury a
+mailbox. **Both caps are per mailbox** (Gilad 2026-11-18, option A). They protect that inbox and stop a sign-up and
+delete loop from spending the provider's shared daily quota through one address; they do not protect that quota from
+many addresses (see Risks).
+- Both use the existing limiter through one helper, `True` unless the limit is reached:
   ```python
+  key = f"rl:security_mail:{kind}:{accounts.email_hmac(email)}"
   try:
-      soft(lambda: count_or_raise(r, [(f"rl:security_mail:password:{user_id}", 3, 3600)]))
+      soft(lambda: count_or_raise(r, [(key, limit, window_s)]))
   except RateLimitedError:
       return False
   return True
   ```
   `soft` returns `None` both on success and when Redis is unavailable; both mean send, since a security notice
-  outranks the cap. The key holds an id only.
-- Result: at most 3 password mails per account per hour (72 a day at worst, to that account's own mailbox). Three
-  rather than one, so the owner's own change cannot silence the warning about an intruder's change right after it. A
-  failed send still uses one of the three, and two remain.
-- The deletion mail needs no cap: an account is deleted once.
+  outranks the cap. The key holds the keyed hash `email_hmac`, never the address or a user id.
+- Password mail: `rl:security_mail:password:<hmac>`, at most 3 per mailbox per hour. Three rather than one, so the
+  owner's own change cannot silence the warning about an intruder's change right after it. A failed send still uses
+  one of the three, and two remain.
+- Deletion mail: `rl:security_mail:deleted:<hmac>`, at most 3 per mailbox per day. One account is deleted once, but one
+  mailbox can sign up and delete again and again. Over the cap the deletion still happens, the login code is still
+  removed and the tours are still announced; only the mail stops.
 
 ## Data
-No table, column or migration. One short-lived Redis counter per account (above).
+No table, column or migration. Two short-lived Redis counters per mailbox (above), keyed by the keyed hash.
 
 ## API
 No new endpoint, and status codes and bodies do not change.
@@ -196,15 +204,20 @@ New API tests are in `api/tests/test_security_mail.py` unless named otherwise.
 - [ ] AC6 Given `PUT /me/password` fails (403 `reauth_required`, 422, 429 or a racing deletion's 401), Then no mail
   is sent — `test_ac6_failed_change_sends_nothing`
 - [ ] AC7 Given four password changes within the hour, Then all return 204, the first three each send a mail and the
-  fourth sends nothing; and with `count_or_raise` in `security_mail` alone raising `RedisError` (`limits.check` also
+  fourth sends nothing, counted under the mailbox's `email_hmac` key; and with `count_or_raise` in `security_mail` alone raising `RedisError` (`limits.check` also
   uses `eval`, so do not fail Redis as a whole), the mail still goes — `test_ac7_password_mail_cap`
 - [ ] AC8 Both mails contain neither the new password nor any session token, no name, and no `\b\d{6}\b`; and nothing
   logged during either path contains the address — `test_ac8_no_secret_or_pii_in_mail_or_logs`
 - [ ] AC9 Given an account that signed up through `/auth/otp/request`, After a deletion mail, no `users` row holds the
   address, no Redis key name outside `rl:*` holds it, and neither the `tour_mail` queue's values nor the
-  `rl:security_mail:*` keys' values hold it — `test_ac9_no_address_left_behind`
+  `rl:security_mail:*` keys' names and values hold it — `test_ac9_no_address_left_behind`
 - [ ] AC10 An https `WEB_ORIGIN` with the placeholder or an empty `contact_email` is refused, and a real one passes —
   `api/tests/test_config.py::test_ac10_contact_email_required_on_https`
+- [ ] AC15 Given one address that repeatedly signs up, changes its password and calls `DELETE /me`, Then across those
+  accounts at most 3 password mails go in the hour and deletion mails stop after 3, while every deletion still
+  succeeds, removes the pending code and announces its tours; and with `count_or_raise` in `security_mail` raising
+  `RedisError` at the cap, the deletion mail still goes — `test_ac15_limits_survive_delete_and_signup_again`,
+  `test_ac15_deletion_limit_fails_open`
 
 *Tour mail*
 - [ ] AC11 Given 5 queued single-recipient items (`booked` with `to="seeker"`) and a sender that always fails, When `send_pending` runs, Then `send` is called once,
@@ -248,10 +261,16 @@ Defaults taken, so nothing blocks the build. Gilad can overrule any of them in t
    there too, which adds noise to every password sign-up.
 2. **Security mail is best effort.** Options: (a) one attempt after the response, recommended for launch; (b) a durable
    outbox, which needs a table that would hold an address after the account is gone, against the deletion promise.
-3. **Password-mail cap.** Q1 default B, awaiting Gilad's confirmation; only AC7 and Scope 5 change if he picks
-   otherwise. Options: (a) 1 per hour, the quietest, but the owner's own change can silence the warning about an
-   intruder's change in that hour; (b) up to 3 per hour per account, recommended; (c) mail every change, no gap, but
-   up to 200 mails an hour from one account.
+3. **Password-mail cap. Q1 decided by Gilad, 2026-11-18: option (b), up to 3 per hour.** Options were:
+   (a) 1 per hour, the quietest, but the owner's own change can silence the warning about an intruder's change in
+   that hour; (b) up to 3 per hour; (c) mail every change, no gap, but up to 200 mails an hour from one account. The
+   unit became the mailbox under decision 4.
+4. **Mail limits. Decided by Gilad, 2026-11-18: option A.** Review showed delete plus re-sign-up gives a new user id,
+   which reset a per-user cap, so one Google account could spend the shared mail quota. Both limits are keyed on
+   `accounts.email_hmac(email)`: 3 password mails per mailbox per hour, 3 deletion mails per mailbox per day.
+5. **Privacy wording. Decided by Gilad, 2026-11-18: option 1.** `legal.privacy.s6.i2` stays as written. A login code
+   requested after the deletion writes `otp:<address>` again, but that is new data someone submitted, and it expires
+   in 10 minutes.
 
 Other risks:
 - **Privacy text:** Scope 8 changes three strings in the legal draft, and now says the email stays in rate-limit data for up to a day. They join the wording Gilad already has to
@@ -267,3 +286,11 @@ Other risks:
   attacker can then spend the address's 20-a-day code ceiling from a few networks (`auth.py:7-9`, `:165`), so the owner
   may get no code for up to 24 h. The mail's contact line is the fallback. No code here; FOLLOWUPS line in Scope 11.
 - The `EMAIL_BACKEND=file` outbox stores the mail in dev and e2e only; FOLLOWUPS 0018c already tracks that outbox.
+
+## Digest (merged 2026-11-18, PR #137, merge ee2e2a7)
+The account owner now gets an email when the password is set or changed and when the account is deleted. Mail goes after
+the response in one attempt, so a mail failure cannot block the action. Limits follow the mailbox through a keyed hash:
+3 password mails an hour and 3 deletion mails a day (Gilad), failing open, so deleting and re-signing up does not reset
+them. Deleting an account clears any pending login code. `send_pending` stops at the first mail failure and re-queues the
+rest in order. The API now requires a real `CONTACT_EMAIL` on https. Reviews: code, security (one blocker, fixed by the
+mailbox limits) and qa. CI passed on `998bbf8`; 1067 API and 898 web tests passed locally. Not tested against a real SMTP server.
