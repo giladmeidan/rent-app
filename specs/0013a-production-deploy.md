@@ -762,6 +762,19 @@ to keep the admin away from password and calendar-token hashes (Q2); if Fly's Re
 undeployed. Q1 is decided: production never contacts nadlan.gov.il, so launch has settlements only. The MPG role behaviour
 is simulated, so runbook §7 probes it first on the real cluster.
 
+Built 2026-11-18, not deployed.
+Shipped: Fly and Cloudflare Pages configs, `make deploy-*` targets, gzip API responses, the admin role for Managed
+Postgres and the runbook `infra/DEPLOY.md`. Demo: `make check-images`; read `infra/DEPLOY.md`; `make deploy-api` refuses
+outside a clean `main`.
+Tests: +20 API test functions, +3 web, +0 e2e; a new CI step builds and checks the three production images.
+Findings: 1 blocker fixed (the admin check missed roles it can switch to), 2 majors fixed, 0 waived, 1 follow-up logged
+(run `--help` for every `fly` command once flyctl is installed: none has been run, they were read from Fly's docs).
+Decided by Gilad during the build: if Fly's Reader can reach the hash tables, the admin stays undeployed until Fly offers
+a narrower role; the shared Fly private network is accepted, with only homie apps in the org. Fly refuses
+`RENT_REFERENCE` other than `off`.
+To know: Resend's EU region covers sending only and its account data stays in the US, so the legal text's provider list
+must say so.
+
 ## Verifier findings (independent, 2026-11-15)
 *Historical: applied to the 2026-11-15 text; the sibling and Mac-runner items no longer apply.*
 Fresh pass against `.claude/agents/spec-verifier.md` on `origin/main` (84b6fef). Checks 2–10 pass apart from the
