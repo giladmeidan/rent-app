@@ -40,32 +40,35 @@ _INSERT_GRANTS = ("admin_actions", "admin_logins")
 # Tables it may not even read: password hashes (spec 0016a), calendar-feed token hashes (0018a).
 _NO_ACCESS = ("user_passwords", "tour_feeds")
 
-# On Fly Managed Postgres these would run as a system role and may be refused, so `--existing-role`
-# skips them; the runbook re-runs the script after migrations instead of using default privileges.
-_NEW_ROLE_ONLY = frozenset(
-    {
-        "REVOKE ALL ON DATABASE {db} FROM {role}",
+# (statement, new role only). The new-role-only ones would run as a system role on Fly Managed
+# Postgres and may be refused, so `--existing-role` skips them; the runbook re-runs the script after
+# migrations instead of using default privileges.
+_STATEMENTS = (
+    ("REVOKE ALL ON DATABASE {db} FROM {role}", True),
+    ("REVOKE ALL ON SCHEMA public FROM {role}", False),
+    ("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {role}", False),
+    ("REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {role}", False),
+    (
         "ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public"
         " REVOKE ALL ON TABLES FROM {role}",
-        "GRANT CONNECT ON DATABASE {db} TO {role}",
+        True,
+    ),
+    ("GRANT CONNECT ON DATABASE {db} TO {role}", True),
+    ("GRANT USAGE ON SCHEMA public TO {role}", False),
+    ("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {role}", False),
+    (
         "ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public"
         " GRANT SELECT ON TABLES TO {role}",
-    }
-)
-_STATEMENTS = (
-    "REVOKE ALL ON DATABASE {db} FROM {role}",
-    "REVOKE ALL ON SCHEMA public FROM {role}",
-    "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {role}",
-    "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {role}",
-    "ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public"
-    " REVOKE ALL ON TABLES FROM {role}",
-    "GRANT CONNECT ON DATABASE {db} TO {role}",
-    "GRANT USAGE ON SCHEMA public TO {role}",
-    "GRANT SELECT ON ALL TABLES IN SCHEMA public TO {role}",
-    "ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public"
-    " GRANT SELECT ON TABLES TO {role}",
+        True,
+    ),
 )
 
+# Every role it belongs to, itself included. MEMBER, not SET: a membership with only ADMIN OPTION
+# passes a SET check, yet lets the role grant itself SET.
+_REACHABLE_ROLES = """
+    SELECT r.rolname, r.rolsuper, r.rolbypassrls FROM pg_roles r
+    WHERE pg_has_role(%(role)s::name, r.oid, 'MEMBER')
+"""
 _RELATIONS = """
     SELECT c.oid, c.relname, c.relrowsecurity,
            EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid),
@@ -84,6 +87,13 @@ _UPDATABLE_COLUMNS = """
     WHERE a.attrelid = %(oid)s AND a.attnum > 0 AND NOT a.attisdropped
       AND has_column_privilege(%(role)s::name, a.attrelid, a.attnum, 'UPDATE')
 """
+_CAN_CREATE_IN_PUBLIC = "SELECT has_schema_privilege(%(role)s::name, 'public', 'CREATE')"
+_UPDATABLE_SEQUENCES = """
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      -- CASE: Postgres may run a WHERE function first, and this one fails on a non-sequence.
+      AND CASE WHEN c.relkind = 'S' THEN has_sequence_privilege(%(role)s::name, c.oid, 'UPDATE') END
+"""
 
 
 class AdminRightsError(Exception):
@@ -96,18 +106,19 @@ def _dsn(database_url: str) -> str:
     return url.render_as_string(hide_password=False)
 
 
-def _assert_rights(conn: psycopg.Connection[TupleRow], role: str, existing: bool) -> None:
-    """Raise unless `role`'s effective rights, inherited ones included, are the intended ones.
-    Only with `existing` (a Fly role whose group cannot be removed), a SELECT on a hash table is
-    tolerated while row-level security leaves it zero rows: on, no policy, no BYPASSRLS."""
-    row = conn.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
-    bypasses_rls = row is None or bool(row[0])
+def _assert_role_rights(conn: psycopg.Connection[TupleRow], role: str, existing: bool) -> None:
+    params = {"role": role}
+    row = conn.execute(_CAN_CREATE_IN_PUBLIC, params).fetchone()
+    if row is None or row[0]:
+        raise AdminRightsError(f"{role} can create objects in schema public")
+    for (sequence,) in conn.execute(_UPDATABLE_SEQUENCES, params).fetchall():
+        raise AdminRightsError(f"{role} can update sequence {sequence}")
     columns = {table: set(names) for table, names in _COLUMN_GRANTS}
     for oid, table, rls, has_policy, reads, writes, inserts, changes in conn.execute(
-        _RELATIONS, {"role": role}
+        _RELATIONS, params
     ).fetchall():
         if table in _NO_ACCESS:
-            hidden = existing and rls and not has_policy and not bypasses_rls
+            hidden = existing and rls and not has_policy
             if writes or (reads and not hidden):
                 raise AdminRightsError(f"{role} can access {table}")
             continue
@@ -116,6 +127,22 @@ def _assert_rights(conn: psycopg.Connection[TupleRow], role: str, existing: bool
         for (column,) in conn.execute(_UPDATABLE_COLUMNS, {"oid": oid, "role": role}).fetchall():
             if column not in columns.get(table, ()):
                 raise AdminRightsError(f"{role} can update {table}.{column}")
+
+
+def _assert_rights(conn: psycopg.Connection[TupleRow], role: str, existing: bool) -> None:
+    """Raise unless `role` and every role it belongs to hold only the intended rights, inherited
+    ones included: `SET ROLE` reaches what inheritance does not. Only with `existing` (a Fly role
+    whose group cannot be removed), a SELECT on a hash table is tolerated while row-level security
+    leaves it zero rows: on, no policy, and no reachable role that bypasses it."""
+    for name, superuser, bypasses_rls in conn.execute(_REACHABLE_ROLES, {"role": role}).fetchall():
+        if superuser:
+            raise AdminRightsError(f"{role} can act as {name}, a superuser")
+        if bypasses_rls:
+            raise AdminRightsError(
+                f"{role} can act as {name}, which bypasses row-level security on"
+                f" {', '.join(_NO_ACCESS)}"
+            )
+        _assert_role_rights(conn, name, existing)
 
 
 def apply_admin_role(
@@ -133,6 +160,8 @@ def apply_admin_role(
         if existing_role:
             if not exists:
                 sys.exit(f"{ROLE} does not exist: create it with `fly mpg users create` (Reader)")
+            # ENABLE ROW LEVEL SECURITY must not queue logins behind it on a re-run.
+            conn.execute("SET LOCAL lock_timeout = '5s'")
         else:
             conn.execute(
                 sql.SQL(
@@ -148,8 +177,8 @@ def apply_admin_role(
             for (group,) in groups:
                 conn.execute(sql.SQL("REVOKE {} FROM {}").format(sql.Identifier(group), role))
         database = sql.Identifier(conn.info.dbname)
-        for statement in _STATEMENTS:
-            if not (existing_role and statement in _NEW_ROLE_ONLY):
+        for statement, new_role_only in _STATEMENTS:
+            if not (existing_role and new_role_only):
                 conn.execute(sql.SQL(statement).format(db=database, role=role))
         for table in _INSERT_GRANTS:
             conn.execute(sql.SQL("GRANT INSERT ON {} TO {}").format(sql.Identifier(table), role))

@@ -8,23 +8,27 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 import psycopg
 import pytest
 from sqlalchemy import Engine, create_engine, text
 
 from admin.main import create_admin_app
-from app.config import Settings
-from app.services import passwords
+from app.config import Settings, parse_smtp_url
+from app.services import passwords, rent_reference
+from app.services.rent_reference import NadlanFetcher
+from scripts import import_areas as import_areas_script
 from scripts.admin_role import (
     ROLE,
     AdminRightsError,
     _dsn,
     apply_admin_role,
     check_session,
+    verify_admin_session,
 )
 from tests.conftest import API_DIR, REPO_ROOT, TEST_DATABASE_URL, make_owner
 from tests.test_admin import SAME_ORIGIN, _check_role, _client, _login_admin, _settings
@@ -230,6 +234,7 @@ def probe(admin_role: str, db_engine: Engine) -> Iterator[Engine]:
             f"ALTER ROLE {ROLE} RESET role",
             f"ALTER ROLE {ROLE} NOBYPASSRLS",
             "DROP POLICY IF EXISTS probe ON user_passwords",
+            "DROP SEQUENCE IF EXISTS probe_sequence",
             "REVOKE ALL ON user_passwords FROM PUBLIC",
             f"REVOKE {PROBE} FROM {ROLE}",
             f"DROP OWNED BY {PROBE}",
@@ -341,6 +346,93 @@ def test_ac5_admin_role_existing_role_verify_needs_role_none(
     # The dashboard's own engine: a login inserts into `admin_logins`, which only homie_admin may.
     with _client(create_admin_app(_settings(admin_role)), headers=SAME_ORIGIN) as admin:
         assert _login_admin(admin).status_code == 302
+
+
+def test_ac5_admin_role_existing_role_refuses_a_reachable_bypassrls_role(
+    admin_role: str, probe: Engine
+) -> None:
+    _run(
+        probe,
+        f"ALTER ROLE {PROBE} BYPASSRLS",
+        f"GRANT pg_read_all_data TO {PROBE}",
+        f"GRANT {PROBE} TO {ROLE}",
+        f"ALTER ROLE {ROLE} SET role = {PROBE}",
+    )
+
+    with pytest.raises(AdminRightsError, match="user_passwords"):
+        apply_admin_role(TEST_DATABASE_URL, None, existing_role=True)
+    assert not _rls(probe, "user_passwords")
+
+    # With row-level security really on, as in production, `--verify` still refuses the group.
+    _run(
+        probe,
+        "ALTER TABLE user_passwords ENABLE ROW LEVEL SECURITY",
+        "ALTER TABLE tour_feeds ENABLE ROW LEVEL SECURITY",
+    )
+    with pytest.raises(AdminRightsError, match=PROBE):
+        verify_admin_session(admin_role)
+
+
+@pytest.mark.parametrize(
+    ("setup", "named"),
+    [
+        (  # no inherited right, but `SET ROLE` gets it
+            (f"GRANT UPDATE ON users TO {PROBE}", f"GRANT {PROBE} TO {ROLE} WITH INHERIT FALSE"),
+            "users",
+        ),
+        (
+            (f"ALTER ROLE {PROBE} SUPERUSER", f"GRANT {PROBE} TO {ROLE} WITH INHERIT FALSE"),
+            "superuser",
+        ),
+        (  # no SET and no INHERIT, but ADMIN lets the role grant itself both
+            (
+                f"GRANT UPDATE ON users TO {PROBE}",
+                f"GRANT {PROBE} TO {ROLE} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE",
+            ),
+            "users",
+        ),
+        ((f"GRANT CREATE ON SCHEMA public TO {PROBE}", f"GRANT {PROBE} TO {ROLE}"), "public"),
+        (
+            (
+                "CREATE SEQUENCE probe_sequence",
+                f"GRANT UPDATE ON SEQUENCE probe_sequence TO {PROBE}",
+                f"GRANT {PROBE} TO {ROLE}",
+            ),
+            "probe_sequence",
+        ),
+    ],
+    ids=["set-role-write", "superuser-group", "admin-option", "schema-create", "sequence-update"],
+)
+def test_ac5_admin_role_existing_role_refuses_what_it_can_reach(
+    probe: Engine, setup: tuple[str, ...], named: str
+) -> None:
+    _run(probe, *setup)
+
+    with pytest.raises(AdminRightsError, match=named):
+        apply_admin_role(TEST_DATABASE_URL, None, existing_role=True)
+    assert not _rls(probe, "user_passwords")
+
+
+def test_ac5_admin_role_existing_role_accepts_a_plain_reader(
+    admin_role: str, probe: Engine
+) -> None:
+    owner = make_owner(probe, "owner@example.com")
+    with probe.begin() as conn:
+        conn.execute(
+            text("INSERT INTO user_passwords (user_id, hash) VALUES (:u, :h)"),
+            {"u": owner, "h": passwords.hash_password("a long test password")},
+        )
+    _run(
+        probe,
+        f"GRANT pg_read_all_data TO {PROBE}",
+        f"GRANT {PROBE} TO {ROLE}",
+        f"ALTER ROLE {ROLE} SET role = {PROBE}",
+    )
+
+    apply_admin_role(TEST_DATABASE_URL, None, existing_role=True)
+
+    verify_admin_session(admin_role)
+    assert _reader_sees(admin_role, "user_passwords") == 0
 
 
 def test_ac5_admin_role_existing_role_needs_the_role(
@@ -464,6 +556,51 @@ def test_ac8_deploy_guard(tmp_path: Path) -> None:
     ]
 
 
+# --- AC11: production never contacts nadlan.gov.il ------------------------------------------------
+
+
+def test_ac11_area_import_off_makes_no_request(
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    set_env: Callable[..., None],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def no_fetcher() -> NadlanFetcher:
+        raise AssertionError("a fetcher was built with RENT_REFERENCE=off")
+
+    monkeypatch.setattr(rent_reference, "get_rent_fetcher", no_fetcher)
+    set_env(RENT_REFERENCE="off")
+
+    import_areas_script.main()
+
+    output = capsys.readouterr().out
+    assert "'neighbourhoods': 0" in output and "'files_failed': 0" in output
+    with db_engine.connect() as conn:
+        kinds = dict(
+            conn.execute(text("SELECT kind, count(*) FROM areas GROUP BY kind")).tuples().all()
+        )
+    assert kinds.keys() == {"settlement"} and kinds["settlement"] > 1000
+
+    # The contrast: `nadlan` builds the fetcher and asks for the big cities (a 404-only mock).
+    requests: list[httpx.Request] = []
+
+    def not_found(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(404)
+
+    nadlan = NadlanFetcher(
+        httpx.Client(transport=httpx.MockTransport(not_found), base_url="https://n.test"),
+        sleep=lambda _: None,
+    )
+    monkeypatch.setattr(rent_reference, "get_rent_fetcher", lambda: nadlan)
+    set_env(RENT_REFERENCE="nadlan")
+
+    import_areas_script.main()
+
+    assert requests
+    assert nadlan.client.is_closed
+
+
 # --- AC9: the runbook -----------------------------------------------------------------------------
 
 
@@ -486,6 +623,15 @@ def test_ac9_runbook_names_every_secret_and_no_value() -> None:
     for name, value in assigned:
         if name != "GOOGLE_VERIFIER":
             assert "<" in value or value.startswith("$("), f"{name}={value}"
+
+
+def test_ac9_runbook_smtp_url_is_one_the_sender_accepts() -> None:
+    runbook = (REPO_ROOT / "infra" / "DEPLOY.md").read_text()
+    match = re.search(r"^SMTP_URL=(\S*<\S+>\S*)$", runbook, re.M)
+    assert match is not None
+    target = parse_smtp_url(re.sub(r"<[^>]+>", "placeholder", match.group(1)))
+    assert target.implicit_tls is True
+    assert (target.host, target.port, target.username) == ("smtp.resend.com", 465, "resend")
 
 
 def test_ac9_runbook_records_the_tool_versions() -> None:

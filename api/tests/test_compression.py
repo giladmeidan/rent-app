@@ -33,6 +33,13 @@ def test_ac10_areas_gzip(client: TestClient, db_engine: Engine) -> None:
     assert zipped.headers["access-control-allow-credentials"] == "true"
 
 
+def test_ac10_small_response_not_compressed(client: TestClient) -> None:
+    response = client.get("/health", headers={"accept-encoding": "gzip"})
+    assert response.status_code == 200
+    assert len(response.content) < 1024
+    assert "content-encoding" not in response.headers
+
+
 @pytest.mark.asyncio
 async def test_ac10_stream_not_compressed(client: TestClient, outbox: Outbox) -> None:
     a, b = _two_users(client, outbox)

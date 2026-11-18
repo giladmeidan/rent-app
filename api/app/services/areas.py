@@ -1,11 +1,12 @@
 """Area queries and the area import (spec 0021a1).
 
 `import_areas` (`make import-areas`, by hand) upserts every settlement of
-`api/data/settlements.csv` and, through nadlan.gov.il's rent files (`rent_reference`'s fetcher and
-parser), the neighbourhoods of `BIG_CITY_CODES`. Rows are never deleted: a settlement gone from the
-CSV, or a neighbourhood no longer listed by a settlement file that was fetched and passed, becomes
-inactive; a failed fetch deactivates nothing. An upsert never touches `is_active` of an existing
-row (the admin's switch)."""
+`api/data/settlements.csv` and, given a fetcher of rent files (`rent_reference`'s parser), the
+neighbourhoods of `BIG_CITY_CODES`. Without one it makes no request: production has none, because
+nadlan.gov.il's terms forbid it (PRODUCT.md "Launch area"). Rows are never deleted: a settlement
+gone from the CSV, or a neighbourhood no longer listed by a settlement file that was fetched and
+passed, becomes inactive; a failed fetch deactivates nothing. An upsert never touches `is_active`
+of an existing row (the admin's switch)."""
 
 import csv
 import functools
@@ -173,10 +174,19 @@ def settlement_districts() -> dict[int, int]:
     }
 
 
-def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -> dict[str, int]:
-    """Upsert the settlements, then each big city's neighbourhoods, committing after the
-    settlements and after each city (no run-long row locks). Raises `ValueError` before any write
-    when the CSV has fewer than `MIN_SETTLEMENTS` rows. Logs the counts only, never a URL."""
+def _finish_import(counts: dict[str, int], stored: list[tuple[uuid.UUID, bool]]) -> dict[str, int]:
+    counts["kept_inactive"] = sum(1 for _id, active in stored if not active)
+    log.info("area import: %s", counts)
+    return counts
+
+
+def import_areas(
+    db: Session, fetcher: RentFetcher | None, csv_path: Path = CSV_PATH
+) -> dict[str, int]:
+    """Upsert the settlements, then, with a `fetcher`, each big city's neighbourhoods, committing
+    after the settlements and after each city (no run-long row locks). Raises `ValueError` before
+    any write when the CSV has fewer than `MIN_SETTLEMENTS` rows. Logs the counts only, never a
+    URL."""
     rows = read_settlements(csv_path)
     if len(rows) < MIN_SETTLEMENTS:
         raise ValueError(f"settlements CSV has {len(rows)} rows, expected {MIN_SETTLEMENTS}+")
@@ -190,6 +200,8 @@ def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -
     )
     db.commit()
     stored = list(settlements.values())
+    if fetcher is None:
+        return _finish_import(counts, stored)
     for code in BIG_CITY_CODES:
         if code not in settlements:
             continue
@@ -237,6 +249,4 @@ def import_areas(db: Session, fetcher: RentFetcher, csv_path: Path = CSV_PATH) -
             Area.source_code.not_in(city.neighbourhood_ids),
         )
         db.commit()
-    counts["kept_inactive"] = sum(1 for _id, active in stored if not active)
-    log.info("area import: %s", counts)
-    return counts
+    return _finish_import(counts, stored)

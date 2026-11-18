@@ -108,8 +108,9 @@ migrate:
 seed:
 	$(UV) run python scripts/seed.py
 
-## import-areas: import every settlement (api/data/settlements.csv) and the big cities' neighbourhoods
-## from nadlan.gov.il (spec 0021a1); by hand, once per environment after `make migrate`, never scheduled
+## import-areas: import every settlement (api/data/settlements.csv; spec 0021a1), no network. Only with
+## RENT_REFERENCE=nadlan, never in production (0013a), also the big cities' neighbourhoods from
+## nadlan.gov.il. By hand, once per environment after `make migrate`, never scheduled
 import-areas:
 	$(UV) run python scripts/import_areas.py
 
@@ -221,8 +222,8 @@ admin-role-prod: deploy-guard
 admin-role-verify-prod:
 	fly ssh console --config infra/fly/admin.toml -C "/opt/venv/bin/python /app/scripts/admin_role.py --verify"
 
-## import-areas-prod: `import-areas` on a worker machine (about an hour); by hand, never by a deploy
-## (infra/DEPLOY.md, section 6)
+## import-areas-prod: `import-areas` on a worker machine: settlements only, no outside request; by
+## hand, never by a deploy (infra/DEPLOY.md, section 6)
 import-areas-prod:
 	fly ssh console --config infra/fly/api.toml --process-group worker -C "/opt/venv/bin/python /app/scripts/import_areas.py"
 
