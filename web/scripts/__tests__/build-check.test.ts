@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const checker = join(dirname(fileURLToPath(import.meta.url)), '..', 'build-check.mjs');
+const headers = readFileSync(join(dirname(checker), '..', 'public', '_headers'), 'utf8');
 const dirs: string[] = [];
 
 type Files = Map<string, string | Buffer>;
@@ -74,6 +75,7 @@ const SW = `${SHIM}define(["./workbox-abc"],function(e){"use strict";self.skipWa
 function good(): Files {
   return new Map<string, string | Buffer>(
     Object.entries({
+      _headers: headers,
       'index.html': HTML,
       'manifest.webmanifest': JSON.stringify(MANIFEST),
       'sw.js': SW,
@@ -269,5 +271,53 @@ describe('ac10_no_source_maps_served', { timeout: 30_000 }, () => {
     const without = runOn();
     expect(without.output).not.toContain('source map');
     expect(without.status).toBe(0);
+  });
+});
+
+describe('ac7_pages_headers', { timeout: 30_000 }, () => {
+  const onlyProblem = (output: string) => {
+    expect(output).toContain('build-check: 1 problem(s)');
+    return output.split('\n')[0];
+  };
+
+  it('ac7_headers_present', () => {
+    const { status, output } = runOn();
+    expect(output).not.toContain('_headers');
+    expect(status).toBe(0);
+
+    const missing = runOn(remove('_headers'));
+    expect(onlyProblem(missing.output)).toBe('_headers: missing');
+    expect(missing.status).toBe(1);
+  });
+
+  it.each([
+    ['/*', 'X-Frame-Options: DENY', 'X-Frame-Options: SAMEORIGIN', 'X-Frame-Options differs'],
+    [
+      '/*',
+      "script-src 'self' ",
+      "script-src 'self' 'unsafe-eval' ",
+      'Content-Security-Policy differs',
+    ],
+    ['/assets/*', ', immutable', '', 'Cache-Control differs'],
+  ])('ac7_header_changed_fails: %s %s', (path, from, to, line) => {
+    const { status, output } = runOn(edit('_headers', from, to));
+    expect(onlyProblem(output)).toBe(`_headers: ${path} ${line} from the expected value`);
+    expect(status).toBe(1);
+  });
+
+  it('ac7_header_changed_fails: a removed header or path', () => {
+    const header = runOn(edit('_headers', /^ {2}X-Content-Type-Options:.*\n/m, ''));
+    expect(onlyProblem(header.output)).toBe('_headers: /* has no X-Content-Type-Options');
+    expect(header.status).toBe(1);
+
+    const path = runOn(edit('_headers', /^\/sw\.js\n.*\n/m, ''));
+    expect(onlyProblem(path.output)).toBe('_headers: /sw.js has no Cache-Control');
+    expect(path.status).toBe(1);
+  });
+
+  it('ac7_404_html_fails', () => {
+    const { status, output } = runOn((files) => void files.set('404.html', '<!doctype html>'));
+    expect(onlyProblem(output)).toContain('404.html: must not exist');
+    expect(status).toBe(1);
   });
 });

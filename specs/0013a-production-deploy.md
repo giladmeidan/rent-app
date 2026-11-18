@@ -1,7 +1,7 @@
 ---
 id: 0013a
 title: "homie can be deployed to production: Fly.io in Frankfurt with managed Postgres, a private Redis and admin, and the web on Cloudflare Pages, from `make deploy-*` and one runbook"
-status: verified
+status: in-review
 depends_on: []   # 0013b, 0013c, 0013e, 0013f, 0016, 0018, 0019 and 0021 are all merged; 0022a may land either side
 reviewers: [code, security, qa]   # security: admin, Redis and DB exposure, secrets, web security headers; qa (Sonnet): gzip changes API responses; no ux (no screen)
 estimate: 1 coder run   # coder Opus/high (production data, secrets; Speed rule 6)
@@ -24,15 +24,15 @@ production deploy). Building this spec spends nothing and creates no account: no
   - Hosting is Fly.io in Frankfurt with **Fly Managed Postgres** (MPG), with the API, worker, Redis and the
     private admin as Fly machines.
   - The web is a static build on **Cloudflare Pages**.
-  - Web and API share **one registrable domain**, which Gilad buys. About $50 a month in all, approved.
+  - Web and API share **one registrable domain**, which Gilad buys. Running cost is now about $76–81 a month with email, approved.
   - No SMS. Login is email OTP, password (0016a) and optional Google sign-in (0016b).
   - Digest email and Protomaps are not before launch; the map stays on public OSM tiles.
 - PRODUCT.md "Admin (Slice 12)": the admin is a separate Fly app with **no public IP**, reached with
   `fly proxy`; its own Postgres role reads everything and writes only its columns (0012b NF2).
-- PRODUCT.md "Pricing": paid services need Gilad's explicit decision. The ~$50/month above is that decision.
-  Nothing else paid is added here: Cloudflare Pages, DNS and the email provider's free tier cost nothing.
-- 0014a / 0014d: `RENT_REFERENCE` and `CBS_RENT` stay `off` in production until nadlan.gov.il's terms and
-  the CBS licence are read (FOLLOWUPS 0014a, 0014d). The first national rent import is not part of this deploy.
+- PRODUCT.md "Pricing": paid services need Gilad's explicit decision. Paid hosting and Resend Pro are that decision
+  (2026-11-18). Cloudflare Pages and DNS cost nothing.
+- Q1 (decided 2026-11-18, PRODUCT.md "Launch area"): `RENT_REFERENCE` and `CBS_RENT` stay `off` and production never contacts
+  nadlan.gov.il. Launch has settlements only; there is no rent import.
 - PRODUCT.md "Launch area" / 0021a1: the area catalogue is data, loaded by hand with the import script after the
   first migration, never by the release step.
 - PRODUCT.md "Observability" (0019a, 0019b): Sentry and PostHog are off without keys; the deploy works either way.
@@ -60,10 +60,11 @@ production deploy). Building this spec spends nothing and creates no account: no
 | Web (static) | Cloudflare Pages project `homie` | yes: `<domain>` (apex) | free | `web/public/_headers` |
 | Photos | Cloudflare R2 bucket, custom domain `media.<domain>` | yes (unguessable keys, 0010d) | free tier | runbook only |
 | DNS | Cloudflare (free plan); the registrar points its nameservers there | — | — | runbook only |
+| Email | Resend Pro, EU region (Ireland, `eu-west-1`), over SMTP | — | $20/month | runbook only |
 
 Cost at these sizes: MPG Basic ~$38, plus machines ~$15–20 (Fly's October 2026 prices), plus a $0.15 volume, plus
 MPG storage at $0.28/GB ($2.80 for the default 10 GB; runbook §2 sets `--volume-size` deliberately).
-That is **about $56–61 a month**, slightly above the ~$50 Gilad approved. Each app runs **one** machine (`--ha=false`).
+That is **about $56–61 a month on Fly**, plus Resend Pro at $20: **about $76–81 a month**. Each app runs **one** machine (`--ha=false`).
 A second API machine (about $7 a month more) would remove the ~30-second gap each deploy causes; it is left
 out for cost (see the Digest FYI).
 
@@ -186,6 +187,10 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
      - any table-level INSERT, UPDATE, DELETE or TRUNCATE other than INSERT on the tables in a new constant
        `_INSERT_GRANTS = ("admin_actions", "admin_logins")`;
      - any column-level UPDATE (`has_column_privilege` over `pg_attribute`) outside `_COLUMN_GRANTS`.
+     - the same rules for **every role it belongs to** (`pg_has_role(role, oid, 'MEMBER')`, which follows indirect membership;
+       `SET ROLE` reaches what inheritance does not, and `ADMIN OPTION` can grant itself `SET`). A superuser or `BYPASSRLS` role
+       among them is refused, as are `CREATE` on schema `public` and `UPDATE` on a `public` sequence.
+     - Existing-role mode sets `lock_timeout = '5s'`, so `ENABLE ROW LEVEL SECURITY` cannot queue logins behind it on a re-run.
 
      The two `GRANT INSERT` statements are generated from `_INSERT_GRANTS`, so the grants and the check read one list.
    - **`--verify`** connects with `ADMIN_DATABASE_URL` the way the admin does (`options=-c role=none`), requires
@@ -202,7 +207,9 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
      details on disk, FOLLOWUPS 0018c);
    - `GEOCODER` other than `nominatim` (fake points on real listings);
    - `NOMINATIM_URL` not https (FOLLOWUPS 0003c);
-   - `TRUST_PROXY` other than `fly` (every visitor would share one per-network limit; homie must not run so).
+   - `TRUST_PROXY` other than `fly` (every visitor would share one per-network limit; homie must not run so);
+   - `RENT_REFERENCE` other than `off` (production must never contact nadlan.gov.il; its terms forbid it, and a Fly
+     secret or the worker cron could otherwise turn it on).
 
    Messages name the rule, never a value. Without `FLY_APP_NAME` nothing changes. The existing https test
    profile (`file` / `fake`, `test_config.py::_HTTPS_READY`) still validates.
@@ -228,7 +235,7 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
        It runs on the admin machine, which has `ADMIN_DATABASE_URL`, and changes nothing;
      - `import-areas-prod`: `fly ssh console --config infra/fly/api.toml --process-group worker -C "/opt/venv/bin/python /app/scripts/import_areas.py"`.
        `make import-areas` cannot be used on Fly: it runs through local `uv` against whatever `DATABASE_URL` the
-       checkout has. The target is run by hand (runbook §6), never by a deploy;
+       checkout has. Settlements only, no outside request (Q1). The target is run by hand (runbook §6), never by a deploy;
      - `deploy-web`: needs `DOMAIN` (`make deploy-web DOMAIN=example.co.il`, or `DOMAIN=` in the checkout's
        `.env`) and `CONTACT_EMAIL` (the public address on the terms and privacy pages; already exported by the
        Makefile for 0017). It prints its usage line when either is missing or `CONTACT_EMAIL` is
@@ -279,6 +286,7 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
 11. `.dockerignore`: add `**/.media`, `web/dist`, `web/test-results` (smaller upload to Fly's remote builder) and
     `api/tests`, which keeps test fixtures out of production images. Compose bind-mounts `api/`, and tests and seed run
     on the host, so dev and CI are unaffected.
+    Also `waitlist/.dev.vars*`, `waitlist/.wrangler/` and `graphify-out/`: the whole root is uploaded to Fly's remote builder.
 12. `.env.example`: a "Production only" comment block naming `FLY_APP_NAME` (set by Fly, never locally),
     `DOMAIN` (deploy-web only) and `REDIS_PASSWORD` (the Redis app's Fly secret), with no values. The API's
     settings are already listed there. That is hard rule 8 for the new names.
@@ -294,6 +302,7 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
        (exists for R2): `wrangler login` through `pnpm dlx`. Buy the domain; add it to Cloudflare (free
        plan); point the registrar's nameservers there.
        - Prerequisites on the deploy computer: Node `>=22.12 <23`, pnpm, uv, and a dedicated clean checkout of `main`.
+       - Keep only homie's apps in this Fly organisation: they share one private network (accepted by Gilad, 2026-11-18).
        - `fly apps create` for `homie-api`, `homie-redis` and `homie-admin`. Fly app names are global: if one is taken,
          pick another and change `app` in its toml, the `*.internal` host in `REDIS_URL`, the `-a` values and the CNAME
          target below, through a PR.
@@ -311,9 +320,11 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
        the edge cache for `media.<domain>`**: objects are stored `immutable` for a year and Cloudflare keeps serving a
        cached object after it is deleted from R2, while homie tells users deletion is immediate. Browsers still cache.
        If R2 reads grow later, use a 2-hour Edge TTL (the Free-plan minimum) and adjust the privacy wording.
-    5. **Email.** Any provider with SMTP and domain authentication. Its free tier should allow ≥ 300 emails a
-       day, since every login is one. Add its SPF and DKIM records and `_dmarc` (`v=DMARC1; p=none`; tighten
-       to `quarantine` after a clean week). Set `SMTP_URL` and `EMAIL_FROM=noreply@<domain>`.
+    5. **Email.** Resend Pro ($20 a month; decided 2026-11-18), EU region (Ireland, `eu-west-1`), over SMTP. Add `<domain>` in that
+       region, copy Resend's SPF and DKIM records into Cloudflare, add `_dmarc` (`v=DMARC1; p=none`; tighten to `quarantine` after a
+       clean week) and keep click tracking off (a tracking subdomain would need https: HSTS has `includeSubDomains`).
+       `SMTP_URL=smtps://resend:<resend-api-key>@smtp.resend.com:465` (implicit TLS, which `parse_smtp_url` maps to `smtps://`) and
+       `EMAIL_FROM=noreply@<domain>` go in through `fly secrets import`.
     6. **API.**
        - Set the secrets listed in Scope 1: `SECRET_KEY` and `EMAIL_BLOCK_KEY` from `$(openssl rand -hex 32)`
          (`EMAIL_BLOCK_KEY` is never rotated: keep it in Gilad's password manager);
@@ -325,23 +336,19 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
          `homie-api.fly.dev`, **DNS-only**.
        - `curl https://api.<domain>/health` must answer `{"status":"ok",…}`.
        - `fly scale count app=1 worker=1` (exactly one worker: arq crons).
-       - **Areas, once, after the first deploy, when Q1 is settled.** Until then the app runs on migration `0031`'s 19
-         settlements. `make import-areas-prod`
-         loads every settlement from the CSV, then the 18 big cities' neighbourhoods from nadlan.gov.il, one
-         request per 5 s: about an hour. It commits after each city, so if the session drops, run it again.
-         **It exits 0 even when nadlan refuses every request: read the counts it prints.** Expect about 1,188
-         settlements and 701 neighbourhoods. `neighbourhoods: 0` with `files_failed: 18` means nadlan does not answer
-         from Frankfurt (it is reported to serve Israeli addresses only). The settlements are stored anyway. Then run
-         the import from a computer in Israel through `fly mpg proxy`: in a clean checkout, set `DATABASE_URL` in that
-         shell only to the proxied migration-role URL and run `make import-areas`.
-         This result is also the production-region check owed before `RENT_REFERENCE=nadlan` is ever turned on
-         (FOLLOWUPS 0014a, 0021c): if Frankfurt fails, the monthly rent job cannot run from Fly as it stands.
+       - **Areas, once, after the first deploy.** Until then the app runs on migration `0031`'s 19 settlements.
+         `make import-areas-prod` loads every settlement from the committed CSV and makes no outside request. Expect about
+         1,188 settlements, `neighbourhoods: 0` and `files_failed: 0`. Production never contacts nadlan.gov.il (Q1), and
+         `RENT_REFERENCE` and `CBS_RENT` stay `off`.
     7. **Admin.**
        - `fly mpg users create <id> -u homie_admin -r reader`. The documented output shows no password: get it with
          `fly mpg users rotate-password` or from the dashboard (the coder confirms which with `--help`).
        - **Probe first:** `fly mpg connect <id> -u homie_admin -c "select current_user, session_user"`, then run the
          privilege checks of Scope 5 against that `current_user`. If what it shows does not fit Scope 5, stop and bring it
          to the orchestrator.
+         The probe also lists `rolname, rolsuper, rolbypassrls` for every role `pg_has_role(current_user, oid, 'MEMBER')`: stop if
+         any row shows true. If the Reader has `BYPASSRLS` or superuser, or can otherwise reach the hash tables,
+         `make admin-role-prod` refuses: stop, leave the admin undeployed and ask Fly for a narrower role (Gilad, 2026-11-18).
        - `make admin-role-prod` (grants, row-level security on the two hash tables, post-check).
        - Set `ADMIN_DATABASE_URL` (direct host, `homie_admin`), `ADMIN_PASSWORD` (16+, kept in Gilad's
          password manager) and `ADMIN_SECRET_KEY` (`openssl rand -hex 32`); `make deploy-admin`.
@@ -376,7 +383,7 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
          `h2`, `text/event-stream`, **no** `content-encoding`, and stays open past 2 minutes (FOLLOWUPS 0005c);
        - `curl --http2 -s -D- -o /dev/null -H 'Accept-Encoding: gzip' https://api.<domain>/areas` shows `HTTP/2 200`
          and `content-encoding: gzip`;
-       - the city picker offers settlements across Israel and a big city's neighbourhoods;
+       - the city picker offers settlements across Israel;
        - log in with a password, and with Google if it is on;
        - book a tour between the two accounts: the email with its `.ics` arrives. Press "הוספה ליומן Google" and check
          the tour appears in Google Calendar (0018d R7; Google may take hours to fetch a new feed). `fly logs` must show
@@ -394,7 +401,7 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
         `ADMIN_DATABASE_URL` would be switched to it. Then destroy the restored cluster. Write the date and the time it
         took at the bottom of `DEPLOY.md`.
     11. **Day-2.**
-        - Deploy = the four targets from a clean `main` (`make deploy-web` needs `DOMAIN` and `CONTACT_EMAIL`); `fly releases` and `fly deploy --image` roll back.
+        - Deploy = the four targets from a clean `main` (`make deploy-web` needs `DOMAIN` and `CONTACT_EMAIL`); `fly releases --image` and `fly deploy --image … --skip-release-command` roll back (the old image's `alembic upgrade head` would fail on a newer revision; the old code must tolerate the newer schema).
         - A release whose migration changes the admin's grants (for example 0013e's `admin_logins`) deploys
           in order: `make deploy-api` (migrates), then `make admin-role-prod`, then `make deploy-admin`.
         - Logs: `fly logs -a homie-api`. Confirm Fly's log retention here; its docs say 7 days, inside the 30 days the
@@ -428,6 +435,10 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
       Cloudflare's proxy (it is DNS-only, for `Fly-Client-IP`).
     - Why the stream is safe: the locked Starlette 1.10.0's middleware is pure ASGI and has `text/event-stream` in
       its default excluded types, so `/me/events` passes through unbuffered. AC10 proves it.
+16. `api/app/services/areas.py` and `api/scripts/import_areas.py` (Q1): `import_areas(db, fetcher, csv_path)` accepts
+    `fetcher=None`, which stores the settlements and makes no request. The script passes `None` unless
+    `RENT_REFERENCE=nadlan`. `scripts/seed.py` keeps passing its fixture fetcher, so `make seed` is unchanged. The gate is not
+    inside `import_areas`: seed runs with `RENT_REFERENCE=off` and must still load its fixtures.
 
 **Out:**
 - **Already merged, only deployed here:** real client IPs (0013b), account deletion (0013c), admin hardening
@@ -435,7 +446,7 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
   (0019), the national catalogue (0021).
 - **Separate work:** the security emails and the tour-mail SMTP stall fix (0022a), the legal text.
 - **Left out of Slice 13 by Gilad:** SMS, the digest email, Protomaps (PRODUCT.md "Launch (Slice 13)").
-- **The first national rent import** and turning on `RENT_REFERENCE` / `CBS_RENT`: after the terms are read.
+- **Any contact with nadlan.gov.il and any rent-data import** (Q1). `RENT_REFERENCE` and `CBS_RENT` stay `off`.
 - **Per-process and per-IP stream caps** (FOLLOWUPS 0005c): at launch Fly's `hard_limit = 500` is the ceiling.
 - **CI auto-deploy.** A deploy job would put Fly and Cloudflare tokens into repository secrets of a public repo, and
   at launch Gilad decides when production changes. Manual `make deploy-*` from a clean `main`; revisit after launch.
@@ -492,8 +503,8 @@ test (runbook §9).
   with or without 0022a merged. The toml is a valid production profile, and it stays one when someone edits it —
   `test_deploy.py::test_ac2_api_env_is_a_production_profile`
 - [ ] AC3 Given `FLY_APP_NAME` set:
-  - When `WEB_ORIGIN` is `http://…`, `EMAIL_BACKEND=file`, `GEOCODER=fake`, `NOMINATIM_URL` is `http://…` or
-    `TRUST_PROXY=none`, Then `Settings()` raises a `ValidationError` naming that rule, and no input value appears in it.
+  - When `WEB_ORIGIN` is `http://…`, `EMAIL_BACKEND=file`, `GEOCODER=fake`, `NOMINATIM_URL` is `http://…`,
+    `TRUST_PROXY=none` or `RENT_REFERENCE=nadlan`, Then `Settings()` raises a `ValidationError` naming that rule, and no input value appears in it.
   - Without `FLY_APP_NAME`, `_HTTPS_READY` (`file` / `fake`) still validates, and plain http dev defaults
     still work.
 
@@ -519,6 +530,10 @@ test (runbook §9).
   - When the role has `ALTER ROLE … SET role = <probe group>`, Then a plain connection's `current_user` is the probe
     group, while with `-c role=none` it is `homie_admin` and `admin_role.py --verify` passes. Without `role=none`
     the check refuses.
+  - Every role `homie_admin` belongs to is checked too. A membership reaching `UPDATE ON users` without inheritance (by
+    `SET ROLE`, or by `ADMIN OPTION`, which can grant itself `SET`), a superuser group, a group with `BYPASSRLS`, `CREATE`
+    on schema `public` and `UPDATE` on a sequence are each refused and commit nothing; `--verify` refuses them too. A
+    plain reader group (`pg_read_all_data`, no `BYPASSRLS`) passes and sees zero hash rows.
   - The probe membership, role setting, policy, row-level security and group are removed in `finally`.
   - When the role does not exist, existing-role mode exits with the `fly mpg users create` message.
     Checked with a role name that does not exist: `ROLE` patched in the test.
@@ -578,7 +593,11 @@ test (runbook §9).
     argument) with that header, has `text/event-stream`,
     no `content-encoding`, and delivers a published event while the stream is still open.
 
-  — `api/tests/test_compression.py::test_ac10_areas_gzip`, `::test_ac10_stream_not_compressed`
+  — `api/tests/test_compression.py::test_ac10_areas_gzip`, `::test_ac10_small_response_not_compressed`, `::test_ac10_stream_not_compressed`
+- [ ] AC11 Given `RENT_REFERENCE=off`, When `scripts/import_areas.py` runs, Then no fetcher is built, every settlement is
+  stored, and it reports `neighbourhoods: 0` and `files_failed: 0`. With `nadlan` the fetcher is used, so `make seed`'s
+  fixture import and the fetcher path keep working —
+  `test_deploy.py::test_ac11_area_import_off_makes_no_request`
 - [ ] NF1 No public address for Redis and the admin: AC1 in CI, plus runbook §3 and §7 (`fly ips list` empty)
   at deploy time.
 - [ ] NF2 Least privilege survives MPG: the post-check (AC5) refuses a `homie_admin` that inherits table writes, and
@@ -592,7 +611,7 @@ Unit:
 - `test_deploy.py::test_ac1_*`, `test_ac2_*`, `test_ac9_*` (tomllib and text; no network).
 
 Integration (test Postgres, Redis):
-- `test_deploy.py::test_ac4_*`, `test_ac5_*`;
+- `test_deploy.py::test_ac4_*`, `test_ac5_*`, `test_ac11_*`;
 - `test_compression.py::test_ac10_*`.
 
 Process (`git`, `make`, temp dirs; no Postgres):
@@ -617,6 +636,8 @@ usable graph nodes, so those lines are traced by hand.
   `redis_client.py`, auth routes, `health`, `services/*`, `worker.py`. New rules act only with a non-empty
   `FLY_APP_NAME`.
 - `_email_and_production_rules`: the graph lists spec references only; code reach is through `Settings`.
+- `import_areas` (`graphify affected` finds no unique node; traced by grep): `scripts/import_areas.py`, `scripts/seed.py`,
+  `test_areas.py`, `test_seed.py`. Seed and the tests pass a fetcher and are unchanged; only `None` skips the requests.
 - `apply_admin_role`: `admin_role.py::main()`, `conftest.py::admin_role`,
   `test_admin.py::test_nf2_role_has_only_its_grants`, and the tests importing `conftest` (`admin_role` is a session
   fixture).
@@ -647,7 +668,7 @@ usable graph nodes, so those lines are traced by hand.
 - **Verification 2026-11-18:** round 1 rejected with 20 findings, all applied; second round waived.
 - **The admin plan rests on inference.** Scope 5 comes from Fly's docs and staff replies, one customer report and a local
   simulation, not a real MPG cluster. Runbook §7's probe is therefore the first step on the real cluster.
-- **Cost:** about $56–61 a month with MPG storage, slightly above the ~$50 approved.
+- **Cost:** about $76–81 a month: $56–61 on Fly with MPG storage, plus Resend Pro at $20.
 - **A Redis outage takes the API offline.** `/health` answers 503 without Redis and Fly then stops routing to the machine,
   so browsing stops too. Accepted for launch (runbook §11); a shallower check is the upgrade.
 - **Server log retention (Gilad, 2026-11-15, PRODUCT.md "Retention"):** server logs are kept 30 days, and the privacy policy says so (`0013h`). Runbook §11 confirms Fly's own log retention is at most 30 days (its docs say 7); a log shipper, if one is added later, is set to 30 days.
@@ -689,9 +710,13 @@ usable graph nodes, so those lines are traced by hand.
 - **OSM tiles in production** are Gilad's call (Protomaps not before launch). The `Referrer-Policy` above
   keeps the Referer OSM's policy asks for. Heavy use can still be blocked by OSM, and the fix is the
   Protomaps spec.
-- **The area import reads nadlan.gov.il** even with `RENT_REFERENCE=off`: `import_areas` does not check that switch.
+- **The area import never reads nadlan.gov.il in production** (Q1): with `RENT_REFERENCE=off` it builds no fetcher (AC11).
+- **Shared Fly private network (Gilad, 2026-11-18):** accepted for launch, relying on the 16+ character admin password,
+  the Redis password and the admin login lock. Rule: keep only homie's apps in this Fly organisation (runbook §1).
+- **Resend's region covers sending only.** Its docs say account data stays in the US; the legal text's provider list
+  (FOLLOWUPS, before going public) must say so.
 
-### Open questions (Q2 is decided; Q1 blocks neither the build nor the first deploy, only the neighbourhood import)
+### Open questions (both decided)
 - **Q2 (Gilad, security): how is the admin kept away from password and calendar-token hashes, given that Fly's Reader
   role probably reads everything?** **Decided by Gilad on 2026-11-18: option A.**
   - **A (chosen):** in `--existing-role` mode, enable row-level security with no policy on `user_passwords`
@@ -701,14 +726,13 @@ usable graph nodes, so those lines are traced by hand.
     moderation dashboard until Fly answers.
   - **C:** accept that the admin role can read the hashes. Not recommended: it contradicts the 0012b, 0016a and 0018a
     decisions.
-- **Q1 (Gilad, legal/product): may the area import read nadlan.gov.il before its terms are read?** FOLLOWUPS 0014a asks
-  for the terms to be read before automated reading. This blocks only the neighbourhood import, and so the full "all of
-  Israel" launch: the app runs on 19 settlements until the import.
-  - **A (default, recommended):** read the nadlan terms and the CBS licence first, then run the full import.
-  - **B:** if the terms are not read by launch, import settlements only. Settlements commit before any fetch and failed
-    fetches are only counted (`api/app/services/areas.py`), so running the import with
-    `NADLAN_RENT_URL=https://nadlan.invalid` should do it with no code. **Untested.** Neighbourhood matching is missing
-    until a full import, and the CBS licence must still be read for `settlements.csv` (0014d).
+  - **If Fly's Reader defeats A (Gilad, 2026-11-18):** if the Reader has `BYPASSRLS` or superuser, or can otherwise reach
+    the hash tables, `make admin-role-prod` refuses. Stop, leave the admin undeployed and ask Fly for a narrower role.
+- **Q1 (legal/product): may the area import read nadlan.gov.il?** **Decided 2026-11-18 (PRODUCT.md "Launch area"): no.**
+  Its terms forbid commercial use without written approval and automated collection, so production never contacts it.
+  `import_areas` reads neighbourhoods only through a fetcher, and `scripts/import_areas.py` builds one only with
+  `RENT_REFERENCE=nadlan`, which production never sets (Scope 16, AC11). `make import-areas-prod` is settlements only, and
+  launch has no big-city neighbourhoods and no official rent figures.
 
 ## Verifier notes
 *Historical: rounds on the 2026-11-15 text. Some names here predate the 2026-11-18 refresh.*
@@ -733,9 +757,23 @@ the `fly mpg databases extensions enable` command, to be confirmed with `--help`
 
 ## Digest (filled by orchestrator after verification)
 Verified 2026-11-18. The build adds the Fly and Cloudflare configs, `make deploy-*` targets and `infra/DEPLOY.md`; it
-deploys nothing and costs nothing. Running homie will cost about $56–61 a month. Gilad chose row-level security to keep
-the admin away from password and calendar-token hashes (Q2). Still open for him: Q1, reading the nadlan.gov.il terms
-before the neighbourhood import. The MPG role behaviour is simulated, so runbook §7 probes it first on the real cluster.
+deploys nothing and costs nothing. Running homie will cost about $76–81 a month with email. Gilad chose row-level security
+to keep the admin away from password and calendar-token hashes (Q2); if Fly's Reader can get past it, the admin stays
+undeployed. Q1 is decided: production never contacts nadlan.gov.il, so launch has settlements only. The MPG role behaviour
+is simulated, so runbook §7 probes it first on the real cluster.
+
+Built 2026-11-18, not deployed.
+Shipped: Fly and Cloudflare Pages configs, `make deploy-*` targets, gzip API responses, the admin role for Managed
+Postgres and the runbook `infra/DEPLOY.md`. Demo: `make check-images`; read `infra/DEPLOY.md`; `make deploy-api` refuses
+outside a clean `main`.
+Tests: +20 API test functions, +3 web, +0 e2e; a new CI step builds and checks the three production images.
+Findings: 1 blocker fixed (the admin check missed roles it can switch to), 2 majors fixed, 0 waived, 1 follow-up logged
+(run `--help` for every `fly` command once flyctl is installed: none has been run, they were read from Fly's docs).
+Decided by Gilad during the build: if Fly's Reader can reach the hash tables, the admin stays undeployed until Fly offers
+a narrower role; the shared Fly private network is accepted, with only homie apps in the org. Fly refuses
+`RENT_REFERENCE` other than `off`.
+To know: Resend's EU region covers sending only and its account data stays in the US, so the legal text's provider list
+must say so.
 
 ## Verifier findings (independent, 2026-11-15)
 *Historical: applied to the 2026-11-15 text; the sibling and Mac-runner items no longer apply.*

@@ -23,6 +23,9 @@
 //   AMD header: the loader shim in front of it calls importScripts to load the runtime itself.
 // Source maps (spec 0019a): no `*.map` file anywhere under distDir (they are uploaded to Sentry and
 //   deleted at build; a served map would publish the source).
+// _headers (spec 0013a): every header below on its path, exactly; Pages applies the file only when
+//   serving, so this is the check that it shipped. No 404.html: its presence would turn off the
+//   single-page-app fallback on Pages.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -271,6 +274,54 @@ if (sw !== null) {
 // ---- source maps -------------------------------------------------------------------------------
 for (const entry of readdirSync(distDir, { recursive: true })) {
   if (String(entry).endsWith('.map')) fail(`${entry}: source map must not be served`);
+}
+
+// ---- _headers (Cloudflare Pages) ----------------------------------------------------------------
+const NO_CACHE = { 'Cache-Control': 'no-cache' };
+const HEADERS = {
+  '/*': {
+    'Content-Security-Policy':
+      "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; " +
+      "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; " +
+      "img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; " +
+      "worker-src 'self' blob:; child-src blob:; frame-src https://accounts.google.com/gsi/; " +
+      "manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; " +
+      "frame-ancestors 'none'; upgrade-insecure-requests",
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+    'Permissions-Policy': 'geolocation=(self), camera=(), microphone=(), payment=(), usb=()',
+  },
+  '/assets/*': { 'Cache-Control': 'public, max-age=31536000, immutable' },
+  '/sw.js': NO_CACHE,
+  '/registerSW.js': NO_CACHE,
+  '/manifest.webmanifest': NO_CACHE,
+};
+
+const headersText = read('_headers');
+if (headersText !== null) {
+  const found = {};
+  let rules = null;
+  for (const line of headersText.split(/\r?\n/)) {
+    if (line.trim() === '' || line.trim().startsWith('#')) continue;
+    if (!/^\s/.test(line)) {
+      rules = found[line.trim()] ??= {};
+    } else if (rules !== null) {
+      const colon = line.indexOf(':');
+      rules[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    }
+  }
+  for (const [path, expected] of Object.entries(HEADERS)) {
+    for (const [name, value] of Object.entries(expected)) {
+      const actual = found[path]?.[name];
+      if (actual === undefined) fail(`_headers: ${path} has no ${name}`);
+      else if (actual !== value) fail(`_headers: ${path} ${name} differs from the expected value`);
+    }
+  }
+}
+if (existsSync(join(distDir, '404.html'))) {
+  fail('404.html: must not exist (it turns off the single-page-app fallback on Pages)');
 }
 
 for (const problem of problems) console.log(problem);

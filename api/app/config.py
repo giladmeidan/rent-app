@@ -118,6 +118,8 @@ class Settings(DatabaseSettings):
     posthog_api_host: str = "https://eu.posthog.com"
     posthog_personal_api_key: SecretStr | None = None
     posthog_project_id: str = ""
+    # Set by Fly on every machine (spec 0013a): turns on the production rules below. Empty = unset.
+    fly_app_name: str | None = None
 
     @field_validator("photo_public_base_url")
     @classmethod
@@ -224,6 +226,20 @@ class Settings(DatabaseSettings):
                 "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are all"
                 " required when PHOTO_BACKEND=r2"
             )
+        # On Fly (spec 0013a). The messages name the rule only, never the value.
+        if self.fly_app_name:
+            if not self.web_origin.startswith("https://"):
+                raise ValueError("WEB_ORIGIN must be https on Fly")
+            if self.email_backend != "smtp":
+                raise ValueError("EMAIL_BACKEND must be smtp on Fly")
+            if self.geocoder != "nominatim":
+                raise ValueError("GEOCODER must be nominatim on Fly")
+            if urlsplit(self.nominatim_url).scheme != "https":
+                raise ValueError("NOMINATIM_URL must be https on Fly")
+            if self.trust_proxy != "fly":
+                raise ValueError("TRUST_PROXY must be fly on Fly")
+            if self.rent_reference != "off":
+                raise ValueError("RENT_REFERENCE must be off on Fly")
         # An https web origin means a real deployment: refuse the dev defaults there.
         if self.web_origin.startswith("https://"):
             if self.secret_key.get_secret_value() == DEV_SECRET_KEY:

@@ -69,7 +69,11 @@ async def _landing(request: Request) -> Response:
 
 
 def create_admin_app(settings: AdminSettings) -> Starlette:
-    engine = make_engine(settings.database_url.get_secret_value())
+    # `role=none`: a Fly Managed Postgres user may carry a `role=` setting; the session must run as
+    # `homie_admin` itself, whose grants the dashboard relies on (spec 0013a).
+    engine = make_engine(
+        settings.database_url.get_secret_value(), connect_args={"options": "-c role=none"}
+    )
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
