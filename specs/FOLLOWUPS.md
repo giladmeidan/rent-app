@@ -353,3 +353,6 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 
 ## 0021c
 - [ ] 0021c · after the first national import (`RENT_REFERENCE=nadlan make rent-import` in the main stack, 4–6 h), run `make rent-backtest` and change `HALF_WIDTH` / `WINDOW_QUARTERS` / `RATIO_HALF_WIDTH` only if it says so, with the run's numbers in the comment · spec 0021c Scope 10
+
+## 0023a
+- [ ] 0023a · web/src/features/search/SearchMap.tsx (`onMoveEnd`) · a `moveend` that lands between a filter push and its commit writes `c`/`z` onto the old params, which can put the old filters back in the URL; the race already exists for Apply and lasts milliseconds · accepted at verification (spec 0023a, Risks)
