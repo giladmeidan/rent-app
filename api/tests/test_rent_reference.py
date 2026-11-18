@@ -273,7 +273,7 @@ _BAD_FILES: tuple[tuple[str, str, Callable[[Any], Any], tuple[str, int], tuple[s
     ("control_char_name", TEL_AVIV, _set("settlementName", "תל\x07אביב"), _TA, _AZ),
     ("x_out_of_bounds", TEL_AVIV, _set("x", 99999.0), _TA, _AZ),
     ("y_out_of_bounds", REVIVIM, _set("y", 800001.0), _RV, _RH),
-    ("x_as_string", TEL_AVIV, _set("x", "179706.07"), _TA, _AZ),
+    ("x_as_string", TEL_AVIV, _set("x", "180000.0"), _TA, _AZ),
     ("no_trends_rooms", TEL_AVIV, _set("trends", {}), _TA, _AZ),
     ("version_21_chars", REVIVIM, _set("version", "v" * 21), _RV, _RH),
     ("version_control_chars", TEL_AVIV, _set("version", "1\nERROR forged"), _TA, _AZ),
