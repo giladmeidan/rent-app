@@ -33,8 +33,8 @@ from tests.conftest import insert_settlement
 FIXTURES = Path(__file__).parent / "fixtures" / "rent_reference"
 TEL_AVIV = "settlement/rent/5000.json"
 AZOR = "settlement/rent/565.json"
-REVIVIM = "neighborhood/rent/65210029.json"
-RAMAT_HAHAYAL = "neighborhood/rent/65210036.json"
+REVIVIM = "neighborhood/rent/99000001.json"
+RAMAT_HAHAYAL = "neighborhood/rent/99000002.json"
 Q2_2026 = dt.date(2026, 6, 1)
 
 
@@ -60,9 +60,9 @@ def _load(name: str) -> Any:
 def _files() -> dict[str, Any]:
     """Tel Aviv with its two neighbourhoods (the second one a renamed copy of the first) and
     Azor, which lists none."""
-    revivim = _load("neighborhood_65210029.json")
-    ramat_hahayal = {**copy.deepcopy(revivim), "neighborhoodId": 65210036}
-    ramat_hahayal["neighborhoodName"] = "רמת החייל"
+    revivim = _load("neighborhood_99000001.json")
+    ramat_hahayal = {**copy.deepcopy(revivim), "neighborhoodId": 99000002}
+    ramat_hahayal["neighborhoodName"] = "שכונת האלון"
     return {
         TEL_AVIV: _load("settlement_5000.json"),
         AZOR: _load("settlement_565.json"),
@@ -137,14 +137,14 @@ def test_ac2_settlement_file_stored(db: Session, rent_clean: Engine) -> None:
     area = _area(rent_clean, "settlement", 5000)
     assert (area.settlement_code, area.name_he, area.streets, area.source_version) == (
         5000,
-        "תל אביב -יפו",
+        "עיר הבדיקה",
         [],
         "20-08-2026",
     )
     prices = _prices(rent_clean, "settlement", 5000)
     assert prices == _expected(files[TEL_AVIV], "settlementPrice")
-    assert prices[(0, Q2_2026)] == 8300  # "all"
-    assert prices[(3, Q2_2026)] == 8250
+    assert prices[(0, Q2_2026)] == 8337  # "all"
+    assert prices[(3, Q2_2026)] == 8287
     assert {rooms for rooms, _ in prices} == {0, 3, 4, 5}
     # Azor's null quarters have no row.
     azor = _expected(files[AZOR], "settlementPrice")
@@ -155,8 +155,8 @@ def test_ac2_settlement_file_stored(db: Session, rent_clean: Engine) -> None:
         for kind, source in (
             ("settlement", 5000),
             ("settlement", 565),
-            ("neighbourhood", 65210029),
-            ("neighbourhood", 65210036),
+            ("neighbourhood", 99000001),
+            ("neighbourhood", 99000002),
         )
     )
 
@@ -166,24 +166,24 @@ def test_ac3_neighbourhood_file_stored(db: Session, rent_clean: Engine) -> None:
     files = _files()
     import_rent_reference(db, FakeRentFetcher(files))
 
-    area = _area(rent_clean, "neighbourhood", 65210029)
-    assert (area.settlement_code, area.name_he) == (5000, "רביבים")
+    area = _area(rent_clean, "neighbourhood", 99000001)
+    assert (area.settlement_code, area.name_he) == (5000, "שכונת הדקל")
     titles = [street["title"] for street in files[REVIVIM]["otherNeighborhoodStreets"]]
     assert len(titles) == 6 and len(set(titles)) == 5  # the fixture repeats one street
     assert area.streets == list(dict.fromkeys(titles))
-    prices = _prices(rent_clean, "neighbourhood", 65210029)
+    prices = _prices(rent_clean, "neighbourhood", 99000001)
     assert prices == _expected(files[REVIVIM], "neighborhoodPrice")
     assert not any(rooms == 4 for rooms, _ in prices)  # every 4-room quarter is null
     assert (3, dt.date(2025, 6, 1)) not in prices  # a null quarter between two figures
-    assert prices[(3, Q2_2026)] == 8200
+    assert prices[(3, Q2_2026)] == 8237
 
 
 @pytest.mark.usefixtures("two_settlements")
 def test_ac4_centre_is_wgs84(db: Session, rent_clean: Engine) -> None:
     files = _files()
     assert (round(files[TEL_AVIV]["x"], 2), round(files[TEL_AVIV]["y"], 2)) == (
-        179706.07,
-        666156.93,
+        180000.0,
+        666000.0,
     )
     import_rent_reference(db, FakeRentFetcher(files))
 
@@ -227,7 +227,7 @@ def test_ac5_import_is_idempotent(
     message = line.getMessage()
     for key in (*first, "20-08-2026"):
         assert key in message
-    for leaked in ("rent/", "http", "nadlan", "תל אביב", "רביבים"):
+    for leaked in ("rent/", "http", "nadlan", "עיר הבדיקה", "שכונת הדקל"):
         assert leaked not in caplog.text
 
 
@@ -248,7 +248,7 @@ def test_ac6_revised_updates_missing_stays(db: Session, rent_clean: Engine) -> N
     assert (counts["prices_new"], counts["prices_changed"]) == (0, 1)
     prices = _prices(rent_clean, "settlement", 5000)
     assert prices[(3, Q2_2026)] == 8999
-    assert prices[(3, dt.date(2026, 3, 1))] == stored[(3, dt.date(2026, 3, 1))] == 8200
+    assert prices[(3, dt.date(2026, 3, 1))] == stored[(3, dt.date(2026, 3, 1))] == 8237
     assert prices == {**stored, (3, Q2_2026): 8999}
 
 
@@ -262,8 +262,8 @@ def _set(key: str, value: object) -> Callable[[Any], Any]:
 
 _TA = ("settlement", 5000)
 _AZ = ("settlement", 565)
-_RV = ("neighbourhood", 65210029)
-_RH = ("neighbourhood", 65210036)
+_RV = ("neighbourhood", 99000001)
+_RH = ("neighbourhood", 99000002)
 # (case, path, mutation, its area, the area imported after it)
 _BAD_FILES: tuple[tuple[str, str, Callable[[Any], Any], tuple[str, int], tuple[str, int]], ...] = (
     ("not_json_object", TEL_AVIV, lambda data: [data], _TA, _AZ),
@@ -273,7 +273,7 @@ _BAD_FILES: tuple[tuple[str, str, Callable[[Any], Any], tuple[str, int], tuple[s
     ("control_char_name", TEL_AVIV, _set("settlementName", "תל\x07אביב"), _TA, _AZ),
     ("x_out_of_bounds", TEL_AVIV, _set("x", 99999.0), _TA, _AZ),
     ("y_out_of_bounds", REVIVIM, _set("y", 800001.0), _RV, _RH),
-    ("x_as_string", TEL_AVIV, _set("x", "179706.07"), _TA, _AZ),
+    ("x_as_string", TEL_AVIV, _set("x", "180000.0"), _TA, _AZ),
     ("no_trends_rooms", TEL_AVIV, _set("trends", {}), _TA, _AZ),
     ("version_21_chars", REVIVIM, _set("version", "v" * 21), _RV, _RH),
     ("version_control_chars", TEL_AVIV, _set("version", "1\nERROR forged"), _TA, _AZ),
@@ -524,7 +524,7 @@ def _city(code: int, name: str, hood_id: int, hood_name: str) -> dict[str, Any]:
         otherNeighborhoods=[{"title": hood_name, "id": hood_id}],
         neighborhoodsPrices=[],
     )
-    hood = _load("neighborhood_65210029.json")
+    hood = _load("neighborhood_99000001.json")
     hood.update(neighborhoodId=hood_id, neighborhoodName=hood_name, settlementID=code)
     return {
         f"settlement/rent/{code}.json": city,
@@ -612,7 +612,7 @@ def test_ac2_resume(db: Session, rent_clean: Engine, monkeypatch: pytest.MonkeyP
         import_rent_reference(db, first)
     db.rollback()
     assert first.requests == [AZOR, HAIFA, HAIFA_HOOD, TEL_AVIV, REVIVIM]
-    assert _area(rent_clean, "neighbourhood", 65210029) is not None
+    assert _area(rent_clean, "neighbourhood", 99000001) is not None
     assert _area(rent_clean, "settlement", 5000) is None  # unfinished: no settlement row
 
     # Run 2: Azor gives the version; Haifa is not requested; Tel Aviv is fetched whole.

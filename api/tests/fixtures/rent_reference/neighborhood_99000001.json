@@ -1,0 +1,290 @@
+{
+  "neighborhoodId": 99000001,
+  "neighborhoodName": "שכונת הדקל",
+  "settlementID": 5000,
+  "settlementName": "עיר הבדיקה",
+  "x": 184500,
+  "y": 669500,
+  "otherNeighborhoods": [],
+  "otherNeighborhoodStreets": [
+    {
+      "id": 99100001,
+      "title": "רחוב התמר"
+    },
+    {
+      "id": 99100002,
+      "title": "רחוב הרימון"
+    },
+    {
+      "id": 99100003,
+      "title": "רחוב הגפן"
+    },
+    {
+      "id": 99100004,
+      "title": "רחוב הזית"
+    },
+    {
+      "id": 99100005,
+      "title": "רחוב התאנה"
+    },
+    {
+      "id": 99100001,
+      "title": "רחוב התמר"
+    }
+  ],
+  "version": "20-08-2026",
+  "trends": {
+    "rooms": [
+      {
+        "graphData": [
+          {
+            "neighborhoodPrice": 8237,
+            "settlementPrice": 8287,
+            "countryPrice": 3912,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": 8537,
+            "settlementPrice": 8237,
+            "countryPrice": 3737,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": 7937,
+            "settlementPrice": 8287,
+            "countryPrice": 3737,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": 8237,
+            "settlementPrice": 8037,
+            "countryPrice": 3887,
+            "year": 2025,
+            "month": 9
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 8037,
+            "countryPrice": 3837,
+            "year": 2025,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": 8237,
+            "settlementPrice": 7937,
+            "countryPrice": 3737,
+            "year": 2025,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": 8237,
+            "settlementPrice": 8037,
+            "countryPrice": 3837,
+            "year": 2024,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": 8237,
+            "settlementPrice": 8037,
+            "countryPrice": 4037,
+            "year": 2024,
+            "month": 9
+          }
+        ],
+        "numRooms": 3,
+        "hasDeals": 1
+      },
+      {
+        "graphData": [
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 10537,
+            "countryPrice": 4862,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 10037,
+            "countryPrice": 4762,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 9937,
+            "countryPrice": 4937,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 9937,
+            "countryPrice": 4937,
+            "year": 2025,
+            "month": 9
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 10037,
+            "countryPrice": 4787,
+            "year": 2025,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 9937,
+            "countryPrice": 4837,
+            "year": 2025,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 10537,
+            "countryPrice": 4837,
+            "year": 2024,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 10037,
+            "countryPrice": 4937,
+            "year": 2024,
+            "month": 9
+          }
+        ],
+        "numRooms": 4,
+        "hasDeals": 1
+      },
+      {
+        "graphData": [
+          {
+            "neighborhoodPrice": 14187,
+            "settlementPrice": 14537,
+            "countryPrice": 6337,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": 14187,
+            "settlementPrice": 13287,
+            "countryPrice": 6237,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": 14187,
+            "settlementPrice": 12237,
+            "countryPrice": 6487,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": 14437,
+            "settlementPrice": 13537,
+            "countryPrice": 6387,
+            "year": 2025,
+            "month": 9
+          },
+          {
+            "neighborhoodPrice": 13937,
+            "settlementPrice": 14037,
+            "countryPrice": 6287,
+            "year": 2025,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": 14237,
+            "settlementPrice": 13537,
+            "countryPrice": 6137,
+            "year": 2025,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": null,
+            "settlementPrice": 13537,
+            "countryPrice": 6337,
+            "year": 2024,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": 10837,
+            "settlementPrice": 13037,
+            "countryPrice": 6537,
+            "year": 2024,
+            "month": 9
+          }
+        ],
+        "numRooms": 5,
+        "hasDeals": 1
+      },
+      {
+        "graphData": [
+          {
+            "neighborhoodPrice": 10037,
+            "settlementPrice": 8337,
+            "countryPrice": 5162,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": 10037,
+            "settlementPrice": 8037,
+            "countryPrice": 5037,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": 11037,
+            "settlementPrice": 8037,
+            "countryPrice": 4937,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": 11537,
+            "settlementPrice": 7937,
+            "countryPrice": 5037,
+            "year": 2025,
+            "month": 9
+          },
+          {
+            "neighborhoodPrice": 12537,
+            "settlementPrice": 7837,
+            "countryPrice": 5087,
+            "year": 2025,
+            "month": 6
+          },
+          {
+            "neighborhoodPrice": 10837,
+            "settlementPrice": 7537,
+            "countryPrice": 5037,
+            "year": 2025,
+            "month": 3
+          },
+          {
+            "neighborhoodPrice": 9937,
+            "settlementPrice": 8037,
+            "countryPrice": 5037,
+            "year": 2024,
+            "month": 12
+          },
+          {
+            "neighborhoodPrice": 10837,
+            "settlementPrice": 8037,
+            "countryPrice": 5137,
+            "year": 2024,
+            "month": 9
+          }
+        ],
+        "numRooms": "all",
+        "hasDeals": 1
+      }
+    ]
+  },
+  "settlementPrice": 8037,
+  "neighborhoodsPrices": []
+}
