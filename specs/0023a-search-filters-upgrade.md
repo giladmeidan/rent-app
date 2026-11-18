@@ -123,6 +123,10 @@ Layout anatomy: `Search.dc.html` and `SearchDesktop.dc.html` under `design/scree
   `search.applyNone` plus Clear does not fit the 240 px desktop panel on one line.
 - A valid Apply and any Clear close the sheet. If the filters changed, focus goes to the results count line
   (existing behaviour); otherwise it returns to the toggle.
+- **Back (Gilad 2026-11-18):** a phone's Back while the sheet is open only closes the sheet. The draft is discarded,
+  as with the X; the URL, the applied filters and the results stay as they were. Opening the sheet pushes a history
+  entry for this. Apply and Clear take that entry over, the X and Esc remove it, and the map's `replace` writes neither
+  close the sheet nor disturb it.
 - The form's own `<h2>` renders only in the desktop panel. The desktop `Card` region named by it is unchanged.
 
 **Removable tags (`ActiveFilterTags`)**
