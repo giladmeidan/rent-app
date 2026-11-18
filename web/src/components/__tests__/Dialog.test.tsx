@@ -72,6 +72,62 @@ const open = () => {
 };
 
 describe('Dialog', () => {
+  it('ac19_sheet_size', () => {
+    const onClose = vi.fn();
+    const sheet = render(
+      <Dialog open onClose={onClose} title={TITLE} size="sheet" closeLabel={he.search.closeFilters}>
+        <input aria-label={he.listings.fields.city} />
+      </Dialog>,
+    );
+    const dialog = dialogEl();
+    // It overrides the browser's modal margin and maximum sizes, and scrolls by itself.
+    expect(dialog).toHaveClass(
+      'm-0',
+      'h-dvh',
+      'max-h-none',
+      'w-full',
+      'max-w-none',
+      'rounded-none',
+      'border-0',
+      'overflow-y-auto',
+      'overscroll-contain',
+    );
+    expect(dialog).not.toHaveClass('max-w-dialog');
+    expect(dialog).not.toHaveClass('rounded-lg');
+    expect(dialog).not.toHaveClass('border');
+    expect(dialog.firstElementChild).toHaveClass('min-h-full');
+
+    // The X is named and is the first thing `showModal` can focus.
+    const close = screen.getByRole('button', { name: he.search.closeFilters });
+    expect(dialog.querySelector('button, input, select, textarea, a[href]')).toBe(close);
+
+    // A backdrop press does nothing; the X closes.
+    fireEvent.pointerDown(dialog);
+    fireEvent.click(dialog);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    sheet.unmount();
+
+    // The other sizes render as before, with no X and a working backdrop.
+    for (const [size, width] of [
+      ['default', 'max-w-dialog'],
+      ['wide', 'max-w-dialog-wide'],
+    ] as const) {
+      const other = render(<Dialog open onClose={onClose} title={TITLE} size={size} />);
+      const element = dialogEl();
+      expect(element).toHaveClass(width, 'w-full', 'rounded-lg', 'border', 'border-border', 'p-0');
+      expect(element).not.toHaveClass('h-dvh');
+      expect(element.firstElementChild).not.toHaveClass('min-h-full');
+      expect(element.querySelector('button')).toBeNull();
+      onClose.mockClear();
+      fireEvent.pointerDown(element);
+      fireEvent.click(element);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      other.unmount();
+    }
+  });
+
   it('ac7_dialog_and_confirm', async () => {
     // ---- Dialog ----
     const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
