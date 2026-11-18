@@ -7,12 +7,14 @@ session, and its sessions no longer resolve. DELETE /me (spec 0013c) deletes the
 from a session signed in within `DELETE_REAUTH_S`; a blocked email's right code answers 403
 `signup_blocked` with no session. Spec 0016a: POST /auth/password/login (public, its own per-network
 limits) and PUT /me/password (a session younger than `DELETE_REAUTH_S`). Spec 0016b: POST
-/auth/google (public, its own per-network limits) signs in or up with a Google ID token."""
+/auth/google (public, its own per-network limits) signs in or up with a Google ID token. Spec 0022a:
+DELETE /me and PUT /me/password email the owner after the response; no DB statement may follow their
+commit, or a pooled connection would be held through the SMTP send."""
 
 import datetime as dt
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -22,7 +24,7 @@ from app.client_ip import client_network
 from app.config import get_settings
 from app.db import get_session
 from app.models import User
-from app.redis_client import RedisClient, get_redis
+from app.redis_client import RedisClient, get_redis, soft
 from app.schemas.auth import (
     GoogleLoginIn,
     OtpRequestIn,
@@ -32,7 +34,7 @@ from app.schemas.auth import (
     UserOut,
 )
 from app.schemas.error import ErrorOut
-from app.services import accounts, google, tours
+from app.services import accounts, google, security_mail, tours
 from app.services import auth as auth_service
 from app.services.email import EmailSender, EmailUnavailable, get_email_sender
 from app.services.photo_store import PhotoStore, get_photo_store
@@ -264,13 +266,15 @@ def logout(request: Request, db: DbDep) -> Response:
 )
 def delete_me(
     request: Request,
+    background: BackgroundTasks,
     user: Annotated[User, Depends(current_user)],
     db: DbDep,
     store: Annotated[PhotoStore, Depends(get_photo_store)],
     r: RedisDep,
+    sender: Annotated[EmailSender, Depends(get_email_sender)],
 ) -> Response:
     """Delete the caller's account for good and sign out every device (spec 0013c), telling the
-    other side of each tour it cancelled (spec 0018a)."""
+    other side of each tour it cancelled (spec 0018a) and the owner's mailbox (spec 0022a)."""
     token = request.cookies[COOKIE_NAME]  # `current_user` resolved it
     created_at = auth_service.session_created_at(db, token)
     # The session went after `current_user` passed: a racing DELETE /me of this account (its
@@ -281,7 +285,14 @@ def delete_me(
         seconds=DELETE_REAUTH_S
     ):
         raise HTTPException(status_code=403, detail="reauth_required")
-    tours.announce(r, accounts.delete_account(db, store, user))
+    deleted = accounts.delete_account(db, store, user)
+    if deleted is not None:
+        tours.announce(r, deleted.changes)
+        # A pending login code's key holds the address; only `rl:*` may keep it (privacy s6).
+        otp_key = auth_service.otp_key(auth_service.normalise_email(deleted.email))
+        soft(lambda: r.delete(otp_key))
+        if security_mail.deleted_mail_due(r, deleted.email):
+            background.add_task(security_mail.send_account_deleted, sender, deleted.email)
     return _signed_out()
 
 
@@ -300,12 +311,14 @@ def delete_me(
 def set_my_password(
     body: PasswordIn,
     request: Request,
+    background: BackgroundTasks,
     user: Annotated[User, Depends(current_user)],
     db: DbDep,
     r: RedisDep,
+    sender: Annotated[EmailSender, Depends(get_email_sender)],
 ) -> Response:
-    """Set or change the caller's password and sign out every other device (spec 0016a). No
-    current password: the fresh sign-in is the proof."""
+    """Set or change the caller's password and sign out every other device (spec 0016a), and tell
+    the owner's mailbox (spec 0022a). No current password: the fresh sign-in is the proof."""
     limits.check(r, user.id, limits.WRITE)
     token = request.cookies[COOKIE_NAME]  # `current_user` resolved it
     created_at = auth_service.session_created_at(db, token)  # as DELETE /me
@@ -315,5 +328,9 @@ def set_my_password(
         seconds=DELETE_REAUTH_S
     ):
         raise HTTPException(status_code=403, detail="reauth_required")
+    assert user.email is not None  # a live account: a deleted one's sessions never resolve
+    email = user.email
     auth_service.set_password(db, user, body.password, token)
+    if security_mail.password_mail_due(r, email):
+        background.add_task(security_mail.send_password_changed, sender, email)
     return Response(status_code=204)

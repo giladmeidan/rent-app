@@ -18,6 +18,7 @@ import hashlib
 import hmac
 import logging
 import uuid
+from dataclasses import dataclass, field
 
 from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -58,6 +59,16 @@ class AccountDeletedError(Exception):
     `unauthenticated`, as for any session that no longer resolves)."""
 
 
+@dataclass(frozen=True)
+class DeletedAccount:
+    """What `delete_account` hands back for after the commit: the address the row no longer holds
+    (memory only, for the deletion email; out of the repr so no stray log prints it) and the tours
+    it cancelled."""
+
+    email: str = field(repr=False)
+    changes: list[tours.TourChange]
+
+
 def is_deleted(db: Session, user_id: uuid.UUID) -> bool:
     """Whether `user_id` is a deleted account (read now, not from the identity map)."""
     return db.scalar(select(User.deleted_at.is_not(None)).where(User.id == user_id)) is True
@@ -91,11 +102,11 @@ def email_blocked(db: Session, email: str) -> bool:
     return bool(db.scalar(select(exists().where(BlockedEmail.email_hmac == email_hmac(email)))))
 
 
-def delete_account(db: Session, store: PhotoStore, user: User) -> list[tours.TourChange]:
+def delete_account(db: Session, store: PhotoStore, user: User) -> DeletedAccount | None:
     """Delete `user`'s account (the spec's 13 steps, in order). A second call on the tombstone,
     including one that waited on the first's row lock, writes nothing. Commits; any failure before
-    the commit rolls everything back and deletes no object. Returns the tours it cancelled (spec
-    0018a) for `tours.announce`; `[]` on the tombstone."""
+    the commit rolls everything back and deletes no object. Returns the address and the tours it
+    cancelled (specs 0022a, 0018a); `None` on the tombstone, so only the winner of a race mails."""
     me = user.id
     try:
         # 1. Lock the row, read as columns (the identity-mapped `user` predates the lock).
@@ -108,7 +119,9 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> list[tours.Tou
         ).one()
         if locked.deleted_at is not None:
             db.rollback()
-            return []
+            return None
+        assert locked.email is not None  # a live row has one (ck_users_deleted_scrubbed)
+        email: str = locked.email
         my_listings = select(Listing.id).where(Listing.owner_id == me).scalar_subquery()
         # 3. Listings off the site, before the photos: its row locks wait for a photo write that
         # holds `_lock_own_listing`, so step 4 sees that write's committed row. The personal
@@ -147,11 +160,8 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> list[tours.Tou
             )
         )
         if db.scalar(select(acted_against)):
-            assert locked.email is not None  # a live row has one (ck_users_deleted_scrubbed)
             db.execute(
-                insert(BlockedEmail)
-                .values(email_hmac=email_hmac(locked.email))
-                .on_conflict_do_nothing()
+                insert(BlockedEmail).values(email_hmac=email_hmac(email)).on_conflict_do_nothing()
             )
         # 4. Listing photos; the objects go after the commit.
         keys = list(
@@ -234,4 +244,4 @@ def delete_account(db: Session, store: PhotoStore, user: User) -> list[tours.Tou
     if names:
         _discard(store, names)
     log.info("account deleted: %d photo objects", len(names))
-    return changes
+    return DeletedAccount(email=email, changes=changes)
