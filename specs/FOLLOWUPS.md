@@ -343,6 +343,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0019b · web/e2e/flatmates.spec.ts (`ac5_group_chat_flow`), web/e2e/inbox.spec.ts (`ac12_shortlist_chat_decline`) · e2e · flatmates ac5 / inbox ac12 run ~30 s, at the default timeout; test.slow() added in 0019b; split or speed up · CI fix on PR #130, not 0019b's code
 - [ ] 0019b · web/e2e/a11y.spec.ts (`ac5_public_pages_pass_axe`) · Flaky e2e: timed out at 30 s on PR #130's run (f550c28), passed on its retry · not 0019b's code; watch whether it recurs
 - [ ] 0021a1 · web/e2e/a11y.spec.ts (`ac5_public_pages_pass_axe`) · The flaky e2e from 0019b recurred on PR #132's run (b1105b1): timed out at 30 s, passed on its retry · watch it
+- [ ] 0023a · web/e2e/a11y.spec.ts:18 (`ac5_public_pages_pass_axe`) · The same flake on PR #140's run 44289593607: hit the whole test's 30 s budget at a11y.spec.ts:84 and passed on retry in 19.0 s. It also timed out first on runs without 0023a's code (44140856353, 44286939418, 44289308133; retries 17.4-18.2 s). 0023a adds about 50 ms of axe time on each search page in headless Chrome (1,189 more `<option>`s), so it is not the cause · the test covers many pages in one 30 s budget; split it or give it its own timeout
 - [ ] 0021a2 · api/app/services/areas.py (`import_areas`) · A neighbourhood deactivated by a re-import stays on `listings.neighbourhood_id` and keeps matching profiles that saved it · low impact; option: clear it in `import_areas` when deactivating
 
 ## 0021a1
