@@ -1,6 +1,7 @@
 """Security emails (spec 0022a): the password and deletion mails, their cap, and what they and the
 logs must not hold. AC10 is in `test_config.py`, AC5's race in `test_account_deletion.py`."""
 
+import datetime as dt
 import logging
 import re
 import uuid
@@ -21,11 +22,13 @@ from app.i18n import he
 from app.models import User
 from app.redis_client import get_redis
 from app.services import accounts, passwords, security_mail, tour_mail
+from app.services import auth as auth_service
 from app.services.email import Attachment, EmailSender, EmailUnavailable, get_email_sender
 from app.services.photo_store import FilePhotoStore
-from tests.conftest import Outbox, signup
+from tests.conftest import Outbox, make_listing, make_owner, signup
 from tests.test_account_deletion import _session
 from tests.test_password import _execute, _login, _scalar, _signup
+from tests.test_tours import db_now, make_tour, shortlisted
 
 pytestmark = pytest.mark.usefixtures("redis_clean")
 
@@ -252,17 +255,30 @@ def test_ac8_no_secret_or_pii_in_mail_or_logs(
     assert EMAIL not in repr(accounts.DeletedAccount(email=EMAIL, changes=[]))
 
 
-def test_ac9_no_address_left_behind(client: TestClient, outbox: Outbox, db_engine: Engine) -> None:
+def test_ac9_no_address_left_behind(
+    client: TestClient, outbox: Outbox, db_engine: Engine, gush_dan: uuid.UUID
+) -> None:
     me = signup(client, outbox, EMAIL, "seeker")
+    seeker_id = _user_id(me)
+    owner_id = make_owner(db_engine, "owner@example.com")
+    listing_id = make_listing(db_engine, owner_id, gush_dan)
+    application_id = shortlisted(db_engine, listing_id, seeker_id, owner_id)
+    starts_at = db_now(db_engine) + dt.timedelta(hours=3)
+    make_tour(db_engine, listing_id, application_id, seeker_id, starts_at)  # deletion cancels it
     _change_password(me)
+    r = get_redis()
+    assert client.post("/auth/otp/request", json={"email": EMAIL}).status_code == 204
+    assert r.exists(auth_service.otp_key(EMAIL))  # a login code still pending
+
     assert me.delete("/me").status_code == 204
     assert [to for to, _, _ in _security(outbox)] == [EMAIL, EMAIL]
 
-    r = get_redis()
     address = EMAIL.encode()
     assert _scalar(db_engine, "SELECT count(*) FROM users WHERE email = :e", e=EMAIL) == 0
     assert not [k for k in r.scan_iter() if address in k and not k.startswith(b"rl:")]
-    assert not [v for v in r.lrange(tour_mail.QUEUE_KEY, 0, -1) if address in v]
+    queued = r.lrange(tour_mail.QUEUE_KEY, 0, -1)
+    assert queued
+    assert not [v for v in queued if address in v]
     counters = list(r.scan_iter(match="rl:security_mail:*"))
     assert counters
     assert not [k for k in counters if address in k or address in (r.get(k) or b"")]

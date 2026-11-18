@@ -732,16 +732,18 @@ def test_ac14_late_login_session_is_refused(
     u = make_owner(db_engine, U_EMAIL)
     device = _session(client, db_engine, u)
     code = _request_code(client, outbox, U_EMAIL)
-    found, deleted = threading.Event(), threading.Event()
-    real_find = auth_service._find_user
+    claimed, deleted = threading.Event(), threading.Event()
+    real_eval = auth_service._eval
 
-    def find_then_wait(db: Session, email: str) -> User | None:
-        user = real_find(db, email)
-        found.set()
-        assert deleted.wait(20)
-        return user
+    # The row is read and the code claimed: DELETE /me removes a code still pending (spec 0022a).
+    def claim_then_wait(r: Any, script: str, keys: list[str], *args: bytes | int) -> Any:
+        result = real_eval(r, script, keys, *args)
+        if script == auth_service._SETTLE_CODE:
+            claimed.set()
+            assert deleted.wait(20)
+        return result
 
-    monkeypatch.setattr(auth_service, "_find_user", find_then_wait)
+    monkeypatch.setattr(auth_service, "_eval", claim_then_wait)
     login: list[httpx.Response] = []
     late = TestClient(client.app)
 
@@ -749,7 +751,7 @@ def test_ac14_late_login_session_is_refused(
         login.append(late.post("/auth/otp/verify", json={"email": U_EMAIL, "code": code}))
 
     def delete() -> None:
-        assert found.wait(20)
+        assert claimed.wait(20)
         assert _delete(device).status_code == 204
         deleted.set()
 

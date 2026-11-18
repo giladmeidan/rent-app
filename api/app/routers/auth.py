@@ -24,7 +24,7 @@ from app.client_ip import client_network
 from app.config import get_settings
 from app.db import get_session
 from app.models import User
-from app.redis_client import RedisClient, get_redis
+from app.redis_client import RedisClient, get_redis, soft
 from app.schemas.auth import (
     GoogleLoginIn,
     OtpRequestIn,
@@ -288,6 +288,9 @@ def delete_me(
     deleted = accounts.delete_account(db, store, user)
     if deleted is not None:
         tours.announce(r, deleted.changes)
+        # A pending login code's key holds the address; only `rl:*` may keep it (privacy s6).
+        otp_key = auth_service.otp_key(auth_service.normalise_email(deleted.email))
+        soft(lambda: r.delete(otp_key))
         background.add_task(security_mail.send_account_deleted, sender, deleted.email)
     return _signed_out()
 
