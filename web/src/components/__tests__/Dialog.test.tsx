@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import he from '../../locales/he.json';
 import { Dialog, useConfirm, type ConfirmFn, type ConfirmOptions } from '../Dialog';
+import { GHOST_CLICK_MS } from '../ghostClick';
 
 const TITLE = he.flatmates.mine.leaveConfirm;
 const BODY = he.listings.edit.expiredBody;
@@ -91,6 +92,7 @@ describe('Dialog', () => {
       'border-0',
       'overflow-y-auto',
       'overscroll-contain',
+      'scroll-pb-[5.5rem]',
     );
     expect(dialog).not.toHaveClass('max-w-dialog');
     expect(dialog).not.toHaveClass('rounded-lg');
@@ -125,6 +127,60 @@ describe('Dialog', () => {
       fireEvent.click(element);
       expect(onClose).toHaveBeenCalledTimes(1);
       other.unmount();
+    }
+  });
+
+  it('ac19_sheet_swallows_the_second_tap', () => {
+    vi.useFakeTimers();
+    try {
+      const behind = vi.fn();
+      const Page = ({ open, size }: { open: boolean; size: 'sheet' | 'default' }) => (
+        <>
+          <button type="button" onClick={behind}>
+            {he.common.retry}
+          </button>
+          <Dialog open={open} onClose={() => undefined} title={TITLE} size={size} />
+        </>
+      );
+      const target = () => screen.getByRole('button', { name: he.common.retry, hidden: true });
+      const view = render(<Page open size="sheet" />);
+      const close = (size: 'sheet' | 'default') => {
+        view.rerender(<Page open size={size} />);
+        view.rerender(<Page open={false} size={size} />);
+      };
+
+      // One pointer click right after closing is dropped, and only one.
+      close('sheet');
+      fireEvent.click(target(), { detail: 1 });
+      expect(behind).not.toHaveBeenCalled();
+      fireEvent.click(target(), { detail: 1 });
+      expect(behind).toHaveBeenCalledTimes(1);
+
+      // A keyboard click (detail 0) is never dropped.
+      behind.mockClear();
+      close('sheet');
+      fireEvent.click(target());
+      expect(behind).toHaveBeenCalledTimes(1);
+
+      // Nor is a tap once the moment has passed.
+      behind.mockClear();
+      act(() => {
+        vi.advanceTimersByTime(GHOST_CLICK_MS);
+      });
+      close('sheet');
+      act(() => {
+        vi.advanceTimersByTime(GHOST_CLICK_MS);
+      });
+      fireEvent.click(target(), { detail: 1 });
+      expect(behind).toHaveBeenCalledTimes(1);
+
+      // Other dialogs do not guard at all.
+      behind.mockClear();
+      close('default');
+      fireEvent.click(target(), { detail: 1 });
+      expect(behind).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
     }
   });
 

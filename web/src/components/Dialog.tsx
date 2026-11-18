@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from './Button';
 import { cx } from './cx';
+import { swallowGhostClick } from './ghostClick';
 
 export type DialogProps = {
   open: boolean;
@@ -37,7 +38,7 @@ const SIZE = {
   wide: 'w-full max-w-dialog-wide min-h-[min(36rem,calc(100dvh-3rem))] rounded-lg border border-border',
   // Overrides the browser's margin and maximum sizes for a modal.
   sheet:
-    'm-0 h-dvh max-h-none w-full max-w-none overflow-y-auto overscroll-contain rounded-none border-0',
+    'm-0 h-dvh max-h-none w-full max-w-none scroll-pb-[5.5rem] overflow-y-auto overscroll-contain rounded-none border-0',
 };
 
 /**
@@ -82,8 +83,10 @@ export function Dialog({
       // Synchronously: the browser fires `close` a task later, after the caller (e.g. an awaited
       // `confirm()`) may already have moved focus on.
       restoreFocus();
+      // A sheet covers the whole page, so a double tap's second tap would land on the page.
+      if (size === 'sheet') swallowGhostClick();
     }
-  }, [open, initialFocusRef]);
+  }, [open, initialFocusRef, size]);
 
   const handleClose = () => {
     // Closed by the browser (a forced Esc close) or from outside: return focus only if it is

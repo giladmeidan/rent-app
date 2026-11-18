@@ -1,4 +1,5 @@
 import type { ListingType } from '../listings/api';
+import { AREAS_MAX } from '../profile/validate';
 
 // The search's filter state lives in the URL only. The URL is user input: `parseFilters` keeps a
 // value only when `0003a`'s `GET /listings` would accept it, so no URL can produce a 422, and an
@@ -12,8 +13,6 @@ export type Sort = (typeof SORTS)[number];
 export const PRICE_MAX = 100_000;
 export const ROOMS_MIN = 1;
 export const ROOMS_MAX = 10;
-/** The API's limit on `area_ids` (spec 0023a). */
-export const AREA_IDS_MAX = 20;
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -95,7 +94,7 @@ export function parseFilters(params: URLSearchParams): Filters {
         .filter((id) => UUID.test(id))
         .map((id) => id.toLowerCase()),
     ),
-  ].slice(0, AREA_IDS_MAX);
+  ].slice(0, AREAS_MAX);
   if (areaIds.length > 0) filters.area_ids = areaIds;
 
   const priceMin = parsePrice(params.get('price_min'));

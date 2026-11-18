@@ -20,6 +20,7 @@ import { gushDan, owner } from '../../listings/__tests__/fixtures';
 import { formatDate } from '../../listings/format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { capture } from '../../../app/analytics';
+import { GHOST_CLICK_MS } from '../../../components/ghostClick';
 import { SearchPage } from '../SearchPage';
 import { at, expected, listings, page, publicListing, query } from './fixtures';
 
@@ -288,15 +289,9 @@ describe('SearchPage', () => {
     expect(priceTo()).toHaveValue('8000');
     expect(feature(he.search.feature.pets)).toBeChecked();
 
-    // Unsaved edits are discarded by clear even when the URL is already clean.
-    clearInSheet();
-    openPanel();
+    // Digits only.
     fireEvent.change(priceFrom(), { target: { value: '12a3' } });
     expect(priceFrom()).toHaveValue('123');
-    clearInSheet();
-    expect(currentPath()).toBe('/search');
-    openPanel();
-    expect(priceFrom()).toHaveValue('');
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -1458,11 +1453,15 @@ describe('SearchPage filters (spec 0023a)', () => {
   const COUNT_TIMEOUT = { timeout: 2000 };
   /** Longer than the count's 400 ms wait. */
   const pastTheWait = () => new Promise((r) => setTimeout(r, 480));
-  const picker = () => within(sheet()).getByLabelText(he.search.area);
-  const pickerReady = () =>
-    vi.waitFor(() => {
-      expect(picker()).toBeEnabled();
-    });
+  // A combobox once `/areas` has loaded; the chip list carries the same name.
+  const picker = () => within(sheet()).getByRole('combobox', { name: he.search.area });
+  const pickerReady = () => vi.waitFor(picker);
+  const back = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+  };
+  /** Past a sheet closed by the test before: its guard would take this test's first tap. */
+  const noGuardLeft = () => new Promise((r) => setTimeout(r, GHOST_CLICK_MS));
+  const desktopPanel = () => within(screen.getByRole('region', { name: he.search.filters }));
   const pick = (name: string) => {
     fireEvent.change(picker(), { target: { value: name } });
   };
@@ -1705,6 +1704,222 @@ describe('SearchPage filters (spec 0023a)', () => {
     });
   });
 
+  it('ac11_desktop_clear_discards_the_draft', async () => {
+    // On a desktop the form outlives a Clear of a clean URL, so Clear itself must empty it.
+    stubDesktop();
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    const panel = desktopPanel();
+    const areaInput = () => panel.getByRole('combobox', { name: he.search.area });
+    await vi.waitFor(areaInput);
+    fireEvent.change(priceFrom(), { target: { value: '5000' } });
+    fireEvent.click(panel.getByRole('checkbox', { name: '3' }));
+    fireEvent.change(areaInput(), { target: { value: haifa.name_he } });
+    fireEvent.change(areaInput(), { target: { value: 'אין כזה' } });
+    fireEvent.keyDown(areaInput(), { key: 'Enter' });
+    expect(panel.getByRole('alert')).toHaveTextContent(he.areas.notFound);
+
+    fireEvent.click(panel.getByRole('button', { name: he.search.clear }));
+    expect(currentPath()).toBe('/search');
+    expect(priceFrom()).toHaveValue('');
+    expect(panel.getByRole('checkbox', { name: '3' })).not.toBeChecked();
+    expect(panel.queryByRole('button', { name: removeLabel(haifa.name_he) })).toBeNull();
+    expect(areaInput()).toHaveValue('');
+    expect(panel.queryByRole('alert')).toBeNull();
+  });
+
+  it('ac9_double_tap_does_not_reach_the_page_behind', async () => {
+    await noGuardLeft();
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    // What the sheet covered: a press on it would change the URL.
+    const behind = () => viewToggle().getByRole('button', { name: he.search.view.map });
+
+    // Apply, then the second tap, now on the page behind it.
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    fireEvent.click(submitButton(), { detail: 1 });
+    expect(currentPath()).toBe('/search?pets=true');
+    fireEvent.click(behind(), { detail: 1 });
+    expect(currentPath()).toBe('/search?pets=true');
+
+    // The X likewise.
+    openPanel();
+    fireEvent.click(screen.getByRole('button', { name: he.search.closeFilters }), { detail: 1 });
+    expectSheetClosed();
+    fireEvent.click(behind(), { detail: 1 });
+    expect(currentPath()).toBe('/search?pets=true');
+
+    // Only that one tap: the next one works.
+    fireEvent.click(behind(), { detail: 1 });
+    expect(params().get('view')).toBe('map');
+  });
+
+  it('ac7_first_click_applies_a_name_resolved_on_blur', async () => {
+    await noGuardLeft();
+    stubDesktop();
+    mockApi({ [SEARCH]: [results] });
+    vi.mocked(capture).mockClear();
+    render('/search');
+    await screen.findAllByRole('article');
+    const panel = desktopPanel();
+    const input = await vi.waitFor(() => panel.getByRole('combobox', { name: he.search.area }));
+    const button = screen
+      .getByRole('region', { name: he.search.filters })
+      .querySelector('button[type="submit"]') as HTMLButtonElement;
+    act(() => {
+      input.focus();
+    });
+    // A full name that also starts a longer label: only Enter or leaving the field picks it.
+    fireEvent.change(input, { target: { value: florentin.name_he } });
+
+    // The press does not take focus, so no chip moves the button under the pointer.
+    expect(fireEvent.mouseDown(button)).toBe(false);
+    expect(input).toHaveFocus();
+    expect(panel.queryByRole('button', { name: removeLabel(FLORENTIN_LABEL) })).toBeNull();
+    fireEvent.mouseUp(button);
+    fireEvent.click(button, { detail: 1 });
+
+    // One click, one search, with the name it resolved.
+    expect(params().getAll('area_ids')).toEqual([florentin.id]);
+    expect(capture).toHaveBeenCalledOnce();
+    back();
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe('/search');
+    });
+  });
+
+  it('ac10_back_closes_the_sheet_only', async () => {
+    const api = mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    await pickerReady();
+    pick(haifa.name_he);
+    submit();
+    await vi.waitFor(() => {
+      expect(api.calls(SEARCH)).toHaveLength(2);
+    });
+
+    openPanel();
+    await pickerReady();
+    pick(FLORENTIN_LABEL);
+    back();
+    await vi.waitFor(expectSheetClosed);
+    expect(toggleButton()).toHaveFocus();
+    // The URL, the tags and the results are still the first area's.
+    expect(params().getAll('area_ids')).toEqual([haifa.id]);
+    expect(screen.getByRole('button', { name: removeLabel(haifa.name_he) })).toBeVisible();
+    await settle();
+    expect(api.calls(SEARCH)).toHaveLength(2);
+
+    // The draft is gone.
+    openPanel();
+    await pickerReady();
+    expect(
+      within(sheet()).queryByRole('button', { name: removeLabel(FLORENTIN_LABEL) }),
+    ).toBeNull();
+    expect(within(sheet()).getByRole('button', { name: removeLabel(haifa.name_he) })).toBeVisible();
+  });
+
+  it('ac10_closing_the_sheet_leaves_no_history_entry', async () => {
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    const backTo = async (path: string) => {
+      back();
+      await vi.waitFor(() => {
+        expect(currentPath()).toBe(path);
+      });
+      await settle();
+    };
+
+    // Apply takes the sheet's entry over: one entry per search.
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    submit();
+    expect(currentPath()).toBe('/search?pets=true');
+    await settle();
+
+    // The X, Esc and an Apply that changes nothing each remove it.
+    openPanel();
+    await settle();
+    closeSheet();
+    await settle();
+    openPanel();
+    await settle();
+    act(() => {
+      sheet().dispatchEvent(new Event('cancel', { cancelable: true }));
+    });
+    await settle();
+    openPanel();
+    await settle();
+    submit();
+    await settle();
+    expectSheetClosed();
+    expect(currentPath()).toBe('/search?pets=true');
+    await backTo('/search');
+
+    // Clear takes it over too.
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    submit();
+    await settle();
+    openPanel();
+    await settle();
+    clearInSheet();
+    expect(currentPath()).toBe('/search');
+    await settle();
+    await backTo('/search?pets=true');
+    await backTo('/search');
+  });
+
+  it('ac10_map_writes_leave_the_sheet_alone', async () => {
+    mockApi({ [SEARCH]: [results] });
+    render('/search?view=map');
+    await vi.waitFor(() => lastProps());
+    moveTo(BOX, { center: [34.8, 32.08], zoom: 13 });
+    await vi.waitFor(() => {
+      expect(params().get('z')).toBe('13');
+    });
+    openPanel();
+    await settle();
+    fireEvent.click(feature(he.search.feature.pets));
+
+    // A move ending under the open sheet rewrites the URL, with the sheet and the draft intact.
+    moveTo(BOX, { center: [34.81, 32.07], zoom: 14 });
+    await vi.waitFor(() => {
+      expect(params().get('z')).toBe('14');
+    });
+    await settle();
+    expect(sheet()).toBeVisible();
+    expect(feature(he.search.feature.pets)).toBeChecked();
+
+    // Back still closes only the sheet.
+    back();
+    await vi.waitFor(expectSheetClosed);
+    expect(params().get('view')).toBe('map');
+    expect(params().has('pets')).toBe(false);
+  });
+
+  it('ac15_double_tap_on_a_tag_removes_one_filter', async () => {
+    await noGuardLeft();
+    mockApi({ [SEARCH]: [results] });
+    render('/search?pets=true&elevator=true');
+    await screen.findAllByRole('article');
+    const remove = (name: string) => screen.getByRole('button', { name: removeLabel(name) });
+    fireEvent.click(remove(he.search.feature.pets), { detail: 1 });
+    expect(params().has('pets')).toBe(false);
+    // The second tap, on the tag that slid under the finger.
+    fireEvent.click(remove(he.search.feature.elevator), { detail: 1 });
+    expect(params().get('elevator')).toBe('true');
+    // A keyboard press is never held back.
+    fireEvent.click(remove(he.search.feature.elevator));
+    expect(params().has('elevator')).toBe(false);
+  });
+
   it('ac12_live_count_labels', async () => {
     let api = mockApi({ [SEARCH]: [results(), total(1), total(2), total(7), total(0)] });
     let view = render('/search');
@@ -1734,6 +1949,9 @@ describe('SearchPage filters (spec 0023a)', () => {
     await expectLabel(he.search.applyCount_two);
     fireEvent.click(feature(he.search.feature.elevator));
     await expectLabel(countLabel(7));
+    // Thousands are separated, in the button and in the results line alike.
+    expect(countLabel(1234)).toContain('1,234');
+    expect(i18n.t('search.count', { count: 1234 })).toContain('1,234');
     // At zero the button says so and still works.
     fireEvent.click(feature(he.search.feature.parking));
     await expectLabel(he.search.applyNone);
@@ -2048,6 +2266,9 @@ describe('SearchPage filters (spec 0023a)', () => {
     expect(roomChipsChecked()).toEqual(['3', '4', he.search.roomsFivePlus]);
     // RTL must not turn "5+" into "+5".
     expect(roomChip(he.search.roomsFivePlus).labels?.[0]).toHaveAttribute('dir', 'ltr');
+    // Equal cells in one row, each as wide as its share.
+    expect(roomChip('1').labels?.[0]).toHaveClass('w-full', 'justify-center', 'px-0');
+    expect(roomChip('1').parentElement?.parentElement).toHaveClass('grid-cols-5');
     // Another edit keeps the range the chips cannot express.
     fireEvent.click(feature(he.search.feature.pets));
     submit();

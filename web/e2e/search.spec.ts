@@ -253,7 +253,7 @@ test('ac20_phone_filter_flow', async ({ page }) => {
   expect((await sheet.boundingBox())?.width).toBe(390);
   await expect(sheet.getByRole('button', { name: he.search.closeFilters })).toBeFocused();
 
-  await sheet.getByLabel(he.search.area).fill(TEL_AVIV);
+  await sheet.getByRole('combobox', { name: he.search.area }).fill(TEL_AVIV);
   await expect(sheet.getByRole('button', { name: removeArea })).toBeVisible();
 
   // The count replaces the plain words, and the posted listing means it is not zero.
@@ -274,4 +274,39 @@ test('ac20_phone_filter_flow', async ({ page }) => {
   await expect(page).toHaveURL('/search');
   await expect(tags).toHaveCount(0);
   expect(await overflow()).toBeLessThanOrEqual(0);
+});
+
+test('ac10_phone_back_closes_only_the_sheet', async ({ page }) => {
+  // Gilad 2026-11-18: Back with the sheet open closes it; the applied search stays.
+  const areaId = await telAvivId(page);
+  const removeLabel = (name: string) => he.search.tags.remove.replace('{{name}}', name);
+  const sheet = page.getByRole('dialog', { name: he.search.filters });
+  const picker = sheet.getByRole('combobox', { name: he.search.area });
+  const openSheet = () => page.getByRole('button', { name: /^מסננים/ }).click();
+
+  await page.goto('/search');
+  await openSheet();
+  await picker.fill(TEL_AVIV);
+  await sheet.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(`/search?area_ids=${areaId}`);
+  await expect(sheet).toBeHidden();
+
+  await openSheet();
+  await picker.fill('חיפה');
+  await expect(sheet.getByRole('button', { name: removeLabel('חיפה') })).toBeVisible();
+  await page.goBack();
+  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(`/search?area_ids=${areaId}`);
+  const tags = page.getByRole('list', { name: he.search.tags.label });
+  await expect(tags.getByRole('button', { name: removeLabel(TEL_AVIV) })).toBeVisible();
+  await expect(tags.getByRole('button', { name: removeLabel('חיפה') })).toHaveCount(0);
+
+  // The draft is gone, and the X leaves no entry: one Back from here is the unfiltered search.
+  await openSheet();
+  await expect(sheet.getByRole('button', { name: removeLabel(TEL_AVIV) })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: removeLabel('חיפה') })).toHaveCount(0);
+  await sheet.getByRole('button', { name: he.search.closeFilters }).click();
+  await expect(sheet).toBeHidden();
+  await page.goBack();
+  await expect(page).toHaveURL('/search');
 });

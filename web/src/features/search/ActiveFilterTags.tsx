@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { swallowGhostClick } from '../../components/ghostClick';
 import { Tag } from '../../components/Tag';
 import { TagRemoveButton } from '../../components/TagRemoveButton';
 import { formatDate, formatIls, formatRooms } from '../listings/format';
@@ -107,14 +108,18 @@ export function ActiveFilterTags({ filters, onRemove, className }: Props) {
     // `py-1`: the row scrolls sideways, which would otherwise clip the buttons' 44 px hit area.
     <ul
       aria-label={t('search.tags.label')}
-      className={`flex flex-nowrap items-center gap-2 overflow-x-auto py-1${className === undefined ? '' : ` ${className}`}`}
+      className={`flex flex-nowrap items-center gap-2 overflow-x-auto py-1 lg:flex-wrap lg:overflow-x-visible${className === undefined ? '' : ` ${className}`}`}
     >
       {tags.map(({ key, label, patch }) => (
         <Tag key={key} as="li" tone="accent" className="shrink-0 whitespace-nowrap">
           {label}
           <TagRemoveButton
             aria-label={t('search.tags.remove', { name: label })}
-            onClick={() => onRemove(patch)}
+            onClick={() => {
+              onRemove(patch);
+              // The next tag slides under the finger.
+              swallowGhostClick();
+            }}
           />
         </Tag>
       ))}

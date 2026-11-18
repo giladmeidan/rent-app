@@ -1242,10 +1242,8 @@ describe('SearchMap', () => {
     };
     const pickArea = async (name: string) => {
       const sheet = openFilters();
-      await vi.waitFor(() => {
-        expect(sheet.getByLabelText(he.search.area)).toBeEnabled();
-      });
-      fireEvent.change(sheet.getByLabelText(he.search.area), { target: { value: name } });
+      const picker = await vi.waitFor(() => sheet.getByRole('combobox', { name: he.search.area }));
+      fireEvent.change(picker, { target: { value: name } });
       const submit = screen.getByRole('dialog').querySelector('button[type="submit"]');
       fireEvent.click(submit as HTMLButtonElement);
     };
@@ -1295,15 +1293,27 @@ describe('SearchMap', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // With two new areas the map goes to the first the catalogue holds.
+    // Two new areas at once (Back after a Clear), the unknown one first: the map goes to the first
+    // the catalogue holds, and the count line says nothing about the old box meanwhile.
     const unknown = '00000000-0000-0000-0000-0000000dead0';
     mockApi({ 'GET /areas': [() => json(AREAS)], [SEARCH]: [() => json(page([listing]))] });
-    view = await openMap(`/search?view=map&c=32.08%2C34.8&z=14&area_ids=${unknown}`);
+    view = await openMap(
+      `/search?view=map&c=32.08%2C34.8&z=14&area_ids=${unknown}&area_ids=${haifa.id}`,
+    );
     moveTo(BOX, VIEW);
-    await pickArea(florentin.name_he + ', ' + gushDan.name_he);
     await vi.waitFor(() => {
-      expect(cameras()).toEqual([{ seq: 1, center: florentin.centre, zoom: 15 }]);
+      expect(liveRegion()).toHaveTextContent(i18n.t('search.count', { count: 1 }));
     });
+    const sheet = openFilters();
+    fireEvent.click(sheet.getByRole('button', { name: he.search.clear }));
+    expect(params().has('area_ids')).toBe(false);
+    await settle();
+    expect(cameras()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
+    await vi.waitFor(() => {
+      expect(cameras()).toEqual([{ seq: 1, ...HAIFA_VIEW }]);
+    });
+    expect(liveRegion()).toBeEmptyDOMElement();
     view.unmount();
     vi.unstubAllGlobals();
 

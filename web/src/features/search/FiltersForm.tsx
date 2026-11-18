@@ -1,4 +1,5 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
@@ -139,11 +140,13 @@ type PillProps = {
   onChange: (checked: boolean) => void;
   /** The label's direction, for text RTL would reorder. */
   dir?: 'ltr';
+  /** Fills a grid cell, for a row of equal pills. */
+  fill?: boolean;
   children: ReactNode;
 };
 
 /** A checkbox drawn as a pill. */
-function PillCheckbox({ id, checked, onChange, dir, children }: PillProps) {
+function PillCheckbox({ id, checked, onChange, dir, fill = false, children }: PillProps) {
   return (
     <div className="flex">
       <input
@@ -156,12 +159,33 @@ function PillCheckbox({ id, checked, onChange, dir, children }: PillProps) {
       <label
         htmlFor={id}
         dir={dir}
-        className="flex min-h-tap cursor-pointer items-center rounded-full border border-border-strong bg-surface px-3.5 text-label text-ink peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+        className={cx(
+          'flex min-h-tap cursor-pointer items-center rounded-full border border-border-strong bg-surface text-label text-ink peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-accent-strong peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent',
+          fill ? 'w-full justify-center px-0' : 'px-3.5',
+        )}
       >
         {children}
       </label>
     </div>
   );
+}
+
+/**
+ * Keeps focus where it is during a press on Apply or Clear. Leaving the area input can add a chip,
+ * which would move the button out from under the pointer before the press ends and lose the click.
+ */
+const holdFocusDuringPress = (event: MouseEvent) => {
+  event.preventDefault();
+};
+
+/** The focus move the press held back, applied before the button acts: the area input's blur may
+ * add a chip, and the submit must see it. A keyboard press (`detail` 0) has no focus to move. */
+function finishPress(event: MouseEvent<HTMLElement>) {
+  if (event.detail === 0) return;
+  const button = event.currentTarget;
+  flushSync(() => {
+    button.focus();
+  });
 }
 
 /** The filters panel of SearchDesktop.dc.html, in a single column. Validates on submit only. */
@@ -178,6 +202,8 @@ export function FiltersForm({
   const [values, setValues] = useState<Values>(() => initialValues(filters));
   const [errors, setErrors] = useState<Errors>({});
   const [areasOverLimit, setAreasOverLimit] = useState(false);
+  // Bumped by Clear: a new area field drops its typed text and its "not found" message.
+  const [areaFieldKey, setAreaFieldKey] = useState(0);
 
   const fieldId = (name: keyof Values) => `${formId}-${name}`;
   const set = (patch: Partial<Values>) => setValues((current) => ({ ...current, ...patch }));
@@ -217,6 +243,7 @@ export function FiltersForm({
     setValues(EMPTY);
     setErrors({});
     setAreasOverLimit(false);
+    setAreaFieldKey((key) => key + 1);
     onClear();
   }
 
@@ -264,6 +291,7 @@ export function FiltersForm({
       )}
 
       <AreaFilterField
+        key={areaFieldKey}
         id={fieldId('area_ids')}
         areaIds={values.area_ids}
         overLimit={areasOverLimit}
@@ -284,7 +312,7 @@ export function FiltersForm({
 
       <fieldset className="min-w-0">
         <legend className={legend}>{t('search.rooms')}</legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-5 gap-2 lg:gap-1">
           {ROOM_CHIPS.map((chip) => (
             <PillCheckbox
               key={chip}
@@ -292,6 +320,7 @@ export function FiltersForm({
               checked={roomsOn.includes(chip)}
               onChange={() => set(toggleRoomChip(roomRange, chip))}
               dir={chip === 5 ? 'ltr' : undefined}
+              fill
             >
               {chip === 5 ? t('search.roomsFivePlus') : formatRooms(chip)}
             </PillCheckbox>
@@ -338,16 +367,34 @@ export function FiltersForm({
 
       <div
         className={cx(
-          'flex flex-wrap gap-3',
+          // In view on a laptop too, where the panel can be taller than the screen.
+          'flex flex-wrap gap-3 lg:sticky lg:bottom-0 lg:bg-surface',
           // Flush with the sheet's edges, over the fields that scroll under it.
           sheet &&
             'sticky bottom-0 -mx-6 -mb-6 mt-auto border-t border-border bg-surface px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
         )}
       >
-        <Button type="submit" variant="primary" size="md" className="grow whitespace-nowrap">
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          onMouseDown={holdFocusDuringPress}
+          onClick={finishPress}
+          className="grow whitespace-nowrap"
+        >
           {countText ?? t('search.apply')}
         </Button>
-        <Button type="button" variant="secondary" size="md" onClick={clear} className="flex-1">
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          onMouseDown={holdFocusDuringPress}
+          onClick={(event) => {
+            finishPress(event);
+            clear();
+          }}
+          className="flex-1"
+        >
           {t('search.clear')}
         </Button>
       </div>

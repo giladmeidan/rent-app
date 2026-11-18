@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Tag } from '../../components/Tag';
 import { TagRemoveButton } from '../../components/TagRemoveButton';
 import { AreaSearch } from '../areas/AreaSearch';
-import { AREA_IDS_MAX } from './filters';
+import { AREAS_MAX } from '../profile/validate';
 import { useAreaName } from './useAreaName';
 
 const KINDS = ['settlement', 'neighbourhood'] as const;
@@ -13,7 +13,7 @@ type Props = {
   id: string;
   /** The chosen areas, in the order picked. */
   areaIds: readonly string[];
-  /** A pick past `AREA_IDS_MAX` was refused; cleared by the next change. */
+  /** A pick past `AREAS_MAX` was refused; cleared by the next change. */
   overLimit: boolean;
   onChange: (areaIds: string[]) => void;
   onOverLimit: () => void;
@@ -28,7 +28,7 @@ export function AreaFilterField({ id, areaIds, overLimit, onChange, onOverLimit 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {areaIds.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
+        <ul aria-label={t('search.area')} className="flex flex-wrap gap-2">
           {areaIds.map((areaId) => {
             const name = areaName(areaId);
             return (
@@ -54,7 +54,7 @@ export function AreaFilterField({ id, areaIds, overLimit, onChange, onOverLimit 
         error={overLimit ? t('profile.errors.areasMax') : undefined}
         onPick={(area) => {
           if (area === null || areaIds.includes(area.id)) return;
-          if (areaIds.length >= AREA_IDS_MAX) onOverLimit();
+          if (areaIds.length >= AREAS_MAX) onOverLimit();
           else onChange([...areaIds, area.id]);
         }}
         onBackspace={() => {

@@ -445,14 +445,12 @@ export function SearchMap({
   let error = null;
   if (search.isError) {
     error = <ErrorState onRetry={() => search.refetch()} />;
-  } else if (data !== undefined) {
+  } else if (data !== undefined && bbox !== undefined) {
+    // With no box the map is on its way to a new area: the last answer is not about it.
     const { total, items } = data;
     if (total === 0) {
-      // With no box the map is on its way to a new area: this answer is not about it.
-      if (bbox !== undefined) {
-        empty = true;
-        count = t('search.map.empty');
-      }
+      empty = true;
+      count = t('search.map.empty');
     } else if (total <= items.length) {
       count = t('search.count', { count: total });
     } else {
