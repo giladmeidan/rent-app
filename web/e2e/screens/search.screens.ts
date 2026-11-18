@@ -357,9 +357,10 @@ test('filters-active', async ({ page }, info) => {
   await mockApi(page, { seeker: false, search: 'items' });
   await page.goto(FILTERED);
   await page.getByRole('article').first().waitFor();
-  // On the phone the panel is opened; on the desktop it is always open.
+  // On the phone the full-screen sheet is opened; on the desktop the panel is always there.
   if (info.project.name === 'mobile') {
     await page.getByRole('button', { name: /^מסננים/ }).click();
+    await page.getByRole('dialog', { name: he.search.filters }).waitFor();
   }
   await sideMapReady(page, info.project.name);
   await shot(page, info.project.name, 'filters-active');

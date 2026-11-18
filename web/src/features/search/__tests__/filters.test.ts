@@ -2,7 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { json, mockApi } from '../../auth/__tests__/harness';
 import { searchListings } from '../api';
-import { countActive, parseFilters, toSearchParams, type Filters } from '../filters';
+import {
+  countActive,
+  parseFilters,
+  roomChipsOn,
+  toggleRoomChip,
+  toSearchParams,
+  type Filters,
+  type RoomChip,
+} from '../filters';
 import { at, expected, page, query } from './fixtures';
 
 afterEach(() => {
@@ -205,5 +213,93 @@ describe('filters', () => {
     expect(query(at(api.calls('GET /listings'), 1).request)).toEqual(
       expected({ limit: '20', offset: '0' }),
     );
+  });
+
+  it('ac6_area_ids_url', async () => {
+    const id = (n: number) => `aaaaaaaa-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const [a, b] = [id(1), id(2)];
+
+    // In the order given, lower-cased; invalid and repeated ids are dropped.
+    const dirty = `area_ids=${b}&area_ids=nope&area_ids=${a.toUpperCase()}&area_ids=&area_ids=${b}`;
+    expect(parse(`area_ids=${b}&area_ids=${a}`)).toEqual({ area_ids: [b, a] });
+    expect(parse(dirty.replace('aaaaaaaa', 'AAAAAAAA'))).toEqual({ area_ids: [b, a] });
+    // A repeat in another case is still a repeat.
+    expect(parse(`area_ids=${a}&area_ids=${a.toUpperCase()}`)).toEqual({ area_ids: [a] });
+    // None left: the key is not set at all.
+    expect(parse('area_ids=nope&area_ids=')).not.toHaveProperty('area_ids');
+
+    // The first 20, counted after the repeats are gone.
+    const many = Array.from({ length: 25 }, (_, i) => id(i));
+    const capped = [many[0], ...many].map((value) => `area_ids=${String(value)}`).join('&');
+    expect(parse(capped).area_ids).toEqual(many.slice(0, 20));
+
+    // Round trip: one param per id, first in the URL's key order.
+    const url = `area_ids=${b}&area_ids=${a}&price_max=8000&pets=true`;
+    expect(toSearchParams(parse(url)).toString()).toBe(url);
+    expect(toSearchParams({ pets: true, area_ids: [a] }).toString()).toBe(
+      `area_ids=${a}&pets=true`,
+    );
+
+    // Each area is one active filter.
+    expect(countActive(parse(url))).toBe(4);
+    expect(countActive({ area_ids: [a] })).toBe(1);
+    expect(countActive({})).toBe(0);
+
+    // The request repeats the param; without areas it is absent.
+    const api = mockApi({ 'GET /listings': [json(page([])), json(page([]))] });
+    await searchListings({ area_ids: [b, a] }, 0);
+    await searchListings({}, 0);
+    expect(
+      new URL(at(api.calls('GET /listings'), 0).request.url).searchParams.getAll('area_ids'),
+    ).toEqual([b, a]);
+    expect(query(at(api.calls('GET /listings'), 1).request)).toEqual(
+      expected({ limit: '20', offset: '0' }),
+    );
+  });
+
+  it('ac17_room_chips', () => {
+    const range = (rooms_min?: number, rooms_max?: number) => ({ rooms_min, rooms_max });
+    const none = range();
+
+    // On: the chip's whole interval is inside the range, and a bound is set.
+    const on: [ReturnType<typeof range>, RoomChip[]][] = [
+      [none, []],
+      [range(3, 3.5), [3]],
+      [range(2, 4.5), [2, 3, 4]],
+      [range(5), [5]],
+      [range(3), [3, 4, 5]],
+      [range(undefined, 2.5), [1, 2]],
+      // Inexact ranges: only what fits whole.
+      [range(2.5), [3, 4, 5]],
+      [range(3, 3), []],
+      [range(2.5, 3), []],
+      // 5+ has no maximum, so any upper bound leaves it off.
+      [range(5, 10), []],
+      [range(4, 10), [4]],
+    ];
+    for (const [value, chips] of on)
+      expect(roomChipsOn(value), JSON.stringify(value)).toEqual(chips);
+
+    // Nothing on: that chip alone; 5+ sets no maximum.
+    expect(toggleRoomChip(none, 3)).toEqual(range(3, 3.5));
+    expect(toggleRoomChip(none, 5)).toEqual(range(5));
+    expect(toggleRoomChip(range(3, 3), 2)).toEqual(range(2, 2.5));
+    // Outside the run: it grows to the chip, on either side, across a gap.
+    expect(toggleRoomChip(range(3, 3.5), 4)).toEqual(range(3, 4.5));
+    expect(toggleRoomChip(range(3, 3.5), 1)).toEqual(range(1, 3.5));
+    expect(toggleRoomChip(range(2, 2.5), 5)).toEqual(range(2));
+    // An end of a longer run: it shrinks by that end.
+    expect(toggleRoomChip(range(2, 4.5), 2)).toEqual(range(3, 4.5));
+    expect(toggleRoomChip(range(2, 4.5), 4)).toEqual(range(2, 3.5));
+    expect(toggleRoomChip(range(4), 5)).toEqual(range(4, 4.5));
+    expect(toggleRoomChip(range(4), 4)).toEqual(range(5));
+    // The only chip on: cleared, both bounds present so they override the URL's.
+    expect(toggleRoomChip(range(3, 3.5), 3)).toEqual(none);
+    expect(toggleRoomChip(range(3, 3.5), 3)).toHaveProperty('rooms_min', undefined);
+    expect(toggleRoomChip(range(5), 5)).toEqual(none);
+    // The middle of a run: that chip alone.
+    expect(toggleRoomChip(range(2, 4.5), 3)).toEqual(range(3, 3.5));
+    // An inexact range is replaced by the first tap.
+    expect(toggleRoomChip(range(2.5), 4)).toEqual(range(4, 4.5));
   });
 });

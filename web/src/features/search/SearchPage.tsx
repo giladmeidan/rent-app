@@ -4,6 +4,7 @@ import { Navigate, useSearchParams } from 'react-router';
 
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { Dialog } from '../../components/Dialog';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { MarketViewSwitch } from '../people/MarketViewSwitch';
@@ -17,8 +18,8 @@ import { hasLooking } from '../profile/api';
 import { useProfile } from '../profile/useProfile';
 import { ActiveFilterTags } from './ActiveFilterTags';
 import { FiltersForm, type FormFilters } from './FiltersForm';
-import { countActive, parseFilters, toSearchParams, type Sort } from './filters';
-import { pickMapParams, writeMapPosition } from './mapPosition';
+import { countActive, parseFilters, toSearchParams, type Filters, type Sort } from './filters';
+import { MAP_PARAMS, pickMapParams, writeMapPosition } from './mapPosition';
 import { SearchMap } from './SearchMap';
 import { SearchResults } from './SearchResults';
 import { SortSelect } from './SortSelect';
@@ -47,7 +48,7 @@ export function SearchPage({ type }: Props) {
 
 /**
  * The URL is the only filter state (plus `view=map`, and the map's position `c`, `z`, `pin`, which
- * are not filters: spec 0009w); the panel's open state and the map's box are component state. The
+ * are not filters: spec 0009w); the sheet's open state and the map's box are component state. The
  * type is the page's, never the URL's: it is part of every query key, so the two sides never share
  * a cached result.
  */
@@ -77,10 +78,12 @@ function SearchView({ type }: Props) {
       ? 'newest'
       : (filters.sort ?? (hasProfile ? 'match' : 'newest')));
   const [open, setOpen] = useState(false);
-  const panelId = useId();
   const titleId = useId();
-  // From `lg` up the panel is always open beside the results, and the toggle is gone.
+  // From `lg` up the panel is always beside the results, and the toggle and the sheet are gone.
   const isDesktop = useIsDesktop();
+  // Rotating a tablet across `lg` never leaves two forms.
+  if (isDesktop && open) setOpen(false);
+  const sheetOpen = open && !isDesktop;
   // Focus after an action that removes the control used (spec 0009t): a filter Apply or Clear that
   // changed the URL remounts the form (its `key`), so focus goes to the results count line; "show
   // the list" on a failed map removes its button, so focus goes to the pressed list button.
@@ -120,15 +123,30 @@ function SearchView({ type }: Props) {
     if (toSearchParams(parseFilters(next)).toString() !== filtersKey) focusCount.current = true;
     setSearchParams(next);
   };
-  const apply = (values: FormFilters) => {
-    const next = withMapPosition(toSearchParams({ ...parseFilters(searchParams), ...values }));
+  /** Runs the search `next` holds. */
+  const run = (next: URLSearchParams) => {
     // The number of filters set, never their values (spec 0019b).
     capture('search_run', { type, filters: countActive(parseFilters(next)) });
     setFilters(next);
   };
+  const apply = (values: FormFilters) => {
+    const next = withMapPosition(toSearchParams({ ...parseFilters(searchParams), ...values }));
+    // From the list, a new area leaves the old map position behind: the map opens on the area.
+    const known = filters.area_ids ?? [];
+    if (view !== 'map' && values.area_ids?.some((id) => !known.includes(id)) === true) {
+      for (const key of MAP_PARAMS) next.delete(key);
+    }
+    setOpen(false);
+    run(next);
+  };
+  // A tag's X: the same search without that filter, wherever the map is.
+  const removeFilter = (patch: Partial<Filters>) =>
+    run(withMapPosition(toSearchParams({ ...filters, ...patch })));
   // Clear keeps the view and the map's position: they are not filters.
-  const clear = () =>
+  const clear = () => {
+    setOpen(false);
     setFilters(withMapPosition(new URLSearchParams(view === 'map' ? { view: 'map' } : {})));
+  };
   const sort = (value: Sort) =>
     setSearchParams(withMapPosition(toSearchParams({ ...filters, sort: value })));
   const switchView = (next: View) =>
@@ -139,9 +157,12 @@ function SearchView({ type }: Props) {
   const toggle = (
     <Button
       variant={active > 0 ? 'soft' : 'secondary'}
-      aria-expanded={open}
-      aria-controls={panelId}
-      onClick={() => setOpen((o) => !o)}
+      aria-haspopup="dialog"
+      onClick={(event) => {
+        // Safari does not focus a pressed button, and the sheet returns focus to its opener.
+        event.currentTarget.focus();
+        setOpen(true);
+      }}
       icon={
         <svg
           width="20"
@@ -166,28 +187,49 @@ function SearchView({ type }: Props) {
       <PageHeader title={title} actions={isDesktop ? undefined : toggle} />
       {type === 'room' && <MarketViewSwitch current="rooms" />}
 
-      {/* The side panel: the artboard's 280px (18rem). */}
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
-        <Card
-          as="section"
-          padding={isDesktop ? 'lg' : 'md'}
-          id={panelId}
-          hidden={!isDesktop && !open}
-          aria-labelledby={titleId}
-        >
+      {/* Stays mounted, so closing can return focus; only the form comes and goes, so closing
+          without applying drops the draft. */}
+      <Dialog
+        open={sheetOpen}
+        onClose={() => setOpen(false)}
+        title={t('search.filters')}
+        size="sheet"
+        closeLabel={t('search.closeFilters')}
+      >
+        {sheetOpen && (
           <FiltersForm
             key={filtersKey}
             filters={filters}
             onApply={apply}
             onClear={clear}
-            titleId={titleId}
             type={type}
+            sheet
           />
-        </Card>
+        )}
+      </Dialog>
+
+      {/* The side panel: the artboard's 280px (18rem). */}
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+        {isDesktop && (
+          <Card as="section" padding="lg" aria-labelledby={titleId}>
+            <FiltersForm
+              key={filtersKey}
+              filters={filters}
+              onApply={apply}
+              onClear={clear}
+              titleId={titleId}
+              type={type}
+            />
+          </Card>
+        )}
 
         <div className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <ActiveFilterTags filters={filters} className="w-full min-w-0 lg:w-auto lg:flex-1" />
+            <ActiveFilterTags
+              filters={filters}
+              onRemove={removeFilter}
+              className="w-full min-w-0 lg:w-auto lg:flex-1"
+            />
             <div className="ms-auto flex flex-wrap items-center gap-3">
               <SortSelect
                 value={sortValue}

@@ -32,6 +32,7 @@ import {
   type MapView,
 } from '../../components/map/MapCanvas';
 import { Skeleton } from '../../components/Skeleton';
+import type { AreaOut } from '../../api/client';
 import { areasQuery } from '../areas/api';
 import { useMe } from '../auth/useMe';
 import { todayInIsrael } from '../listings/format';
@@ -50,20 +51,36 @@ import { useListingPins } from './useListingPins';
 import { useMapSearch } from './useMapSearch';
 
 const NO_ITEMS: ListingPublic[] = [];
+const NO_AREAS: string[] = [];
+
+/** The first of `areaIds` the catalogue holds. */
+function firstKnownArea(areaIds: readonly string[], catalogue: readonly AreaOut[] = []) {
+  for (const areaId of areaIds) {
+    const area = catalogue.find(({ id }) => id === areaId);
+    if (area !== undefined) return area;
+  }
+  return undefined;
+}
 
 /**
- * Where the map opens without a URL position (spec 0021d), `undefined` while it is not known: a
- * visitor at `DEFAULT_VIEW`; a signed-in person, once `/me/profile` and `/areas` (asked together) have answered, at
- * the first preferred area (`areaView`), else (no looking part, no area, a failed request) at
- * `DEFAULT_VIEW`.
+ * Where the map opens without a URL position (spec 0021d), `undefined` while it is not known: the
+ * first filtered area the catalogue holds (spec 0023a); else a visitor at `DEFAULT_VIEW`; a
+ * signed-in person, once `/me/profile` and `/areas` (asked together) have answered, at the first
+ * preferred area (`areaView`), else (no looking part, no area, a failed request) at `DEFAULT_VIEW`.
  */
-function useDefaultView(): MapView | undefined {
+function useDefaultView(filterAreaIds: readonly string[]): MapView | undefined {
   const me = useMe();
   const signedIn = me.data != null;
   const profile = useProfile(signedIn);
   const firstId = hasLooking(profile.data) ? profile.data.area_ids[0] : undefined;
   // Asked with `/me/profile`, not after it: the first area's centre is in the catalogue.
-  const areas = useQuery({ ...areasQuery, enabled: signedIn });
+  const areas = useQuery({ ...areasQuery, enabled: signedIn || filterAreaIds.length > 0 });
+  if (filterAreaIds.length > 0) {
+    // Only here: without ids the query may be disabled, which also reads as pending.
+    if (areas.isPending) return undefined;
+    const filtered = firstKnownArea(filterAreaIds, areas.data);
+    if (filtered !== undefined) return areaView(filtered);
+  }
   if (me.isPending) return undefined;
   if (!signedIn) return DEFAULT_VIEW;
   if (profile.isPending) return undefined;
@@ -142,7 +159,8 @@ export function SearchMap({
     const { center, zoom } = parseMapPosition(searchParams);
     return center === undefined ? undefined : { center, zoom: zoom ?? 14 };
   });
-  const defaultView = useDefaultView();
+  const areaIds = filters.area_ids ?? NO_AREAS;
+  const defaultView = useDefaultView(areaIds);
   if (initialView === undefined && defaultView !== undefined) setInitialView(defaultView);
   const [bbox, setBbox] = useState<Bbox>();
   // The zoom of the last reported view; until one arrives the pins are drawn unclustered.
@@ -217,6 +235,25 @@ export function SearchMap({
   const sendCamera = (move: { bounds: Bbox } | MapView) => {
     setCamera((previous) => ({ seq: (previous?.seq ?? 0) + 1, ...move }));
   };
+
+  // A newly filtered area takes the map there (spec 0023a). Checked during render, as an effect
+  // would run after the new filter's request for the old box had left: with no box the query
+  // waits, the old pins stay, and the move's `moveend` gives the box to search.
+  const catalogue = useQuery({ ...areasQuery, enabled: areaIds.length > 0 });
+  const areasKey = areaIds.join();
+  const [seenAreas, setSeenAreas] = useState(areasKey);
+  if (areasKey !== seenAreas && !catalogue.isPending) {
+    setSeenAreas(areasKey);
+    const seen = seenAreas.split(',');
+    const added = firstKnownArea(
+      areaIds.filter((areaId) => !seen.includes(areaId)),
+      catalogue.data,
+    );
+    if (added !== undefined) {
+      setBbox(undefined);
+      sendCamera(areaView(added));
+    }
+  }
 
   /** Empties the status line (a map move or a press). */
   const hushStatus = () => {
@@ -411,8 +448,11 @@ export function SearchMap({
   } else if (data !== undefined) {
     const { total, items } = data;
     if (total === 0) {
-      empty = true;
-      count = t('search.map.empty');
+      // With no box the map is on its way to a new area: this answer is not about it.
+      if (bbox !== undefined) {
+        empty = true;
+        count = t('search.map.empty');
+      }
     } else if (total <= items.length) {
       count = t('search.count', { count: total });
     } else {

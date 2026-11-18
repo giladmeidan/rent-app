@@ -12,11 +12,17 @@ export type Sort = (typeof SORTS)[number];
 export const PRICE_MAX = 100_000;
 export const ROOMS_MIN = 1;
 export const ROOMS_MAX = 10;
+/** The API's limit on `area_ids` (spec 0023a). */
+export const AREA_IDS_MAX = 20;
+
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const FEATURES = ['pets', 'furnished', 'elevator', 'parking', 'shelter'] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export type Filters = {
+  /** Cities and neighbourhoods (spec 0023a), in the order picked: lower-case ids, no repeats. */
+  area_ids?: string[] | undefined;
   price_min?: number | undefined;
   price_max?: number | undefined;
   rooms_min?: number | undefined;
@@ -40,6 +46,7 @@ export type Filters = {
 
 /** The URL's key order, as `toSearchParams` writes it. */
 const KEYS = [
+  'area_ids',
   'price_min',
   'price_max',
   'rooms_min',
@@ -81,6 +88,16 @@ function isSort(value: string | null): value is Sort {
 export function parseFilters(params: URLSearchParams): Filters {
   const filters: Filters = {};
 
+  const areaIds = [
+    ...new Set(
+      params
+        .getAll('area_ids')
+        .filter((id) => UUID.test(id))
+        .map((id) => id.toLowerCase()),
+    ),
+  ].slice(0, AREA_IDS_MAX);
+  if (areaIds.length > 0) filters.area_ids = areaIds;
+
   const priceMin = parsePrice(params.get('price_min'));
   let priceMax = parsePrice(params.get('price_max'));
   if (priceMin !== undefined && priceMax !== undefined && priceMin > priceMax) priceMax = undefined;
@@ -115,14 +132,58 @@ export function toSearchParams(filters: Filters): URLSearchParams {
   for (const key of KEYS) {
     const value = filters[key];
     if (value === undefined) continue;
-    params.set(key, String(value));
+    // One param per area, in order.
+    if (Array.isArray(value)) for (const item of value) params.append(key, item);
+    else params.set(key, String(value));
   }
   return params;
 }
 
 /** How many filters are set (`sort` and `view` are not filters, nor is the page's `listing_type`;
- * each price and rooms bound counts). */
+ * each area and each price and rooms bound counts). */
 export function countActive(filters: Filters): number {
-  return KEYS.filter((key) => key !== 'sort' && key !== 'view' && filters[key] !== undefined)
-    .length;
+  const others = KEYS.filter(
+    (key) => key !== 'area_ids' && key !== 'sort' && key !== 'view' && filters[key] !== undefined,
+  );
+  return others.length + (filters.area_ids?.length ?? 0);
+}
+
+/** The rooms quick choices: `n` is `n` to `n + 0.5` rooms, and the last, 5+, is 5 and up. */
+export const ROOM_CHIPS = [1, 2, 3, 4, 5] as const;
+export type RoomChip = (typeof ROOM_CHIPS)[number];
+export type RoomRange = Pick<Filters, 'rooms_min' | 'rooms_max'>;
+
+const LAST_ROOM_CHIP: RoomChip = 5;
+
+/** The chips whose whole interval lies inside `range`, in order; none when no bound is set. */
+export function roomChipsOn({ rooms_min: min, rooms_max: max }: RoomRange): RoomChip[] {
+  if (min === undefined && max === undefined) return [];
+  return ROOM_CHIPS.filter((chip) => {
+    if (min !== undefined && chip < min) return false;
+    if (max === undefined) return true;
+    return chip !== LAST_ROOM_CHIP && chip + 0.5 <= max;
+  });
+}
+
+const chipsRange = (from: number, to: number): RoomRange => ({
+  rooms_min: from,
+  rooms_max: to === LAST_ROOM_CHIP ? undefined : to + 0.5,
+});
+
+/**
+ * `range` after a tap on `chip`. Nothing on: that chip alone. Outside the run of chips that are on:
+ * the run grows to it. An end of a longer run: the run shrinks by it. The only chip on: no range.
+ * The middle of a run: that chip alone.
+ */
+export function toggleRoomChip(range: RoomRange, chip: RoomChip): RoomRange {
+  const on = roomChipsOn(range);
+  const first = on[0];
+  const last = on.at(-1);
+  if (first === undefined || last === undefined) return chipsRange(chip, chip);
+  if (chip < first) return chipsRange(chip, last);
+  if (chip > last) return chipsRange(first, chip);
+  if (first === last) return { rooms_min: undefined, rooms_max: undefined };
+  if (chip === first) return chipsRange(first + 1, last);
+  if (chip === last) return chipsRange(first, last - 1);
+  return chipsRange(chip, chip);
 }

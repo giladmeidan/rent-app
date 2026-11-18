@@ -10,12 +10,13 @@ import {
   currentPath,
   deferred,
   json,
-  mockApi,
+  mockApi as mockRoutes,
   noa,
   renderRoutes,
   testQueryClient,
 } from '../../auth/__tests__/harness';
-import { owner } from '../../listings/__tests__/fixtures';
+import type { AreaOut } from '../../../api/client';
+import { gushDan, owner } from '../../listings/__tests__/fixtures';
 import { formatDate } from '../../listings/format';
 import { inDays, profile } from '../../profile/__tests__/fixtures';
 import { capture } from '../../../app/analytics';
@@ -50,8 +51,33 @@ const stubDesktop = () => {
 const mascots = () => document.querySelectorAll('img[src*="homie-turtle"]');
 
 const SEARCH = 'GET /listings';
+const AREAS = 'GET /areas';
 const ME = 'GET /me';
 const PROFILE = 'GET /me/profile';
+const haifa: AreaOut = {
+  ...gushDan,
+  id: '00000000-0000-0000-0000-00000000a2a2',
+  slug: 's-4000',
+  name_he: 'חיפה',
+  centre: [34.9896, 32.794],
+};
+const florentin: AreaOut = {
+  ...gushDan,
+  id: '00000000-0000-0000-0000-00000000a3a3',
+  slug: 'n-florentin',
+  name_he: 'פלורנטין',
+  kind: 'neighbourhood',
+  parent_id: gushDan.id,
+  centre: [34.7686, 32.0578],
+};
+const CATALOGUE = [gushDan, haifa, florentin];
+const FLORENTIN_LABEL = i18n.t('areas.neighbourhoodOf', {
+  neighbourhood: florentin.name_he,
+  city: gushDan.name_he,
+});
+/** The harness's mock, with the area catalogue every filter form asks for. */
+const mockApi = (routes: Parameters<typeof mockRoutes>[0]) =>
+  mockRoutes({ [AREAS]: [() => json(CATALOGUE)], ...routes });
 const unauthenticated = () => json({ detail: 'unauthenticated' }, 401);
 const noProfile = () => json({ detail: 'seeker_profile_not_found' }, 404);
 
@@ -88,8 +114,20 @@ const openPanel = () => {
 const group = (name: string) => within(screen.getByRole('group', { name }));
 const priceFrom = () => group(he.search.price).getByLabelText(he.search.from);
 const priceTo = () => group(he.search.price).getByLabelText(he.search.to);
-const roomsFrom = () => group(he.search.rooms).getByLabelText(he.search.from);
-const roomsTo = () => group(he.search.rooms).getByLabelText(he.search.to);
+const roomChip = (name: string) =>
+  group(he.search.rooms).getByRole<HTMLInputElement>('checkbox', { name });
+const roomChipsChecked = () =>
+  group(he.search.rooms)
+    .getAllByRole<HTMLInputElement>('checkbox')
+    .filter((chip) => chip.checked)
+    .map((chip) => chip.labels?.[0]?.textContent);
+const sheet = () => screen.getByRole('dialog', { name: he.search.filters });
+const expectSheetClosed = () => {
+  expect(screen.queryByRole('dialog')).toBeNull();
+};
+const clearInSheet = () => {
+  fireEvent.click(within(sheet()).getByRole('button', { name: he.search.clear }));
+};
 const feature = (name: string) => screen.getByRole('checkbox', { name });
 const apply = () => {
   fireEvent.click(screen.getByRole('button', { name: he.search.apply }));
@@ -123,17 +161,13 @@ describe('SearchPage', () => {
     const button = screen.getByRole('button', {
       name: i18n.t('search.filtersActive', { count: 3 }),
     });
-    expect(button).toHaveAttribute('aria-expanded', 'false');
-    const panel = document.getElementById(button.getAttribute('aria-controls') ?? '');
-    expect(panel).not.toBeNull();
-    expect(panel).not.toBeVisible();
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    expectSheetClosed();
     fireEvent.click(button);
-    expect(button).toHaveAttribute('aria-expanded', 'true');
-    expect(panel).toBeVisible();
+    expect(sheet()).toBeVisible();
     expect(priceFrom()).toHaveValue('');
     expect(priceTo()).toHaveValue('8000');
-    expect(roomsFrom()).toHaveValue('3');
-    expect(roomsTo()).toHaveValue('');
+    expect(roomChipsChecked()).toEqual(['3', '4', he.search.roomsFivePlus]);
     expect(feature(he.search.feature.pets)).toBeChecked();
     expect(feature(he.search.feature.furnished)).not.toBeChecked();
     expect(screen.getByLabelText(he.search.sort.label)).toHaveValue('price_asc');
@@ -204,7 +238,9 @@ describe('SearchPage', () => {
     expect(capture).toHaveBeenCalledWith('search_run', { type: 'apartment', filters: 2 });
 
     // Clear sends nothing.
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    openPanel();
+    clearInSheet();
+    expect(currentPath()).toBe('/search');
     expect(capture).toHaveBeenCalledOnce();
   });
 
@@ -230,28 +266,36 @@ describe('SearchPage', () => {
         offset: '0',
       }),
     );
-    // The panel stays open across the URL change; the form shows the URL's values.
+    // The sheet closes; opened again, the form shows the URL's values.
+    expectSheetClosed();
+    openPanel();
     expect(priceTo()).toHaveValue('8000');
     expect(feature(he.search.feature.pets)).toBeChecked();
 
-    // Clear: an empty search, the form reset.
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    // Clear: an empty search, the sheet closed, the form reset.
+    clearInSheet();
     expect(currentPath()).toBe('/search');
+    expectSheetClosed();
+    openPanel();
     expect(priceTo()).toHaveValue('');
     expect(feature(he.search.feature.pets)).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: he.search.closeFilters }));
 
     // Back: the previous URL, and the form shows it again.
     fireEvent.click(screen.getByRole('button', { name: 'history-back' }));
     expect(currentPath()).toBe('/search?price_max=8000&pets=true');
+    openPanel();
     expect(priceTo()).toHaveValue('8000');
     expect(feature(he.search.feature.pets)).toBeChecked();
 
     // Unsaved edits are discarded by clear even when the URL is already clean.
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    clearInSheet();
+    openPanel();
     fireEvent.change(priceFrom(), { target: { value: '12a3' } });
     expect(priceFrom()).toHaveValue('123');
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    clearInSheet();
     expect(currentPath()).toBe('/search');
+    openPanel();
     expect(priceFrom()).toHaveValue('');
     view.unmount();
     vi.unstubAllGlobals();
@@ -284,23 +328,6 @@ describe('SearchPage', () => {
     view.unmount();
     vi.unstubAllGlobals();
 
-    // Rooms from > to: the error under the rooms "to" select.
-    api = mockApi({ [SEARCH]: [json(page([]))] });
-    view = render('/search');
-    await screen.findByText(he.search.empty);
-    openPanel();
-    fireEvent.change(roomsFrom(), { target: { value: '4' } });
-    fireEvent.change(roomsTo(), { target: { value: '3' } });
-    apply();
-    alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(he.search.errors.roomsOrder);
-    expect(roomsTo()).toHaveAttribute('aria-describedby', alert.id);
-    expect(roomsTo()).toHaveFocus();
-    expect(currentPath()).toBe('/search');
-    expect(api.calls(SEARCH)).toHaveLength(1);
-    view.unmount();
-    vi.unstubAllGlobals();
-
     // The sort survives apply.
     mockApi({ [SEARCH]: [json(page([]))] });
     render('/search?sort=price_asc');
@@ -312,13 +339,13 @@ describe('SearchPage', () => {
   });
 
   it('ac3_focus_after_apply_and_clear', async () => {
-    // An Apply that changes the URL remounts the form (its key), so focus moves to the count line.
+    // An Apply that changes the URL closes the sheet, and focus moves to the count line.
     mockApi({ [SEARCH]: [json(page([publicListing()]))] });
     let view = render('/search');
     await screen.findByText(i18n.t('search.count', { count: 1 }));
     openPanel();
     fireEvent.change(priceTo(), { target: { value: '8000' } });
-    let applyButton = screen.getByRole('button', { name: he.search.apply });
+    const applyButton = screen.getByRole('button', { name: he.search.apply });
     act(() => applyButton.focus());
     apply();
     expect(currentPath()).toBe('/search?price_max=8000');
@@ -327,19 +354,17 @@ describe('SearchPage', () => {
     });
     expect(applyButton).not.toBeInTheDocument();
 
-    // Apply with unchanged filters: the URL and the form stay, and so does focus on Apply.
-    applyButton = screen.getByRole('button', { name: he.search.apply });
-    act(() => applyButton.focus());
+    // Apply with unchanged filters: the URL stays, and focus returns to the toggle.
+    openPanel();
     apply();
     expect(currentPath()).toBe('/search?price_max=8000');
     await settle();
-    expect(applyButton).toBeInTheDocument();
-    expect(applyButton).toHaveFocus();
+    expectSheetClosed();
+    expect(screen.getByRole('button', { name: /^מסננים/ })).toHaveFocus();
 
     // Clear: the count line again.
-    const clearButton = screen.getByRole('button', { name: he.search.clear });
-    act(() => clearButton.focus());
-    fireEvent.click(clearButton);
+    openPanel();
+    clearInSheet();
     expect(currentPath()).toBe('/search');
     await vi.waitFor(() => {
       expect(liveRegion()).toHaveFocus();
@@ -948,13 +973,16 @@ describe('SearchPage', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(he.search.title);
 
     const toggle = screen.getByRole('button', { name: he.search.filters });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
-    expect(panel).toHaveAttribute('hidden');
+    expect(toggle).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(toggle).not.toHaveAttribute('aria-expanded');
+    expect(toggle).not.toHaveAttribute('aria-controls');
+    expectSheetClosed();
+    // No inline panel on a phone: the filters are only in the sheet.
+    expect(screen.queryByRole('region', { name: he.search.filters })).toBeNull();
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(panel).not.toHaveAttribute('hidden');
-    expect(panel).toBeVisible();
+    expect(sheet()).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: he.search.closeFilters }));
+    expectSheetClosed();
 
     // The toolbar (the sort and the view toggle), then the nudge, then the count line.
     const sort = screen.getByLabelText(he.search.sort.label);
@@ -988,10 +1016,19 @@ describe('SearchPage', () => {
       `כניסה עד ${formatDate('2027-01-01')}`,
       he.search.feature.pets,
     ]);
-    // Static: no button inside the list.
+    // Each tag has its own remove button, named after it (spec 0023a).
     expect(
-      within(screen.getByRole('list', { name: he.search.tags.label })).queryAllByRole('button'),
-    ).toHaveLength(0);
+      within(screen.getByRole('list', { name: he.search.tags.label }))
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(
+      [
+        'עד 8,000 ₪',
+        'חדרים: 3–4',
+        `כניסה עד ${formatDate('2027-01-01')}`,
+        he.search.feature.pets,
+      ].map((name) => i18n.t('search.tags.remove', { name })),
+    );
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -1006,6 +1043,14 @@ describe('SearchPage', () => {
     view = render('/search?rooms_max=4');
     await screen.findAllByRole('article');
     expect(tags()).toEqual(['חדרים: עד 4']);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // One room chip (`n` to `n + 0.5`) reads as "n" (spec 0023a).
+    mockApi({ [SEARCH]: [json(page([publicListing()]))] });
+    view = render('/search?rooms_min=3&rooms_max=3.5');
+    await screen.findAllByRole('article');
+    expect(tags()).toEqual(['חדרים: 3']);
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -1041,10 +1086,12 @@ describe('SearchPage', () => {
         .map((li) => li.textContent),
     ).toEqual([label]);
     // Clearing drops the param, the tag and the check.
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    openPanel();
+    clearInSheet();
     expect(currentPath()).toBe('/search');
-    expect(feature(label)).not.toBeChecked();
     expect(tagList()).toBeNull();
+    openPanel();
+    expect(feature(label)).not.toBeChecked();
     view.unmount();
     vi.unstubAllGlobals();
 
@@ -1118,7 +1165,7 @@ describe('SearchPage', () => {
     expect((mascots()[0]?.getAttribute('src') ?? '').split('/').pop()).toBe(
       'homie-turtle-search.svg',
     );
-    // The panel's own "ניקוי" is hidden on the phone until opened; the empty state's is visible.
+    // The sheet's own "ניקוי" exists only while it is open; the empty state's is visible.
     const clears = screen.getAllByRole('button', { name: he.search.clear });
     expect(clears).toHaveLength(1);
     fireEvent.click(clears[0] as HTMLElement);
@@ -1135,13 +1182,14 @@ describe('SearchPage', () => {
   });
 
   it('ac2_map_move_keeps_the_form', async () => {
+    // On a desktop, where the form stays on the page beside the map.
+    stubDesktop();
     // Replies are built per request: a Response body is read once.
     mockApi({ [SEARCH]: [() => json(page([publicListing({ lat: 32.08, lng: 34.8 })]))] });
     render('/search?view=map');
     // The map mounts once `/me` has answered (a visitor's default view).
     await vi.waitFor(() => lastProps());
     // A filter Apply first: a pushed entry, so Back shows whether a move adds one.
-    openPanel();
     fireEvent.click(feature(he.search.feature.pets));
     apply();
     expect(currentPath()).toBe('/search?pets=true&view=map');
@@ -1204,7 +1252,8 @@ describe('SearchPage', () => {
     });
     expect(params().get('sort')).toBe('price_asc');
     atTheSamePlace();
-    fireEvent.click(screen.getByRole('button', { name: he.search.clear }));
+    openPanel();
+    clearInSheet();
     expect(params().get('pets')).toBeNull();
     expect(params().get('sort')).toBeNull();
     expect(params().get('view')).toBe('map');
@@ -1233,13 +1282,12 @@ describe('SearchPage', () => {
       }
     }
 
-    // An Apply that changes nothing keeps focus on Apply (no form remount, no focus flag)...
-    const applyButton = screen.getByRole('button', { name: he.search.apply });
-    act(() => applyButton.focus());
+    // An Apply that changes nothing returns focus to the toggle (no focus flag)...
+    openPanel();
     apply();
     await settle();
-    expect(applyButton).toBeInTheDocument();
-    expect(applyButton).toHaveFocus();
+    expectSheetClosed();
+    expect(screen.getByRole('button', { name: /^מסננים/ })).toHaveFocus();
     atTheSamePlace();
     // ...so the next view toggle leaves focus on the toggle, not on the count line.
     const list = viewToggle().getByRole('button', { name: he.search.view.list });
@@ -1403,5 +1451,664 @@ describe('SearchPage', () => {
     view = render('/search');
     await screen.findAllByRole('article');
     expect(screen.queryByRole('navigation', { name: he.market.view.label })).toBeNull();
+  });
+});
+
+describe('SearchPage filters (spec 0023a)', () => {
+  const COUNT_TIMEOUT = { timeout: 2000 };
+  /** Longer than the count's 400 ms wait. */
+  const pastTheWait = () => new Promise((r) => setTimeout(r, 480));
+  const picker = () => within(sheet()).getByLabelText(he.search.area);
+  const pickerReady = () =>
+    vi.waitFor(() => {
+      expect(picker()).toBeEnabled();
+    });
+  const pick = (name: string) => {
+    fireEvent.change(picker(), { target: { value: name } });
+  };
+  const submitButton = () => {
+    const button = sheet().querySelector('button[type="submit"]');
+    if (!(button instanceof HTMLButtonElement)) throw new Error('no submit button');
+    return button;
+  };
+  const submit = () => {
+    fireEvent.click(submitButton());
+  };
+  const toggleButton = () => screen.getByRole('button', { name: /^מסננים/ });
+  const closeSheet = () => {
+    fireEvent.click(screen.getByRole('button', { name: he.search.closeFilters }));
+  };
+  const removeLabel = (name: string) => i18n.t('search.tags.remove', { name });
+  const countRequests = (api: ReturnType<typeof mockApi>) =>
+    api
+      .calls(SEARCH)
+      .filter(({ request }) => new URL(request.url).searchParams.get('limit') === '1');
+  const expectLabel = (text: string) =>
+    vi.waitFor(() => {
+      expect(submitButton()).toHaveTextContent(text);
+    }, COUNT_TIMEOUT);
+  const countLabel = (count: number) => i18n.t('search.applyCount', { count });
+  const results = () => json(page([publicListing()]));
+  /** A count's answer: only its `total` is read. */
+  const total = (count: number) => json(page([], count));
+
+  it('ac7_area_filter_applies', async () => {
+    for (const [path, type] of [
+      ['/search', 'apartment'],
+      ['/market', 'room'],
+    ] as const) {
+      const api = mockApi({ [SEARCH]: [results] });
+      const view = render(path);
+      await screen.findAllByRole('article');
+      openPanel();
+      await pickerReady();
+      pick(haifa.name_he);
+      pick(FLORENTIN_LABEL);
+      // Each pick empties the input and becomes a chip, in the order picked.
+      expect(picker()).toHaveValue('');
+      expect(
+        within(sheet())
+          .getAllByRole('button', { name: /^הסרת/ })
+          .map((button) => button.getAttribute('aria-label')),
+      ).toEqual([removeLabel(haifa.name_he), removeLabel(FLORENTIN_LABEL)]);
+      submit();
+
+      expect(params().getAll('area_ids')).toEqual([haifa.id, florentin.id]);
+      await vi.waitFor(() => {
+        expect(api.calls(SEARCH)).toHaveLength(2);
+      });
+      const sentParams = new URL(sent(api, 1).url).searchParams;
+      expect(sentParams.getAll('area_ids')).toEqual([haifa.id, florentin.id]);
+      expect(sentParams.get('listing_type')).toBe(type);
+      // Each area is one active filter.
+      expect(
+        screen.getByRole('button', { name: i18n.t('search.filtersActive', { count: 2 }) }),
+      ).toBeVisible();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ac8_area_picker_rules', async () => {
+    const cities: AreaOut[] = Array.from({ length: 21 }, (_, i) => ({
+      ...gushDan,
+      id: `00000000-0000-0000-0001-${String(i + 1).padStart(12, '0')}`,
+      slug: `s-${String(i + 1)}`,
+      name_he: `עיר ${String(i + 1)}`,
+    }));
+    mockApi({ [SEARCH]: [results], [AREAS]: [() => json([...CATALOGUE, ...cities])] });
+    let view = render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    await pickerReady();
+    const chips = () =>
+      within(sheet())
+        .queryAllByRole('button', { name: /^הסרת/ })
+        .map((button) => button.getAttribute('aria-label'));
+
+    // Enter on a full name picks it and does not submit. "פלורנטין" alone is the start of its own
+    // label, so typing it waits for Enter.
+    fireEvent.change(picker(), { target: { value: florentin.name_he } });
+    expect(chips()).toEqual([]);
+    expect(fireEvent.keyDown(picker(), { key: 'Enter' })).toBe(false);
+    expect(chips()).toEqual([removeLabel(FLORENTIN_LABEL)]);
+    expect(currentPath()).toBe('/search');
+
+    // Enter on a name that matches nothing says so and does not submit.
+    fireEvent.change(picker(), { target: { value: 'אין כזה' } });
+    expect(fireEvent.keyDown(picker(), { key: 'Enter' })).toBe(false);
+    expect(within(sheet()).getByRole('alert')).toHaveTextContent(he.areas.notFound);
+    expect(currentPath()).toBe('/search');
+    fireEvent.change(picker(), { target: { value: '' } });
+
+    // A repeated pick does nothing.
+    pick(FLORENTIN_LABEL);
+    expect(chips()).toEqual([removeLabel(FLORENTIN_LABEL)]);
+
+    // Backspace in the empty input removes the last chip.
+    pick(haifa.name_he);
+    fireEvent.keyDown(picker(), { key: 'Backspace' });
+    expect(chips()).toEqual([removeLabel(FLORENTIN_LABEL)]);
+
+    // A chip's button removes it and leaves focus in the picker.
+    fireEvent.click(within(sheet()).getByRole('button', { name: removeLabel(FLORENTIN_LABEL) }));
+    expect(chips()).toEqual([]);
+    expect(picker()).toHaveFocus();
+
+    // Enter on the empty input is left to the browser, which submits the form.
+    pick(haifa.name_he);
+    expect(fireEvent.keyDown(picker(), { key: 'Enter' })).toBe(true);
+    fireEvent.submit(submitButton().form as HTMLFormElement);
+    expect(params().getAll('area_ids')).toEqual([haifa.id]);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // A 21st area shows the limit and is not added; the next change clears the message.
+    mockApi({ [SEARCH]: [results], [AREAS]: [() => json(cities)] });
+    const twenty = cities.slice(0, 20);
+    view = render(`/search?${twenty.map(({ id }) => `area_ids=${id}`).join('&')}`);
+    await screen.findAllByRole('article');
+    openPanel();
+    await pickerReady();
+    expect(chips()).toHaveLength(20);
+    pick('עיר 21');
+    expect(within(sheet()).getByRole('alert')).toHaveTextContent(he.profile.errors.areasMax);
+    expect(chips()).toHaveLength(20);
+    fireEvent.keyDown(picker(), { key: 'Backspace' });
+    expect(chips()).toHaveLength(19);
+    expect(within(sheet()).queryByRole('alert')).toBeNull();
+  });
+
+  it('ac8_areas_failure_leaves_the_other_filters_working', async () => {
+    mockApi({ [SEARCH]: [results], [AREAS]: [json({ detail: 'boom' }, 500)] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    const alert = await within(sheet()).findByRole('alert');
+    expect(within(alert).getByRole('button', { name: he.common.retry })).toBeVisible();
+    fireEvent.click(feature(he.search.feature.pets));
+    submit();
+    expect(currentPath()).toBe('/search?pets=true');
+  });
+
+  it('ac9_sheet_apply_closes', async () => {
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    // A modal with its title, and no second heading from the form.
+    expect(sheet()).toHaveAttribute('open');
+    expect(
+      within(sheet()).getAllByRole('heading', { level: 2, name: he.search.filters }),
+    ).toHaveLength(1);
+    fireEvent.click(feature(he.search.feature.pets));
+    submit();
+    expect(currentPath()).toBe('/search?pets=true');
+    expectSheetClosed();
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+  });
+
+  it('ac9_rotating_to_desktop_leaves_one_form', async () => {
+    let desktop = false;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal('matchMedia', (media: string) => ({
+      matches: desktop && media === '(min-width: 1024px)',
+      media,
+      addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    }));
+    mockApi({ [SEARCH]: [results] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    expect(screen.queryByRole('region', { name: he.search.filters })).toBeNull();
+    act(() => {
+      desktop = true;
+      for (const listener of listeners) listener();
+    });
+    expectSheetClosed();
+    expect(screen.getByRole('region', { name: he.search.filters })).toBeVisible();
+    expect(screen.getAllByRole('group', { name: he.search.price })).toHaveLength(1);
+  });
+
+  it('ac10_sheet_discard', async () => {
+    const api = mockApi({ [SEARCH]: [results] });
+    render('/search?price_max=8000');
+    await screen.findAllByRole('article');
+
+    // The X.
+    openPanel();
+    fireEvent.change(priceTo(), { target: { value: '5000' } });
+    fireEvent.click(feature(he.search.feature.pets));
+    closeSheet();
+    expectSheetClosed();
+    expect(toggleButton()).toHaveFocus();
+    expect(currentPath()).toBe('/search?price_max=8000');
+    openPanel();
+    expect(priceTo()).toHaveValue('8000');
+    expect(feature(he.search.feature.pets)).not.toBeChecked();
+
+    // Esc.
+    fireEvent.change(priceTo(), { target: { value: '5000' } });
+    act(() => {
+      sheet().dispatchEvent(new Event('cancel', { cancelable: true }));
+    });
+    expectSheetClosed();
+    expect(toggleButton()).toHaveFocus();
+    openPanel();
+    expect(priceTo()).toHaveValue('8000');
+    expect(api.calls(SEARCH)).toHaveLength(1);
+  });
+
+  it('ac11_sheet_invalid_and_clear', async () => {
+    mockApi({ [SEARCH]: [results] });
+    render('/search?pets=true');
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.change(priceFrom(), { target: { value: '200000' } });
+    submit();
+    // Stays open, with the error on the focused field.
+    expect(sheet()).toBeVisible();
+    expect(within(sheet()).getByRole('alert')).toHaveTextContent(
+      i18n.t('listings.errors.range', { min: 0, max: 100000 }),
+    );
+    expect(priceFrom()).toHaveFocus();
+    expect(currentPath()).toBe('/search?pets=true');
+
+    clearInSheet();
+    expect(currentPath()).toBe('/search');
+    expectSheetClosed();
+    await vi.waitFor(() => {
+      expect(liveRegion()).toHaveFocus();
+    });
+  });
+
+  it('ac12_live_count_labels', async () => {
+    let api = mockApi({ [SEARCH]: [results(), total(1), total(2), total(7), total(0)] });
+    let view = render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    expect(within(sheet()).getByRole('status')).toBeEmptyDOMElement();
+
+    fireEvent.click(feature(he.search.feature.pets));
+    await expectLabel(he.search.applyCount_one);
+    expect(query(at(countRequests(api), 0).request)).toEqual(
+      expected({
+        listing_type: 'apartment',
+        pets: 'true',
+        sort: 'newest',
+        limit: '1',
+        offset: '0',
+      }),
+    );
+    // Repeated for a screen reader, in a status that is not the results' `aria-live` line.
+    const status = within(sheet()).getByRole('status');
+    expect(status).toHaveTextContent(he.search.applyCount_one);
+    expect(status).not.toHaveAttribute('aria-live');
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+
+    fireEvent.click(feature(he.search.feature.furnished));
+    await expectLabel(he.search.applyCount_two);
+    fireEvent.click(feature(he.search.feature.elevator));
+    await expectLabel(countLabel(7));
+    // At zero the button says so and still works.
+    fireEvent.click(feature(he.search.feature.parking));
+    await expectLabel(he.search.applyNone);
+    expect(submitButton()).toBeEnabled();
+    submit();
+    expect(currentPath()).toBe('/search?pets=true&furnished=true&elevator=true&parking=true');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The same draft on the two sides is two counts, never one shared answer.
+    const client = testQueryClient();
+    api = mockApi({ [SEARCH]: [results(), total(3), results(), total(4)] });
+    view = render('/search', client);
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    await expectLabel(countLabel(3));
+    view.unmount();
+    render('/market', client);
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    await expectLabel(countLabel(4));
+    expect(
+      countRequests(api).map(({ request }) =>
+        new URL(request.url).searchParams.get('listing_type'),
+      ),
+    ).toEqual(['apartment', 'room']);
+  });
+
+  it('ac13_live_count_requests', async () => {
+    // On load, with the sheet open, and for a draft back at the URL's filters: nothing.
+    let api = mockApi({ [SEARCH]: [results] });
+    let view = render('/search?pets=true');
+    await screen.findAllByRole('article');
+    await pastTheWait();
+    openPanel();
+    await pastTheWait();
+    fireEvent.click(feature(he.search.feature.pets));
+    fireEvent.click(feature(he.search.feature.pets));
+    await pastTheWait();
+    expect(countRequests(api)).toHaveLength(0);
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+
+    // An invalid draft: nothing, whichever rule it breaks.
+    fireEvent.change(priceFrom(), { target: { value: '200000' } });
+    await pastTheWait();
+    fireEvent.change(priceFrom(), { target: { value: '9000' } });
+    fireEvent.change(priceTo(), { target: { value: '8000' } });
+    await pastTheWait();
+    expect(countRequests(api)).toHaveLength(0);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The map view: nothing.
+    api = mockApi({ [SEARCH]: [results] });
+    view = render('/search?view=map');
+    await vi.waitFor(() => lastProps());
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    await pastTheWait();
+    expect(countRequests(api)).toHaveLength(0);
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    expect(within(sheet()).queryByRole('status')).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Rapid edits: one request, for the last draft.
+    api = mockApi({ [SEARCH]: [results(), total(2)] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    fireEvent.click(feature(he.search.feature.furnished));
+    fireEvent.click(feature(he.search.feature.elevator));
+    await expectLabel(he.search.applyCount_two);
+    await pastTheWait();
+    expect(countRequests(api)).toHaveLength(1);
+    const sentParams = new URL(at(countRequests(api), 0).request.url).searchParams;
+    expect(sentParams.get('pets')).toBe('true');
+    expect(sentParams.get('elevator')).toBe('true');
+  });
+
+  it('ac13_count_waits_400ms_after_the_last_edit', async () => {
+    const api = mockApi({ [SEARCH]: [results(), total(2)] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const advance = (ms: number) =>
+        act(async () => {
+          await vi.advanceTimersByTimeAsync(ms);
+        });
+      fireEvent.click(feature(he.search.feature.pets));
+      await advance(399);
+      // Each edit starts the wait again.
+      fireEvent.click(feature(he.search.feature.furnished));
+      await advance(399);
+      expect(countRequests(api)).toHaveLength(0);
+      await advance(1);
+      await advance(50);
+      expect(countRequests(api)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ac14_live_count_stale_and_error', async () => {
+    const slow = deferred();
+    const api = mockApi({
+      [SEARCH]: [
+        results(),
+        total(5),
+        slow.promise,
+        json({ detail: 'boom' }, 500),
+        json({ detail: 'rate_limited' }, 429),
+        total(8),
+      ],
+    });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    await expectLabel(countLabel(5));
+
+    // Back at a draft already counted: the plain words while it waits, then its number, unasked.
+    fireEvent.click(feature(he.search.feature.furnished));
+    fireEvent.click(feature(he.search.feature.furnished));
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    await expectLabel(countLabel(5));
+    expect(countRequests(api)).toHaveLength(1);
+
+    // A newer draft: the old number goes at once, while it waits and while it loads.
+    fireEvent.click(feature(he.search.feature.furnished));
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    expect(within(sheet()).getByRole('status')).toBeEmptyDOMElement();
+    await vi.waitFor(() => {
+      expect(countRequests(api)).toHaveLength(2);
+    }, COUNT_TIMEOUT);
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    slow.resolve(total(6));
+    await expectLabel(countLabel(6));
+
+    // A failed count: the plain label and no message.
+    fireEvent.click(feature(he.search.feature.elevator));
+    await vi.waitFor(() => {
+      expect(countRequests(api)).toHaveLength(3);
+    }, COUNT_TIMEOUT);
+    await settle();
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    expect(within(sheet()).queryByRole('alert')).toBeNull();
+
+    // A 429: the plain label, and no more counts from this form.
+    fireEvent.click(feature(he.search.feature.parking));
+    await vi.waitFor(() => {
+      expect(countRequests(api)).toHaveLength(4);
+    }, COUNT_TIMEOUT);
+    await settle();
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    fireEvent.click(feature(he.search.feature.shelter));
+    await pastTheWait();
+    expect(countRequests(api)).toHaveLength(4);
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+
+    // A new form counts again (a draft not asked before: a fresh answer would be reused).
+    closeSheet();
+    openPanel();
+    fireEvent.click(feature(he.search.feature.shelter));
+    await expectLabel(countLabel(8));
+    expect(countRequests(api)).toHaveLength(5);
+
+    // Apply works whatever the count did.
+    submit();
+    expect(currentPath()).toBe('/search?shelter=true');
+  });
+
+  it('ac14_apply_works_while_the_count_loads', async () => {
+    const slow = deferred();
+    const api = mockApi({ [SEARCH]: [results(), slow.promise, results()] });
+    render('/search');
+    await screen.findAllByRole('article');
+    openPanel();
+    fireEvent.click(feature(he.search.feature.pets));
+    await vi.waitFor(() => {
+      expect(countRequests(api)).toHaveLength(1);
+    }, COUNT_TIMEOUT);
+    expect(submitButton()).toHaveTextContent(he.search.apply);
+    submit();
+    expect(currentPath()).toBe('/search?pets=true');
+    expectSheetClosed();
+    slow.resolve(total(1));
+  });
+
+  it('ac15_remove_tags', async () => {
+    mockApi({ [SEARCH]: [results] });
+    vi.mocked(capture).mockClear();
+    const area = (id: string) => `area_ids=${id}`;
+    const url =
+      `/search?${area(haifa.id)}&${area(florentin.id)}&price_min=4000&price_max=8000` +
+      '&rooms_min=3&rooms_max=3.5&available_by=2027-01-01&pets=true&sort=price_asc' +
+      '&c=32.08%2C34.8&z=14';
+    let view = render(url);
+    await screen.findAllByRole('article');
+    const list = () => within(screen.getByRole('list', { name: he.search.tags.label }));
+    await vi.waitFor(() => {
+      expect(list().getAllByRole('listitem')[0]).toHaveTextContent(haifa.name_he);
+    });
+    expect(list().getAllByRole('listitem')[1]).toHaveTextContent(FLORENTIN_LABEL);
+
+    const steps: [string, string[], number][] = [
+      [haifa.name_he, ['area_ids'], 7],
+      ['4,000–8,000 ₪', ['price_min', 'price_max'], 5],
+      ['חדרים: 3', ['rooms_min', 'rooms_max'], 3],
+      [`כניסה עד ${formatDate('2027-01-01')}`, ['available_by'], 2],
+      [he.search.feature.pets, ['pets'], 1],
+    ];
+    for (const [name, gone, left] of steps) {
+      act(() => {
+        document.body.focus();
+      });
+      fireEvent.click(list().getByRole('button', { name: removeLabel(name) }));
+      for (const key of gone) {
+        if (key !== 'area_ids') expect(params().has(key), key).toBe(false);
+      }
+      // The sort and the map's position stay.
+      expect(params().get('sort')).toBe('price_asc');
+      expect(params().get('c')).toBe('32.08,34.8');
+      expect(params().get('z')).toBe('14');
+      await vi.waitFor(() => {
+        expect(liveRegion()).toHaveFocus();
+      });
+      expect(capture).toHaveBeenLastCalledWith('search_run', { type: 'apartment', filters: left });
+    }
+    // One area was removed, the other stays until its own tag goes.
+    expect(params().getAll('area_ids')).toEqual([florentin.id]);
+    fireEvent.click(list().getByRole('button', { name: removeLabel(FLORENTIN_LABEL) }));
+    expect(params().has('area_ids')).toBe(false);
+    expect(screen.queryByRole('list', { name: he.search.tags.label })).toBeNull();
+    expect(capture).toHaveBeenLastCalledWith('search_run', { type: 'apartment', filters: 0 });
+    // NF3: counts only, never a value.
+    const events = JSON.stringify(vi.mocked(capture).mock.calls);
+    expect(events).not.toContain(haifa.id);
+    expect(events).not.toContain(florentin.id);
+    expect(events).not.toContain('4000');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // The map view stays the map view.
+    mockApi({ [SEARCH]: [results] });
+    view = render('/search?pets=true&view=map&c=32.08%2C34.8&z=14');
+    await vi.waitFor(() => lastProps());
+    fireEvent.click(screen.getByRole('button', { name: removeLabel(he.search.feature.pets) }));
+    expect(params().has('pets')).toBe(false);
+    expect(params().get('view')).toBe('map');
+    expect(params().get('c')).toBe('32.08,34.8');
+  });
+
+  it('ac16_area_tag_fallback', async () => {
+    const fallback = he.search.tags.areaFallback;
+    const tagButton = () => screen.getByRole('button', { name: removeLabel(fallback) });
+
+    // `/areas` failed: the tag still shows, and goes.
+    let api = mockApi({ [SEARCH]: [results], [AREAS]: [json({ detail: 'boom' }, 500)] });
+    let view = render(`/search?area_ids=${haifa.id}`);
+    await screen.findAllByRole('article');
+    await vi.waitFor(() => {
+      expect(api.calls(AREAS).length).toBeGreaterThan(0);
+    });
+    expect(tagButton()).toBeVisible();
+    fireEvent.click(tagButton());
+    expect(currentPath()).toBe('/search');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // An id the catalogue does not hold.
+    const unknown = '00000000-0000-0000-0000-0000000dead0';
+    mockApi({ [SEARCH]: [results] });
+    view = render(`/search?area_ids=${unknown}`);
+    await screen.findAllByRole('article');
+    await settle();
+    expect(tagButton()).toBeVisible();
+    fireEvent.click(tagButton());
+    expect(currentPath()).toBe('/search');
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // While `/areas` loads; its answer then names the tag.
+    const areas = deferred();
+    mockApi({ [SEARCH]: [results], [AREAS]: [areas.promise] });
+    view = render(`/search?area_ids=${haifa.id}`);
+    await screen.findAllByRole('article');
+    expect(tagButton()).toBeVisible();
+    areas.resolve(json(CATALOGUE));
+    expect(await screen.findByRole('button', { name: removeLabel(haifa.name_he) })).toBeVisible();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // Without an area filter the tags never ask for `/areas`.
+    api = mockApi({ [SEARCH]: [results] });
+    render('/search?pets=true');
+    await screen.findAllByRole('article');
+    await settle();
+    expect(api.calls(AREAS)).toHaveLength(0);
+  });
+
+  it('ac17_rooms_url_range_kept', async () => {
+    mockApi({ [SEARCH]: [results] });
+    render('/search?rooms_min=2.5');
+    await screen.findAllByRole('article');
+    openPanel();
+    expect(roomChipsChecked()).toEqual(['3', '4', he.search.roomsFivePlus]);
+    // RTL must not turn "5+" into "+5".
+    expect(roomChip(he.search.roomsFivePlus).labels?.[0]).toHaveAttribute('dir', 'ltr');
+    // Another edit keeps the range the chips cannot express.
+    fireEvent.click(feature(he.search.feature.pets));
+    submit();
+    expect(params().get('rooms_min')).toBe('2.5');
+    expect(params().has('rooms_max')).toBe(false);
+
+    // The first tap replaces it.
+    openPanel();
+    fireEvent.click(roomChip('4'));
+    expect(roomChipsChecked()).toEqual(['4']);
+    submit();
+    expect(params().get('rooms_min')).toBe('4');
+    expect(params().get('rooms_max')).toBe('4.5');
+
+    // 5+ has no maximum.
+    openPanel();
+    fireEvent.click(roomChip('4'));
+    fireEvent.click(roomChip(he.search.roomsFivePlus));
+    submit();
+    expect(params().get('rooms_min')).toBe('5');
+    expect(params().has('rooms_max')).toBe(false);
+  });
+
+  it('ac18_list_apply_drops_old_position', async () => {
+    const pin = '00000000-0000-0000-0000-00000000beef';
+    const position = `c=32.08%2C34.8&z=14&pin=${pin}`;
+    mockApi({ [SEARCH]: [results] });
+    let view = render(`/search?${position}`);
+    await screen.findAllByRole('article');
+    openPanel();
+    await pickerReady();
+    pick(haifa.name_he);
+    submit();
+    expect(params().getAll('area_ids')).toEqual([haifa.id]);
+    for (const key of ['c', 'z', 'pin']) expect(params().has(key), key).toBe(false);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // No new area: the position stays, also when an area is taken away.
+    mockApi({ [SEARCH]: [results] });
+    view = render(`/search?area_ids=${haifa.id}&area_ids=${florentin.id}&${position}`);
+    await screen.findAllByRole('article');
+    openPanel();
+    await pickerReady();
+    fireEvent.click(within(sheet()).getByRole('button', { name: removeLabel(haifa.name_he) }));
+    fireEvent.click(feature(he.search.feature.pets));
+    submit();
+    expect(params().getAll('area_ids')).toEqual([florentin.id]);
+    expect(params().get('c')).toBe('32.08,34.8');
+    expect(params().get('pin')).toBe(pin);
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    // In the map view the map itself moves, so Apply leaves the position to it.
+    mockApi({ [SEARCH]: [results] });
+    render(`/search?view=map&${position}`);
+    await vi.waitFor(() => lastProps());
+    openPanel();
+    await pickerReady();
+    pick(haifa.name_he);
+    submit();
+    expect(params().get('c')).toBe('32.08,34.8');
   });
 });

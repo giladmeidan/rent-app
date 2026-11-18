@@ -423,10 +423,11 @@
     "filters": "מסננים",
     "filtersActive": "מסננים · {{count}}",
     "price": "מחיר חודשי",
+    "area": "עיר או שכונה",
     "rooms": "חדרים",
+    "roomsFivePlus": "5+",
     "from": "מ־",
     "to": "עד",
-    "any": "הכול",
     "availableBy": "תאריך כניסה",
     "availableByHint": "דירות שאפשר להיכנס אליהן עד התאריך הזה",
     "features": "מאפיינים",
@@ -438,6 +439,10 @@
       "shelter": "מרחב מוגן"
     },
     "apply": "הצגת תוצאות",
+    "applyCount_one": "הצגת מודעה אחת",
+    "applyCount_two": "הצגת 2 מודעות",
+    "applyCount_other": "הצגת {{count}} מודעות",
+    "applyNone": "אין מודעות בסינון הזה",
     "clear": "ניקוי",
     "closeFilters": "סגירת המסננים",
     "sort": {
@@ -454,8 +459,7 @@
     "empty": "לא מצאנו מודעות שמתאימות לחיפוש. אפשר להרחיב את המסננים.",
     "more": "עוד מודעות",
     "errors": {
-      "priceOrder": "המחיר המינימלי גבוה מהמקסימלי",
-      "roomsOrder": "מספר החדרים המינימלי גבוה מהמקסימלי"
+      "priceOrder": "המחיר המינימלי גבוה מהמקסימלי"
     },
     "view": {
       "label": "תצוגת תוצאות",
@@ -500,7 +504,9 @@
       "roomsRange": "{{min}}–{{max}}",
       "roomsAtLeast": "{{min}} ומעלה",
       "roomsUpTo": "עד {{max}}",
-      "availableBy": "כניסה עד {{date}}"
+      "availableBy": "כניסה עד {{date}}",
+      "remove": "הסרת {{name}}",
+      "areaFallback": "אזור נבחר"
     },
     "sideMap": {
       "label": "מפת התוצאות שברשימה",
