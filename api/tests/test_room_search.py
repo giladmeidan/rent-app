@@ -1,6 +1,7 @@
 """Rooms in search, on the map, on their page and in apply (spec 0007b): AC1-AC7 (AC2's 422 half
 is also in `test_search.py::test_ac7_validation_rejects_bad_params`, AC6's migration half is
-`test_migrations.py::test_ac6_application_listing_type_backfill_and_downgrade`).
+`test_migrations.py::test_ac6_application_listing_type_backfill_and_downgrade`); spec 0023a AC5
+(the area filter on rooms).
 
 Every listing date comes from `test_matching`'s UTC `TODAY` (`_l0`). `R0` is `L0` as a room for
 two flatmates, for anyone unless a test says otherwise. A room section is `make_profile(...,
@@ -282,6 +283,26 @@ def test_ac3_misfit_rooms_hidden_per_seeker(
     for name, listing_id in rooms.items():
         assert _detail(caller, listing_id)["room_fit"] is fits[name], name
     assert _detail(caller, apartment)["room_fit"] is None
+
+
+def test_ac5_area_filter_on_rooms(
+    client: TestClient,
+    outbox: Outbox,
+    db_engine: Engine,
+    gush_dan: uuid.UUID,
+    owner: uuid.UUID,
+) -> None:
+    """Spec 0023a AC5: `area_ids` holds on the market's search, and the room fit still hides."""
+    other_city = _area(db_engine, 6300, active=True)
+    fits = _r0(db_engine, owner, gush_dan, gender_preference="any")
+    misfit = _r0(db_engine, owner, gush_dan, gender_preference="women")
+    _r0(db_engine, owner, other_city, gender_preference="any")
+    _l0(db_engine, owner, gush_dan)  # an apartment in the city is never a room result
+    query = f"listing_type=room&area_ids={gush_dan}"
+
+    assert _id_set(client, query) == {fits, misfit}  # a visitor: no fit applies
+    man = _seeker(client, outbox, db_engine, gush_dan, gender="man", flatmate_gender="any")
+    assert _id_set(man, query) == {fits}
 
 
 def test_ac4_fit_filter_pages_counts_and_adds_no_statement(

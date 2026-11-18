@@ -1,7 +1,7 @@
 ---
 id: 0023a
 title: A seeker narrows apartments and rooms to chosen cities or neighbourhoods, sees how many results a filter gives before applying it, and edits filters comfortably on a phone
-status: verified
+status: in-progress
 depends_on: []
 reviewers: [code, qa, ux, perf]   # perf: a new search predicate and a new source of search requests
 estimate: 1 long coder run        # full-stack on purpose; if it must shrink, the room chips move out first
