@@ -43,7 +43,7 @@ export EMAIL_BLOCK_KEY   ?= dev-only-email-block-key-0123456789abcdef
 export ADMIN_PORT        ?= 8001
 export ADMIN_DB_PASSWORD ?= dev-only-admin-db-password
 
-.PHONY: dev dev-api admin down migrate seed import-areas rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate waitlist-secret deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web
+.PHONY: dev dev-api admin down migrate seed import-areas rent-import rent-backtest cbs-rent-import cbs-rent-history test test-api test-web test-waitlist waitlist-migrate waitlist-secret deploy-waitlist waitlist-stats waitlist-delete lint lint-api lint-web client i18n-check e2e merge build-web screens build-check icons preview-web audit-web deploy-guard deploy-redis deploy-api deploy-admin deploy-web admin-role-prod admin-role-verify-prod import-areas-prod check-images
 
 # The api publishes on IPv4 loopback only, and its CORS allows exactly the localhost web origin.
 API_HEALTH := http://127.0.0.1:$(API_PORT)/health
@@ -180,6 +180,55 @@ waitlist-stats:
 ## the address (no SQL or shell ever sees the text) and counts again
 waitlist-delete:
 	cd waitlist && WRANGLER_VERSION=$(WRANGLER_VERSION) node delete.mjs
+
+## deploy-guard: refuse a production deploy unless `fly` is on PATH and this is a clean checkout of
+## origin/main (spec 0013a), so no local commit or untracked file reaches an image. Ignored files are
+## `.dockerignore`'s job. Everything runs in the recipe: test_dotenv.py includes this file
+deploy-guard:
+	@command -v fly >/dev/null 2>&1 || { echo "deploy: fly is not on PATH (infra/DEPLOY.md, section 1)" >&2; exit 1; }
+	@git fetch -q origin main || { echo "deploy: git fetch origin main failed" >&2; exit 1; }
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "deploy: HEAD is not origin/main; deploy from a clean checkout of main" >&2; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "deploy: the working tree is not clean; deploy from a clean checkout of main" >&2; exit 1; }
+
+## deploy-redis: build on Fly's remote builder (the right architecture from any computer) and deploy
+## the private Redis app (infra/DEPLOY.md, section 3)
+deploy-redis: deploy-guard
+	fly deploy . --config infra/fly/redis.toml --dockerfile infra/Dockerfile.redis --remote-only --ha=false
+
+## deploy-api: deploy the API and the worker; the release step migrates first (infra/DEPLOY.md, section 6)
+deploy-api: deploy-guard
+	fly deploy . --config infra/fly/api.toml --dockerfile infra/Dockerfile.api --remote-only --ha=false --env SENTRY_RELEASE=$$(git rev-parse HEAD)
+
+## deploy-admin: deploy the private admin dashboard (infra/DEPLOY.md, section 7)
+deploy-admin: deploy-guard
+	fly deploy . --config infra/fly/admin.toml --dockerfile infra/Dockerfile.admin --remote-only --ha=false
+
+## deploy-web: build the web for https://api.$(DOMAIN), check the build and upload it to the Pages
+## project homie (`make deploy-web DOMAIN=<domain> CONTACT_EMAIL=<address>`, or both in `.env`)
+deploy-web: deploy-guard
+	@test -n "$(DOMAIN)" && test -n "$$CONTACT_EMAIL" && test "$$CONTACT_EMAIL" != contact@example.com || { echo "usage: make deploy-web DOMAIN=<domain> CONTACT_EMAIL=<public contact address>" >&2; exit 1; }
+	$(MAKE) client
+	VITE_API_URL=https://api.$(DOMAIN) VITE_CONTACT_EMAIL="$$CONTACT_EMAIL" VITE_SENTRY_ENVIRONMENT=production VITE_SENTRY_RELEASE=$$(git rev-parse HEAD) $(MAKE) build-web
+	$(MAKE) build-check
+	cd web && pnpm dlx wrangler@$(WRANGLER_VERSION) pages deploy dist --project-name homie --branch main
+
+## admin-role-prod: apply homie_admin's grants on production from the API machine, which has
+## DATABASE_URL (infra/DEPLOY.md, section 7)
+admin-role-prod: deploy-guard
+	fly ssh console --config infra/fly/api.toml --process-group app -C "/opt/venv/bin/python /app/scripts/admin_role.py --existing-role"
+
+## admin-role-verify-prod: prove the admin's real session has only its rights; changes nothing
+admin-role-verify-prod:
+	fly ssh console --config infra/fly/admin.toml -C "/opt/venv/bin/python /app/scripts/admin_role.py --verify"
+
+## import-areas-prod: `import-areas` on a worker machine (about an hour); by hand, never by a deploy
+## (infra/DEPLOY.md, section 6)
+import-areas-prod:
+	fly ssh console --config infra/fly/api.toml --process-group worker -C "/opt/venv/bin/python /app/scripts/import_areas.py"
+
+## check-images: build the three production images and check them in throwaway containers (spec 0013a)
+check-images:
+	sh infra/check-images.sh
 
 ## lint: api ruff (lint + format) and mypy --strict, then web eslint, prettier --check, tsc --noEmit
 lint: lint-api lint-web

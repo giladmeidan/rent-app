@@ -1,0 +1,19 @@
+# Redis (spec 0013a): no public address, reachable only as homie-redis.internal:6379 on the org's
+# private network, so no [http_service] and no [[services]]. REDIS_PASSWORD is a Fly secret.
+app = "homie-redis"
+primary_region = "fra"
+
+[mounts]
+source = "redis_data"
+destination = "/data"
+
+[checks.redis]
+type = "tcp"
+port = 6379
+interval = "15s"
+timeout = "5s"
+grace_period = "30s"
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "256mb"

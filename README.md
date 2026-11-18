@@ -53,6 +53,8 @@ Each target is documented by the `##` comment above it in the `Makefile`. The ev
 `i18n-check`, `build-web`, `build-check`, `screens` (screenshot check, mocked API), `merge PR=N` (CLAUDE.md
 rule 8). `e2e` runs only in CI. The web targets run `pnpm install --frozen-lockfile` themselves when needed.
 
+Production runs on Fly.io and Cloudflare Pages: the `deploy-*` targets and every one-time step are in the runbook, [`infra/DEPLOY.md`](infra/DEPLOY.md).
+
 The pre-launch waitlist page (`join.<domain>`, its own Cloudflare Pages project and D1) lives in `waitlist/`; its runbook is [`waitlist/README.md`](waitlist/README.md).
 
 ## Configuration

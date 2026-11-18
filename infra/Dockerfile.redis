@@ -1,0 +1,8 @@
+# Redis for production (spec 0013a; infra/fly/redis.toml). Multi-arch index digest: amd64 on Fly,
+# arm64 on a Mac. The shell refuses an empty password, then goes through the image's entrypoint,
+# which fixes the ownership of /data and drops root (a bare `exec redis-server` would stay uid 0).
+# noeviction is today's policy; the cap below the 256 MB VM makes a full Redis refuse writes
+# instead of the machine being OOM-killed.
+FROM redis:7.4.12-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+
+CMD ["sh", "-c", "test -n \"$REDIS_PASSWORD\" || { echo 'REDIS_PASSWORD must be set' >&2; exit 1; }; exec docker-entrypoint.sh redis-server --bind '* -::*' --requirepass \"$REDIS_PASSWORD\" --appendonly yes --dir /data --maxmemory 200mb --maxmemory-policy noeviction"]

@@ -1,0 +1,56 @@
+# The API and the worker (spec 0013a): one Fly app, one image, two process groups. Deployed by
+# `make deploy-api` from the repo root, which names infra/Dockerfile.api and uses the root as the
+# build context. Every secret and every value naming the domain is a Fly secret (infra/DEPLOY.md, 6).
+app = "homie-api"
+primary_region = "fra"
+# uvicorn's graceful shutdown takes up to 5 s, which is also Fly's default: leave it room to finish.
+kill_timeout = 10
+
+[processes]
+app = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 5"
+worker = "arq app.worker.WorkerSettings"
+
+[deploy]
+# Migrations only. Never scripts/seed.py: it would store the rent test fixtures' neighbourhoods.
+release_command = "/opt/venv/bin/alembic upgrade head"
+
+[env]
+EMAIL_BACKEND = "smtp"
+COOKIE_SECURE = "true"
+GEOCODER = "nominatim"
+PHOTO_BACKEND = "r2"
+RENT_REFERENCE = "off"
+CBS_RENT = "off"
+TRUST_PROXY = "fly"
+SENTRY_ENVIRONMENT = "production"
+
+[http_service]
+processes = ["app"]
+internal_port = 8000
+force_https = true
+auto_stop_machines = "off"
+min_machines_running = 1
+
+# Each open tab holds one SSE stream (/me/events); Fly's default hard limit of 25 would queue the 26th.
+[http_service.concurrency]
+type = "connections"
+soft_limit = 400
+hard_limit = 500
+
+[[http_service.checks]]
+method = "GET"
+path = "/health"
+interval = "15s"
+timeout = "5s"
+grace_period = "30s"
+
+# 1 GB: photo decodes.
+[[vm]]
+processes = ["app"]
+size = "shared-cpu-1x"
+memory = "1gb"
+
+[[vm]]
+processes = ["worker"]
+size = "shared-cpu-1x"
+memory = "512mb"

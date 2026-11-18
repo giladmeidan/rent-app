@@ -12,3 +12,8 @@ node_modules
 web/node_modules
 **/node_modules
 **/.outbox
+**/.media
+web/dist
+web/test-results
+# Test fixtures stay out of production images. Compose bind-mounts api/; tests and seed run on the host.
+api/tests

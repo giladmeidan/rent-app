@@ -96,6 +96,8 @@ jobs:
       - name: Smoke suite (playwright; a shard's failed tests run once more)
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-e2e') }}
         run: make e2e
+      - name: Check production images (`make check-images`)
+        run: make check-images
       # The failed tests' traces (playwright.config.ts: trace retain-on-failure); open with `playwright show-trace`.
       - name: Upload Playwright traces
         if: failure()

@@ -1,7 +1,7 @@
 ---
 id: 0013a
 title: "homie can be deployed to production: Fly.io in Frankfurt with managed Postgres, a private Redis and admin, and the web on Cloudflare Pages, from `make deploy-*` and one runbook"
-status: verified
+status: in-review
 depends_on: []   # 0013b, 0013c, 0013e, 0013f, 0016, 0018, 0019 and 0021 are all merged; 0022a may land either side
 reviewers: [code, security, qa]   # security: admin, Redis and DB exposure, secrets, web security headers; qa (Sonnet): gzip changes API responses; no ux (no screen)
 estimate: 1 coder run   # coder Opus/high (production data, secrets; Speed rule 6)

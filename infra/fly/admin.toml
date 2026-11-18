@@ -1,0 +1,14 @@
+# The admin dashboard (spec 0013a): no public address, reached with `fly proxy 8001:8001`, so no
+# [http_service] and no [[services]]. No [checks] either: Fly checks a port on 0.0.0.0 and the admin
+# listens on IPv6 only. ADMIN_DATABASE_URL, ADMIN_PASSWORD and ADMIN_SECRET_KEY are Fly secrets.
+app = "homie-admin"
+primary_region = "fra"
+
+[env]
+ADMIN_HTTPS_ONLY = "true"
+# `fly proxy` forwards the browser's localhost:8001 Host unchanged.
+ADMIN_ALLOWED_HOSTS = "localhost,127.0.0.1"
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "512mb"
