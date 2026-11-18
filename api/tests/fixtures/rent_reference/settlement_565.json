@@ -1,149 +1,149 @@
 {
- "settlementID": 565,
- "settlementName": "אזור",
- "x": 182049.5905812721,
- "y": 658965.4217499997,
- "otherNeighborhoods": [],
- "otherSettlmentStreets": [
-  {
-   "id": 5650111,
-   "title": "אחד העם"
+  "settlementID": 565,
+  "settlementName": "עיירת הבדיקה",
+  "x": 182500,
+  "y": 659500,
+  "otherNeighborhoods": [],
+  "otherSettlmentStreets": [
+    {
+      "id": 99300001,
+      "title": "רחוב הבוחן"
+    },
+    {
+      "id": 99300002,
+      "title": "רחוב המדגם"
+    },
+    {
+      "id": 99300003,
+      "title": "רחוב הסימולציה"
+    }
+  ],
+  "trends": {
+    "rooms": [
+      {
+        "graphData": [
+          {
+            "settlementPrice": 4337,
+            "countryPrice": 3912,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "settlementPrice": 4437,
+            "countryPrice": 3737,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "settlementPrice": null,
+            "countryPrice": 3737,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "settlementPrice": 4237,
+            "countryPrice": 3887,
+            "year": 2025,
+            "month": 9
+          }
+        ],
+        "numRooms": 3,
+        "hasDeals": 1
+      },
+      {
+        "graphData": [
+          {
+            "settlementPrice": 5837,
+            "countryPrice": 4862,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "settlementPrice": 5537,
+            "countryPrice": 4762,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "settlementPrice": 5687,
+            "countryPrice": 4937,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "settlementPrice": 6137,
+            "countryPrice": 4937,
+            "year": 2025,
+            "month": 9
+          }
+        ],
+        "numRooms": 4,
+        "hasDeals": 1
+      },
+      {
+        "graphData": [
+          {
+            "settlementPrice": null,
+            "countryPrice": 6337,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "settlementPrice": 6687,
+            "countryPrice": 6237,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "settlementPrice": 6687,
+            "countryPrice": 6487,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "settlementPrice": 6687,
+            "countryPrice": 6387,
+            "year": 2025,
+            "month": 9
+          }
+        ],
+        "numRooms": 5,
+        "hasDeals": 1
+      },
+      {
+        "graphData": [
+          {
+            "settlementPrice": 4737,
+            "countryPrice": 5162,
+            "year": 2026,
+            "month": 6
+          },
+          {
+            "settlementPrice": 4537,
+            "countryPrice": 5037,
+            "year": 2026,
+            "month": 3
+          },
+          {
+            "settlementPrice": 4737,
+            "countryPrice": 4937,
+            "year": 2025,
+            "month": 12
+          },
+          {
+            "settlementPrice": 4337,
+            "countryPrice": 5037,
+            "year": 2025,
+            "month": 9
+          }
+        ],
+        "numRooms": "all",
+        "hasDeals": 1
+      }
+    ]
   },
-  {
-   "id": 5650168,
-   "title": "ירושלים"
-  },
-  {
-   "id": 5650127,
-   "title": "העלייה השנייה"
-  }
- ],
- "trends": {
-  "rooms": [
-   {
-    "graphData": [
-     {
-      "settlementPrice": 4300,
-      "countryPrice": 3875,
-      "year": 2026,
-      "month": 6
-     },
-     {
-      "settlementPrice": 4400,
-      "countryPrice": 3700,
-      "year": 2026,
-      "month": 3
-     },
-     {
-      "settlementPrice": null,
-      "countryPrice": 3700,
-      "year": 2025,
-      "month": 12
-     },
-     {
-      "settlementPrice": 4200,
-      "countryPrice": 3850,
-      "year": 2025,
-      "month": 9
-     }
-    ],
-    "numRooms": 3,
-    "hasDeals": 1
-   },
-   {
-    "graphData": [
-     {
-      "settlementPrice": 5800,
-      "countryPrice": 4825,
-      "year": 2026,
-      "month": 6
-     },
-     {
-      "settlementPrice": 5500,
-      "countryPrice": 4725,
-      "year": 2026,
-      "month": 3
-     },
-     {
-      "settlementPrice": 5650,
-      "countryPrice": 4900,
-      "year": 2025,
-      "month": 12
-     },
-     {
-      "settlementPrice": 6100,
-      "countryPrice": 4900,
-      "year": 2025,
-      "month": 9
-     }
-    ],
-    "numRooms": 4,
-    "hasDeals": 1
-   },
-   {
-    "graphData": [
-     {
-      "settlementPrice": null,
-      "countryPrice": 6300,
-      "year": 2026,
-      "month": 6
-     },
-     {
-      "settlementPrice": 6650,
-      "countryPrice": 6200,
-      "year": 2026,
-      "month": 3
-     },
-     {
-      "settlementPrice": 6650,
-      "countryPrice": 6450,
-      "year": 2025,
-      "month": 12
-     },
-     {
-      "settlementPrice": 6650,
-      "countryPrice": 6350,
-      "year": 2025,
-      "month": 9
-     }
-    ],
-    "numRooms": 5,
-    "hasDeals": 1
-   },
-   {
-    "graphData": [
-     {
-      "settlementPrice": 4700,
-      "countryPrice": 5125,
-      "year": 2026,
-      "month": 6
-     },
-     {
-      "settlementPrice": 4500,
-      "countryPrice": 5000,
-      "year": 2026,
-      "month": 3
-     },
-     {
-      "settlementPrice": 4700,
-      "countryPrice": 4900,
-      "year": 2025,
-      "month": 12
-     },
-     {
-      "settlementPrice": 4300,
-      "countryPrice": 5000,
-      "year": 2025,
-      "month": 9
-     }
-    ],
-    "numRooms": "all",
-    "hasDeals": 1
-   }
-  ]
- },
- "version": "20-08-2026",
- "settlementPrice": 4600,
- "neighborhoodsPrices": [],
- "countryPrice": 5349
+  "version": "20-08-2026",
+  "settlementPrice": 4637,
+  "neighborhoodsPrices": [],
+  "countryPrice": 5386
 }

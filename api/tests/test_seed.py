@@ -41,10 +41,10 @@ def test_seed_after_real_import_keeps_neighbourhoods(db_engine: Engine) -> None:
     """Review 0021a1: the fixtures list fewer Tel Aviv neighbourhoods than a real import stores;
     seeding afterwards (every `make dev`) must not deactivate the rest."""
     files = _files()
-    third = {**copy.deepcopy(files[REVIVIM]), "neighborhoodId": 65210099, "neighborhoodName": "ג"}
-    files["neighborhood/rent/65210099.json"] = third
+    third = {**copy.deepcopy(files[REVIVIM]), "neighborhoodId": 99000003, "neighborhoodName": "ג"}
+    files["neighborhood/rent/99000003.json"] = third
     for key in ("otherNeighborhoods", "neighborhoodsPrices"):
-        files[TEL_AVIV][key].append({"id": 65210099})
+        files[TEL_AVIV][key].append({"id": 99000003})
     with get_sessionmaker()() as db:
         assert import_areas(db, FakeRentFetcher(files))["neighbourhoods"] == 3
 
