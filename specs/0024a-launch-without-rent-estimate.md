@@ -1,7 +1,7 @@
 ---
 id: 0024a
 title: "homie launches with no promise of a rent estimate and no nadlan.gov.il content in its public pages or test data"
-status: verified
+status: in-review
 depends_on: []
 reviewers: [code]   # text, test data and one static page; no behaviour change
 estimate: 1 coder run   # coder Sonnet/medium (mechanical; the wording is fixed here; the fixture work is the bulk)

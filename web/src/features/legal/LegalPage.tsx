@@ -54,7 +54,7 @@ export function LegalPage({ kind }: { kind: 'terms' | 'privacy' }) {
           </h2>
           {section.blocks.map((block, i) =>
             'p' in block ? (
-              <p key={i} className="text-body leading-relaxed">
+              <p key={i} className="text-body leading-relaxed [overflow-wrap:anywhere]">
                 <Line>{block.p}</Line>
               </p>
             ) : (
