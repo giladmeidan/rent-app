@@ -69,6 +69,18 @@ describe('LegalPage', () => {
     expect(page).toContain(CONTACT_EMAIL);
   });
 
+  it('ac1_terms_s6_is_the_cbs_credit', () => {
+    const legal = JSON.stringify(he.legal);
+    expect(legal).not.toContain('nadlan');
+    expect(legal).not.toContain('הערכת שכר דירה');
+    expect(he.legal.terms.s6.title).toBe('6. מקורות מידע');
+    expect(he.legal.terms.s6.p1).toContain('הלשכה המרכזית לסטטיסטיקה');
+    expect(he.legal.terms.s6.p1).toContain(
+      'https://data.gov.il/he/datasets/cbs/localities-in-israel',
+    );
+    expect(he.legal.terms.s6.p1).toContain('https://www.cbs.gov.il/en/Pages/Enduser-license.aspx');
+  });
+
   it('ac9_privacy_deletion_anchor', async () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
     await visit('/privacy#deletion');

@@ -3,8 +3,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 
 ## Before going public (Gilad 2026-11-18)
 - [ ] legal · web/src/locales/he.json `legal.*` · finish the legal text, postponed by Gilad: `legal.date`; operator name and ID (`legal.terms.intro`, `legal.privacy.intro`); confirm 18+ (`legal.terms.s2.i1`) and the Tel Aviv-Yafo courts (`legal.terms.s11.p1`); hosting, server location, photo, site and email providers (`legal.privacy.s3.i2`); countries (`legal.privacy.s3.i5`); approve the retention, Google sign-in and 0022a wording; a lawyer's read is advised · **blocks going public**
-- [ ] legal · spec 0024a · remove the rent-estimate promise and nadlan.gov.il from the terms and the waitlist page, and add the CBS credit; then redeploy the waitlist, which still shows the promise (needs Gilad's OK) · **blocks going public**
-- [ ] nadlan · spec 0024a · replace the real nadlan.gov.il fixtures with invented data; the repo is already public and old versions stay in git history unless Gilad approves a purge (default: leave them) · **blocks launch**
+- [ ] nadlan · git history · old real nadlan.gov.il fixtures remain in this public repo's history (before PR #139); purging needs a force push and probably GitHub Support · default: leave them unless Gilad decides otherwise
 - [ ] promo-video · the video still says "בגוש דן", while homie now launches nationally; update it before using it
 - [ ] nadlan · product (after launch) · the rent estimate engine is postponed and big cities have no neighbourhoods. To bring them back: written permission from the Survey of Israel (מפ"י) through the site's contact form (it may set conditions or a fee), or another source with a usable licence
 - [ ] nadlan · local databases · dev stacks that ran `make rent-import` or `make import-areas` hold nadlan data; clear them once nothing depends on it
