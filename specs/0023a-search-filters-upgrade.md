@@ -235,5 +235,17 @@ Accepted at verification, nothing left for the coder to decide:
     Reviewers: code, qa, ux, perf   Estimated: 1 long coder run, 1 review round
     Links: specs/0023a-search-filters-upgrade.md · PRODUCT.md "Search" · Search.dc.html, SearchDesktop.dc.html
 
+    Spec 0023a — Search filters upgrade, phase 1   BUILT, reviewed, awaiting CI and merge
+    Shipped: filter `/search` and `/market` by cities or neighbourhoods, see the count on the apply button, remove
+    filters by tag, edit filters in a full-screen phone sheet, pick rooms with quick choices.
+    Demo: on a phone width open `/search` → מסננים → add a city and watch the button count → apply → remove its tag.
+    Tests: about +30 unit, +6 integration, +2 e2e   CI: on the PR
+    Findings: 1 blocker waived, 5 majors fixed, 10 minors fixed, 17 follow-ups logged.
+    Waived (Gilad 2026-11-18): NF2 misses for a signed-out visitor filtering on 20 broad cities (about 79% of 10,000
+    apartments): search p95 77 to 124 ms, live count 75 to 141 ms, busy Mac in Docker. Index logged in FOLLOWUPS.
+    Decided (Gilad 2026-11-18): phone Back with the sheet open only closes the sheet.
+    Changed in PRODUCT.md: nothing in this branch.
+    Still for Gilad: check the area list inside the sheet on a real phone after merge.
+
 ## Verifier findings
 One round (2026-11-18): 6 must-fix and 10 should-fix findings, all applied to the sections above by the orchestrator.
