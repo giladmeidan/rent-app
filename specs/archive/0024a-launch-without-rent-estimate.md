@@ -99,6 +99,8 @@ Graph is from the main checkout; greps cover what it missed.
   dataset was confirmed through its API.
 - Round 1 rejected with 10 findings, all applied; second round waived.
 
-## Digest (filled by orchestrator after verification)
-Nothing public promises a rent estimate any more, the terms credit CBS for the settlement list, and the test data no
-longer copies nadlan.gov.il. The engine stays in the repo, switched off. No behaviour changes for users beyond text.
+## Digest (merged 2026-11-18, PR #139, merge 271c76a)
+Nothing in the app or the waitlist source promises a rent estimate any more. Section 6 of the terms now credits CBS for
+the settlement list, the closure dialog no longer points at estimates, and long URLs wrap on narrow screens. The nadlan
+test fixtures are replaced with invented data; old versions remain in git history. The engine stays in the repo, switched
+off. Review: code, 0 blockers, 0 majors. CI passed on `bbbb0ce`.
