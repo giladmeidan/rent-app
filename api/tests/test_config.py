@@ -411,3 +411,43 @@ def test_0019a_sentry_settings() -> None:
     for rate in (-0.1, 1.1):
         with pytest.raises(ValidationError, match="sentry_traces_sample_rate"):
             Settings(database_url=_DSN, redis_url=_REDIS, sentry_traces_sample_rate=rate)
+
+
+# Spec 0013a: what Fly's machines run with. The sentinel host must never reach an error message.
+_FLY_READY: dict[str, Any] = {
+    **_HTTPS_READY,
+    "database_url": _DSN,
+    "redis_url": _REDIS,
+    "web_origin": "https://rent.example",
+    "email_backend": "smtp",
+    "smtp_url": "smtp://smtp.rent.example:587",
+    "geocoder": "nominatim",
+    "nominatim_user_agent": "homie/1.0 (+https://rent.example)",
+    "trust_proxy": "fly",
+}
+_SENTINEL_URL = "http://sentinel-value.example"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "rule"),
+    [
+        ("web_origin", _SENTINEL_URL, "WEB_ORIGIN must be https on Fly"),
+        ("email_backend", "file", "EMAIL_BACKEND must be smtp on Fly"),
+        ("geocoder", "fake", "GEOCODER must be nominatim on Fly"),
+        ("nominatim_url", _SENTINEL_URL, "NOMINATIM_URL must be https on Fly"),
+        ("trust_proxy", "none", "TRUST_PROXY must be fly on Fly"),
+    ],
+)
+def test_ac3_on_fly_refuses_dev_settings(field: str, value: str, rule: str) -> None:
+    assert Settings(**_FLY_READY, fly_app_name="homie-api").trust_proxy == "fly"
+
+    with pytest.raises(ValidationError, match=rule) as error:
+        Settings(**{**_FLY_READY, field: value}, fly_app_name="homie-api")
+    assert value not in str(error.value)
+
+    # Off Fly, and with an empty name, the same value is left to the existing rules.
+    off_fly: dict[str, Any] = {"database_url": _DSN, "redis_url": _REDIS, field: value}
+    if field != "web_origin":
+        off_fly = {**_HTTPS_READY, "web_origin": "https://rent.example", **off_fly}
+    assert getattr(Settings(**off_fly), field) == value
+    assert getattr(Settings(**off_fly, fly_app_name=""), field) == value

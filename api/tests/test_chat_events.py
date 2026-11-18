@@ -53,8 +53,10 @@ class Stream:
     listens for `http.disconnect`), with no server, thread or network. `receive` returns the request
     once, then blocks until `disconnect()`; `send` collects the response start and body chunks."""
 
-    def __init__(self, app: FastAPI, token: str | None) -> None:
-        headers = [(b"host", b"testserver")]
+    def __init__(
+        self, app: FastAPI, token: str | None, extra_headers: tuple[tuple[bytes, bytes], ...] = ()
+    ) -> None:
+        headers = [(b"host", b"testserver"), *extra_headers]
         if token is not None:
             headers.append((b"cookie", f"rent_session={token}".encode()))
         self._scope: dict[str, Any] = {

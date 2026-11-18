@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
 from starlette.datastructures import Headers
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app import analytics
@@ -186,6 +187,9 @@ def create_app() -> FastAPI:
     if not any(isinstance(f, RedactFeedToken) for f in access_log.filters):
         access_log.addFilter(RedactFeedToken())
     app = FastAPI(title="Rent App API", version="0.0.1", lifespan=_lifespan)
+    # Innermost, so the 413 and the CORS headers are unchanged. `text/event-stream` is among its
+    # default exclusions: /me/events passes through unbuffered (spec 0013a).
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
     # Added before CORS: the last added is outermost, so the 413 carries the CORS headers.
     app.add_middleware(BodySizeLimit)
     app.add_middleware(
