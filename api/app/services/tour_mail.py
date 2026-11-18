@@ -183,17 +183,35 @@ def _body(row: Any, template: str, side: Side) -> str:
     )
 
 
+def _defer(r: RedisClient, rest: Sequence[str | bytes], counts: dict[str, int]) -> None:
+    """Put what a stopped run did not try back at the head of the queue, order kept (`LPUSH`
+    reverses its arguments and refuses none)."""
+    if not rest:
+        return
+    try:
+        r.lpush(QUEUE_KEY, *reversed(rest))
+        counts["deferred"] += len(rest)
+    except RedisError as exc:
+        log.error("tour mail not re-queued: %s", type(exc).__name__)
+        counts["dropped"] += len(rest)
+
+
 def send_pending(db: Session, r: RedisClient, sender: EmailSender) -> dict[str, int]:
-    """Pop up to `BATCH` items and send each to its recipients (spec "Delivery"). Returns the
-    counts `sent`, `skipped`, `retried`, `dropped`."""
-    counts = {"sent": 0, "skipped": 0, "retried": 0, "dropped": 0}
-    for raw in r.lpop(QUEUE_KEY, BATCH) or []:
+    """Pop up to `BATCH` items and send each to its recipients (spec "Delivery"). The first
+    `EmailUnavailable` ends the run (spec 0022a), so a dead mail server costs one timeout, not one
+    per item: the failed recipient goes to the tail, so it cannot starve the queue, and everything
+    untried back to the head. Returns the counts `sent`, `skipped`, `retried`, `dropped`,
+    `deferred`."""
+    counts = {"sent": 0, "skipped": 0, "retried": 0, "dropped": 0, "deferred": 0}
+    raws = r.lpop(QUEUE_KEY, BATCH) or []
+    for index, raw in enumerate(raws):
         try:
             tour_id, change, attempt, to = _parse(raw)
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             log.warning("tour mail item malformed: %s", type(exc).__name__)
             counts["dropped"] += 1
             continue
+        untried: list[str] | None = None  # set when the mail system failed: the run stops
         try:
             row = _load(db, tour_id)
             if row is None or not _current(row, change):
@@ -201,32 +219,38 @@ def send_pending(db: Session, r: RedisClient, sender: EmailSender) -> dict[str, 
                 continue
             subject, bodies = _MAIL[change]
             attachments = _calendar(row, change)
-            for side, template in bodies.items():
-                if to is not None and side != to:
-                    continue
+            sides = [side for side in bodies if to is None or side == to]
+            for position, side in enumerate(sides):
                 email = row.lister_email if side == "lister" else row.seeker_email
                 suspended = row.lister_suspended if side == "lister" else row.seeker_suspended
                 if email is None or suspended:  # deleted (scrubbed) or suspended
                     counts["skipped"] += 1
                     continue
                 try:
-                    sender.send(email, subject, _body(row, template, side), attachments)
+                    sender.send(email, subject, _body(row, bodies[side], side), attachments)
                     counts["sent"] += 1
                 except EmailUnavailable:
+                    untried = [_item(tour_id, change, attempt, s) for s in sides[position + 1 :]]
                     if attempt + 1 >= MAX_ATTEMPTS:
                         counts["dropped"] += 1
-                        continue
+                        break
                     try:
                         r.rpush(QUEUE_KEY, _item(tour_id, change, attempt + 1, side))
                         counts["retried"] += 1
-                    except RedisError as exc:  # only this side is lost; the other still goes
+                    except RedisError as exc:  # only this side is lost; the rest are re-queued
                         log.error("tour mail retry not queued: %s", type(exc).__name__)
                         counts["dropped"] += 1
+                    break
         except Exception as exc:  # one item's bug never loses or loops the others
             db.rollback()
             # Never log.exception: a SQLAlchemy message carries bound parameters (an address).
             log.error("tour mail item failed: %s", type(exc).__name__)
             counts["dropped"] += 1
+        if untried is not None:
+            _defer(r, [*untried, *raws[index + 1 :]], counts)
+            break
+    if counts["dropped"]:
+        log.warning("tour mail dropped: %d", counts["dropped"])
     return counts
 
 
