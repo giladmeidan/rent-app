@@ -39,3 +39,19 @@ TOUR_CANCELLED_SYSTEM_BODY = (
 )
 TOUR_REMINDER_SUBJECT = "תזכורת: סיור מחר"
 TOUR_REMINDER_BODY = "תזכורת: מחר יש סיור עם {name}.\n{when}\n{where}\n\n{footer}"
+
+# Security emails (spec 0022a). Each URL and address sits alone on its line, as the OTP code does.
+# No run of six digits: e2e's `latestCode` would read it as a login code.
+SECURITY_PASSWORD_SUBJECT = "הסיסמה בחשבון הומי שלך עודכנה"
+SECURITY_PASSWORD_BODY = (
+    "הסיסמה בחשבון הומי שלך נקבעה או שונתה, וכל המכשירים האחרים נותקו מהחשבון.\n\n"
+    "אם עשית את זה, אין צורך לעשות דבר.\n\n"
+    "לא עשית את זה? צריך להיכנס עכשיו עם קוד חד-פעמי לאימייל ולקבוע סיסמה חדשה. "
+    "זה ינתק כל מכשיר אחר מהחשבון:\n{login_url}\n\n"
+    "לעזרה:\n{contact}"
+)
+SECURITY_DELETED_SUBJECT = "חשבון הומי שלך נמחק"
+SECURITY_DELETED_BODY = (
+    "חשבון הומי שלך נמחק, וכל המכשירים נותקו ממנו. המחיקה סופית.\n\n"
+    "לא ביקשת למחוק את החשבון? כדאי לכתוב לנו מיד:\n{contact}"
+)
