@@ -21,8 +21,9 @@ from app.config import get_settings
 from app.i18n import he
 from app.models import User
 from app.redis_client import get_redis
-from app.services import accounts, passwords, security_mail, tour_mail
+from app.services import accounts, passwords, security_mail, tour_mail, tours
 from app.services import auth as auth_service
+from app.services import google as google_service
 from app.services.email import Attachment, EmailSender, EmailUnavailable, get_email_sender
 from app.services.photo_store import FilePhotoStore
 from tests.conftest import Outbox, make_listing, make_owner, signup
@@ -60,6 +61,28 @@ def _use_sender(client: TestClient, sender: EmailSender) -> None:
 
 def _change_password(caller: TestClient, password: str = PASSWORD) -> None:
     assert caller.put("/me/password", json={"password": password}).status_code == 204
+
+
+def _counter(kind: str) -> str:
+    return f"rl:security_mail:{kind}:{accounts.email_hmac(EMAIL)}"
+
+
+def _redis_down(*_: Any) -> None:
+    raise redis.ConnectionError("redis down")
+
+
+def _google_signup(client: TestClient) -> TestClient:
+    """A new account of `EMAIL` with no code to request (the OTP limits would stop a loop)."""
+    response = client.post(
+        "/auth/google",
+        json={
+            "credential": f"fake:g1:{EMAIL}",
+            "profile": {"display_name": "נועה", "role": "seeker"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    client.cookies.clear()
+    return TestClient(client.app, cookies={"rent_session": response.cookies["rent_session"]})
 
 
 def test_ac1_password_set_and_change_mail_owner(
@@ -210,7 +233,6 @@ def test_ac7_password_mail_cap(
     client: TestClient, outbox: Outbox, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     me = signup(client, outbox, EMAIL, "seeker")
-    user_id = _user_id(me)
     limit = security_mail.PASSWORD_MAIL_LIMIT
 
     for sent in range(1, limit + 1):
@@ -218,13 +240,10 @@ def test_ac7_password_mail_cap(
         assert len(_security(outbox)) == sent
     _change_password(me)  # over the cap: the change works, the mail stays home
     assert len(_security(outbox)) == limit
-    ttl = get_redis().ttl(f"rl:security_mail:password:{user_id}")
+    ttl = get_redis().ttl(_counter("password"))
     assert 0 < ttl <= security_mail.PASSWORD_MAIL_WINDOW_S
 
-    def redis_down(*_: Any) -> None:
-        raise redis.ConnectionError("redis down")
-
-    monkeypatch.setattr(security_mail, "count_or_raise", redis_down)
+    monkeypatch.setattr(security_mail, "count_or_raise", _redis_down)
     _change_password(me)
     assert len(_security(outbox)) == limit + 1  # a security notice outranks the cap
 
@@ -279,6 +298,60 @@ def test_ac9_no_address_left_behind(
     queued = r.lrange(tour_mail.QUEUE_KEY, 0, -1)
     assert queued
     assert not [v for v in queued if address in v]
-    counters = list(r.scan_iter(match="rl:security_mail:*"))
-    assert counters
+    counters = set(r.scan_iter(match="rl:security_mail:*"))
+    assert counters == {_counter("password").encode(), _counter("deleted").encode()}
     assert not [k for k in counters if address in k or address in (r.get(k) or b"")]
+
+
+def test_ac15_limits_survive_delete_and_signup_again(
+    client: TestClient,
+    outbox: Outbox,
+    set_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_env(GOOGLE_VERIFIER="fake")
+    google_service._reset_cache()
+    announced: list[Any] = []
+    real_announce = tours.announce
+
+    def counting_announce(r: Any, changes: Any) -> None:
+        announced.append(changes)
+        real_announce(r, changes)
+
+    monkeypatch.setattr(tours, "announce", counting_announce)
+    cycles = security_mail.DELETED_MAIL_LIMIT + 1
+
+    for cycle in range(cycles):
+        me = _google_signup(client)
+        _change_password(me, f"{PASSWORD} {cycle} a")
+        _change_password(me, f"{PASSWORD} {cycle} b")
+        assert me.delete("/me").status_code == 204
+
+    mails = _security(outbox)
+    assert {to for to, _, _ in mails} == {EMAIL}
+    subjects = [subject for _, subject, _ in mails]
+    assert subjects.count(he.SECURITY_PASSWORD_SUBJECT) == security_mail.PASSWORD_MAIL_LIMIT
+    assert subjects.count(he.SECURITY_DELETED_SUBJECT) == security_mail.DELETED_MAIL_LIMIT
+    r = get_redis()
+    assert 0 < r.ttl(_counter("deleted")) <= security_mail.DELETED_MAIL_WINDOW_S
+
+    # Over the cap only the mail stops: the pending code still goes and the tours are announced.
+    me = _google_signup(client)
+    assert client.post("/auth/otp/request", json={"email": EMAIL}).status_code == 204
+    assert r.exists(auth_service.otp_key(EMAIL))
+    assert me.delete("/me").status_code == 204
+    assert not r.exists(auth_service.otp_key(EMAIL))
+    assert len(announced) == cycles + 1
+    assert len(_security(outbox)) == len(mails)
+
+
+def test_ac15_deletion_limit_fails_open(
+    client: TestClient, outbox: Outbox, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    me = signup(client, outbox, EMAIL, "seeker")
+    get_redis().set(_counter("deleted"), security_mail.DELETED_MAIL_LIMIT, ex=60)  # at the cap
+    monkeypatch.setattr(security_mail, "count_or_raise", _redis_down)
+
+    assert me.delete("/me").status_code == 204
+
+    assert [subject for _, subject, _ in _security(outbox)] == [he.SECURITY_DELETED_SUBJECT]

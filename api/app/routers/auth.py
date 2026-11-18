@@ -291,7 +291,8 @@ def delete_me(
         # A pending login code's key holds the address; only `rl:*` may keep it (privacy s6).
         otp_key = auth_service.otp_key(auth_service.normalise_email(deleted.email))
         soft(lambda: r.delete(otp_key))
-        background.add_task(security_mail.send_account_deleted, sender, deleted.email)
+        if security_mail.deleted_mail_due(r, deleted.email):
+            background.add_task(security_mail.send_account_deleted, sender, deleted.email)
     return _signed_out()
 
 
@@ -330,6 +331,6 @@ def set_my_password(
     assert user.email is not None  # a live account: a deleted one's sessions never resolve
     email = user.email
     auth_service.set_password(db, user, body.password, token)
-    if security_mail.password_mail_due(r, user.id):
+    if security_mail.password_mail_due(r, email):
         background.add_task(security_mail.send_password_changed, sender, email)
     return Response(status_code=204)
