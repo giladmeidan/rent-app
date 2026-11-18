@@ -288,7 +288,6 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0016a · web/src/features/auth/PasswordForm.tsx, ProfilePage `PasswordSection` · missing vitest: PasswordForm network/5xx, offline, pending and tab-unmount; PasswordSection 401-as-reauth, 429 + Retry-After, offline, Cancel and pending; the empty-field case on the profile "שמירה"; a ProfilePage section-order assertion · review qa minor
 - [ ] 0016a · api/tests/test_password.py · missing pytest: test_ac6 for the `email:day:net` (30/day), `ip` (30/15 min, 300/day) and IPv6 /48 keys and "a refused attempt counts nothing"; NF1 for the wrong-password and suspended paths; the `DELETE /me` race (→ 401 unauthenticated) on `PUT /me/password` · review qa minor
 - [ ] 0016a · api/tests/test_migrations.py · no test runs migration 0029's own REVOKE where `homie_admin` already has default SELECT grants (apply the role at 0028, upgrade, assert no privilege on `user_passwords`) · review qa minor
-- [ ] 0016a · api/app/routers/auth.py (`DELETE /me`, `PUT /me/password`) · A password login counts as a fresh sign-in for DELETE /me and PUT /me/password, so someone with only the password can delete the account or change the password, with no email to the owner. Planned fix: a 'your password was changed' / 'your account was deleted' security email, as its own spec before going public (Gilad 2026-11-16, option 1; option 3 later) · review security trade-off
 - [ ] 0016b · api/app/config.py (`_email_and_production_rules`) · `GOOGLE_VERIFIER=fake` is refused only with an https `WEB_ORIGIN`; consider also refusing it unless the `WEB_ORIGIN` host is localhost/127.0.0.1 · security call for Gilad; review security minor
 - [ ] 0016b · web/src/features/auth/OtpForm.tsx · move `errorText` / `hasDetail` / `TooMany` into `auth/errors.ts` (shared with GoogleButton) and restore `hasDetail`'s literal union of details · review code nit
 - [ ] 0016b · web/src/features/auth/GoogleButton.tsx · GIS button width is read once at render (no resize; 0 if the area is hidden) · review ux nit
@@ -298,8 +297,7 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0017 · waitlist/functions/api/signup.js + Cloudflare WAF rule · a few IPs at the rate limit (5 per 10 s each; three IPs ≈ 130 k a day) can exhaust D1's 100 k free writes a day, after which signups 500 until the reset; options: Turnstile, or a daily insert cap in the Function · product/cost decision for Gilad · review security minor
 - [ ] 0018c · api/tests/test_tour_mail.py · no test runs two `queue_reminders` sweeps at once to prove the claim stays idempotent under concurrency · review qa minor
 - [ ] 0018c · api/tests/test_tour_mail.py · no Redis-down test for `queue_reminders`' `rpush` after the claim or for `send_pending`'s `lpop` · review qa minor
-- [ ] 0018c · api/app/services/tour_mail.py `send_pending` · the 3 attempts run within ~20 s (10 s cron), so an SMTP outage longer than ~30 s drops the mail; consider a not-before time on retries, or log non-zero `dropped` at WARNING · review qa minor
-- [ ] 0018c · api/app/services/tour_mail.py `send_pending` · a dead SMTP host can stall one run (BATCH 100 × 10 s timeout, past arq's 300 s job timeout, piling up threads); on the first `EmailUnavailable` re-push the rest and break, before 0013a goes live · review minor
+- [ ] 0018c · api/app/services/tour_mail.py `send_pending` · the 3 attempts run within ~20 s (10 s cron), so an SMTP outage longer than ~30 s drops the mail; consider a not-before time on retries · review qa minor
 - [ ] 0018c · api/app/services/email.py `FileEmailSender` · with `EMAIL_BACKEND=file` the outbox JSON files hold tour PII (names, street, time) and no retention rule covers them; purge old outbox files or switch to SMTP before tours go live (0013a) · review security minor
 - [ ] 0018e · web/src/components/ChoiceGroup.tsx, features/tours/SlotPicker.tsx · SlotPicker radio labels are plain `formatTourTime` text (ChoiceGroup label is a string), not `<time><bdi>`; needs a ReactNode label in ChoiceGroup · minor (UX review of 0018e)
 
@@ -353,3 +351,6 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 
 ## 0021c
 - [ ] 0021c · after the first national import (`RENT_REFERENCE=nadlan make rent-import` in the main stack, 4–6 h), run `make rent-backtest` and change `HALF_WIDTH` / `WINDOW_QUARTERS` / `RATIO_HALF_WIDTH` only if it says so, with the run's numbers in the comment · spec 0021c Scope 10
+
+## 0022a
+- [ ] 0022a · api/app/services/auth.py (`set_password`, the OTP limits) · OTP lock-out after a takeover: `set_password` revokes the owner's sessions, and an attacker can then spend the address's 20-a-day code ceiling from a few networks, so the owner may get no code for up to 24 h; the security mail's contact line is the fallback · spec 0022a "Other risks", existing behaviour, no code there
