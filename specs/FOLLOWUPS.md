@@ -353,4 +353,6 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0021c · after the first national import (`RENT_REFERENCE=nadlan make rent-import` in the main stack, 4–6 h), run `make rent-backtest` and change `HALF_WIDTH` / `WINDOW_QUARTERS` / `RATIO_HALF_WIDTH` only if it says so, with the run's numbers in the comment · spec 0021c Scope 10
 
 ## 0022a
+- [ ] 0022a · api/app/routers/auth.py (`DELETE /me`, `PUT /me/password`) · require the current password for both, so someone who knows only a fresh session or the password cannot act and the owner hears about it only afterwards · the 0016a "option 3, later" (Gilad 2026-11-16); out of scope in 0022a, which only adds the emails
+- [ ] 0022a · api/app/config.py `_email_and_production_rules` · the https `CONTACT_EMAIL` check accepts malformed values (`Contact@Example.com` passes as not the placeholder, a leading space, a bare `@`): strip, compare case-insensitively, validate the shape · review minor
 - [ ] 0022a · api/app/services/auth.py (`set_password`, the OTP limits) · OTP lock-out after a takeover: `set_password` revokes the owner's sessions, and an attacker can then spend the address's 20-a-day code ceiling from a few networks, so the owner may get no code for up to 24 h; the security mail's contact line is the fallback · spec 0022a "Other risks", existing behaviour, no code there
