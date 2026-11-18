@@ -207,7 +207,9 @@ The runbook checks `SHOW max_connections` (≥ 50 needed: API 15 + worker 15 + a
      details on disk, FOLLOWUPS 0018c);
    - `GEOCODER` other than `nominatim` (fake points on real listings);
    - `NOMINATIM_URL` not https (FOLLOWUPS 0003c);
-   - `TRUST_PROXY` other than `fly` (every visitor would share one per-network limit; homie must not run so).
+   - `TRUST_PROXY` other than `fly` (every visitor would share one per-network limit; homie must not run so);
+   - `RENT_REFERENCE` other than `off` (production must never contact nadlan.gov.il; its terms forbid it, and a Fly
+     secret or the worker cron could otherwise turn it on).
 
    Messages name the rule, never a value. Without `FLY_APP_NAME` nothing changes. The existing https test
    profile (`file` / `fake`, `test_config.py::_HTTPS_READY`) still validates.
@@ -501,8 +503,8 @@ test (runbook §9).
   with or without 0022a merged. The toml is a valid production profile, and it stays one when someone edits it —
   `test_deploy.py::test_ac2_api_env_is_a_production_profile`
 - [ ] AC3 Given `FLY_APP_NAME` set:
-  - When `WEB_ORIGIN` is `http://…`, `EMAIL_BACKEND=file`, `GEOCODER=fake`, `NOMINATIM_URL` is `http://…` or
-    `TRUST_PROXY=none`, Then `Settings()` raises a `ValidationError` naming that rule, and no input value appears in it.
+  - When `WEB_ORIGIN` is `http://…`, `EMAIL_BACKEND=file`, `GEOCODER=fake`, `NOMINATIM_URL` is `http://…`,
+    `TRUST_PROXY=none` or `RENT_REFERENCE=nadlan`, Then `Settings()` raises a `ValidationError` naming that rule, and no input value appears in it.
   - Without `FLY_APP_NAME`, `_HTTPS_READY` (`file` / `fake`) still validates, and plain http dev defaults
     still work.
 

@@ -234,6 +234,8 @@ class Settings(DatabaseSettings):
                 raise ValueError("NOMINATIM_URL must be https on Fly")
             if self.trust_proxy != "fly":
                 raise ValueError("TRUST_PROXY must be fly on Fly")
+            if self.rent_reference != "off":
+                raise ValueError("RENT_REFERENCE must be off on Fly")
         # An https web origin means a real deployment: refuse the dev defaults there.
         if self.web_origin.startswith("https://"):
             if self.secret_key.get_secret_value() == DEV_SECRET_KEY:

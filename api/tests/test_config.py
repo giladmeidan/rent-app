@@ -436,6 +436,7 @@ _SENTINEL_URL = "http://sentinel-value.example"
         ("geocoder", "fake", "GEOCODER must be nominatim on Fly"),
         ("nominatim_url", _SENTINEL_URL, "NOMINATIM_URL must be https on Fly"),
         ("trust_proxy", "none", "TRUST_PROXY must be fly on Fly"),
+        ("rent_reference", "nadlan", "RENT_REFERENCE must be off on Fly"),
     ],
 )
 def test_ac3_on_fly_refuses_dev_settings(field: str, value: str, rule: str) -> None:
