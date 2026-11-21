@@ -140,7 +140,8 @@ migration have no code; such a person signing up again gets one (the `COALESCE` 
 ## UI
 The waitlist page's two success panels (`waitlist/public/index.html`, `.success`); no app artboard covers the
 waitlist page, so the existing success panel's look (card, Fredoka title, turtle) is the reference.
-- **Success with a code:** the current title, line and "other side" button, then the referral block:
+- **Success with a code:** the current title and line, then the referral block, then the "other side" button
+  (review round 2026-11-21: the share action sits above the fold on phones):
   - title: "רוצים להיכנס בגל הראשון?"
   - line: "שלושה חברים שנרשמים מהקישור שלכם, ואתם בגל הראשון."
   - privacy note under the buttons (`.refer__privacy`, small text like `.privacy`): "נשמור מי נרשם מהקישור
@@ -167,7 +168,9 @@ waitlist page, so the existing success panel's look (card, Fredoka title, turtle
   never sent for them — `…::ac2d_bad_attribution_is_dropped` (table-driven)
 - [ ] AC3 Given A signed up (code `A`), when B signs up with `ref: A`, then B's `referred_by = A`. When C signs
   up with a well-formed code no row has, `referred_by` is NULL. When A joins the other side with the same email
-  and `ref: A` (A's own code), that new row's `referred_by` is NULL — `…::ac3d_referral_only_for_existing_code`
+  and `ref: A` (A's own code), that new row's `referred_by` is NULL, and a second row of the same email never
+  counts again for the same code — `…::ac3d_referral_only_for_existing_code`,
+  `…::ac3d_same_email_both_sides_counts_once` (review round, 2026-11-21)
 - [ ] AC4 Given A signed up with `source: "tiktok"`, when the same side and email sign up again with
   `source: "instagram"` and `ref: <B's code>`, then 200 with A's original code, and A's row is unchanged
   (source still `tiktok`, `referred_by` still NULL); the row count is unchanged —
@@ -249,7 +252,12 @@ Unit: extend `waitlist/test/signup.test.js` (AC1–AC8, fetch stubbed as in 0017
   can submit a guessed email on that side: the answer is the same code exactly when that email is already on the
   list and owns the link. A wrong guess signs that address up (as any submit already does) and returns another
   code. AC6 (same shape) holds, but the value is an oracle for someone who already holds a code. Cost per guess:
-  a Turnstile solve, and the zone rate limit once the domain exists.
+  a Turnstile solve, and the zone rate limit once the domain exists. It works in both directions: a known email
+  returns its stored code, and a known code can be checked against guessed emails; each guess costs one
+  Turnstile solve and every wrong guess signs that address up.
+- **Accepted, low impact (review round 2026-11-21):** a bot that solves Turnstile can tell a honeypot code from a
+  stored one by submitting again without the honeypot (a duplicate returns the stored code, the honeypot's never
+  comes back).
 - **D1 `RETURNING` on `ON CONFLICT DO UPDATE`:** supported by SQLite 3.35+ and D1 (the coder confirms against
   Cloudflare's docs and notes it in the PR); node:sqlite in Node 22 supports it, so the unit tests run it.
 - **Deploy order:** `make waitlist-migrate` then `make deploy-waitlist`; the new Function on the old schema
