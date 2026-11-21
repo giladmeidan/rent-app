@@ -4,7 +4,7 @@ title: "Gilad can back up the waitlist and spot junk signups; optionally, a sign
 status: draft            # not queued for build (Gilad, 2026-11-16: "no need to build"); Part C needs his decision first
 depends_on: [0017, 0017b]   # both merged (PR #116, PR #120)
 reviewers: [code, security, qa]   # security: PII export, email tokens; qa: endpoint + page (Part C)
-estimate: 1 coder run   # A+B are small; with C it is one full run. The verifier may split C out as 0017d
+estimate: 1 coder run   # A+B are small; with C it is one full run. The verifier may split C out as 0017e
 ---
 
 ## Goal

@@ -79,25 +79,58 @@ test/                    node --test (`make test-waitlist`); the page test is we
 
 A deploy is a new Pages deployment; roll back from the project's Deployments list in the dashboard.
 
+**Migrate first.** When a deploy comes with a new file in `migrations/`, run `make waitlist-migrate` before
+`make deploy-waitlist`. Spec 0017d's Function writes `source`, `campaign`, `ref_code` and `referred_by`; on the
+old schema it would answer 500 to every signup. The old Function keeps working on the migrated table (it names
+its columns), so migrating first is always safe.
+
 ## Reading the numbers
 
-`make waitlist-stats` prints one table with the columns `summary, side, kind, city, available, signups, units`:
+`make waitlist-stats` prints one table with the columns
+`summary, side, kind, city, available, signups, units, source, campaign, code`:
 
 | summary | what it counts |
 | --- | --- |
 | `by_side` | signups per side |
+| `by_source` | signups per side × `source` × `campaign` (spec 0017d); `direct` = no `utm_source`, `-` = no campaign |
 | `lister_available` | listers by when the place is free |
 | `lister_kind_city` | listers by type × city; `units` sums the properties (`3+` counts as 3) |
 | `lister_phone` | listers who left a phone number |
+| `referrals` | signups that came through someone's personal link (a code that exists, not their own) |
 | `seeker_kind_city` | seekers by type × city |
+| `top_referrers` | up to 20 personal codes with 3 or more joins, most first (`code`, `signups`) |
 
-It never selects an address or a phone number.
+It never selects an address or a phone number; referrers show only as their code.
+
+## Sources and referrals
+
+Spec 0017d. Each signup stores where it came from, first touch only: a repeat signup never changes it.
+
+- **One link per channel.** Put the channel in the link you post; nothing else is needed:
+  - Instagram bio: `https://<site>/?utm_source=instagram`
+  - TikTok bio: `https://<site>/?utm_source=tiktok`
+  - A Facebook group: `https://<site>/?utm_source=facebook&utm_campaign=<group-slug>` (one slug per group,
+    for example `givatayim-rooms`)
+
+  `utm_source` and `utm_campaign` are lower-cased; only letters, digits, `-` and `_` are kept (40 / 60
+  characters at most). Anything else is dropped and the signup still goes through (it shows as `direct`).
+- **Personal links.** Every signup gets a random 8-letter code (no `i`, `l`, `o`, `0`, `1`); the success panel
+  shows `https://<site>/?ref=<code>&utm_source=referral` with a WhatsApp button and a copy button, and the offer
+  "three friends who join put you in the first wave". A person on both sides has two codes; joins through
+  either count. A join counts only for a code that exists, only for a new signup, and never for the code's own
+  address. Repeating a signup shows the same code again.
+- **Reading it.** `by_source` gives the channels; `referrals` the total; `top_referrers` the codes that reached
+  three. Before inviting anyone, look the codes over for padding (many joins at once, look-alike addresses);
+  turning a code into a person is the launch-email spec's export, not this command.
 
 ## How it behaves
 
 - `POST /api/signup` takes JSON `{side, email, kind, city, consent: true, website: ""}`, plus for listers
-  `units, available, neighbourhood?, phone?`. It answers `200 {"ok": true}` whether the address is new or
-  already on that side's list, so it never tells whether an address is on the list. The same address may join
+  `units, available, neighbourhood?, phone?`, and optionally `source`, `campaign` and `ref` (spec 0017d,
+  above). It answers `200 {"ok": true, "ref": "<code>"}` whether the address is new or already on that side's
+  list (a repeat gets back its stored code) and for a caught bot (a random code that is not stored), so the
+  shape never tells whether an address is on the list. A code collision is retried with a new code, up to 3
+  tries. The same address may join
   both sides. Guards, in order: method (405), the request's own origin must be `ALLOWED_ORIGIN` or localhost and
   `Origin` must equal it (403; any other host is refused, so `homie-waitlist.pages.dev`, outside the zone's
   rate-limit rule, is served only while it is `ALLOWED_ORIGIN`, as it is since PR #118, with Turnstile as its
@@ -126,8 +159,8 @@ It never selects an address or a phone number.
 
 ## Local checks
 
-- `make test-waitlist` (Node 22): the unit tests (`node --test`, a fake D1 over `node:sqlite` running the real
-  migration) and the Playwright page test (`web/playwright.waitlist.config.ts`: `public/` on a python static
+- `make test-waitlist` (Node 22): the unit tests (`node --test`, a fake D1 over `node:sqlite` running every
+  migration in order) and the Playwright page test (`web/playwright.waitlist.config.ts`: `public/` on a python static
   server on port 4179, every API call stubbed). It is part of `make test`.
 - To try the Functions locally: copy `.dev.vars.example` to `.dev.vars` (git-ignored; Cloudflare's always-pass
   test secret), set a temporary `https://….test` `ALLOWED_ORIGIN` (for example `https://join.homie.test`),
@@ -140,7 +173,8 @@ It never selects an address or a phone number.
 ## Rollback
 
 D1 has no down-migration. Before launch, `DROP TABLE signups` (through `d1 execute … --remote --command`) undoes
-`0001_signups.sql`.
+`0001_signups.sql`. To undo only `0002_attribution.sql`: drop the indexes `signups_referred_by` and
+`signups_ref_code`, then recreate `signups` without the four columns (its header comment has the steps).
 
 ## Media
 

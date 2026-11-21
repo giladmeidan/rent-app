@@ -1,7 +1,7 @@
 ---
 id: 0017d
 title: "Each waitlist signup records where it came from and who sent it, and every new signup gets a personal link to bring friends"
-status: in-progress        # draft | verified | in-progress | in-review | done
+status: in-review          # draft | verified | in-progress | in-review | done
 depends_on: [0017, 0017b]   # both merged (PR #116, PR #120)
 reviewers: [code, security, qa, ux]   # security: new public input stored next to emails, a new per-person code; qa: endpoint + page; ux: new block on the success screen (verifier added)
 estimate: 1 coder run   # coder Opus/high (data + migration, Speed rule 6)
