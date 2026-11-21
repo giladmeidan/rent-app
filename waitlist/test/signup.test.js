@@ -769,6 +769,37 @@ test('ac3d_referral_only_for_existing_code', async () => {
   assert.equal(rowOf(environment, 'seeker', 'd@example.com').referred_by, otherSide.ref_code);
 });
 
+test('ac3d_same_email_both_sides_counts_once', async () => {
+  const environment = env();
+  const a = await post(environment, { ...SEEKER, email: 'a@example.com' });
+  const codeA = a.json.ref;
+
+  // B joins both sides through A's link: the second row never counts again for the same code.
+  await post(environment, { ...SEEKER, email: 'b@example.com', ref: codeA });
+  const lister = await post(environment, { ...LISTER, email: 'B@example.com', ref: codeA });
+  assert.equal(lister.response.status, 200);
+  assertOk(lister.json);
+  assert.equal(rowOf(environment, 'seeker', 'b@example.com').referred_by, codeA);
+  assert.equal(rowOf(environment, 'lister', 'b@example.com').referred_by, null);
+  const joins = environment.DB.db
+    .prepare('SELECT COUNT(*) AS n FROM signups WHERE referred_by = ?')
+    .get(codeA);
+  assert.equal(Number(joins.n), 1);
+
+  // Another address still counts for A, and C's own code counts for C's friends.
+  await post(environment, { ...SEEKER, email: 'c@example.com', ref: codeA });
+  assert.equal(rowOf(environment, 'seeker', 'c@example.com').referred_by, codeA);
+  const c = rowOf(environment, 'seeker', 'c@example.com');
+  const d = await post(environment, { ...LISTER, email: 'c-friend@example.com', ref: c.ref_code });
+  assert.equal(d.response.status, 200);
+  assert.equal(rowOf(environment, 'lister', 'c-friend@example.com').referred_by, c.ref_code);
+
+  // The lookup never reads an address out of the database.
+  const lookups = environment.DB.calls.filter((sql) => sql.startsWith('SELECT'));
+  assert.ok(lookups.length > 0);
+  for (const sql of lookups) assert.doesNotMatch(sql, /^SELECT\s+(\*|email)/);
+});
+
 test('ac4d_duplicate_returns_same_code_first_touch_wins', async () => {
   const environment = env();
   const a = await post(environment, { ...SEEKER, email: 'a@example.com', source: 'tiktok' });

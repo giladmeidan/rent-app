@@ -32,7 +32,11 @@ const UPSERT_SQL =
   'campaign, ref_code, referred_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) ' +
   'ON CONFLICT (side, email) DO UPDATE SET ref_code = COALESCE(signups.ref_code, excluded.ref_code) ' +
   'RETURNING ref_code';
-const REFERRER_SQL = 'SELECT email FROM signups WHERE ref_code = ?';
+// A referral counts when the code belongs to another address and this address has not already counted for
+// it from its other side. Addresses stay in the database: the Worker only learns whether a row matched.
+const REFERRER_SQL =
+  'SELECT 1 AS ok FROM signups WHERE ref_code = ? AND email <> ? ' +
+  'AND NOT EXISTS (SELECT 1 FROM signups WHERE referred_by = ? AND email = ?)';
 
 /** The referral code alphabet (spec 0017d): 31 letters, no i, l, o, 0 or 1. */
 export const REF_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -245,11 +249,12 @@ export async function handleSignup(request, env, options = {}) {
   const { source, campaign, ref } = normaliseAttribution(body);
   let code;
   try {
-    // A referral counts only for a code that exists and belongs to another address (never oneself).
+    // A referral counts only for a code that exists, belongs to another address (never oneself) and has not
+    // counted this address already (one email counts once per code, whichever sides it joins).
     let referredBy = null;
     if (ref !== null) {
-      const referrer = await env.DB.prepare(REFERRER_SQL).bind(ref).first('email');
-      if (typeof referrer === 'string' && referrer !== email) referredBy = ref;
+      const counts = await env.DB.prepare(REFERRER_SQL).bind(ref, email, ref, email).first('ok');
+      if (counts === 1) referredBy = ref;
     }
     for (let attempt = 1; ; attempt += 1) {
       try {

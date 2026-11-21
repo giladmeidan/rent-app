@@ -118,7 +118,12 @@ Spec 0017d. Each signup stores where it came from, first touch only: a repeat si
   shows `https://<site>/?ref=<code>&utm_source=referral` with a WhatsApp button and a copy button, and the offer
   "three friends who join put you in the first wave". A person on both sides has two codes; joins through
   either count. A join counts only for a code that exists, only for a new signup, and never for the code's own
-  address. Repeating a signup shows the same code again.
+  address, and one address counts once per code even when it joins both sides. Repeating a signup shows the
+  same code again.
+- **Known trade-off (accepted by Gilad 2026-11-21).** Because a repeat signup returns the stored code, the
+  answer confirms "this email owns this link" in both directions: a known email returns its stored code, and a
+  known code can be checked against guessed emails. Each guess costs one Turnstile solve, and every wrong guess
+  signs that address up.
 - **Reading it.** `by_source` gives the channels; `referrals` the total; `top_referrers` the codes that reached
   three. Before inviting anyone, look the codes over for padding (many joins at once, look-alike addresses);
   turning a code into a person is the launch-email spec's export, not this command.

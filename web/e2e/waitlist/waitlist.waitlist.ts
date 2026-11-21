@@ -505,14 +505,17 @@ test('ac16_axe_and_reduced_motion', async ({ page }) => {
     await expect(referLink(seekerPanel(page))).toBeVisible();
     await expectNoAxeViolations(page, `success ${size}`);
 
-    // Spec 0017d NF1: the block's controls are reached in order: field, WhatsApp, copy.
-    await seekerPanel(page).getByRole('button', { name: 'גם משכירים? להרשמה גם שם' }).focus();
+    // Spec 0017d NF1: from the focused title, Tab reaches field, WhatsApp, copy, then the other side.
     await page.keyboard.press('Tab');
     await expect(referLink(seekerPanel(page))).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(whatsapp(seekerPanel(page))).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(copyButton(seekerPanel(page))).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(
+      seekerPanel(page).getByRole('button', { name: 'גם משכירים? להרשמה גם שם' }),
+    ).toBeFocused();
   }
 
   // Tap targets: the small header button, the footer link and the consent row are 44 px tall at least.
@@ -821,6 +824,7 @@ test('ac12d_referral_block', async ({ page, context }) => {
   const share = whatsapp(seeker);
   await expect(share).toHaveAttribute('target', '_blank');
   await expect(share).toHaveAttribute('rel', 'noopener');
+  await expect(share).toHaveAccessibleName('שליחה בוואטסאפ (נפתח בלשונית חדשה)');
   const href = new URL((await share.getAttribute('href')) ?? '');
   expect(`${href.origin}${href.pathname}`).toBe('https://wa.me/');
   expect(href.searchParams.get('text')).toBe(`${SHARE_MESSAGE} ${link}`);
@@ -881,5 +885,23 @@ test('ac13d_copy_fallback', async ({ page }) => {
   // Nothing else changes: the button keeps its text and nothing is announced.
   await expect(copyButton(seeker)).toBeVisible();
   await expect(referBlock(seeker).locator('[aria-live="polite"]')).toHaveText('');
+  expect(errors).toEqual([]);
+});
+
+test('ac12d_bad_ref_in_response_hides_block', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  for (const ref of ['<img src=x onerror=1>', {}]) {
+    await page.route('**/api/signup', (route) => json(route, 200, { ok: true, ref }));
+    await open(page);
+    const seeker = seekerPanel(page);
+    await fillSeeker(seeker, 'noa@example.com');
+    await submitButton(seeker).click();
+    await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
+    await expect(referBlock(seeker)).toBeHidden();
+    await expect(seeker.locator('.refer__whatsapp')).not.toHaveAttribute('href');
+    await expect(seeker.locator('.refer__link')).toHaveValue('');
+    await expect(seeker.locator('img[src="x"]')).toHaveCount(0);
+  }
   expect(errors).toEqual([]);
 });

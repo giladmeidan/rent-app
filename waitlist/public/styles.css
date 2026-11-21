@@ -1164,8 +1164,8 @@ a:hover {
   flex: 1 1 10rem;
 }
 
-/* The live region is read out, not shown: the copy button's own text changes on screen. */
-.refer__status {
+/* Read out, not shown: the copy status (the button's own text changes on screen), the new-tab note. */
+.visually-hidden {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
