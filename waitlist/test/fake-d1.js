@@ -1,13 +1,33 @@
 // A fake D1 binding for the unit tests (spec 0017): `prepare().bind().run()/.first()/.all()` over an
-// in-memory node:sqlite database built from the real migration, so its CHECKs and UNIQUE run too.
-import { readFileSync } from 'node:fs';
+// in-memory node:sqlite database built from the real migrations, so their CHECKs and UNIQUEs run too.
+import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-export const MIGRATION = new URL('../migrations/0001_signups.sql', import.meta.url);
+const MIGRATIONS_DIR = new URL('../migrations/', import.meta.url);
 
-export function migratedDatabase() {
+/** Every migration file, in name order (spec 0017d: 0001, then 0002, …). */
+export const MIGRATIONS = readdirSync(MIGRATIONS_DIR)
+  .filter((name) => name.endsWith('.sql'))
+  .sort()
+  .map((name) => new URL(name, MIGRATIONS_DIR));
+
+/** A database with the migrations applied; `upTo` (a file name prefix such as '0001') stops after that one. */
+export function migratedDatabase({ upTo } = {}) {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(MIGRATION, 'utf8'));
+  for (const file of MIGRATIONS) {
+    db.exec(readFileSync(file, 'utf8'));
+    if (upTo !== undefined && file.pathname.split('/').pop().startsWith(upTo)) break;
+  }
+  return db;
+}
+
+/** Applies the migrations after `after` (a file name prefix) to `db`. */
+export function migrateFrom(db, after) {
+  let applying = false;
+  for (const file of MIGRATIONS) {
+    if (applying) db.exec(readFileSync(file, 'utf8'));
+    else if (file.pathname.split('/').pop().startsWith(after)) applying = true;
+  }
   return db;
 }
 

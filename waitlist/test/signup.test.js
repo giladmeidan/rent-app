@@ -41,6 +41,16 @@ function rows(environment) {
   return environment.DB.db.prepare('SELECT * FROM signups ORDER BY id').all();
 }
 
+/** A referral code (spec 0017d). */
+const CODE_RE = /^[a-hjkmnp-z2-9]{8}$/;
+
+/** A success body (spec 0017d: `{ok: true, ref}` with a well-formed code). */
+function assertOk(json) {
+  assert.deepEqual(Object.keys(json).sort(), ['ok', 'ref']);
+  assert.equal(json.ok, true);
+  assert.match(json.ref, CODE_RE);
+}
+
 const SEEKER = {
   side: 'seeker',
   email: '  Noa.Levi@Example.COM ',
@@ -93,7 +103,7 @@ test('ac1_seeker_signup_stored', async () => {
   const { response, json } = await post(environment, SEEKER);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(json, { ok: true });
+  assertOk(json);
   assert.equal(response.headers.get('Content-Type'), 'application/json; charset=utf-8');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
   const stored = rows(environment);
@@ -145,7 +155,7 @@ test('ac3_duplicate_is_silent_and_sides_independent', async () => {
   const once = await post(environment, SEEKER);
   const twice = await post(environment, { ...SEEKER, email: 'noa.levi@example.com', kind: 'apartment' });
   assert.equal(once.response.status, 200);
-  assert.deepEqual(twice.json, { ok: true });
+  assertOk(twice.json);
   assert.equal(twice.response.status, 200);
   assert.equal(rows(environment).length, 1);
   assert.equal(rows(environment)[0].kind, 'room'); // the first entry is kept, never edited
@@ -210,7 +220,7 @@ test('ac5_honeypot_drops_silently', async () => {
   const environment = env();
   const { response, json } = await post(environment, { ...SEEKER, website: 'https://spam.example' });
   assert.equal(response.status, 200);
-  assert.deepEqual(json, { ok: true });
+  assertOk(json);
   assert.equal(rows(environment).length, 0);
 
   // A filled honeypot wins even over an otherwise invalid body: bots always see success.
@@ -403,14 +413,14 @@ test('ac7_count_threshold_and_cache', async (t) => {
 test('ac8_db_failure_logged_without_pii', async (t) => {
   const email = 'owner@example.com';
   const phone = '0521234567';
-  // A D1 error that echoes the values back, the worst case for a log line.
+  // A D1 error that echoes the values back, the worst case for a log line. Spec 0017d: the insert runs
+  // with `.first()` (RETURNING), so both read and write throw the same error.
+  const fail = (values) => async () => {
+    throw new Error(`D1_ERROR: constraint failed for ${values.join(', ')} (+972 52-123-4567)`);
+  };
   const failing = {
     prepare: () => ({
-      bind: (...values) => ({
-        run: async () => {
-          throw new Error(`D1_ERROR: constraint failed for ${values.join(', ')} (+972 52-123-4567)`);
-        },
-      }),
+      bind: (...values) => ({ run: fail(values), first: fail(values) }),
     }),
   };
   const logged = t.mock.method(console, 'error', () => undefined);
@@ -420,7 +430,7 @@ test('ac8_db_failure_logged_without_pii', async (t) => {
   assert.deepEqual(json, { error: 'server' });
   assert.equal(logged.mock.callCount(), 1);
   const line = logged.mock.calls[0].arguments.map(String).join(' ');
-  assert.match(line, /waitlist: signup insert failed/);
+  assert.match(line, /waitlist: signup insert failed \(Error: D1_ERROR: constraint failed/);
   for (const secret of [email, phone, '521234567', '52-123-4567', '1234567']) {
     assert.ok(!line.includes(secret), `the log line holds ${secret}: ${line}`);
   }
@@ -478,7 +488,7 @@ test('ac1b_turnstile_ok_stores', async (t) => {
     const environment = env();
     const { response, json } = await post(environment, { ...SEEKER, turnstile: TOKEN }, { ip: IP });
     assert.equal(response.status, 200);
-    assert.deepEqual(json, { ok: true });
+    assertOk(json);
     const stored = rows(environment);
     assert.equal(stored.length, 1);
     assert.ok(!Object.hasOwn(stored[0], 'turnstile'), 'the token is not a column');
@@ -622,7 +632,7 @@ test('ac5b_order_validation_before_turnstile', async (t) => {
     const environment = env();
     const { response, json } = await post(environment, { ...SEEKER, website: 'https://spam.example' });
     assert.equal(response.status, 200);
-    assert.deepEqual(json, { ok: true });
+    assertOk(json);
     assert.equal(rows(environment).length, 0);
     assert.equal(siteverify.calls.length, 0);
   });
@@ -632,4 +642,266 @@ test('ac5b_order_validation_before_turnstile', async (t) => {
     assert.deepEqual(json, { error: 'origin' });
     assert.equal(siteverify.calls.length, 0);
   });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Spec 0017d: sources and referrals.
+
+function rowOf(environment, side, email) {
+  const row = environment.DB.db.prepare('SELECT * FROM signups WHERE side = ? AND email = ?').get(side, email);
+  return row === undefined ? undefined : { ...row };
+}
+
+function count(environment) {
+  return Number(environment.DB.db.prepare('SELECT COUNT(*) AS n FROM signups').get().n);
+}
+
+/** handleSignup with an injected code generator that hands out `codes` in order. */
+async function postWithCodes(environment, body, codes) {
+  const drawn = [];
+  const queue = [...codes];
+  const newRefCode = () => {
+    const code = queue.length > 1 ? queue.shift() : queue[0];
+    drawn.push(code);
+    return code;
+  };
+  const response = await lib.handleSignup(signupRequestFor(body), environment, { newRefCode });
+  return { response, json: await response.json(), drawn };
+}
+
+test('ac1d_stores_source_and_code', async () => {
+  const environment = env();
+  const { response, json } = await post(environment, { ...SEEKER, source: 'Instagram', campaign: 'bio' });
+  assert.equal(response.status, 200);
+  assertOk(json);
+  const [row] = rows(environment);
+  assert.equal(row.source, 'instagram');
+  assert.equal(row.campaign, 'bio');
+  assert.equal(row.ref_code, json.ref);
+  assert.equal(row.referred_by, null);
+  // Trimmed too, and the other columns as before.
+  const lister = await post(environment, { ...LISTER, source: '  TikTok ', campaign: 'Reel_01-a' });
+  assert.equal(lister.response.status, 200);
+  const stored = rowOf(environment, 'lister', 'owner@example.com');
+  assert.equal(stored.source, 'tiktok');
+  assert.equal(stored.campaign, 'reel_01-a');
+  assert.equal(stored.phone, '0521234567');
+  assert.notEqual(stored.ref_code, row.ref_code);
+});
+
+test('ac2d_bad_attribution_is_dropped', async (t) => {
+  const cases = [
+    ['source "a b"', { source: 'a b' }],
+    ['source "<x>"', { source: '<x>' }],
+    ['source of 41 characters', { source: 'a'.repeat(41) }],
+    ['source a number', { source: 42 }],
+    ['source an object', { source: { a: 1 } }],
+    ['source empty', { source: '' }],
+    ['source starting with "-"', { source: '-x' }],
+    ['campaign of 61 characters', { campaign: 'c'.repeat(61) }],
+    ['campaign "a/b"', { campaign: 'a/b' }],
+    ['ref "ABCDEFGH"', { ref: 'ABCDEFGH' }],
+    ['ref "abcdefg" (7)', { ref: 'abcdefg' }],
+    ['ref "abcdefgl" (l is not in the alphabet)', { ref: 'abcdefgl' }],
+    ['ref a number', { ref: 12345678 }],
+  ];
+  for (const [name, extra] of cases) {
+    await t.test(name, async () => {
+      const environment = env();
+      // A row whose code is the uppercase-free spelling of a bad ref, so a lax check would count it.
+      environment.DB.db
+        .prepare(
+          "INSERT INTO signups (side, email, kind, city, consent, ref_code) VALUES ('seeker', 'other@example.com', 'room', 'holon', 1, 'abcdefgh')",
+        )
+        .run();
+      const { response, json } = await post(environment, { ...SEEKER, ...extra });
+      assert.equal(response.status, 200);
+      assertOk(json);
+      assert.ok(!Object.hasOwn(json, 'fields'));
+      const row = rowOf(environment, 'seeker', 'noa.levi@example.com');
+      assert.equal(row.source, null);
+      assert.equal(row.campaign, null);
+      assert.equal(row.referred_by, null);
+    });
+  }
+  await t.test('validateSignup never reports attribution keys', () => {
+    const result = validate.validateSignup({ ...SEEKER, source: '<x>', campaign: 7, ref: 'nope' });
+    assert.equal(result.ok, true);
+    const bad = validate.validateSignup({ ...SEEKER, email: 'x', source: '<x>', ref: 'nope' });
+    assert.deepEqual(bad, { ok: false, fields: ['email'] });
+  });
+  await t.test('normaliseAttribution keeps limits exactly', () => {
+    assert.deepEqual(
+      validate.normaliseAttribution({ source: 'a'.repeat(40), campaign: 'b'.repeat(60), ref: 'k7m2pq9x' }),
+      { source: 'a'.repeat(40), campaign: 'b'.repeat(60), ref: 'k7m2pq9x' },
+    );
+    assert.deepEqual(validate.normaliseAttribution(null), { source: null, campaign: null, ref: null });
+    assert.deepEqual(validate.normaliseAttribution([]), { source: null, campaign: null, ref: null });
+  });
+});
+
+test('ac3d_referral_only_for_existing_code', async () => {
+  const environment = env();
+  const a = await post(environment, { ...SEEKER, email: 'a@example.com' });
+  const codeA = a.json.ref;
+
+  const b = await post(environment, { ...SEEKER, email: 'b@example.com', ref: codeA });
+  assert.equal(b.response.status, 200);
+  assert.equal(rowOf(environment, 'seeker', 'b@example.com').referred_by, codeA);
+
+  // A well-formed code no row has.
+  let unknown = 'k7m2pq9x';
+  while (unknown === codeA || unknown === b.json.ref) unknown = lib.newRefCode();
+  const c = await post(environment, { ...SEEKER, email: 'c@example.com', ref: unknown });
+  assert.equal(c.response.status, 200);
+  assert.equal(rowOf(environment, 'seeker', 'c@example.com').referred_by, null);
+
+  // A joins the other side through their own link: never their own referral.
+  const self = await post(environment, { ...LISTER, email: 'A@Example.com', ref: codeA });
+  assert.equal(self.response.status, 200);
+  const otherSide = rowOf(environment, 'lister', 'a@example.com');
+  assert.equal(otherSide.referred_by, null);
+  assert.notEqual(otherSide.ref_code, codeA, 'one code per row');
+
+  // A join through A's lister code counts too (either of a person's codes).
+  const d = await post(environment, { ...SEEKER, email: 'd@example.com', ref: otherSide.ref_code });
+  assert.equal(d.response.status, 200);
+  assert.equal(rowOf(environment, 'seeker', 'd@example.com').referred_by, otherSide.ref_code);
+});
+
+test('ac4d_duplicate_returns_same_code_first_touch_wins', async () => {
+  const environment = env();
+  const a = await post(environment, { ...SEEKER, email: 'a@example.com', source: 'tiktok' });
+  const b = await post(environment, { ...SEEKER, email: 'b@example.com' });
+  const before = rowOf(environment, 'seeker', 'a@example.com');
+  const total = count(environment);
+
+  const again = await post(environment, {
+    ...SEEKER,
+    email: 'A@example.com',
+    kind: 'apartment',
+    source: 'instagram',
+    campaign: 'bio',
+    ref: b.json.ref,
+  });
+  assert.equal(again.response.status, 200);
+  assertOk(again.json);
+  assert.equal(again.json.ref, a.json.ref);
+  assert.deepEqual(rowOf(environment, 'seeker', 'a@example.com'), before);
+  assert.equal(before.source, 'tiktok');
+  assert.equal(before.referred_by, null);
+  assert.equal(count(environment), total);
+});
+
+test('ac5d_old_row_gets_a_code', async () => {
+  const environment = env();
+  environment.DB.db
+    .prepare(
+      "INSERT INTO signups (side, email, kind, city, consent, created_at) VALUES ('seeker', 'noa.levi@example.com', 'room', 'holon', 1, '2026-11-01T00:00:00Z')",
+    )
+    .run();
+  const before = rowOf(environment, 'seeker', 'noa.levi@example.com');
+  assert.equal(before.ref_code, null);
+
+  const { response, json } = await post(environment, { ...SEEKER, source: 'instagram' });
+  assert.equal(response.status, 200);
+  assertOk(json);
+  const after = rowOf(environment, 'seeker', 'noa.levi@example.com');
+  assert.equal(after.ref_code, json.ref);
+  assert.deepEqual({ ...after, ref_code: null }, before);
+  assert.equal(count(environment), 1);
+
+  // Asked again, the same code comes back.
+  const again = await post(environment, SEEKER);
+  assert.equal(again.json.ref, json.ref);
+});
+
+test('ac6d_no_enumeration_by_shape', async () => {
+  const environment = env();
+  const shape = (json) => Object.entries(json).map(([key, value]) => [key, typeof value]).sort();
+  const fresh = await post(environment, SEEKER);
+  const duplicate = await post(environment, SEEKER);
+  const bot = await post(environment, { ...SEEKER, email: 'bot@example.com', website: 'x' });
+  for (const answer of [fresh, duplicate, bot]) {
+    assert.equal(answer.response.status, 200);
+    assertOk(answer.json);
+  }
+  assert.deepEqual(shape(duplicate.json), shape(fresh.json));
+  assert.deepEqual(shape(bot.json), shape(fresh.json));
+  const stored = environment.DB.db.prepare('SELECT ref_code FROM signups').all().map((row) => row.ref_code);
+  assert.deepEqual(stored, [fresh.json.ref]);
+  assert.ok(!stored.includes(bot.json.ref), "the honeypot's code is not stored");
+});
+
+test('ac7d_code_collision_retries', async (t) => {
+  await t.test('a code already stored → a fresh one is drawn and stored', async () => {
+    const environment = env();
+    await postWithCodes(environment, { ...SEEKER, email: 'first@example.com' }, ['aaaaaaaa']);
+    const { response, json, drawn } = await postWithCodes(environment, SEEKER, ['aaaaaaaa', 'bbbbbbbb']);
+    assert.equal(response.status, 200);
+    assert.deepEqual(json, { ok: true, ref: 'bbbbbbbb' });
+    assert.deepEqual(drawn, ['aaaaaaaa', 'bbbbbbbb']);
+    assert.equal(rowOf(environment, 'seeker', 'noa.levi@example.com').ref_code, 'bbbbbbbb');
+  });
+
+  await t.test('an old row (no code) whose new code collides is retried like a new row', async () => {
+    const environment = env();
+    await postWithCodes(environment, { ...SEEKER, email: 'first@example.com' }, ['aaaaaaaa']);
+    environment.DB.db
+      .prepare(
+        "INSERT INTO signups (side, email, kind, city, consent) VALUES ('seeker', 'old@example.com', 'room', 'holon', 1)",
+      )
+      .run();
+    const { response, json } = await postWithCodes(
+      environment,
+      { ...SEEKER, email: 'old@example.com' },
+      ['aaaaaaaa', 'cccccccc'],
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(json, { ok: true, ref: 'cccccccc' });
+    assert.equal(rowOf(environment, 'seeker', 'old@example.com').ref_code, 'cccccccc');
+  });
+
+  await t.test('3 collisions → 500 server, no row, a log line without the email or phone', async (tt) => {
+    const environment = env();
+    await postWithCodes(environment, { ...SEEKER, email: 'first@example.com' }, ['aaaaaaaa']);
+    const logged = tt.mock.method(console, 'error', () => undefined);
+    const { response, json, drawn } = await postWithCodes(environment, LISTER, ['aaaaaaaa']);
+    assert.equal(response.status, 500);
+    assert.deepEqual(json, { error: 'server' });
+    assert.equal(drawn.length, lib.REF_CODE_ATTEMPTS);
+    assert.equal(lib.REF_CODE_ATTEMPTS, 3);
+    assert.equal(rowOf(environment, 'lister', 'owner@example.com'), undefined);
+    assert.equal(count(environment), 1);
+    assert.equal(logged.mock.callCount(), 1);
+    const line = logged.mock.calls[0].arguments.map(String).join(' ');
+    assert.match(line, /^waitlist: signup insert failed \(.*UNIQUE constraint failed: signups\.ref_code/);
+    for (const secret of ['owner@example.com', '0521234567', '521234567']) {
+      assert.ok(!line.includes(secret), `the log line holds ${secret}: ${line}`);
+    }
+  });
+
+  await t.test('any other error is not retried', async (tt) => {
+    const environment = env();
+    tt.mock.method(console, 'error', () => undefined);
+    // A code that breaks the length CHECK: a constraint error, but not the code collision.
+    const { response, drawn } = await postWithCodes(environment, SEEKER, ['short']);
+    assert.equal(response.status, 500);
+    assert.equal(drawn.length, 1);
+    assert.equal(count(environment), 0);
+  });
+});
+
+test('ac8d_code_alphabet', () => {
+  assert.equal(lib.REF_ALPHABET, 'abcdefghjkmnpqrstuvwxyz23456789');
+  assert.equal(lib.REF_ALPHABET.length, 31);
+  const seen = Array.from({ length: 8 }, () => new Set());
+  for (let i = 0; i < 10000; i += 1) {
+    const code = lib.newRefCode();
+    assert.match(code, CODE_RE);
+    for (let position = 0; position < 8; position += 1) seen[position].add(code[position]);
+  }
+  for (const [position, letters] of seen.entries()) {
+    assert.equal(letters.size, 31, `position ${position} misses a letter`);
+  }
 });

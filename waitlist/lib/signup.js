@@ -2,7 +2,7 @@
 // and count. Every function takes the request and `env` (the D1 binding `env.DB`, the vars and the
 // `TURNSTILE_SECRET` secret) as arguments, so the tests call it with a fake D1; siteverify goes through the
 // global `fetch`, which the tests stub. The Functions in functions/api/ only switch on the method.
-import { validateSignup } from '../public/validate.js';
+import { normaliseAttribution, validateSignup } from '../public/validate.js';
 
 // The page and the server share one rule set (AC9): re-exported so the test can compare the objects.
 export { validateSignup };
@@ -25,9 +25,23 @@ const TEST_SECRET = /^[123]x0{31}AA$/;
 /** siteverify error codes that are our misconfiguration or Cloudflare's fault, not the visitor's. */
 const UNAVAILABLE_CODES = new Set(['missing-input-secret', 'invalid-input-secret', 'internal-error']);
 
-const INSERT_SQL =
-  'INSERT INTO signups (side, email, kind, city, neighbourhood, units, available, phone, consent) ' +
-  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT (side, email) DO NOTHING';
+// Spec 0017d: one statement inserts the row or, on a duplicate, only fills a missing referral code (first
+// touch wins: source, campaign and referred_by never change), and returns the row's code either way.
+const UPSERT_SQL =
+  'INSERT INTO signups (side, email, kind, city, neighbourhood, units, available, phone, consent, source, ' +
+  'campaign, ref_code, referred_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) ' +
+  'ON CONFLICT (side, email) DO UPDATE SET ref_code = COALESCE(signups.ref_code, excluded.ref_code) ' +
+  'RETURNING ref_code';
+const REFERRER_SQL = 'SELECT email FROM signups WHERE ref_code = ?';
+
+/** The referral code alphabet (spec 0017d): 31 letters, no i, l, o, 0 or 1. */
+export const REF_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+const REF_LENGTH = 8;
+/** The largest multiple of 31 that fits a byte: bytes at or above it are drawn again (no modulo bias). */
+const REF_BYTE_LIMIT = 256 - (256 % REF_ALPHABET.length);
+/** Attempts at a fresh code when the drawn one is already stored (spec 0017d). */
+export const REF_CODE_ATTEMPTS = 3;
+const REF_COLLISION = 'UNIQUE constraint failed: signups.ref_code';
 const COUNT_SQL = 'SELECT COUNT(*) AS n FROM signups';
 
 /** A JSON response with the headers every Function sets itself (`_headers` covers static files only). */
@@ -115,6 +129,21 @@ function scrub(error) {
   return text.replace(/[^\s@]+@[^\s@]+/g, '<email>').replace(/\+?\d[\d\s()-]{5,}\d/g, '<number>');
 }
 
+/** A random referral code: 8 letters of REF_ALPHABET, from crypto.getRandomValues with rejection sampling. */
+export function newRefCode() {
+  let code = '';
+  const bytes = new Uint8Array(16);
+  while (code.length < REF_LENGTH) {
+    crypto.getRandomValues(bytes);
+    for (const byte of bytes) {
+      if (byte >= REF_BYTE_LIMIT) continue;
+      code += REF_ALPHABET[byte % REF_ALPHABET.length];
+      if (code.length === REF_LENGTH) break;
+    }
+  }
+  return code;
+}
+
 function turnstileUnavailable(reason) {
   // A fixed line and a reason word or Cloudflare's error codes: never the token, the IP or the body.
   console.error(`waitlist: turnstile unavailable (${reason})`);
@@ -168,8 +197,12 @@ export async function verifyTurnstile(token, ip, request, env) {
   return data.action === TURNSTILE_ACTION && data.hostname === hostname ? 'ok' : 'invalid';
 }
 
-/** `POST /api/signup`. The guards run in the spec's order, each ending the request. */
-export async function handleSignup(request, env) {
+/**
+ * `POST /api/signup`. The guards run in the spec's order, each ending the request. `options.newRefCode`
+ * replaces the code generator (the collision test only).
+ */
+export async function handleSignup(request, env, options = {}) {
+  const drawCode = options.newRefCode ?? newRefCode;
   if (!originAllowed(request, env)) return json(403, { error: 'origin' });
   if (!isJson(request)) return json(415, { error: 'content_type' });
   const declared = Number(request.headers.get('Content-Length') ?? '0');
@@ -183,7 +216,8 @@ export async function handleSignup(request, env) {
   } catch {
     return json(400, { error: 'invalid', fields: [] });
   }
-  if (honeypotFilled(body)) return json(200, { ok: true });
+  // A caught bot gets the same answer as a person, with a code that is never stored (spec 0017d AC6).
+  if (honeypotFilled(body)) return json(200, { ok: true, ref: drawCode() });
 
   const result = validateSignup(body);
   if (!result.ok) return json(400, { error: 'invalid', fields: result.fields });
@@ -208,16 +242,36 @@ export async function handleSignup(request, env) {
   if (verdict !== 'ok') return json(503, { error: 'server' });
 
   const { side, email, kind, city, neighbourhood, units, available, phone } = result.value;
+  const { source, campaign, ref } = normaliseAttribution(body);
+  let code;
   try {
-    await env.DB.prepare(INSERT_SQL)
-      .bind(side, email, kind, city, neighbourhood, units, available, phone)
-      .run();
+    // A referral counts only for a code that exists and belongs to another address (never oneself).
+    let referredBy = null;
+    if (ref !== null) {
+      const referrer = await env.DB.prepare(REFERRER_SQL).bind(ref).first('email');
+      if (typeof referrer === 'string' && referrer !== email) referredBy = ref;
+    }
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        code = await env.DB.prepare(UPSERT_SQL)
+          .bind(side, email, kind, city, neighbourhood, units, available, phone, source, campaign, drawCode(), referredBy)
+          .first('ref_code');
+        break;
+      } catch (error) {
+        // Only a code collision is retried, with a fresh code; anything else fails at once.
+        if (attempt >= REF_CODE_ATTEMPTS || !String(error?.message ?? '').includes(REF_COLLISION)) throw error;
+      }
+    }
   } catch (error) {
     // Never the email or the phone (NF2): a fixed line and the scrubbed error.
     console.error(`waitlist: signup insert failed (${scrub(error)})`);
     return json(500, { error: 'server' });
   }
-  return json(200, { ok: true });
+  if (typeof code !== 'string') {
+    console.error('waitlist: signup insert failed (no code returned)');
+    return json(500, { error: 'server' });
+  }
+  return json(200, { ok: true, ref: code });
 }
 
 /**
