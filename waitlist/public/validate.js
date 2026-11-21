@@ -44,6 +44,30 @@ export function normaliseNeighbourhood(value) {
   return [...text].length <= 60 ? text : undefined;
 }
 
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
+/** A referral code: 8 letters from `abcdefghjkmnpqrstuvwxyz23456789` (no i, l, o, 0, 1). */
+export const REF_CODE_RE = /^[a-hjkmnp-z2-9]{8}$/;
+
+function slug(value, max) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().toLowerCase();
+  return text.length <= max && SLUG_RE.test(text) ? text : null;
+}
+
+/**
+ * Where a signup came from (spec 0017d): `source` and `campaign` trimmed and lower-cased slugs of at most
+ * 40 / 60 characters, `ref` a well-formed referral code. Anything else is `null`: attribution is dropped,
+ * never a field error, so it can never block a signup.
+ */
+export function normaliseAttribution(body) {
+  const value = body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  return {
+    source: slug(value.source, 40),
+    campaign: slug(value.campaign, 60),
+    ref: typeof value.ref === 'string' && REF_CODE_RE.test(value.ref) ? value.ref : null,
+  };
+}
+
 /**
  * Validates and normalises a signup body. Returns `{ok: true, value}` with every column (the lister
  * columns null for a seeker), or `{ok: false, fields}` with the bad keys in form order. Keys that belong

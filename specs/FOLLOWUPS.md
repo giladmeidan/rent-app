@@ -375,3 +375,9 @@ Open minor findings and pending decisions (closed ones are deleted; git history 
 - [ ] 0022a · api/app/routers/auth.py (`DELETE /me`, `PUT /me/password`) · require the current password for both, so someone who knows only a fresh session or the password cannot act and the owner hears about it only afterwards · the 0016a "option 3, later" (Gilad 2026-11-16); out of scope in 0022a, which only adds the emails
 - [ ] 0022a · api/app/config.py `_email_and_production_rules` · the https `CONTACT_EMAIL` check accepts malformed values (`Contact@Example.com` passes as not the placeholder, a leading space, a bare `@`): strip, compare case-insensitively, validate the shape · review minor
 - [ ] 0022a · api/app/services/auth.py (`set_password`, the OTP limits) · OTP lock-out after a takeover: `set_password` revokes the owner's sessions, and an attacker can then spend the address's 20-a-day code ceiling from a few networks, so the owner may get no code for up to 24 h; the security mail's contact line is the fallback · spec 0022a "Other risks", existing behaviour, no code there
+
+## 0017d
+- [ ] 0017d · waitlist/lib/signup.js (`REFERRER_SQL`) · Gmail-style aliases (dots, `+tags`) let one person reach 3 joins through their own link; canonicalise addresses when deciding first-wave eligibility · belongs to the launch-email spec, which decides who is invited; security minor
+- [ ] 0017d · waitlist/public/validate.js (`normaliseAttribution`) · a `ref` typed by hand in upper case or with spaces is dropped (AC2 by design); lower-casing and trimming it needs a spec edit · qa minor
+- [ ] 0017d · waitlist/public/app.js (`copyReferral`) · no visible hint when the clipboard is unavailable (the field is only selected); add a line such as "אפשר להעתיק ידנית" · ux minor
+- [ ] 0017d · web/e2e/waitlist/waitlist.waitlist.ts · no e2e for the referral block's tab order at 320 px (covered at 375 and 1280) · qa minor
