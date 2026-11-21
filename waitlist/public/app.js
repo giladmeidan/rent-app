@@ -2,7 +2,7 @@
 // No framework; the field rules are validate.js's, the same module the server runs. Spec 0017b: each form
 // carries a Cloudflare Turnstile token, from the page's one third-party script.
 import { CITIES } from './cities.js';
-import { validateSignup } from './validate.js';
+import { REF_CODE_RE, validateSignup } from './validate.js';
 
 const TEXT = {
   sending: 'בשליחה…',
@@ -12,6 +12,8 @@ const TEXT = {
   videoError: 'הסרטון לא נטען. אפשר לנסות שוב מאוחר יותר.',
   counter: (n) => ['כבר ', n, ' נרשמו לרשימה'],
   success: (email) => ['נעדכן ב-', email, ' ברגע שהומי עולה לאוויר. לאט לאט? ממש לא.'],
+  shareMessage: 'מצאתי את הומי: דירות ושותפים ישר מאנשים פרטיים, בלי מתווכים ובחינם. נרשמים לרשימת ההמתנה כאן:',
+  copied: 'הקישור הועתק',
   fields: {
     email: 'צריך אימייל תקין, למשל name@example.com',
     phone: 'מספר הטלפון לא נראה תקין. אפשר גם להשאיר ריק.',
@@ -370,7 +372,79 @@ function setBusy(form, busy) {
 /** The address each side signed up with, normalised, for the other side's fresh form. */
 const joinedEmail = new Map();
 
-function showSuccess(form, email) {
+// ---------------------------------------------------------------------------------------------
+// Sources and referrals (spec 0017d).
+
+/** The page's own link parameters as body keys: utm_source, utm_campaign and ref; missing ones left out. */
+const ATTRIBUTION = (() => {
+  const params = new URLSearchParams(window.location.search);
+  const found = {};
+  for (const [param, key] of [
+    ['utm_source', 'source'],
+    ['utm_campaign', 'campaign'],
+    ['ref', 'ref'],
+  ]) {
+    const value = params.get(param);
+    if (value !== null && value !== '') found[key] = value;
+  }
+  return found;
+})();
+
+/** How long the copy button says "copied". */
+const COPIED_MS = 2000;
+const copyTimers = new WeakMap();
+
+/** Fills the panel's referral block with the personal link for `ref`, or hides it when there is none. */
+function showReferral(success, ref) {
+  const block = success.querySelector('.refer');
+  if (typeof ref !== 'string' || !REF_CODE_RE.test(ref)) {
+    block.hidden = true;
+    return;
+  }
+  const link = `${window.location.origin}/?ref=${ref}&utm_source=referral`;
+  block.querySelector('.refer__link').value = link;
+  block.querySelector('.refer__whatsapp').href =
+    `https://wa.me/?text=${encodeURIComponent(`${TEXT.shareMessage} ${link}`)}`;
+  const copy = block.querySelector('.refer__copy');
+  copy.dataset.label ??= copy.textContent;
+  copy.textContent = copy.dataset.label;
+  clearTimeout(copyTimers.get(copy));
+  block.querySelector('.refer__status').textContent = '';
+  block.hidden = false;
+}
+
+/** Copies the link; without a working clipboard the field is selected so it can be copied by hand. */
+async function copyReferral(copy) {
+  const block = copy.closest('.refer');
+  const field = block.querySelector('.refer__link');
+  try {
+    await navigator.clipboard.writeText(field.value);
+  } catch {
+    field.focus();
+    field.select();
+    return;
+  }
+  const status = block.querySelector('.refer__status');
+  copy.dataset.label ??= copy.textContent;
+  copy.textContent = TEXT.copied;
+  status.textContent = TEXT.copied;
+  clearTimeout(copyTimers.get(copy));
+  copyTimers.set(
+    copy,
+    setTimeout(() => {
+      copy.textContent = copy.dataset.label;
+      status.textContent = '';
+    }, COPIED_MS),
+  );
+}
+
+for (const copy of document.querySelectorAll('.refer__copy')) {
+  copy.addEventListener('click', () => {
+    copyReferral(copy);
+  });
+}
+
+function showSuccess(form, email, ref) {
   joinedEmail.set(form.dataset.side, email);
   // Once both sides have joined there is no other side left to offer.
   for (const other of document.querySelectorAll('.success__other')) {
@@ -383,6 +457,7 @@ function showSuccess(form, email) {
   const address = document.createElement('bdi');
   address.textContent = email;
   line.replaceChildren(before, address, after);
+  showReferral(success, ref);
   form.hidden = true;
   success.hidden = false;
   success.querySelector('.success__title').focus();
@@ -427,14 +502,17 @@ async function submit(form) {
     const response = await fetch('/api/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, turnstile: token }),
+      body: JSON.stringify({ ...body, ...ATTRIBUTION, turnstile: token }),
       signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined,
     });
     inFlight = false;
     if (response.ok) {
       challengeOf(form).token = null;
+      // An answer without a readable code (or an older Function) shows the panel without the referral block.
+      const data = await response.json().catch(() => null);
+      const ref = typeof data?.ref === 'string' ? data.ref : undefined;
       hideBanner(form);
-      showSuccess(form, result.value.email);
+      showSuccess(form, result.value.email, ref);
       return;
     }
     spendToken(form);

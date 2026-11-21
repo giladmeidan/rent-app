@@ -160,6 +160,18 @@ const seekerPanel = (page: Page) => page.locator('#panel-seeker');
 const listerPanel = (page: Page) => page.locator('#panel-lister');
 const submitButton = (panel: Locator) => panel.getByRole('button', { name: 'הרשמה לרשימה' });
 
+// Spec 0017d: the referral block in the success panel.
+const REF = 'k7m2pq9x';
+const SHARE_MESSAGE =
+  'מצאתי את הומי: דירות ושותפים ישר מאנשים פרטיים, בלי מתווכים ובחינם. נרשמים לרשימת ההמתנה כאן:';
+const REFER_PRIVACY = 'נשמור מי נרשם מהקישור שלכם, רק כדי לצרף אתכם לגל הראשון.';
+const FORM_PRIVACY_START =
+  'שומרים רק את מה שמילאתם כאן, כדי לעדכן על ההשקה ולדעת כמה מחכים בכל עיר.';
+const referBlock = (panel: Locator) => panel.locator('.refer');
+const referLink = (panel: Locator) => panel.getByLabel('הקישור שלכם');
+const whatsapp = (panel: Locator) => panel.getByRole('link', { name: 'שליחה בוואטסאפ' });
+const copyButton = (panel: Locator) => panel.getByRole('button', { name: 'העתקת הקישור' });
+
 async function fillSeeker(panel: Locator, email = 'Noa@Example.com') {
   await panel.getByLabel('אימייל').fill(email);
   await panel.getByRole('radio', { name: 'חדר בדירת שותפים' }).check();
@@ -487,10 +499,20 @@ test('ac16_axe_and_reduced_motion', async ({ page }) => {
     await expect(seekerPanel(page).getByRole('alert')).toHaveText(CHALLENGE_BANNER);
     await expectNoAxeViolations(page, `challenge banner ${size}`);
 
-    await page.route('**/api/signup', (route) => json(route, 200, { ok: true }));
+    await page.route('**/api/signup', (route) => json(route, 200, { ok: true, ref: REF }));
     await submitButton(seekerPanel(page)).click();
     await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
+    await expect(referLink(seekerPanel(page))).toBeVisible();
     await expectNoAxeViolations(page, `success ${size}`);
+
+    // Spec 0017d NF1: the block's controls are reached in order: field, WhatsApp, copy.
+    await seekerPanel(page).getByRole('button', { name: 'גם משכירים? להרשמה גם שם' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(referLink(seekerPanel(page))).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(whatsapp(seekerPanel(page))).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(copyButton(seekerPanel(page))).toBeFocused();
   }
 
   // Tap targets: the small header button, the footer link and the consent row are 44 px tall at least.
@@ -525,13 +547,15 @@ test('ac17_no_third_party_requests', async ({ page }) => {
   await page.addInitScript(() => {
     HTMLMediaElement.prototype.play = () => Promise.resolve();
   });
-  await page.route('**/api/signup', (route) => json(route, 200, { ok: true }));
+  // Spec 0017d NF3: with the referral block shown, its WhatsApp link requests nothing (never followed here).
+  await page.route('**/api/signup', (route) => json(route, 200, { ok: true, ref: REF }));
   await open(page);
   await revealAll(page);
   await page.getByRole('button', { name: 'צפייה בסרטון' }).click();
   await fillSeeker(seekerPanel(page));
   await submitButton(seekerPanel(page)).click();
   await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  await expect(whatsapp(seekerPanel(page))).toBeVisible();
   await page.waitForLoadState('networkidle');
 
   // Fonts, images, the poster and both APIs were all fetched, and only from the page's own origin; the
@@ -737,4 +761,125 @@ test('ac9b_script_blocked', async ({ page }) => {
   await submitButton(seeker).click();
   await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
   expect(requests).toBe(1);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Spec 0017d: sources and referrals.
+
+test('ac11d_sends_attribution', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = [];
+  await page.route('**/api/signup', (route) => {
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, 200, { ok: true, ref: REF });
+  });
+  await open(page, '/?utm_source=instagram&utm_campaign=bio&ref=abcdefgh');
+  await fillSeeker(seekerPanel(page), 'noa@example.com');
+  await submitButton(seekerPanel(page)).click();
+  await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  expect(bodies).toEqual([
+    {
+      side: 'seeker',
+      email: 'noa@example.com',
+      kind: 'room',
+      city: 'tel-aviv',
+      consent: true,
+      website: '',
+      source: 'instagram',
+      campaign: 'bio',
+      ref: 'abcdefgh',
+      turnstile: 'fake-token',
+    },
+  ]);
+
+  await open(page);
+  await fillSeeker(seekerPanel(page), 'noa@example.com');
+  await submitButton(seekerPanel(page)).click();
+  await expect(seekerPanel(page).getByRole('heading', { name: 'נרשמתם!' })).toBeVisible();
+  expect(bodies).toHaveLength(2);
+  for (const key of ['source', 'campaign', 'ref']) expect(bodies[1]).not.toHaveProperty(key);
+});
+
+test('ac12d_referral_block', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.route('**/api/signup', (route) => json(route, 200, { ok: true, ref: REF }));
+  await open(page);
+  const seeker = seekerPanel(page);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
+
+  const origin = new URL(page.url()).origin;
+  const link = `${origin}/?ref=${REF}&utm_source=referral`;
+  const block = referBlock(seeker);
+  await expect(block).toBeVisible();
+  await expect(block.getByRole('heading', { name: 'רוצים להיכנס בגל הראשון?' })).toBeVisible();
+  await expect(block.getByText('שלושה חברים שנרשמים מהקישור שלכם, ואתם בגל הראשון.')).toBeVisible();
+  await expect(referLink(seeker)).toHaveValue(link);
+  await expect(referLink(seeker)).toHaveAttribute('readonly', '');
+  await expect(referLink(seeker)).toHaveAttribute('dir', 'ltr');
+
+  const share = whatsapp(seeker);
+  await expect(share).toHaveAttribute('target', '_blank');
+  await expect(share).toHaveAttribute('rel', 'noopener');
+  const href = new URL((await share.getAttribute('href')) ?? '');
+  expect(`${href.origin}${href.pathname}`).toBe('https://wa.me/');
+  expect(href.searchParams.get('text')).toBe(`${SHARE_MESSAGE} ${link}`);
+
+  await expect(block.locator('.refer__privacy')).toHaveText(REFER_PRIVACY);
+  // The forms' privacy line is unchanged.
+  for (const line of await page.locator('form .privacy').all()) {
+    await expect(line).toContainText(FORM_PRIVACY_START);
+  }
+
+  await copyButton(seeker).click();
+  await expect(block.getByRole('button', { name: 'הקישור הועתק' })).toBeVisible();
+  await expect(block.locator('[aria-live="polite"]')).toHaveText('הקישור הועתק');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+  // After 2 s the button says "copy" again.
+  await expect(copyButton(seeker)).toBeVisible({ timeout: 4000 });
+
+  // An answer without a code (an older Function) or without a readable body: today's panel, no block.
+  for (const fulfil of [
+    (route: Route) => json(route, 200, { ok: true }),
+    (route: Route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: 'not json' }),
+  ]) {
+    await page.route('**/api/signup', fulfil);
+    await open(page);
+    await fillSeeker(seeker, 'noa@example.com');
+    await submitButton(seeker).click();
+    await expect(seeker.getByRole('heading', { name: 'נרשמתם!' })).toBeFocused();
+    await expect(seeker.getByText('ברגע שהומי עולה לאוויר. לאט לאט? ממש לא.')).toBeVisible();
+    await expect(seeker.getByRole('button', { name: 'גם משכירים? להרשמה גם שם' })).toBeVisible();
+    await expect(referBlock(seeker)).toBeHidden();
+  }
+});
+
+test('ac13d_copy_fallback', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'clipboard', { get: () => undefined });
+  });
+  await page.route('**/api/signup', (route) => json(route, 200, { ok: true, ref: REF }));
+  await open(page);
+  const seeker = seekerPanel(page);
+  await fillSeeker(seeker, 'noa@example.com');
+  await submitButton(seeker).click();
+  await expect(referLink(seeker)).toBeVisible();
+
+  await copyButton(seeker).click();
+  await expect(referLink(seeker)).toBeFocused();
+  const selection = await referLink(seeker).evaluate((field: HTMLInputElement) => [
+    field.selectionStart,
+    field.selectionEnd,
+    field.value.length,
+  ]);
+  expect(selection[0]).toBe(0);
+  expect(selection[1]).toBe(selection[2]);
+  expect(selection[2]).toBeGreaterThan(0);
+  // Nothing else changes: the button keeps its text and nothing is announced.
+  await expect(copyButton(seeker)).toBeVisible();
+  await expect(referBlock(seeker).locator('[aria-live="polite"]')).toHaveText('');
+  expect(errors).toEqual([]);
 });
